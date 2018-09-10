@@ -25,7 +25,11 @@ RUN apt-get install -y \
 RUN wget http://mirrors.kernel.org/ubuntu/pool/main/r/readline6/libreadline6_6.3-8ubuntu2_amd64.deb && dpkg -i libreadline6_6.3-8ubuntu2_amd64.deb
 
 #Create service account
-RUN adduser -u $UID -g $GID $USERNAME
+
+RUN echo $UID \
+    echo $GID \
+    echo $USERNAME
+RUN adduser --uid $UID --gid $GID $USERNAME
 
 # Disable the known hosts prompt
 RUN mkdir -p /root/.ssh && echo "StrictHostKeyChecking no\nUserKnownHostsFile /dev/null" > /root/.ssh/config
