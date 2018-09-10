@@ -2,12 +2,12 @@ FROM ubuntu:18.04
 
 LABEL maintainer="nitrobass24"
 
-ARG USER=docker
+ARG USERNAME=docker
 
-ENV USER=$USER \
+ENV USERNAME=$USERNAME \
     UID=991 \
     GID=991 \
-    TZ-America/Chicago
+    TZ=America/Chicago
 
 # Install dependencies
 RUN apt-get update && apt-get upgrade -y
@@ -21,8 +21,11 @@ RUN apt-get install -y \
     curl \
     libexpat1 \
     wget
-
+    
 RUN wget http://mirrors.kernel.org/ubuntu/pool/main/r/readline6/libreadline6_6.3-8ubuntu2_amd64.deb && dpkg -i libreadline6_6.3-8ubuntu2_amd64.deb
+
+#Create service account
+RUN adduser -u $UID -g $GID $USERNAME
 
 # Disable the known hosts prompt
 RUN mkdir -p /root/.ssh && echo "StrictHostKeyChecking no\nUserKnownHostsFile /dev/null" > /root/.ssh/config
