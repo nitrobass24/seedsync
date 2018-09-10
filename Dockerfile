@@ -10,11 +10,9 @@ ENV USERNAME=$USERNAME \
     TZ=America/Chicago
 
 #Create service account
-RUN echo $UID \
-    echo $GID \
-    echo $USERNAME
+RUN echo $UID $GID $USERNAME
 RUN groupadd -g $GID $USERNAME
-    useradd -u $UID -g $GID $USERNAME
+RUN useradd -u $UID -g $GID $USERNAME
 
 # Install dependencies
 RUN apt-get update && apt-get upgrade -y
