@@ -9,6 +9,12 @@ ENV USERNAME=$USERNAME \
     GID=991 \
     TZ=America/Chicago
 
+#Create service account
+RUN echo $UID \
+    echo $GID \
+    echo $USERNAME
+RUN useradd -u $UID -g $GID $USERNAME
+
 # Install dependencies
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get install -y \
@@ -24,13 +30,6 @@ RUN apt-get install -y \
     
 RUN wget http://mirrors.kernel.org/ubuntu/pool/main/r/readline6/libreadline6_6.3-8ubuntu2_amd64.deb && dpkg -i libreadline6_6.3-8ubuntu2_amd64.deb
 
-#Create service account
-
-RUN echo $UID \
-    echo $GID \
-    echo $USERNAME
-RUN adduser --uid $UID --gid $GID $USERNAME
-
 # Disable the known hosts prompt
 RUN mkdir -p /root/.ssh && echo "StrictHostKeyChecking no\nUserKnownHostsFile /dev/null" > /root/.ssh/config
 
@@ -40,7 +39,6 @@ RUN echo "seedsync seedsync/username string $USER" | debconf-set-selections
 RUN dpkg -i seedsync*.deb
 
 #create directories
-RUN echo "creating directories"
 RUN mkdir /downloads /config /config/log
 
 #WORKDIR /config
