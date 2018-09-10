@@ -13,7 +13,7 @@ ENV USERNAME=$USERNAME \
 RUN echo $UID \
     echo $GID \
     echo $USERNAME
-RUN groupadd -g $GID $USERNAME \
+RUN groupadd -g $GID $USERNAME
     useradd -u $UID -g $GID $USERNAME
 
 # Install dependencies
