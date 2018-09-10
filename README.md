@@ -1,34 +1,28 @@
-# seedsync
-A Seedsync container based on Ubuntu 18.04
-
-# nitrobass24/seedsync
+# seedsync https://github.com/ipsingh06/seedsync
 SeedSync is a GUI-configurable, LFTP-based file transfer and management program.
 With a LFTP backend, it can fetch files from a remote server (like your seedbox) at maximum throughput.
 Fully GUI-configurable means not having to muck around with scripts.
 SeedSync also allows you to extract archives and delete files on both the local machine and the remote server,
- all from the GUI!
+all from the GUI!
 
 ![](https://user-images.githubusercontent.com/12875506/37031587-3a5df834-20f4-11e8-98a0-e42ee764f2ea.png)
 
-[![](https://images.microbadger.com/badges/version/linuxserver/sonarr.svg)](https://microbadger.com/images/linuxserver/sonarr "Get your own version badge on microbadger.com")[![](https://images.microbadger.com/badges/image/linuxserver/sonarr.svg)](https://microbadger.com/images/linuxserver/sonarr "Get your own image badge on microbadger.com")[![Docker Pulls](https://img.shields.io/docker/pulls/linuxserver/sonarr.svg)][hub][![Docker Stars](https://img.shields.io/docker/stars/linuxserver/sonarr.svg)][hub][![Build Status](https://ci.linuxserver.io/buildStatus/icon?job=Docker-Builders/x86-64/x86-64-sonarr)](https://ci.linuxserver.io/job/Docker-Builders/job/x86-64/job/x86-64-sonarr/)
-
-[Sonarr](https://sonarr.tv/) (formerly NZBdrone) is a PVR for usenet and bittorrent users. It can monitor multiple RSS feeds for new episodes of your favorite shows and will grab, sort and rename them. It can also be configured to automatically upgrade the quality of files already downloaded when a better quality format becomes available.
-
-[![sonarr](https://raw.githubusercontent.com/linuxserver/docker-templates/master/linuxserver.io/img/sonarr-banner.png)][appurl]
+# nitrobass24/seedsync
+A Seedsync container running on Ubuntu 18.04
 
 ## Usage
 
 ```
 docker create \
-	--name sonarr \
-	-p 8989:8989 \
-	-e PUID=<UID> -e PGID=<GID> \
+	--name seedsync \
+	-p 8800:8800 \
+	-e USERNAME=<username>
+	-e UID=<UID> \
+	-e GID=<GID> \
 	-e TZ=<timezone> \ 
-	-v /etc/localtime:/etc/localtime:ro \
 	-v </path/to/appdata>:/config \
-	-v <path/to/tvseries>:/tv \
-	-v <path/to/downloadclient-downloads>:/downloads \
-	linuxserver/sonarr
+	-v <path/to/downloads>:/downloads \
+	nitrobass24/seedsync
 ```
 
 You can choose between ,using tags, various branch versions of sonarr, no tag is required to remain on the main branch.
@@ -43,23 +37,20 @@ Add one of the tags,  if required,  to the linuxserver/sonarr line of the run/cr
 
 `The parameters are split into two halves, separated by a colon, the left hand side representing the host and the right the container side. 
 For example with a port -p external:internal - what this shows is the port mapping from internal to external of the container.
-So -p 8080:80 would expose port 80 from inside the container to be accessible from the host's IP on port 8080
-http://192.168.x.x:8080 would show you what's running INSIDE the container on port 80.`
+So -p 8800:80 would expose port 8800 from inside the container to be accessible from the host's IP on port 8800
+http://192.168.x.x:8800 would show you what's running INSIDE the container on port 8800.`
 
 
-* `-p 8989` - the port sonarr webinterface
-* `-v /config` - database and sonarr configs
-* `-v /tv` - location of TV library on disk
-* `-v /etc/localtime` for timesync - see [Localtime](#localtime) for important information
-* `-e TZ` for timezone information, Europe/London - see [Localtime](#localtime) for important information
-* `-e PGID` for for GroupID - see below for explanation
-* `-e PUID` for for UserID - see below for explanation
-
-It is based on ubuntu xenial with S6 overlay, for shell access whilst the container is running do `docker exec -it sonarr /bin/bash`.
+* `-p 8800` - the port sonarr webinterface
+* `-v /config` - seedsync configs
+* `-v /downloads` - location where you want downloads stored
+* `-e TZ` for timezone information, America/Chicago (default)
+* `-e GID` for for GroupID - see below for explanation
+* `-e UID` for for UserID - see below for explanation
 
 ## Localtime
 
-It is important that you either set `-v /etc/localtime:/etc/localtime:ro` or the TZ variable, mono will throw exceptions without one of them set.
+It is important that you set the TZ variable. See [Localtime](#localtime) for important information
 
 ### User / Group Identifiers
 
