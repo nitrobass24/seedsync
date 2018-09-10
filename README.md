@@ -4,8 +4,7 @@ A Seedsync container running on Ubuntu 18.04
 [SeedSync](https://github.com/ipsingh06/seedsync) is a GUI-configurable, LFTP-based file transfer and management program.
 With a LFTP backend, it can fetch files from a remote server (like your seedbox) at maximum throughput.
 Fully GUI-configurable means not having to muck around with scripts.
-SeedSync also allows you to extract archives and delete files on both the local machine and the remote server,
-all from the GUI!
+SeedSync also allows you to extract archives and delete files on both the local machine and the remote server, all from the GUI!
 
 ![](https://user-images.githubusercontent.com/12875506/37031587-3a5df834-20f4-11e8-98a0-e42ee764f2ea.png)
 
