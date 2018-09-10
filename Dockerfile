@@ -34,7 +34,7 @@ RUN mkdir -p /root/.ssh && echo "StrictHostKeyChecking no\nUserKnownHostsFile /d
 
 #Install Seedsync from Latest Github Release https://github.com/ipsingh06/seedsync
 RUN wget `curl -s https://api.github.com/repos/ipsingh06/seedsync/releases/latest | grep browser_download_url | grep '64[.]deb' | cut -d '"' -f 4`
-RUN echo "seedsync seedsync/username string $USER" | debconf-set-selections
+RUN echo "seedsync seedsync/username string $USERNAME" | debconf-set-selections
 RUN dpkg -i seedsync*.deb
 
 #create directories
