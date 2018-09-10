@@ -10,7 +10,8 @@ RUN apt-get install -y \
     unrar \
     p7zip \
     curl \
-    libexpat1
+    libexpat1 \
+    wget
 
 RUN wget http://mirrors.kernel.org/ubuntu/pool/main/r/readline6/libreadline6_6.3-8ubuntu2_amd64.deb && dpkg -i libreadline6_6.3-8ubuntu2_amd64.deb
 
