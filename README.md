@@ -1,7 +1,15 @@
 # seedsync
 A Seedsync container based on Ubuntu 18.04
 
-# linuxserver/sonarr
+# nitrobass24/seedsync
+SeedSync is a GUI-configurable, LFTP-based file transfer and management program.
+With a LFTP backend, it can fetch files from a remote server (like your seedbox) at maximum throughput.
+Fully GUI-configurable means not having to muck around with scripts.
+SeedSync also allows you to extract archives and delete files on both the local machine and the remote server,
+ all from the GUI!
+
+![](https://user-images.githubusercontent.com/12875506/37031587-3a5df834-20f4-11e8-98a0-e42ee764f2ea.png)
+
 [![](https://images.microbadger.com/badges/version/linuxserver/sonarr.svg)](https://microbadger.com/images/linuxserver/sonarr "Get your own version badge on microbadger.com")[![](https://images.microbadger.com/badges/image/linuxserver/sonarr.svg)](https://microbadger.com/images/linuxserver/sonarr "Get your own image badge on microbadger.com")[![Docker Pulls](https://img.shields.io/docker/pulls/linuxserver/sonarr.svg)][hub][![Docker Stars](https://img.shields.io/docker/stars/linuxserver/sonarr.svg)][hub][![Build Status](https://ci.linuxserver.io/buildStatus/icon?job=Docker-Builders/x86-64/x86-64-sonarr)](https://ci.linuxserver.io/job/Docker-Builders/job/x86-64/job/x86-64-sonarr/)
 
 [Sonarr](https://sonarr.tv/) (formerly NZBdrone) is a PVR for usenet and bittorrent users. It can monitor multiple RSS feeds for new episodes of your favorite shows and will grab, sort and rename them. It can also be configured to automatically upgrade the quality of files already downloaded when a better quality format becomes available.
