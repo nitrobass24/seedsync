@@ -5,8 +5,8 @@ LABEL maintainer="nitrobass24"
 ARG USER=docker
 
 ENV USER=$USER \
-    UID=991
-    GID=991
+    UID=991 \
+    GID=991 \
     TZ-America/Chicago
 
 # Install dependencies
@@ -36,6 +36,7 @@ RUN dpkg -i seedsync*.deb
 RUN echo "creating directories"
 RUN mkdir /downloads /config /config/log
 
-WORKDIR /config
+#WORKDIR /config
 
 EXPOSE 8800
+VOLUME /confg /downloads
