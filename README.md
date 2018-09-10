@@ -24,14 +24,6 @@ docker create \
 	nitrobass24/seedsync
 ```
 
-You can choose between ,using tags, various branch versions of sonarr, no tag is required to remain on the main branch.
-
-Add one of the tags,  if required,  to the linuxserver/sonarr line of the run/create command in the following format, linuxserver/sonarr:develop
-
-#### Tags
-
-+ **develop**
-
 ## Parameters
 
 `The parameters are split into two halves, separated by a colon, the left hand side representing the host and the right the container side. 
@@ -44,8 +36,9 @@ http://192.168.x.x:8800 would show you what's running INSIDE the container on po
 * `-v /config` - seedsync configs
 * `-v /downloads` - location where you want downloads stored
 * `-e TZ` for timezone information, America/Chicago (default)
-* `-e GID` for for GroupID - see below for explanation
-* `-e UID` for for UserID - see below for explanation
+* `-e USERNAME` for seedsync service account. suggest using name of account associated with UID & GID from the host system
+* `-e GID` for GroupID - see below for explanation
+* `-e UID` for UserID - see below for explanation
 
 ## Localtime
 
