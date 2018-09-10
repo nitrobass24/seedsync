@@ -10,7 +10,7 @@ ENV USERNAME=$USERNAME \
     TZ=America/Chicago
 
 #Create service account
-RUN echo $UID $GID $USERNAME
+#RUN echo $UID $GID $USERNAME
 RUN groupadd -g $GID $USERNAME
 RUN useradd -u $UID -g $GID $USERNAME
 
