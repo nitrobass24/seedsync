@@ -1,0 +1,21 @@
+---
+version: "2.4"
+services:
+  seedsync:
+    image: ipsingh06/seedsync
+    container_name: seedsync
+    environment:
+      - TZ=America/Chicago
+    volumes:
+      - seedsync:/config
+      - /ssdpool/sftpsync_final:/downloads
+    ports:
+      - 8800:8800
+    restart: unless-stopped
+    
+volumes:
+  seedsync:
+    name: seedsync
+    driver: local-persist
+    driver_opts:
+      mountpoint: /ssdpool/docker/volumes/seedsync/_data 
