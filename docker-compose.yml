@@ -4,6 +4,7 @@ services:
   seedsync:
     image: ipsingh06/seedsync
     container_name: seedsync
+    user: root
     environment:
       - TZ=America/Chicago
     volumes:
