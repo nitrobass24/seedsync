@@ -1,0 +1,37 @@
+# SeedSync Development Docker Compose
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml build
+#   docker compose -f docker-compose.dev.yml up
+#
+# Access the web UI at: http://localhost:8800
+
+services:
+  seedsync:
+    build:
+      context: .
+      dockerfile: src/docker/build/docker-image/Dockerfile
+    container_name: seedsync-dev
+    ports:
+      - "8800:8800"
+    environment:
+      # Set these to match your host user's UID/GID
+      # Run 'id' command to find your values
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      # Configuration storage (persists settings)
+      - ./dev-config:/config
+      # Download destination
+      - ./dev-downloads:/downloads
+    restart: unless-stopped
+
+# Uncomment below for a test remote server (for development only)
+#  test-remote:
+#    image: atmoz/sftp
+#    container_name: seedsync-test-remote
+#    ports:
+#      - "2222:22"
+#    volumes:
+#      - ./dev-remote-files:/home/testuser/files
+#    command: testuser:testpass:1000

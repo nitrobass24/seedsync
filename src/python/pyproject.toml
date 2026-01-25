@@ -1,12 +1,11 @@
-[tool]
 [tool.poetry]
 name = "seedsync"
 version = "0.0.0"
-description = ""
+description = "File synchronization tool for seedboxes"
 authors = []
 
 [tool.poetry.dependencies]
-python = "~3.8"
+python = "^3.8"
 bottle = "*"
 mkdocs = "*"
 mkdocs-material = "*"
@@ -19,7 +18,7 @@ requests = "*"
 tblib = "*"
 timeout-decorator = "*"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pyinstaller = "*"
 testfixtures = "*"
 webtest = "*"

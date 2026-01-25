@@ -1,0 +1,42 @@
+# Changelog
+
+## [0.9.0] - 2025-01-25
+
+### Fixed
+- **Docker image now works** - Complete rewrite of Dockerfile to properly build all components
+- **Angular frontend included** - Web UI was missing from previous Docker builds
+- **scanfs binary included** - File system scanner now properly built and included
+- **PUID/PGID permissions** - Improved entrypoint script for proper user/group handling
+- **Python 3.11 support** - Updated from Python 3.8 (EOL) to Python 3.11
+- **TypeScript build errors** - Fixed type conflicts in Angular build
+
+### Changed
+- **Dockerfile**: Complete multi-stage build that includes:
+  - Stage 1: Angular frontend build (Node 12)
+  - Stage 2: scanfs binary build (PyInstaller)
+  - Stage 3: Python runtime with all components
+- **pyproject.toml**: Updated Python version constraint from `~3.8` to `^3.8` (allows 3.8-3.12)
+- **package.json**: Updated node-sass version for build compatibility
+- **tsconfig.json**: Added `skipLibCheck` to resolve type definition conflicts
+- **entrypoint.sh**: Enhanced permission handling for mounted volumes
+
+### Added
+- **docker-compose.dev.yml**: Development compose file for easy local testing
+- **MODERNIZATION_PLAN.md**: Documentation of codebase architecture and future roadmap
+
+### Technical Notes
+- Base image: `python:3.11-slim-bullseye`
+- Node version for Angular build: 12.22 (required for Angular 4.x compatibility)
+- Poetry used for Python dependency management
+- Multi-architecture support preserved (amd64, arm64, arm/v7)
+
+### Known Issues
+- Angular 4.x is outdated but functional; upgrade to modern Angular would require significant work
+- Some seedbox providers may have issues with the scanfs binary due to `/tmp` mount restrictions (see GitHub issues #97, #136)
+
+---
+
+## Previous Releases
+
+See the original repository for earlier changelog entries:
+https://github.com/ipsingh06/seedsync/releases
