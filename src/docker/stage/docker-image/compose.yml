@@ -1,5 +1,0 @@
-version: "3.4"
-services:
-  myapp:
-    image: ${STAGING_REGISTRY}/seedsync:${STAGING_VERSION}
-    container_name: seedsync_test_e2e_myapp

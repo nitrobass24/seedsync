@@ -1,0 +1,11 @@
+# SeedSync Runtime Dependencies
+# Generated from pyproject.toml - runtime only (no dev/docs dependencies)
+
+bottle>=0.12,<1.0
+paste>=3.0
+patool>=1.12
+pexpect>=4.8
+pytz>=2024.1
+requests>=2.31
+tblib>=3.0
+timeout-decorator>=0.5

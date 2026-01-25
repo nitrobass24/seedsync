@@ -1,141 +1,95 @@
-# SeedSync Docker Image - Complete Multi-Stage Build
-# This Dockerfile builds all required components:
-# 1. Angular frontend (web UI)
-# 2. scanfs binary (file system scanner for remote server)
-# 3. Python application
+# SeedSync Docker Image - Optimized Build
+# Target size: <200MB (down from 439MB)
 
 # ==============================================================================
 # Stage 1: Build Angular Frontend
 # ==============================================================================
-FROM node:18-bullseye as angular-builder
+FROM node:12.22-buster-slim AS angular-builder
 
-# Install Angular CLI globally
 WORKDIR /app
-
-# Copy package files first for better caching
 COPY src/angular/package*.json ./
-
-# Install dependencies (use --legacy-peer-deps for older Angular compatibility)
-RUN npm install --legacy-peer-deps
-
-# Copy Angular source
+RUN npm install --production=false --silent
 COPY src/angular/ ./
-
-# Build production bundle
-# Note: Angular 4.x uses different build flags than modern Angular
-RUN ./node_modules/.bin/ng build --prod --output-path /build/html || \
-    ./node_modules/.bin/ng build --configuration production --output-path /build/html
+RUN ./node_modules/.bin/ng build --prod --output-path /build/html
 
 # ==============================================================================
 # Stage 2: Build scanfs binary with PyInstaller
 # ==============================================================================
-FROM python:3.11-slim-bullseye as scanfs-builder
+FROM python:3.12-slim-bookworm AS scanfs-builder
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     binutils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PyInstaller
 RUN pip install --no-cache-dir pyinstaller
 
-# Copy Python source for scanfs
 COPY src/python/scan_fs.py /src/
 COPY src/python/system/ /src/system/
 
 WORKDIR /build
-
-# Build scanfs as a single executable
 RUN pyinstaller /src/scan_fs.py \
     --onefile \
     -p /src \
     --distpath /build/dist \
     --workpath /build/work \
     --specpath /build \
-    --name scanfs
+    --name scanfs \
+    && strip /build/dist/scanfs 2>/dev/null || true
 
 # ==============================================================================
-# Stage 3: Final Runtime Image
+# Stage 3: Final Runtime Image (Optimized)
 # ==============================================================================
-FROM python:3.11-slim-bullseye as seedsync_run
+FROM python:3.12-slim-bookworm AS runtime
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    # LFTP for file transfers
+LABEL maintainer="nitrobass24" \
+      description="SeedSync - Seedbox file synchronization tool" \
+      version="0.9.0"
+
+# Install only essential runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     lftp \
-    # SSH client for remote connections
     openssh-client \
-    # Archive extraction tools
     p7zip \
     p7zip-full \
-    bzip2 \
     unrar-free \
-    # User management
     gosu \
-    # Misc utilities
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Try to set up RAR codec symlink (may not exist in all versions)
+# Set up RAR codec symlink
 RUN ln -sf /usr/lib/p7zip/Codecs/Rar.so /usr/lib/p7zip/Codecs/Rar29.so 2>/dev/null || true
 
 # Set locale
-ENV LC_ALL=C.UTF-8
-ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8 \
+    LANG=C.UTF-8 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Install Poetry for dependency management
-RUN pip install --no-cache-dir poetry && \
-    poetry config virtualenvs.create false
-
-# Create app directory structure
+# Create directory structure
 RUN mkdir -p /app/python /app/html /config /downloads
 
-# Copy and install Python dependencies first (for better caching)
-COPY src/python/pyproject.toml /app/python/
-WORKDIR /app/python
+# Install Python dependencies directly with pip (no Poetry overhead)
+COPY src/python/requirements.txt /app/python/
+RUN pip install --no-cache-dir -r /app/python/requirements.txt \
+    && rm -rf /root/.cache/pip
 
-# Regenerate lock file and install dependencies (production only)
-RUN poetry lock --no-interaction && \
-    poetry install --only main --no-interaction --no-ansi
-
-# Copy Python application source
+# Copy application source
 COPY src/python/ /app/python/
 
-# Copy built Angular frontend from Stage 1
+# Copy built artifacts from previous stages
 COPY --from=angular-builder /build/html /app/html
-
-# Copy scanfs binary from Stage 2
 COPY --from=scanfs-builder /build/dist/scanfs /app/scanfs
 
-# Also copy scanfs Python source as fallback
-COPY src/python/scan_fs.py /app/python/
-COPY src/python/system/ /app/python/system/
+# Copy and set up entrypoint
+COPY src/docker/build/docker-image/entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh /app/scanfs
 
-# Copy entrypoint script
-COPY src/docker/build/docker-image/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Runtime configuration
+ENV PUID=1000 \
+    PGID=1000
 
-# Set permissions
-RUN chmod +x /app/scanfs || true
-
-# Default environment variables for user/group mapping
-ENV PUID=1000
-ENV PGID=1000
-
-# Expose web UI port
 EXPOSE 8800
-
-# Volumes for configuration and downloads
 VOLUME ["/config", "/downloads"]
 
-# Use entrypoint for dynamic user setup
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-
-# Run the application
-CMD [ \
-    "python", \
-    "/app/python/seedsync.py", \
-    "-c", "/config", \
-    "--html", "/app/html", \
-    "--scanfs", "/app/scanfs" \
-]
+CMD ["python", "/app/python/seedsync.py", "-c", "/config", "--html", "/app/html", "--scanfs", "/app/scanfs"]

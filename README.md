@@ -2,82 +2,148 @@
     <img src="https://user-images.githubusercontent.com/12875506/85908858-c637a100-b7cb-11ea-8ab3-75c0c0ddf756.png" alt="SeedSync" />
 </p>
 
-
 <p align="center">
-  <!--<a href="https://travis-ci.com/ipsingh06/seedsync">
-    <img src="https://img.shields.io/travis/com/ipsingh06/seedsync" alt="Build">
-  </a>-->
-  <a href="https://github.com/ipsingh06/seedsync">
-    <img src="https://img.shields.io/github/stars/ipsingh06/seedsync" alt="Stars">
+  <a href="https://github.com/nitrobass24/seedsync">
+    <img src="https://img.shields.io/github/stars/nitrobass24/seedsync" alt="Stars">
   </a>
-  <a href="https://hub.docker.com/r/ipsingh06/seedsync">
-    <img src="https://img.shields.io/docker/pulls/ipsingh06/seedsync" alt="Downloads">
-  </a>
-  <a href="https://hub.docker.com/r/ipsingh06/seedsync">
-    <img src="https://img.shields.io/docker/v/ipsingh06/seedsync?color=blue" alt="Version">
-  </a>
-  <a href="https://hub.docker.com/r/ipsingh06/seedsync">
-    <img src="https://img.shields.io/docker/image-size/ipsingh06/seedsync/latest?style=flat" alt="Size">
-  </a>
-  <a href="https://github.com/ipsingh06/seedsync/blob/master/LICENSE.txt">
-    <img src="https://img.shields.io/github/license/ipsingh06/seedsync" alt="License">
+  <a href="https://github.com/nitrobass24/seedsync/blob/master/LICENSE.txt">
+    <img src="https://img.shields.io/github/license/nitrobass24/seedsync" alt="License">
   </a>
 </p>
 
-SeedSync is a tool to sync the files on a remote Linux server (like your seedbox, for example).
+SeedSync is a tool to sync files from a remote Linux server (like your seedbox) to your local machine.
 It uses LFTP to transfer files fast!
+
+> **Note**: This is a modernized fork of [ipsingh06/seedsync](https://github.com/ipsingh06/seedsync) with updated dependencies and Docker-only deployment.
 
 ## Features
 
-* Built on top of [LFTP](http://lftp.tech/), the fastest file transfer program ever
+* Built on top of [LFTP](http://lftp.tech/), the fastest file transfer program
 * Web UI - track and control your transfers from anywhere
 * Automatically extract your files after sync
 * Auto-Queue - only sync the files you want based on pattern matching
 * Delete local and remote files easily
 * Fully open source!
 
-## How it works
+## Quick Start (Docker)
 
-Install SeedSync on a local machine.
-SeedSync will connect to your remote server and sync files to the local machine as
-they become available.
+### Using Docker Compose (Recommended)
 
-You don't need to install anything on the remote server.
-All you need are the SSH credentials for the remote server.
+1. Create a `docker-compose.yml`:
 
-## Supported Platforms
+```yaml
+services:
+  seedsync:
+    image: ghcr.io/nitrobass24/seedsync:latest
+    container_name: seedsync
+    ports:
+      - "8800:8800"
+    environment:
+      - PUID=1000  # Your user ID (run 'id' to find)
+      - PGID=1000  # Your group ID
+    volumes:
+      - ./config:/config
+      - /path/to/downloads:/downloads
+    restart: unless-stopped
+```
 
-* Linux
-* Raspberry Pi (v2, v3 and v4)
-* Windows (via Docker)
-* MacOS (via Docker)
+2. Start the container:
 
+```bash
+docker compose up -d
+```
 
-## Installation and Usage
+3. Access the web UI at **http://localhost:8800**
 
-Please refer to the [documentation](https://ipsingh06.github.io/seedsync/).
+### Using Docker Run
 
+```bash
+docker run -d \
+  --name seedsync \
+  -p 8800:8800 \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -v /path/to/config:/config \
+  -v /path/to/downloads:/downloads \
+  ghcr.io/nitrobass24/seedsync:latest
+```
+
+## Configuration
+
+On first run, access the web UI and configure:
+
+1. **Remote Server**: Your seedbox SSH hostname/IP
+2. **SSH Credentials**: Username and password (or SSH key)
+3. **Remote Path**: Directory on the seedbox to sync from
+4. **Local Path**: Maps to `/downloads` in the container
+
+## Building from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/nitrobass24/seedsync.git
+cd seedsync
+
+# Build and run
+make build
+make run
+
+# View logs
+make logs
+```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PUID` | 1000 | User ID for file permissions |
+| `PGID` | 1000 | Group ID for file permissions |
+
+## Volumes
+
+| Path | Description |
+|------|-------------|
+| `/config` | Configuration and state files |
+| `/downloads` | Download destination directory |
+
+## Ports
+
+| Port | Description |
+|------|-------------|
+| 8800 | Web UI |
+
+## Troubleshooting
+
+### View Logs
+
+```bash
+docker logs seedsync
+```
+
+### Permission Issues
+
+Ensure your `PUID` and `PGID` match your host user:
+
+```bash
+id  # Shows your UID and GID
+```
+
+### SSH Connection Issues
+
+- Verify your seedbox allows SSH connections
+- Check that the SSH port is correct (default: 22)
+- Ensure your credentials are correct
 
 ## Report an Issue
 
-Please report any issues on the [issues](../../issues) page.
-Please post the logs as well. The logs are available at:
-* Deb install: `<user home directory>/.seedsync/log/seedsync.log`
-* Docker: Run `docker logs <container id>`
-
-
-## Contribute
-
-Contributions to SeedSync are welcome!
-Please take a look at the [Developer Readme](doc/DeveloperReadme.md) for instructions
-on environment setup and the build process.
-
+Please report issues on the [issues page](https://github.com/nitrobass24/seedsync/issues).
+Include container logs: `docker logs seedsync`
 
 ## License
 
 SeedSync is distributed under Apache License Version 2.0.
-See [License.txt](https://github.com/ipsingh06/seedsync/blob/master/LICENSE.txt) for more information.
+See [LICENSE.txt](LICENSE.txt) for more information.
 
+---
 
-
-![](https://user-images.githubusercontent.com/12875506/37031587-3a5df834-20f4-11e8-98a0-e42ee764f2ea.png)
+![SeedSync Screenshot](https://user-images.githubusercontent.com/12875506/37031587-3a5df834-20f4-11e8-98a0-e42ee764f2ea.png)

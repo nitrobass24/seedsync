@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.9.1] - 2025-01-25
+
+### Changed
+- **Docker-only deployment** - Removed Debian package support, simplified to Docker-only
+- **Image size reduced 45%** - From 439MB to 240MB
+- **Python 3.12** - Updated from Python 3.11 to 3.12
+- **Replaced Poetry with pip** - Faster builds, smaller image
+- **Replaced node-sass with sass** - Pure JS, no native compilation needed
+- **Fixed Python 3.12 regex warnings** - Updated to raw strings
+
+### Removed
+- Debian packaging (`src/debian/`)
+- Legacy build files (`src/docker/build/deb/`, `src/docker/stage/`)
+- mkdocs/mkdocs-material from runtime (documentation tools not needed)
+
+### Added
+- `requirements.txt` - Minimal runtime dependencies
+- Simplified `Makefile` with Docker-focused commands
+
+---
+
 ## [0.9.0] - 2025-01-25
 
 ### Fixed
@@ -25,9 +46,9 @@
 - **MODERNIZATION_PLAN.md**: Documentation of codebase architecture and future roadmap
 
 ### Technical Notes
-- Base image: `python:3.11-slim-bullseye`
+- Base image: `python:3.12-slim-bookworm`
 - Node version for Angular build: 12.22 (required for Angular 4.x compatibility)
-- Poetry used for Python dependency management
+- Uses pip for Python dependency management (faster, smaller)
 - Multi-architecture support preserved (amd64, arm64, arm/v7)
 
 ### Known Issues

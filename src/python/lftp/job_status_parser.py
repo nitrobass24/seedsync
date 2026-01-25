@@ -515,22 +515,22 @@ class LftpJobStatusParser:
                     raise ValueError("Missing queued commands")
 
                 # Parse the queued commands
-                queue_pget_pattern = ("^(?P<id>\d+)\.\s+"
-                                      "pget\s+"
-                                      "(?P<flags>.*?)\s+"
-                                      "(?P<lq>[\'\"]|)(?P<remote>.+)(?P=lq)\s+"  # greedy on purpose
-                                      "(?:-o\s+)"
-                                      "(?P<rq>[\'\"]|)(?P<local>.+)(?P=rq)$")  # greedy on purpose
+                queue_pget_pattern = (r"^(?P<id>\d+)\.\s+"
+                                      r"pget\s+"
+                                      r"(?P<flags>.*?)\s+"
+                                      r"(?P<lq>[\'\"]|)(?P<remote>.+)(?P=lq)\s+"  # greedy on purpose
+                                      r"(?:-o\s+)"
+                                      r"(?P<rq>[\'\"]|)(?P<local>.+)(?P=rq)$")  # greedy on purpose
                 queue_pget_m = re.compile(queue_pget_pattern)
-                queue_mirror_pattern = ("^(?P<id>\d+)\.\s+"
-                                        "mirror\s+"
-                                        "(?P<flags>.*?)\s+"
-                                        "(?P<lq>[\'\"]|)(?P<remote>.+)(?P=lq)\s+"  # greedy on purpose
-                                        "(?P<rq>[\'\"]|)(?P<local>.+)(?P=rq)$")  # greedy on purpose
+                queue_mirror_pattern = (r"^(?P<id>\d+)\.\s+"
+                                        r"mirror\s+"
+                                        r"(?P<flags>.*?)\s+"
+                                        r"(?P<lq>[\'\"]|)(?P<remote>.+)(?P=lq)\s+"  # greedy on purpose
+                                        r"(?P<rq>[\'\"]|)(?P<local>.+)(?P=rq)$")  # greedy on purpose
                 queue_mirror_m = re.compile(queue_mirror_pattern)
                 while lines:
                     line = lines[0]
-                    if re.match("^\d+\.", line):
+                    if re.match(r"^\d+\.", line):
                         # header line
                         lines.pop(0)
 
@@ -553,7 +553,7 @@ class LftpJobStatusParser:
                                                name=name,
                                                flags=flags)
                         queue.append(status)
-                    elif re.match("^cd\s.*$", line):
+                    elif re.match(r"^cd\s.*$", line):
                         # 'cd' line after pget, ignore
                         lines.pop(0)
                     else:

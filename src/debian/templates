@@ -1,6 +1,0 @@
-Template: seedsync/username
-Type: string
-Default: root
-Description: User for SeedSync service
- The service will run under this user.
- All transferred files will be owned by this user.
