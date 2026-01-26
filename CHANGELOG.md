@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.2] - 2026-01-26
+
+### Fixed
+- **Python 3.12 regex warnings** - Converted all regex patterns to raw strings across:
+  - `lftp/job_status_parser.py` - LFTP output parsing patterns
+  - `system/scanner.py` - File size parsing patterns
+  - `controller/extract/dispatch.py` - RAR file extension pattern
+
+### Changed
+- **CI workflow** - Updated `softprops/action-gh-release` to v2 with `make_latest: true`
+
+---
+
 ## [0.9.1] - 2025-01-25
 
 ### Changed
