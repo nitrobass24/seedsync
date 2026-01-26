@@ -214,6 +214,6 @@ class ExtractDispatch:
         filtered_paths = []
         for archive_path, out_path in task.archive_paths:
             file_ext = os.path.splitext(os.path.basename(archive_path))[1]
-            if not re.match("^\.r\d{2,}$", file_ext):
+            if not re.match(r"^\.r\d{2,}$", file_ext):
                 filtered_paths.append((archive_path, out_path))
         task.archive_paths = filtered_paths

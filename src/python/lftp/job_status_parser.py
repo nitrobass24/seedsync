@@ -19,15 +19,15 @@ class LftpJobStatusParser:
     """
     # python doesn't support partial inline-modified flags, so we need
     # to capture all case-sensitive cases here
-    __SIZE_UNITS_REGEX = ("b|B|"
-                          "k|kb|kib|K|Kb|KB|KiB|Kib|"
-                          "m|mb|mib|M|Mb|MB|MiB|Mib|"
-                          "g|gb|gib|G|Gb|GB|GiB|Gib")
-    __TIME_UNITS_REGEX = "(?P<eta_d>\d*d)?(?P<eta_h>\d*h)?(?P<eta_m>\d*m)?(?P<eta_s>\d*s)?"
+    __SIZE_UNITS_REGEX = (r"b|B|"
+                          r"k|kb|kib|K|Kb|KB|KiB|Kib|"
+                          r"m|mb|mib|M|Mb|MB|MiB|Mib|"
+                          r"g|gb|gib|G|Gb|GB|GiB|Gib")
+    __TIME_UNITS_REGEX = r"(?P<eta_d>\d*d)?(?P<eta_h>\d*h)?(?P<eta_m>\d*m)?(?P<eta_s>\d*s)?"
 
-    __QUOTED_FILE_NAME_REGEX = "`(?P<name>.*)'"
+    __QUOTED_FILE_NAME_REGEX = r"`(?P<name>.*)'"
 
-    __QUEUE_DONE_REGEX = "^\[(?P<id>\d+)\]\sDone\s\(queue\s\(.+\)\)"
+    __QUEUE_DONE_REGEX = r"^\[(?P<id>\d+)\]\sDone\s\(queue\s\(.+\)\)"
 
     def __init__(self):
         self.logger = logging.getLogger("LftpJobStatusParser")
@@ -44,7 +44,7 @@ class LftpJobStatusParser:
         """
         if size == "0":
             return 0
-        m = re.compile("(?P<number>\d+\.?\d*)\s*(?P<units>{})?".format(LftpJobStatusParser.__SIZE_UNITS_REGEX))
+        m = re.compile(r"(?P<number>\d+\.?\d*)\s*(?P<units>{})?".format(LftpJobStatusParser.__SIZE_UNITS_REGEX))
         result = m.search(size)
         if not result:
             raise ValueError("String '{}' does not match the size pattern".format(size))
@@ -100,97 +100,97 @@ class LftpJobStatusParser:
 
         # Header patterns
         # pget header
-        pget_header_pattern = ("^\[(?P<id>\d+)\]\s+"
-                               "pget\s+"
-                               "(?P<flags>.*?)\s+"
-                               "(?P<lq>['\"]|)(?P<remote>.+)(?P=lq)\s+"  # greedy on purpose
-                               "-o\s+"
-                               "(?P<rq>['\"]|)(?P<local>.+)(?P=rq)$")  # greedy on purpose
+        pget_header_pattern = (r"^\[(?P<id>\d+)\]\s+"
+                               r"pget\s+"
+                               r"(?P<flags>.*?)\s+"
+                               r"(?P<lq>['\"]|)(?P<remote>.+)(?P=lq)\s+"  # greedy on purpose
+                               r"-o\s+"
+                               r"(?P<rq>['\"]|)(?P<local>.+)(?P=rq)$")  # greedy on purpose
         pget_header_m = re.compile(pget_header_pattern)
 
         # mirror header (downloading)
-        mirror_header_pattern = ("^\[(?P<id>\d+)\]\s+"
-                                 "mirror\s+"
-                                 "(?P<flags>.*?)\s+"
-                                 "(?P<lq>['\"]|)(?P<remote>.+)(?P=lq)\s+"  # greedy on purpose
-                                 "(?P<rq>['\"]|)(?P<local>.+)(?P=rq)\s+"  # greedy on purpose
-                                 "--\s+"
-                                 "(?P<szlocal>\d+\.?\d*\s?({sz})?)"  # size=0 has no units
-                                 "\/"
-                                 "(?P<szremote>\d+\.?\d*\s?({sz})?)\s+"  # size=0 has no units
-                                 "\((?P<pctlocal>\d+)%\)"
-                                 "(\s+(?P<speed>\d+\.?\d*\s?({sz}))\/s)?$")\
+        mirror_header_pattern = (r"^\[(?P<id>\d+)\]\s+"
+                                 r"mirror\s+"
+                                 r"(?P<flags>.*?)\s+"
+                                 r"(?P<lq>['\"]|)(?P<remote>.+)(?P=lq)\s+"  # greedy on purpose
+                                 r"(?P<rq>['\"]|)(?P<local>.+)(?P=rq)\s+"  # greedy on purpose
+                                 r"--\s+"
+                                 r"(?P<szlocal>\d+\.?\d*\s?({sz})?)"  # size=0 has no units
+                                 r"\/"
+                                 r"(?P<szremote>\d+\.?\d*\s?({sz})?)\s+"  # size=0 has no units
+                                 r"\((?P<pctlocal>\d+)%\)"
+                                 r"(\s+(?P<speed>\d+\.?\d*\s?({sz}))\/s)?$")\
             .format(sz=LftpJobStatusParser.__SIZE_UNITS_REGEX)
         mirror_header_m = re.compile(mirror_header_pattern)
 
         # mirror header (connecting or receiving file list)
-        mirror_fl_header_pattern = ("^\[(?P<id>\d+)\]\s+"
-                                    "mirror\s+"
-                                    "(?P<flags>.*?)\s+"
-                                    "(?P<lq>['\"]|)(?P<remote>.+)(?P=lq)\s+"  # greedy on purpose
-                                    "(?P<rq>['\"]|)(?P<local>.+)(?P=rq)$")  # greedy on purpose
+        mirror_fl_header_pattern = (r"^\[(?P<id>\d+)\]\s+"
+                                    r"mirror\s+"
+                                    r"(?P<flags>.*?)\s+"
+                                    r"(?P<lq>['\"]|)(?P<remote>.+)(?P=lq)\s+"  # greedy on purpose
+                                    r"(?P<rq>['\"]|)(?P<local>.+)(?P=rq)$")  # greedy on purpose
         mirror_fl_header_m = re.compile(mirror_fl_header_pattern)
 
         # Data patterns
-        filename_pattern = "\\\\transfer\s" + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX
+        filename_pattern = r"\\transfer\s" + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX
         filename_m = re.compile(filename_pattern)
 
-        chunk_at_pattern = ("^" + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX + "\s+"
-                            "at\s+"
-                            "\d+\s+"  # this is NOT the local size
-                            "(?:\(\d+%\)\s+)?"  # this is NOT the local percent
-                            "((?P<speed>\d+\.?\d*\s?({sz}))\/s\s+)?"
-                            "(eta:(?P<eta>{eta})\s+)?"
-                            "\s*\[(?P<desc>.*)\]$")\
+        chunk_at_pattern = (r"^" + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX + r"\s+"
+                            r"at\s+"
+                            r"\d+\s+"  # this is NOT the local size
+                            r"(?:\(\d+%\)\s+)?"  # this is NOT the local percent
+                            r"((?P<speed>\d+\.?\d*\s?({sz}))\/s\s+)?"
+                            r"(eta:(?P<eta>{eta})\s+)?"
+                            r"\s*\[(?P<desc>.*)\]$")\
             .format(sz=LftpJobStatusParser.__SIZE_UNITS_REGEX,
                     eta=LftpJobStatusParser.__TIME_UNITS_REGEX)
         chunk_at_m = re.compile(chunk_at_pattern)
 
-        chunk_at2_pattern = ("^" + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX + "\s+"
-                             "at\s+"
-                             "\d+\s+"  # this is NOT the local size
-                             "(?:\(\d+%\))")  # this is NOT the local percent
+        chunk_at2_pattern = (r"^" + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX + r"\s+"
+                             r"at\s+"
+                             r"\d+\s+"  # this is NOT the local size
+                             r"(?:\(\d+%\))")  # this is NOT the local percent
         chunk_at2_m = re.compile(chunk_at2_pattern)
 
-        chunk_got_pattern = ("^" + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX + ",\s+"
-                             "got\s+"
-                             "(?P<szlocal>\d+)\s+"
-                             "of\s+"
-                             "(?P<szremote>\d+)\s+"
-                             "\((?P<pctlocal>\d+)%\)"
-                             "(\s+(?P<speed>\d+\.?\d*\s?({sz}))\/s)?"
-                             "(\seta:(?P<eta>{eta}))?")\
+        chunk_got_pattern = (r"^" + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX + r",\s+"
+                             r"got\s+"
+                             r"(?P<szlocal>\d+)\s+"
+                             r"of\s+"
+                             r"(?P<szremote>\d+)\s+"
+                             r"\((?P<pctlocal>\d+)%\)"
+                             r"(\s+(?P<speed>\d+\.?\d*\s?({sz}))\/s)?"
+                             r"(\seta:(?P<eta>{eta}))?")\
             .format(sz=LftpJobStatusParser.__SIZE_UNITS_REGEX,
                     eta=LftpJobStatusParser.__TIME_UNITS_REGEX)
         chunk_got_m = re.compile(chunk_got_pattern)
 
-        chunk_header_pattern = ("\\\\chunk\s"
-                                "(?P<start>\d+)"
-                                "-"
-                                "(?P<end>\d+)")
+        chunk_header_pattern = (r"\\chunk\s"
+                                r"(?P<start>\d+)"
+                                r"-"
+                                r"(?P<end>\d+)")
         chunk_header_m = re.compile(chunk_header_pattern)
 
-        chmod_header_pattern = ("chmod\s"
-                                "(?P<name>.*)")
+        chmod_header_pattern = (r"chmod\s"
+                                r"(?P<name>.*)")
         chmod_header_m = re.compile(chmod_header_pattern)
 
-        chmod_pattern = (LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX + ""
-                         "\s\[\]")
+        chmod_pattern = (LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX +
+                         r"\s\[\]")
         chmod_pattern_m = re.compile(chmod_pattern)
 
-        mirror_pattern = ("\\\\mirror\s"
-                          "" + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX + "\s+"
-                          "--\s+"
-                          "(?P<szlocal>\d+\.?\d*\s?({sz})?)"  # size=0 has no units
-                          "\/"
-                          "(?P<szremote>\d+\.?\d*\s?({sz})?)\s+"  # size=0 has no units
-                          "\((?P<pctlocal>\d+)%\)"
-                          "(\s+(?P<speed>\d+\.?\d*\s?({sz}))\/s)?$")\
+        mirror_pattern = (r"\\mirror\s"
+                          + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX + r"\s+"
+                          r"--\s+"
+                          r"(?P<szlocal>\d+\.?\d*\s?({sz})?)"  # size=0 has no units
+                          r"\/"
+                          r"(?P<szremote>\d+\.?\d*\s?({sz})?)\s+"  # size=0 has no units
+                          r"\((?P<pctlocal>\d+)%\)"
+                          r"(\s+(?P<speed>\d+\.?\d*\s?({sz}))\/s)?$")\
             .format(sz=LftpJobStatusParser.__SIZE_UNITS_REGEX)
         mirror_m = re.compile(mirror_pattern)
 
-        mirror_empty_pattern = ("\\\\mirror\s"
-                                "" + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX + "\s*$")
+        mirror_empty_pattern = (r"\\mirror\s"
+                                + LftpJobStatusParser.__QUOTED_FILE_NAME_REGEX + r"\s*$")
         mirror_empty_m = re.compile(mirror_empty_pattern)
 
         queue_done_m = re.compile(LftpJobStatusParser.__QUEUE_DONE_REGEX)
@@ -486,7 +486,7 @@ class LftpJobStatusParser:
             # Look for the header lines
             if len(lines) < 2:
                 raise ValueError("Missing queue header")
-            header1_pattern = "^\[\d+\] queue \(sftp://.*@.*\)(?:\s+--\s+(?:\d+\.\d+|\d+)\s(?:{})\/s)?$"\
+            header1_pattern = r"^\[\d+\] queue \(sftp://.*@.*\)(?:\s+--\s+(?:\d+\.\d+|\d+)\s({})\/s)?$"\
                               .format(LftpJobStatusParser.__SIZE_UNITS_REGEX)
             header2_pattern = "^sftp://.*@.*$"
             line = lines.pop(0)
@@ -505,7 +505,7 @@ class LftpJobStatusParser:
                 pass
             elif re.match("Now executing:", line):
                 # Remove any more lines associated with 'now executing'
-                while lines and re.match("^-\[\d+\]", lines[0]):
+                while lines and re.match(r"^-\[\d+\]", lines[0]):
                     lines.pop(0)
 
             # Look for the actual queue
