@@ -1,11 +1,15 @@
 # SeedSync Runtime Dependencies
-# Generated from pyproject.toml - runtime only (no dev/docs dependencies)
+# Minimal runtime dependencies with security patches
 
 bottle>=0.12,<1.0
 paste>=3.0
 patool>=1.12
 pexpect>=4.8
 pytz>=2024.1
-requests>=2.31
+requests>=2.32.0
 tblib>=3.0
 timeout-decorator>=0.5
+
+# Security: pin transitive dependencies to patched versions
+urllib3>=2.2.0
+certifi>=2024.7.4
