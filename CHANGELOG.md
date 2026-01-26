@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.9.3] - 2026-01-26
+
+### Security
+- **Updated requests** to >=2.32.0 (fixes credential leak, session verification issues)
+- **Updated urllib3** to >=2.2.0 (fixes redirect bombs, decompression vulnerabilities)
+- **Updated certifi** to >=2024.7.4 (removes revoked root certificates)
+- **Updated pyinstaller** to >=6.0 (fixes privilege escalation in build)
+
+### Removed
+- **poetry.lock** - Removed unused lock file that was triggering 30 Dependabot alerts
+- **mkdocs/mkdocs-material** - Removed documentation tools from pyproject.toml (not needed at runtime)
+
+### Changed
+- Cleaned up `pyproject.toml` with explicit version constraints
+
+---
+
 ## [0.9.2] - 2026-01-26
 
 ### Fixed
