@@ -92,6 +92,33 @@ class TestLftpJobStatusParser(unittest.TestCase):
         statuses = parser.parse(output)
         self.assertEqual(0, len(statuses))
 
+    def test_ansi_escape_codes_stripped(self):
+        """Test that ANSI escape codes (like bracketed paste mode) are stripped from output"""
+        # \x1b[?2004l and \x1b[?2004h are bracketed paste mode disable/enable
+        output = """
+        jobs -v
+        \x1b[?2004l
+        \x1b[?2004h
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(0, len(statuses))
+
+    def test_ansi_escape_codes_in_actual_output(self):
+        """Test parsing works when ANSI codes are mixed with real job data"""
+        output = """
+        \x1b[?2004ljobs -v
+        [0] queue (sftp://someone:@localhost)\x1b[?2004h
+        sftp://someone:@localhost/home/someone
+        Queue is stopped.
+        Commands queued:
+         1. mirror -c /tmp/test_lftp/remote/a /tmp/test_lftp/local/
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("a", statuses[0].name)
+
     def test_queued_items(self):
         """Queued items, no jobs running"""
         output = """

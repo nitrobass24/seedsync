@@ -73,8 +73,22 @@ class LftpJobStatusParser:
         eta_s = int((result.group("eta_s") or '0s')[:-1])
         return eta_d*24*3600 + eta_h*3600 + eta_m*60 + eta_s
 
+    @staticmethod
+    def _strip_ansi_codes(text: str) -> str:
+        """
+        Strip ANSI escape sequences from text.
+        These can appear in lftp output when terminal features like
+        bracketed paste mode are enabled (e.g., ^[[?2004l, ^[[?2004h).
+        """
+        # Match ANSI escape sequences: ESC [ ... <letter>
+        # This covers CSI sequences including bracketed paste mode
+        ansi_pattern = re.compile(r'\x1b\[[0-9;?]*[a-zA-Z]')
+        return ansi_pattern.sub('', text)
+
     def parse(self, output: str) -> List[LftpJobStatus]:
         statuses = list()
+        # Strip ANSI escape codes that may be present in terminal output
+        output = self._strip_ansi_codes(output)
         lines = [s.strip() for s in output.splitlines()]
         lines = list(filter(None, lines))  # remove blank lines
         # remove all lines before the first 'jobs -v'
