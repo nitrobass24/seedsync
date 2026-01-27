@@ -13,6 +13,23 @@ from ssh import Sshcp, SshcpError
 from system import SystemFile
 
 
+def _escape_remote_path_single(path: str) -> str:
+    """
+    Escape a remote path using single quotes (no variable expansion).
+    """
+    return "'{}'".format(path)
+
+
+def _escape_remote_path_double(path: str) -> str:
+    """
+    Escape a remote path using double quotes (allows $HOME expansion).
+    Converts ~ to $HOME for shell expansion.
+    """
+    if path.startswith("~"):
+        path = "$HOME" + path[1:]
+    return '"{}"'.format(path)
+
+
 class RemoteScanner(IScanner):
     """
     Scanner implementation to scan the remote filesystem
@@ -51,10 +68,18 @@ class RemoteScanner(IScanner):
             self._install_scanfs()
 
         try:
-            out = self.__ssh.shell("'{}' '{}'".format(
-                self.__remote_path_to_scan_script,
-                self.__remote_path_to_scan)
-            )
+            # Use consistent quoting: double quotes if scan path has tilde (for $HOME expansion),
+            # single quotes otherwise (protects literal characters)
+            if self.__remote_path_to_scan.startswith("~"):
+                out = self.__ssh.shell("{} {}".format(
+                    _escape_remote_path_double(self.__remote_path_to_scan_script),
+                    _escape_remote_path_double(self.__remote_path_to_scan))
+                )
+            else:
+                out = self.__ssh.shell("{} {}".format(
+                    _escape_remote_path_single(self.__remote_path_to_scan_script),
+                    _escape_remote_path_single(self.__remote_path_to_scan))
+                )
         except SshcpError as e:
             self.logger.warning("Caught an SshcpError: {}".format(str(e)))
             recoverable = True
@@ -88,7 +113,8 @@ class RemoteScanner(IScanner):
             local_md5sum = hashlib.md5(f.read()).hexdigest()
         self.logger.debug("Local scanfs md5sum = {}".format(local_md5sum))
         try:
-            out = self.__ssh.shell("md5sum {} | awk '{{print $1}}' || echo".format(self.__remote_path_to_scan_script))
+            out = self.__ssh.shell("md5sum '{}' | awk '{{print $1}}' || echo".format(
+                self.__remote_path_to_scan_script))
             out = out.decode()
             if out == local_md5sum:
                 self.logger.info("Skipping remote scanfs installation: already installed")

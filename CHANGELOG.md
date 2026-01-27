@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.4] - 2026-01-27
+
+### Fixed
+- **Remote paths with tilde (~)** - Fixed remote scanner to properly handle paths containing `~`. The tilde is now converted to `$HOME` for shell expansion, allowing users whose SSH and LFTP paths differ (e.g., LFTP locked to home directory). (#14)
+- **LftpJobStatusParser crash on empty output** - Fixed parser crashing with "Missing queue header line 1" when lftp `jobs -v` returns empty or unexpected output. Now gracefully returns empty status instead of crashing. (#15)
+- **ANSI escape codes in LFTP output** - Fixed parser failing on "First line is not a matching header" when LFTP output contains ANSI escape sequences like bracketed paste mode (`^[[?2004l`). These terminal control codes are now stripped before parsing. (#15)
+
+---
+
 ## [0.10.3] - 2026-01-27
 
 ### Fixed
