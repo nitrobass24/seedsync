@@ -4,6 +4,7 @@
 
 ### Fixed
 - **Docker entrypoint UID/GID handling** - Fixed container crash when PGID matches an existing group ID in the container (e.g., Synology with GID 101). Now checks for existing UID/GID by ID instead of name, allowing reuse of pre-existing system groups. (#4)
+- **scanfs glibc compatibility** - Fixed "Failed to load Python shared library" error on older seedbox servers by building scanfs on Debian Buster (glibc 2.28) instead of Bookworm (glibc 2.36). Now supports Linux systems from 2018+. (#5)
 
 ### Changed
 - **Improved entrypoint logging** - Now shows whether existing users/groups are being reused for easier debugging of permission issues
