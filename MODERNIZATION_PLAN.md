@@ -39,14 +39,21 @@ The fork at [github.com/nitrobass24/seedsync](https://github.com/nitrobass24/see
 | Update GitHub Actions | ✅ Done |
 | Update documentation | ✅ Done |
 
-### Phase 4: Angular Modernization ⏸️ DEFERRED
+### Phase 4: Angular Modernization 🔄 IN PROGRESS
 
-Angular 4.x is outdated but functional. Upgrading would require:
-- Major rewrite of components
-- Updated RxJS patterns
-- New build tooling
+Angular 17 migration is complete on the `angular-upgrade` branch ([PR #154](https://github.com/ipsingh06/seedsync/pull/154)):
 
-**Recommendation**: Only upgrade if UI issues arise.
+| Task | Status |
+|------|--------|
+| Upgrade Angular 4 → 17 | ✅ Done |
+| Standalone components (no NgModules) | ✅ Done |
+| Bootstrap 4 → 5.3 | ✅ Done |
+| Replace Immutable.js with native TypeScript | ✅ Done |
+| Replace ngx-modialog with Angular CDK Dialog | ✅ Done |
+| RxJS 5 → 7 pipe operators | ✅ Done |
+| Update Dockerfiles to Node 20 | ✅ Done |
+
+**Status**: Ready for testing and merge. Original Angular 4 code preserved in `src/angular-v4/` for rollback.
 
 ---
 
@@ -109,10 +116,10 @@ Angular 4.x is outdated but functional. Upgrading would require:
 - Works fine, just old
 - Upgrade would be significant effort
 
-### 2. scanfs Binary Compatibility
-- PyInstaller binary may not work on all seedbox servers
-- Some providers restrict `/tmp` execution
-- Workaround: Set `TMPDIR` on remote server
+### 2. scanfs Binary Compatibility ✅ FIXED in v0.9.4
+- ~~PyInstaller binary may not work on all seedbox servers~~ Fixed by building on Debian Buster (glibc 2.28)
+- Now supports Linux systems from 2018+
+- Some providers still restrict `/tmp` execution - Workaround: Set `TMPDIR` on remote server
 
 ### 3. LFTP Parsing
 - Some edge cases in LFTP output parsing
@@ -125,10 +132,11 @@ Angular 4.x is outdated but functional. Upgrading would require:
 
 If you want to continue development:
 
-1. **Angular Upgrade** - Major undertaking, consider alternatives (Vue, React, vanilla JS)
-2. **Python scanfs fallback** - Run scanner as Python script instead of binary
+1. ~~**Angular Upgrade**~~ ✅ Done - See `angular-upgrade` branch
+2. **Python scanfs fallback** - Run scanner as Python script instead of binary (for restricted servers)
 3. **Memory profiling** - If high memory usage reported
 4. **Additional tests** - Expand test coverage
+5. **Dark mode** - Requested in issue #133 (upstream)
 
 ---
 
@@ -144,8 +152,8 @@ make stop     # Stop container
 
 ### Release
 ```bash
-git tag v0.9.2
-git push origin v0.9.2
+git tag v0.9.4
+git push origin v0.9.4
 # GitHub Actions handles the rest
 ```
 
