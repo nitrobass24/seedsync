@@ -4,7 +4,7 @@
 
 SeedSync is a Docker-based tool that syncs files from a remote seedbox to a local machine using LFTP.
 
-- **Frontend**: Angular 17 (standalone components)
+- **Frontend**: Angular 4 (Bootstrap 4)
 - **Backend**: Python 3.12 with Bottle
 - **Container**: Multi-arch Docker image (amd64, arm64)
 - **Registry**: ghcr.io/nitrobass24/seedsync
@@ -13,8 +13,8 @@ SeedSync is a Docker-based tool that syncs files from a remote seedbox to a loca
 
 ```
 src/
-├── angular/          # Angular 17 frontend
-├── angular-v4/       # Legacy Angular 4 (preserved for rollback)
+├── angular/          # Angular 4 frontend (current)
+├── angular-v17/      # Angular 17 (preserved for future work)
 ├── python/           # Python backend
 ├── docker/           # Docker build files
 └── e2e/              # End-to-end tests
@@ -50,12 +50,16 @@ If the change relates to modernization tasks:
 - Update version references
 - Update architecture diagram if needed
 
-### 3. Create Release
+### 3. Update package.json Version
+
+Update the version in `src/angular/package.json` to match the release version. This is displayed on the About page.
+
+### 4. Create Release
 
 ```bash
-# Commit documentation updates
-git add CHANGELOG.md MODERNIZATION_PLAN.md
-git commit -m "Update CHANGELOG and docs for vX.Y.Z"
+# Commit all changes
+git add CHANGELOG.md MODERNIZATION_PLAN.md src/angular/package.json
+git commit -m "Release vX.Y.Z - Brief description"
 git push origin master
 
 # Create and push tag
@@ -68,11 +72,38 @@ The CI workflow will automatically:
 - Push to ghcr.io
 - Create GitHub release with auto-generated notes
 
-### 4. Verify Release
+### 5. Update GitHub Release Notes
+
+After CI creates the release, update the release notes with detailed changelog:
+
+```bash
+gh release edit vX.Y.Z --repo nitrobass24/seedsync --notes "$(cat <<'EOF'
+## What's Changed
+
+### Fixed
+- **Bug name** - Description of fix (#issue)
+
+### Changed
+- **Feature name** - Description of change
+
+### Added
+- **New feature** - Description
+
+**Full Changelog**: https://github.com/nitrobass24/seedsync/compare/vPREV...vX.Y.Z
+EOF
+)"
+```
+
+Format should match CHANGELOG.md entries with:
+- Section headers: Fixed, Changed, Added, Removed, Security
+- Bold feature/bug names
+- Issue references where applicable
+
+### 6. Verify Release
 
 - Check GitHub Actions completed successfully
-- Verify image is available: `docker pull ghcr.io/nitrobass24/seedsync:vX.Y.Z`
-- Verify GitHub release was created
+- Verify image is available: `docker pull ghcr.io/nitrobass24/seedsync:X.Y.Z`
+- Verify GitHub release notes are formatted correctly
 
 ## Version Numbering
 
