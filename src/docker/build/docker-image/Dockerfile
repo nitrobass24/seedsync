@@ -4,18 +4,18 @@
 # ==============================================================================
 # Stage 1: Build Angular Frontend
 # ==============================================================================
-FROM node:12.22-buster-slim AS angular-builder
+FROM node:20-bookworm-slim AS angular-builder
 
 WORKDIR /app
 COPY src/angular/package*.json ./
-RUN npm install --production=false --silent
+RUN npm install --include=dev
 COPY src/angular/ ./
-RUN ./node_modules/.bin/ng build --prod --output-path /build/html
+RUN ./node_modules/.bin/ng build --configuration production --output-path /build/html
 
 # ==============================================================================
 # Stage 2: Build scanfs binary with PyInstaller
-# Use older Debian (buster) for broader glibc compatibility on remote seedboxes
-# buster has glibc 2.28, supporting most Linux systems from 2018+
+# Use Debian Bullseye for glibc compatibility on remote seedboxes
+# Bullseye has glibc 2.31, supporting Linux systems from 2021+
 # ==============================================================================
 FROM python:3.12-slim-bullseye AS scanfs-builder
 
@@ -79,7 +79,8 @@ RUN pip install --no-cache-dir -r /app/python/requirements.txt \
 COPY src/python/ /app/python/
 
 # Copy built artifacts from previous stages
-COPY --from=angular-builder /build/html /app/html
+# Angular 17+ outputs to browser/ subfolder
+COPY --from=angular-builder /build/html/browser /app/html
 COPY --from=scanfs-builder /build/dist/scanfs /app/scanfs
 
 # Copy and set up entrypoint
