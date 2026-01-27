@@ -39,9 +39,9 @@ The fork at [github.com/nitrobass24/seedsync](https://github.com/nitrobass24/see
 | Update GitHub Actions | ✅ Done |
 | Update documentation | ✅ Done |
 
-### Phase 4: Angular Modernization 🔄 IN PROGRESS
+### Phase 4: Angular Modernization ✅
 
-Angular 17 migration is complete on the `angular-upgrade` branch:
+Angular 17 migration merged to master in v0.10.0:
 
 | Task | Status |
 |------|--------|
@@ -53,7 +53,7 @@ Angular 17 migration is complete on the `angular-upgrade` branch:
 | RxJS 5 → 7 pipe operators | ✅ Done |
 | Update Dockerfiles to Node 20 | ✅ Done |
 
-**Status**: Ready for testing and merge. Original Angular 4 code preserved in `src/angular-v4/` for rollback.
+**Status**: ✅ Complete. Original Angular 4 code preserved in `src/angular-v4/` for rollback.
 
 ---
 
@@ -95,7 +95,7 @@ Angular 17 migration is complete on the `angular-upgrade` branch:
 │                     (240 MB)                        │
 │                                                     │
 │  ┌─────────────┐    ┌─────────────┐               │
-│  │  Python 3.12│    │  Angular 4  │               │
+│  │  Python 3.12│    │  Angular 17 │               │
 │  │   Bottle    │◄───│   Web UI    │               │
 │  │  REST API   │    │             │               │
 │  └──────┬──────┘    └─────────────┘               │
@@ -111,17 +111,12 @@ Angular 17 migration is complete on the `angular-upgrade` branch:
 
 ## Known Limitations
 
-### 1. Angular 4.x (Functional but Outdated)
-- Last supported Angular version from 2017
-- Works fine, just old
-- Upgrade would be significant effort
-
-### 2. scanfs Binary Compatibility ✅ FIXED in v0.9.4
+### 1. scanfs Binary Compatibility ✅ FIXED in v0.9.4
 - ~~PyInstaller binary may not work on all seedbox servers~~ Fixed by building on Debian Buster (glibc 2.28)
 - Now supports Linux systems from 2018+
 - Some providers still restrict `/tmp` execution - Workaround: Set `TMPDIR` on remote server
 
-### 3. LFTP Parsing
+### 2. LFTP Parsing
 - Some edge cases in LFTP output parsing
 - May affect certain server configurations
 - Report issues if encountered
@@ -132,7 +127,7 @@ Angular 17 migration is complete on the `angular-upgrade` branch:
 
 If you want to continue development:
 
-1. ~~**Angular Upgrade**~~ ✅ Done - See `angular-upgrade` branch
+1. ~~**Angular Upgrade**~~ ✅ Done in v0.10.0
 2. **Python scanfs fallback** - Run scanner as Python script instead of binary (for restricted servers)
 3. **Memory profiling** - If high memory usage reported
 4. **Additional tests** - Expand test coverage
@@ -152,8 +147,8 @@ make stop     # Stop container
 
 ### Release
 ```bash
-git tag v0.9.4
-git push origin v0.9.4
+git tag v0.10.0
+git push origin v0.10.0
 # GitHub Actions handles the rest
 ```
 

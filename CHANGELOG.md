@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.10.0] - 2026-01-27
+
+### Changed
+- **Angular 4 → 17** - Complete frontend rewrite with modern Angular
+  - Standalone components (no NgModules)
+  - Bootstrap 4 → 5.3 (removes jQuery dependency)
+  - RxJS 5 → 7 with pipe operators
+  - Immutable.js removed (native TypeScript)
+  - ngx-modialog → Angular CDK Dialog
+  - Node 12 → Node 20 for builds
+- **Smaller JS bundles** - ~150-200KB reduction from removed dependencies
+- **scanfs builder** - Now uses Debian Bullseye (glibc 2.31) as Buster repos are EOL
+
+### Added
+- `src/angular-v4/` - Original Angular 4 code preserved for rollback if needed
+
+### Fixed
+- **Dockerfile compatibility** - Fixed Python/Debian version combinations for multi-stage build
+
+---
+
 ## [0.9.4] - 2026-01-26
 
 ### Fixed
