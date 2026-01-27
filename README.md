@@ -9,6 +9,9 @@
   <a href="https://github.com/nitrobass24/seedsync/blob/master/LICENSE.txt">
     <img src="https://img.shields.io/github/license/nitrobass24/seedsync" alt="License">
   </a>
+  <a href="https://nitrobass24.github.io/seedsync/">
+    <img src="https://img.shields.io/badge/docs-website-blue" alt="Documentation">
+  </a>
 </p>
 
 SeedSync is a tool to sync files from a remote Linux server (like your seedbox) to your local machine.
@@ -24,6 +27,10 @@ It uses LFTP to transfer files fast!
 * Auto-Queue - only sync the files you want based on pattern matching
 * Delete local and remote files easily
 * Fully open source!
+
+## Documentation
+
+Full documentation is available at **[nitrobass24.github.io/seedsync](https://nitrobass24.github.io/seedsync/)**
 
 ## Quick Start (Docker)
 
