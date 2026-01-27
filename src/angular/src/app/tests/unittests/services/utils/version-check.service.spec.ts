@@ -51,7 +51,7 @@ describe("Testing version check service", () => {
 
     it("should request the correct github url", fakeAsync(() => {
         expect(restService.sendRequest).toHaveBeenCalledWith(
-            "https://api.github.com/repos/ipsingh06/seedsync/releases/latest"
+            "https://api.github.com/repos/nitrobass24/seedsync/releases/latest"
         );
     }));
 

@@ -11,5 +11,5 @@ On the left navigation you will find useful links.
 
 External links:
 
-* Github: [ipsingh06/seedsync](https://github.com/ipsingh06/seedsync)
-* Docker Hub: [ipsingh06/seedsync](https://hub.docker.com/repository/docker/ipsingh06/seedsync)
+* Github: [nitrobass24/seedsync](https://github.com/nitrobass24/seedsync)
+* Docker Hub: [nitrobass24/seedsync](https://hub.docker.com/r/nitrobass24/seedsync)

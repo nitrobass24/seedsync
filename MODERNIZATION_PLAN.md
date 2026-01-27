@@ -41,7 +41,7 @@ The fork at [github.com/nitrobass24/seedsync](https://github.com/nitrobass24/see
 
 ### Phase 4: Angular Modernization 🔄 IN PROGRESS
 
-Angular 17 migration is complete on the `angular-upgrade` branch ([PR #154](https://github.com/ipsingh06/seedsync/pull/154)):
+Angular 17 migration is complete on the `angular-upgrade` branch:
 
 | Task | Status |
 |------|--------|

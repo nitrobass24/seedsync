@@ -50,4 +50,4 @@ For Seedsync docker, try adding the following options to the `docker run` comman
 -e LANG=en_US.UTF-8
 ```
 
-See [this issue](https://github.com/ipsingh06/seedsync/issues/66) for more details.
+See [this issue](https://github.com/nitrobass24/seedsync/issues) for more details.
