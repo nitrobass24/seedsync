@@ -17,7 +17,7 @@ RUN ./node_modules/.bin/ng build --prod --output-path /build/html
 # Use older Debian (buster) for broader glibc compatibility on remote seedboxes
 # buster has glibc 2.28, supporting most Linux systems from 2018+
 # ==============================================================================
-FROM python:3.11-slim-buster AS scanfs-builder
+FROM python:3.12-slim-bullseye AS scanfs-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     binutils \
