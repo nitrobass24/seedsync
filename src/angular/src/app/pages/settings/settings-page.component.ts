@@ -105,6 +105,9 @@ export class SettingsPageComponent implements OnInit {
     }
 
     onCommandRestart() {
+        // Hide the restart notification immediately when user clicks restart
+        this._notifService.hide(this._configRestartNotif);
+
         this._commandService.restart().subscribe({
             next: reaction => {
                 if (reaction.success) {

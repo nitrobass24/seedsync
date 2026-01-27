@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.3] - 2026-01-27
+
+### Fixed
+- **Restart button** - Fixed server restart functionality that was broken due to Bottle framework's custom `__setattr__` blocking attribute updates. Now uses `threading.Event` for thread-safe signaling.
+- **Settings persistence** - Settings are now properly saved before restart
+- **Restart notification** - "Restart the app to apply new settings" notification now clears immediately when restart button is clicked
+
+### Changed
+- **About page** - Updated GitHub repository link to nitrobass24/seedsync and copyright information
+
+---
+
 ## [0.10.2] - 2026-01-27
 
 ### Fixed

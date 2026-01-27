@@ -24,10 +24,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     binutils \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir pyinstaller
+RUN pip install --no-cache-dir pyinstaller tblib
 
 COPY src/python/scan_fs.py /src/
 COPY src/python/system/ /src/system/
+COPY src/python/common/ /src/common/
 
 WORKDIR /build
 RUN pyinstaller /src/scan_fs.py \
