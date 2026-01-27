@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2] - 2026-01-27
+
+### Fixed
+- **scanfs architecture mismatch** - Force AMD64 build for scanfs binary since it runs on remote seedbox servers, not locally. Fixes "cannot execute binary file: Exec format error" on ARM-based local machines.
+
+---
+
 ## [0.10.1] - 2026-01-27
 
 ### Reverted

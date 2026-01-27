@@ -16,8 +16,9 @@ RUN ./node_modules/.bin/ng build --prod --output-path /build/html
 # Stage 2: Build scanfs binary with PyInstaller
 # Use Debian Bullseye for glibc compatibility on remote seedboxes
 # Bullseye has glibc 2.31, supporting Linux systems from 2021+
+# IMPORTANT: Force AMD64 platform - scanfs runs on remote server, not locally
 # ==============================================================================
-FROM python:3.12-slim-bullseye AS scanfs-builder
+FROM --platform=linux/amd64 python:3.12-slim-bullseye AS scanfs-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     binutils \
