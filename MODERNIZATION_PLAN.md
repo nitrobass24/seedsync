@@ -170,4 +170,4 @@ Env: PUID, PGID
 
 - Original project: [ipsingh06/seedsync](https://github.com/ipsingh06/seedsync)
 - Modernization: [nitrobass24/seedsync](https://github.com/nitrobass24/seedsync)
-- Assistance: Claude Code
+
