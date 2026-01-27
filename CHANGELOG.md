@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.4] - 2026-01-27
+
+### Fixed
+- **Remote paths with tilde (~)** - Fixed remote scanner to properly handle paths containing `~`. The tilde is now converted to `$HOME` for shell expansion, allowing users whose SSH and LFTP paths differ (e.g., LFTP locked to home directory). (#14)
+
+---
+
 ## [0.10.3] - 2026-01-27
 
 ### Fixed

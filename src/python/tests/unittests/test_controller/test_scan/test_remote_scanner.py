@@ -162,7 +162,7 @@ class TestRemoteScanner(unittest.TestCase):
         scanner.scan()
         self.assertEqual(2, self.mock_ssh.shell.call_count)
         self.mock_ssh.shell.assert_has_calls([
-            call("md5sum /remote/path/to/scan/script | awk '{print $1}' || echo"),
+            call("md5sum '/remote/path/to/scan/script' | awk '{print $1}' || echo"),
             call(ANY)
         ])
 
@@ -286,6 +286,38 @@ class TestRemoteScanner(unittest.TestCase):
         self.assertEqual(2, self.mock_ssh.shell.call_count)
         self.mock_ssh.shell.assert_called_with(
             "'/remote/path/to/scan/script' '/remote/path/to/scan'"
+        )
+
+    def test_handles_tilde_path_for_shell_expansion(self):
+        """Test that paths starting with ~ are converted to $HOME for shell expansion"""
+        scanner = RemoteScanner(
+            remote_address="my remote address",
+            remote_username="my remote user",
+            remote_password="my password",
+            remote_port=1234,
+            remote_path_to_scan="~/data/torrents",
+            local_path_to_scan_script=TestRemoteScanner.temp_scan_script,
+            remote_path_to_scan_script="/remote/path/to/scan/script"
+        )
+
+        self.ssh_run_command_count = 0
+
+        def ssh_shell(*args):
+            self.ssh_run_command_count += 1
+            if self.ssh_run_command_count == 1:
+                # md5sum check
+                return b''
+            else:
+                # later tries
+                return pickle.dumps([])
+        self.mock_ssh.shell.side_effect = ssh_shell
+
+        scanner.scan()
+        self.assertEqual(2, self.mock_ssh.shell.call_count)
+        # When scan path has tilde, both paths use double quotes for consistent quoting
+        # Tilde is converted to $HOME for shell expansion
+        self.mock_ssh.shell.assert_called_with(
+            "\"/remote/path/to/scan/script\" \"$HOME/data/torrents\""
         )
 
     def test_raises_nonrecoverable_error_on_first_failed_ssh(self):
