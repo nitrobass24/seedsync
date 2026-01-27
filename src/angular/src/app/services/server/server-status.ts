@@ -1,61 +1,62 @@
+import {Record} from "immutable";
+
 /**
- * ServerStatus
+ * ServerStatus immutable
  */
-export interface ServerStatusData {
-    readonly server: {
-        readonly up: boolean;
-        readonly errorMessage: string | null;
+interface IServerStatus {
+    server: {
+        up: boolean;
+        errorMessage: string;
     };
-    readonly controller: {
-        readonly latestLocalScanTime: Date | null;
-        readonly latestRemoteScanTime: Date | null;
-        readonly latestRemoteScanFailed: boolean;
-        readonly latestRemoteScanError: string | null;
+
+    controller: {
+        latestLocalScanTime: Date;
+        latestRemoteScanTime: Date;
+        latestRemoteScanFailed: boolean;
+        latestRemoteScanError: string;
     };
 }
-
-/**
- * Immutable ServerStatus class
- */
-export class ServerStatus implements ServerStatusData {
-    readonly server: {
-        readonly up: boolean;
-        readonly errorMessage: string | null;
-    };
-    readonly controller: {
-        readonly latestLocalScanTime: Date | null;
-        readonly latestRemoteScanTime: Date | null;
-        readonly latestRemoteScanFailed: boolean;
-        readonly latestRemoteScanError: string | null;
-    };
-
-    constructor(data: ServerStatusData) {
-        this.server = Object.freeze({ ...data.server });
-        this.controller = Object.freeze({ ...data.controller });
-        Object.freeze(this);
+const DefaultServerStatus: IServerStatus = {
+    server: {
+        up: null,
+        errorMessage: null
+    },
+    controller: {
+        latestLocalScanTime: null,
+        latestRemoteScanTime: null,
+        latestRemoteScanFailed: null,
+        latestRemoteScanError: null
     }
+};
+const ServerStatusRecord = Record(DefaultServerStatus);
+export class ServerStatus extends ServerStatusRecord implements IServerStatus {
+    server: {
+        up: boolean;
+        errorMessage: string;
+    };
 
-    /**
-     * Create a new ServerStatus with updated properties
-     */
-    update(updates: Partial<ServerStatusData>): ServerStatus {
-        return new ServerStatus({
-            server: updates.server ?? this.server,
-            controller: updates.controller ?? this.controller
-        });
+    controller: {
+        latestLocalScanTime: Date;
+        latestRemoteScanTime: Date;
+        latestRemoteScanFailed: boolean;
+        latestRemoteScanError: string;
+    };
+
+    constructor(props) {
+        super(props);
     }
+}
 
-    /**
-     * Create from JSON response
-     */
-    static fromJson(json: ServerStatusJson): ServerStatus {
-        let latestLocalScanTime: Date | null = null;
+
+export module ServerStatus {
+    export function fromJson(json: ServerStatusJson): ServerStatus {
+        let latestLocalScanTime: Date = null;
         if (json.controller.latest_local_scan_time != null) {
             // str -> number, then sec -> ms
             latestLocalScanTime = new Date(1000 * +json.controller.latest_local_scan_time);
         }
 
-        let latestRemoteScanTime: Date | null = null;
+        let latestRemoteScanTime: Date = null;
         if (json.controller.latest_remote_scan_time != null) {
             // str -> number, then sec -> ms
             latestRemoteScanTime = new Date(1000 * +json.controller.latest_remote_scan_time);
@@ -64,48 +65,32 @@ export class ServerStatus implements ServerStatusData {
         return new ServerStatus({
             server: {
                 up: json.server.up,
-                errorMessage: json.server.error_msg ?? null
+                errorMessage: json.server.error_msg
             },
             controller: {
-                latestLocalScanTime,
-                latestRemoteScanTime,
+                latestLocalScanTime: latestLocalScanTime,
+                latestRemoteScanTime: latestRemoteScanTime,
                 latestRemoteScanFailed: json.controller.latest_remote_scan_failed,
-                latestRemoteScanError: json.controller.latest_remote_scan_error ?? null
-            }
-        });
-    }
-
-    /**
-     * Create default (disconnected) ServerStatus
-     */
-    static createDefault(): ServerStatus {
-        return new ServerStatus({
-            server: {
-                up: false,
-                errorMessage: null
-            },
-            controller: {
-                latestLocalScanTime: null,
-                latestRemoteScanTime: null,
-                latestRemoteScanFailed: false,
-                latestRemoteScanError: null
+                latestRemoteScanError: json.controller.latest_remote_scan_error
             }
         });
     }
 }
 
 /**
- * JSON structure from backend
+ * ServerStatus as serialized by the backend.
+ * Note: naming convention matches that used in JSON
  */
 export interface ServerStatusJson {
     server: {
         up: boolean;
-        error_msg: string | null;
+        error_msg: string;
     };
+
     controller: {
-        latest_local_scan_time: string | null;
-        latest_remote_scan_time: string | null;
+        latest_local_scan_time: string;
+        latest_remote_scan_time: string;
         latest_remote_scan_failed: boolean;
-        latest_remote_scan_error: string | null;
+        latest_remote_scan_error: string;
     };
 }

@@ -1,36 +1,41 @@
-import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { Observable } from 'rxjs';
+import {Component, ChangeDetectionStrategy} from "@angular/core";
+import {Observable} from "rxjs/Observable";
 
-import { ViewFileService } from '../../services/files/view-file.service';
-import { ViewFile } from '../../services/files/view-file';
-import { LoggerService } from '../../services/utils/logger.service';
-import { ViewFileOptions } from '../../services/files/view-file-options';
-import { ViewFileOptionsService } from '../../services/files/view-file-options.service';
-import { FileComponent } from './file.component';
+import {List} from "immutable";
+
+import {ViewFileService} from "../../services/files/view-file.service";
+import {ViewFile} from "../../services/files/view-file";
+import {LoggerService} from "../../services/utils/logger.service";
+import {ViewFileOptions} from "../../services/files/view-file-options";
+import {ViewFileOptionsService} from "../../services/files/view-file-options.service";
 
 @Component({
-    selector: 'app-file-list',
-    standalone: true,
-    imports: [CommonModule, FileComponent],
-    templateUrl: './file-list.component.html',
-    styleUrl: './file-list.component.scss',
+    selector: "app-file-list",
+    providers: [],
+    templateUrl: "./file-list.component.html",
+    styleUrls: ["./file-list.component.scss"],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
+
 export class FileListComponent {
-    public files: Observable<readonly ViewFile[]>;
+    public files: Observable<List<ViewFile>>;
+    public identify = FileListComponent.identify;
     public options: Observable<ViewFileOptions>;
 
-    private logger = inject(LoggerService);
-    private viewFileService = inject(ViewFileService);
-    private viewFileOptionsService = inject(ViewFileOptionsService);
-
-    constructor() {
-        this.files = this.viewFileService.filteredFiles;
+    constructor(private _logger: LoggerService,
+                private viewFileService: ViewFileService,
+                private viewFileOptionsService: ViewFileOptionsService) {
+        this.files = viewFileService.filteredFiles;
         this.options = this.viewFileOptionsService.options;
     }
 
-    trackByName(_index: number, item: ViewFile): string {
+    // noinspection JSUnusedLocalSymbols
+    /**
+     * Used for trackBy in ngFor
+     * @param index
+     * @param item
+     */
+    static identify(index: number, item: ViewFile): string {
         return item.name;
     }
 
@@ -42,33 +47,33 @@ export class FileListComponent {
         }
     }
 
-    onQueue(file: ViewFile): void {
+    onQueue(file: ViewFile) {
         this.viewFileService.queue(file).subscribe(data => {
-            this.logger.info(data);
+            this._logger.info(data);
         });
     }
 
-    onStop(file: ViewFile): void {
+    onStop(file: ViewFile) {
         this.viewFileService.stop(file).subscribe(data => {
-            this.logger.info(data);
+            this._logger.info(data);
         });
     }
 
-    onExtract(file: ViewFile): void {
+    onExtract(file: ViewFile) {
         this.viewFileService.extract(file).subscribe(data => {
-            this.logger.info(data);
+            this._logger.info(data);
         });
     }
 
-    onDeleteLocal(file: ViewFile): void {
+    onDeleteLocal(file: ViewFile) {
         this.viewFileService.deleteLocal(file).subscribe(data => {
-            this.logger.info(data);
+            this._logger.info(data);
         });
     }
 
-    onDeleteRemote(file: ViewFile): void {
+    onDeleteRemote(file: ViewFile) {
         this.viewFileService.deleteRemote(file).subscribe(data => {
-            this.logger.info(data);
+            this._logger.info(data);
         });
     }
 }

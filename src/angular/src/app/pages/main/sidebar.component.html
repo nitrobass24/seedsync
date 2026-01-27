@@ -1,19 +1,18 @@
 <div id="sidebar">
-    @for (routeInfo of routeInfos; track routeInfo.path) {
-        <a class="button"
-           [routerLink]="routeInfo.path"
-           routerLinkActive="selected">
-            <img [src]="routeInfo.icon" [alt]="routeInfo.name" />
-            <span class="text">{{routeInfo.name}}</span>
-        </a>
-    }
+    <a *ngFor="let routeInfo of routeInfos"
+       class="button"
+       routerLink="{{routeInfo.path}}"
+       routerLinkActive="selected">
+        <img src="{{routeInfo.icon}}" />
+        <span class="text">{{routeInfo.name}}</span>
+    </a>
 
     <hr>
 
     <a class="button"
        [attr.disabled]="commandsEnabled ? null : true"
        (click)="!commandsEnabled || onCommandRestart()">
-        <img src="assets/icons/refresh.svg" alt="Restart" />
+        <img src="assets/icons/refresh.svg" />
         <span class="text">Restart</span>
     </a>
 </div>

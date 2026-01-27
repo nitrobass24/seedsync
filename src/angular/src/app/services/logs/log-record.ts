@@ -1,63 +1,67 @@
-/**
- * LogRecord
- */
-export interface LogRecordData {
-    readonly time: Date;
-    readonly level: LogRecordLevel;
-    readonly loggerName: string;
-    readonly message: string;
-    readonly exceptionTraceback: string | null;
-}
+import {Record} from "immutable";
 
-export enum LogRecordLevel {
-    DEBUG = 'DEBUG',
-    INFO = 'INFO',
-    WARNING = 'WARNING',
-    ERROR = 'ERROR',
-    CRITICAL = 'CRITICAL'
-}
 
 /**
- * Immutable LogRecord class
+ * LogRecord immutable
  */
-export class LogRecord implements LogRecordData {
-    readonly time: Date;
-    readonly level: LogRecordLevel;
-    readonly loggerName: string;
-    readonly message: string;
-    readonly exceptionTraceback: string | null;
+interface ILogRecord {
+    time: Date;
+    level: LogRecord.Level;
+    loggerName: string;
+    message: string;
+    exceptionTraceback: string;
+}
+const DefaultLogRecord: ILogRecord = {
+    time: null,
+    level: null,
+    loggerName: null,
+    message: null,
+    exceptionTraceback: null,
+};
+const LogRecordRecord = Record(DefaultLogRecord);
+export class LogRecord extends LogRecordRecord implements ILogRecord {
+    time: Date;
+    level: LogRecord.Level;
+    loggerName: string;
+    message: string;
+    exceptionTraceback: string;
 
-    constructor(data: LogRecordData) {
-        this.time = data.time;
-        this.level = data.level;
-        this.loggerName = data.loggerName;
-        this.message = data.message;
-        this.exceptionTraceback = data.exceptionTraceback;
-        Object.freeze(this);
+    constructor(props) {
+        super(props);
     }
+}
 
-    /**
-     * Create from JSON response
-     */
-    static fromJson(json: LogRecordJson): LogRecord {
+
+export module LogRecord {
+    export function fromJson(json: LogRecordJson): LogRecord {
         return new LogRecord({
             // str -> number, then sec -> ms
             time: new Date(1000 * +json.time),
-            level: LogRecordLevel[json.level_name as keyof typeof LogRecordLevel] ?? LogRecordLevel.INFO,
+            level: LogRecord.Level[json.level_name],
             loggerName: json.logger_name,
             message: json.message,
-            exceptionTraceback: json.exc_tb ?? null
+            exceptionTraceback: json.exc_tb
         });
+    }
+
+    export enum Level {
+        DEBUG       = <any> "DEBUG",
+        INFO        = <any> "INFO",
+        WARNING     = <any> "WARNING",
+        ERROR       = <any> "ERROR",
+        CRITICAL    = <any> "CRITICAL",
     }
 }
 
+
 /**
- * JSON structure from backend
+ * LogRecord as serialized by the backend.
+ * Note: naming convention matches that used in JSON
  */
 export interface LogRecordJson {
     time: number;
     level_name: string;
     logger_name: string;
     message: string;
-    exc_tb: string | null;
+    exc_tb: string;
 }

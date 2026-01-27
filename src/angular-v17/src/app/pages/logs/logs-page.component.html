@@ -1,0 +1,37 @@
+<div id="logs">
+    <div #logHead></div>
+
+    <div id="log-container">
+        @for (log of logs; track $index) {
+            <div class="log-entry"
+                 [class.log-debug]="log.level === LogRecordLevel.DEBUG"
+                 [class.log-info]="log.level === LogRecordLevel.INFO"
+                 [class.log-warning]="log.level === LogRecordLevel.WARNING"
+                 [class.log-error]="log.level === LogRecordLevel.ERROR"
+                 [class.log-critical]="log.level === LogRecordLevel.CRITICAL">
+                <span class="timestamp">{{log.time | date:'HH:mm:ss'}}</span>
+                <span class="level">[{{log.level}}]</span>
+                <span class="logger">{{log.loggerName}}</span>
+                <span class="message">{{log.message}}</span>
+                @if (log.exceptionTraceback) {
+                    <pre class="traceback">{{log.exceptionTraceback}}</pre>
+                }
+            </div>
+        } @empty {
+            <div class="text-muted">Waiting for logs...</div>
+        }
+    </div>
+
+    <div #logTail></div>
+
+    @if (showScrollToTopButton) {
+        <button class="btn btn-primary scroll-btn scroll-top" (click)="scrollToTop()">
+            <i class="fa-solid fa-arrow-up"></i>
+        </button>
+    }
+    @if (showScrollToBottomButton) {
+        <button class="btn btn-primary scroll-btn scroll-bottom" (click)="scrollToBottom()">
+            <i class="fa-solid fa-arrow-down"></i>
+        </button>
+    }
+</div>

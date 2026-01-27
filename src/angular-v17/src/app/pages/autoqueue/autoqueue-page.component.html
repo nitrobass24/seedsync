@@ -1,0 +1,42 @@
+<div id="autoqueue">
+    <div id="status" class="alert" [class.alert-success]="enabled" [class.alert-warning]="!enabled">
+        @if (enabled) {
+            <span>AutoQueue is <b>enabled</b></span>
+            @if (patternsOnly) {
+                <span> and restricted to patterns</span>
+            }
+        } @else {
+            <span>AutoQueue is <b>disabled</b></span>
+        }
+    </div>
+
+    <div id="add-pattern">
+        <div class="input-group">
+            <input type="text" class="form-control" placeholder="Enter pattern..."
+                   [(ngModel)]="newPattern"
+                   [disabled]="!connected"
+                   (keyup.enter)="onAddPattern()">
+            <button class="btn btn-primary" type="button"
+                    [disabled]="!connected"
+                    (click)="onAddPattern()">
+                Add
+            </button>
+        </div>
+    </div>
+
+    <div id="patterns">
+        <h5>Patterns</h5>
+        <ul class="list-group">
+            @for (pattern of patterns | async; track pattern.pattern) {
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{{pattern.pattern}}</span>
+                    <button class="btn btn-danger btn-sm" (click)="onRemovePattern(pattern)">
+                        Remove
+                    </button>
+                </li>
+            } @empty {
+                <li class="list-group-item text-muted">No patterns defined</li>
+            }
+        </ul>
+    </div>
+</div>

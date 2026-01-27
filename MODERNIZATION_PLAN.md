@@ -39,21 +39,21 @@ The fork at [github.com/nitrobass24/seedsync](https://github.com/nitrobass24/see
 | Update GitHub Actions | ✅ Done |
 | Update documentation | ✅ Done |
 
-### Phase 4: Angular Modernization ✅
+### Phase 4: Angular Modernization ⏸️ PAUSED
 
-Angular 17 migration merged to master in v0.10.0:
+Angular 17 migration was attempted in v0.10.0 but rolled back in v0.10.1 due to runtime issues.
 
 | Task | Status |
 |------|--------|
-| Upgrade Angular 4 → 17 | ✅ Done |
-| Standalone components (no NgModules) | ✅ Done |
-| Bootstrap 4 → 5.3 | ✅ Done |
-| Replace Immutable.js with native TypeScript | ✅ Done |
-| Replace ngx-modialog with Angular CDK Dialog | ✅ Done |
-| RxJS 5 → 7 pipe operators | ✅ Done |
-| Update Dockerfiles to Node 20 | ✅ Done |
+| Upgrade Angular 4 → 17 | ⏸️ Rolled back |
+| Standalone components (no NgModules) | ⏸️ Rolled back |
+| Bootstrap 4 → 5.3 | ⏸️ Rolled back |
+| Replace Immutable.js with native TypeScript | ⏸️ Rolled back |
+| Replace ngx-modialog with Angular CDK Dialog | ⏸️ Rolled back |
+| RxJS 5 → 7 pipe operators | ⏸️ Rolled back |
+| Update Dockerfiles to Node 20 | ⏸️ Rolled back |
 
-**Status**: ✅ Complete. Original Angular 4 code preserved in `src/angular-v4/` for rollback.
+**Status**: Rolled back to Angular 4. Angular 17 code preserved in `src/angular-v17/` for future work.
 
 ---
 
@@ -95,7 +95,7 @@ Angular 17 migration merged to master in v0.10.0:
 │                     (240 MB)                        │
 │                                                     │
 │  ┌─────────────┐    ┌─────────────┐               │
-│  │  Python 3.12│    │  Angular 17 │               │
+│  │  Python 3.12│    │  Angular 4  │               │
 │  │   Bottle    │◄───│   Web UI    │               │
 │  │  REST API   │    │             │               │
 │  └──────┬──────┘    └─────────────┘               │
@@ -127,7 +127,7 @@ Angular 17 migration merged to master in v0.10.0:
 
 If you want to continue development:
 
-1. ~~**Angular Upgrade**~~ ✅ Done in v0.10.0
+1. **Angular Upgrade** - Code ready in `src/angular-v17/`, needs debugging before re-merge
 2. **Python scanfs fallback** - Run scanner as Python script instead of binary (for restricted servers)
 3. **Memory profiling** - If high memory usage reported
 4. **Additional tests** - Expand test coverage

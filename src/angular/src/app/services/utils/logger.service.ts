@@ -1,48 +1,53 @@
-import { Injectable } from '@angular/core';
-import { environment } from '../../../environments/environment';
+import {Injectable} from "@angular/core";
 
-export enum LogLevel {
-    ERROR = 0,
-    WARN = 1,
-    INFO = 2,
-    DEBUG = 3
-}
-
-@Injectable({
-    providedIn: 'root'
-})
+@Injectable()
 export class LoggerService {
-    public level: LogLevel;
+
+    public level: LoggerService.Level;
 
     constructor() {
-        this.level = environment.logger.level as LogLevel;
+        this.level = LoggerService.Level.DEBUG;
     }
 
-    get debug(): (...args: unknown[]) => void {
-        if (this.level >= LogLevel.DEBUG) {
+    get debug() {
+        if (this.level >= LoggerService.Level.DEBUG) {
             return console.debug.bind(console);
+        } else {
+            return () => {};
         }
-        return () => { /* noop */ };
     }
 
-    get info(): (...args: unknown[]) => void {
-        if (this.level >= LogLevel.INFO) {
+    get info() {
+        if (this.level >= LoggerService.Level.INFO) {
             return console.log.bind(console);
+        } else {
+            return () => {};
         }
-        return () => { /* noop */ };
     }
 
-    get warn(): (...args: unknown[]) => void {
-        if (this.level >= LogLevel.WARN) {
+    // noinspection JSUnusedGlobalSymbols
+    get warn() {
+        if (this.level >= LoggerService.Level.WARN) {
             return console.warn.bind(console);
+        } else {
+            return () => {};
         }
-        return () => { /* noop */ };
     }
 
-    get error(): (...args: unknown[]) => void {
-        if (this.level >= LogLevel.ERROR) {
+    get error() {
+        if (this.level >= LoggerService.Level.ERROR) {
             return console.error.bind(console);
+        } else {
+            return () => {};
         }
-        return () => { /* noop */ };
+    }
+}
+
+export module LoggerService {
+    export enum Level {
+        ERROR,
+        WARN,
+        INFO,
+        DEBUG,
     }
 }

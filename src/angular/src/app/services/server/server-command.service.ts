@@ -1,32 +1,55 @@
-import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import {Injectable} from "@angular/core";
+import {Observable} from "rxjs/Observable";
 
-import { BaseWebService } from '../base/base-web.service';
-import { RestService, WebReaction } from '../utils/rest.service';
+import {BaseWebService} from "../base/base-web.service";
+import {StreamServiceRegistry} from "../base/stream-service.registry";
+import {RestService, WebReaction} from "../utils/rest.service";
+
 
 /**
  * ServerCommandService handles sending commands to the backend server
  */
-@Injectable({
-    providedIn: 'root'
-})
+@Injectable()
 export class ServerCommandService extends BaseWebService {
-    private readonly RESTART_URL = '/server/command/restart';
+    private readonly RESTART_URL = "/server/command/restart";
 
-    private restService = inject(RestService);
+    constructor(_streamServiceProvider: StreamServiceRegistry,
+                private _restService: RestService) {
+        super(_streamServiceProvider);
+    }
 
     /**
      * Send a restart command to the server
+     * @returns {Observable<WebReaction>}
      */
     public restart(): Observable<WebReaction> {
-        return this.restService.sendRequest(this.RESTART_URL);
+        return this._restService.sendRequest(this.RESTART_URL);
     }
 
-    protected onConnected(): void {
+    protected onConnected() {
         // Nothing to do
     }
 
-    protected onDisconnected(): void {
+    protected onDisconnected() {
         // Nothing to do
     }
 }
+
+/**
+ * ConfigService factory and provider
+ */
+export let serverCommandServiceFactory = (
+    _streamServiceRegistry: StreamServiceRegistry,
+    _restService: RestService
+) => {
+  const serverCommandService = new ServerCommandService(_streamServiceRegistry, _restService);
+  serverCommandService.onInit();
+  return serverCommandService;
+};
+
+// noinspection JSUnusedGlobalSymbols
+export let ServerCommandServiceProvider = {
+    provide: ServerCommandService,
+    useFactory: serverCommandServiceFactory,
+    deps: [StreamServiceRegistry, RestService]
+};

@@ -1,70 +1,85 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, OnInit, ViewChild, ElementRef, HostListener, inject } from '@angular/core';
-import { CommonModule, DatePipe } from '@angular/common';
-import { Observable } from 'rxjs';
+import {
+    AfterContentChecked,
+    ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener,
+    OnInit, ViewChild, ViewContainerRef
+} from "@angular/core";
 
-import { LogService } from '../../services/logs/log.service';
-import { LogRecord, LogRecordLevel } from '../../services/logs/log-record';
-import { StreamServiceRegistry } from '../../services/base/stream-service.registry';
-import { DomService } from '../../services/utils/dom.service';
+import {LogService} from "../../services/logs/log.service";
+import {LogRecord} from "../../services/logs/log-record";
+import {StreamServiceRegistry} from "../../services/base/stream-service.registry";
+import {Localization} from "../../common/localization";
+import {DomService} from "../../services/utils/dom.service";
+import {Observable} from "rxjs/Observable";
 
 @Component({
-    selector: 'app-logs-page',
-    standalone: true,
-    imports: [CommonModule, DatePipe],
-    templateUrl: './logs-page.component.html',
-    styleUrl: './logs-page.component.scss',
+    selector: "app-logs-page",
+    templateUrl: "./logs-page.component.html",
+    styleUrls: ["./logs-page.component.scss"],
+    providers: [],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class LogsPageComponent implements OnInit {
-    LogRecordLevel = LogRecordLevel;
+
+export class LogsPageComponent implements OnInit, AfterContentChecked {
+    public readonly LogRecord = LogRecord;
+    public readonly Localization = Localization;
 
     public headerHeight: Observable<number>;
-    public logs: LogRecord[] = [];
+
+    @ViewChild("templateRecord") templateRecord;
+    @ViewChild("templateConnected") templateConnected;
+
+    // Where to insert the cloned content
+    @ViewChild("container", {read: ViewContainerRef}) container;
+
+    @ViewChild("logHead") logHead;
+    @ViewChild("logTail") logTail;
+
     public showScrollToTopButton = false;
     public showScrollToBottomButton = false;
 
-    @ViewChild('logHead') logHead!: ElementRef;
-    @ViewChild('logTail') logTail!: ElementRef;
+    private _logService: LogService;
 
-    private logService: LogService;
-
-    private elementRef = inject(ElementRef);
-    private changeDetector = inject(ChangeDetectorRef);
-    private streamRegistry = inject(StreamServiceRegistry);
-    private domService = inject(DomService);
-
-    constructor() {
-        this.logService = this.streamRegistry.logService;
-        this.headerHeight = this.domService.headerHeight;
+    constructor(private _elementRef: ElementRef,
+                private _changeDetector: ChangeDetectorRef,
+                private _streamRegistry: StreamServiceRegistry,
+                private _domService: DomService) {
+        this._logService = _streamRegistry.logService;
+        this.headerHeight = this._domService.headerHeight;
     }
 
-    ngOnInit(): void {
-        this.logService.logs.subscribe({
+    ngOnInit() {
+        this._logService.logs.subscribe({
             next: record => {
                 this.insertRecord(record);
             }
         });
     }
 
-    scrollToTop(): void {
-        window.scrollTo(0, 0);
-    }
-
-    scrollToBottom(): void {
-        window.scrollTo(0, document.body.scrollHeight);
-    }
-
-    @HostListener('window:scroll')
-    checkScroll(): void {
+    ngAfterContentChecked() {
+        // Refresh button state when tabs is switched away and back
         this.refreshScrollButtonVisibility();
     }
 
-    private insertRecord(record: LogRecord): void {
-        const scrollToBottom = this.elementRef.nativeElement.offsetParent != null &&
-            this.logTail?.nativeElement && this.isElementInViewport(this.logTail.nativeElement);
+    scrollToTop() {
+        // this.logHead.nativeElement.scrollIntoView(true);
+        window.scrollTo(0, 0);
+    }
 
-        this.logs = [...this.logs, record];
-        this.changeDetector.detectChanges();
+    scrollToBottom() {
+        window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    @HostListener("window:scroll", ["$event"])
+    checkScroll() {
+        this.refreshScrollButtonVisibility();
+    }
+
+    private insertRecord(record: LogRecord) {
+        // Scroll down if the log is visible and already scrolled to the bottom
+        const scrollToBottom = this._elementRef.nativeElement.offsetParent != null &&
+            LogsPageComponent.isElementInViewport(this.logTail.nativeElement);
+        this.container.createEmbeddedView(this.templateRecord, {record: record});
+        this._changeDetector.detectChanges();
 
         if (scrollToBottom) {
             this.scrollToBottom();
@@ -72,20 +87,24 @@ export class LogsPageComponent implements OnInit {
         this.refreshScrollButtonVisibility();
     }
 
-    private refreshScrollButtonVisibility(): void {
-        this.showScrollToTopButton = this.logHead?.nativeElement &&
-            !this.isElementInViewport(this.logHead.nativeElement);
-        this.showScrollToBottomButton = this.logTail?.nativeElement &&
-            !this.isElementInViewport(this.logTail.nativeElement);
+    private refreshScrollButtonVisibility() {
+        // Show/hide the scroll buttons
+        this.showScrollToTopButton = !LogsPageComponent.isElementInViewport(
+            this.logHead.nativeElement
+        );
+        this.showScrollToBottomButton = !LogsPageComponent.isElementInViewport(
+            this.logTail.nativeElement
+        );
     }
 
-    private isElementInViewport(el: HTMLElement): boolean {
+    // Source: https://stackoverflow.com/a/7557433
+    private static isElementInViewport(el): boolean {
         const rect = el.getBoundingClientRect();
         return (
             rect.top >= 0 &&
             rect.left >= 0 &&
-            rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-            rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+            rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) && /*or $(window).height() */
+            rect.right <= (window.innerWidth || document.documentElement.clientWidth) /*or $(window).width() */
         );
     }
 }

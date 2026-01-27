@@ -6,3 +6,4 @@ package-lock.json
 !website/package-lock.json
 src/python/build
 src/python/site
+dev-config/

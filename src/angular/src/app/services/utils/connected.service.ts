@@ -1,17 +1,21 @@
-import { Injectable } from '@angular/core';
-import { Observable, BehaviorSubject } from 'rxjs';
+import {Injectable} from "@angular/core";
+import {Observable} from "rxjs/Observable";
+import {BehaviorSubject} from "rxjs/Rx";
 
-import { BaseStreamService } from '../base/base-stream.service';
+import {LoggerService} from "./logger.service";
+import {BaseStreamService} from "../base/base-stream.service";
+import {RestService} from "./rest.service";
+
 
 /**
  * ConnectedService exposes the connection status to clients
  * as an Observable
  */
-@Injectable({
-    providedIn: 'root'
-})
+@Injectable()
 export class ConnectedService extends BaseStreamService {
-    private connectedSubject = new BehaviorSubject<boolean>(false);
+
+    // For clients
+    private _connectedSubject: BehaviorSubject<boolean> = new BehaviorSubject(false);
 
     constructor() {
         super();
@@ -19,22 +23,22 @@ export class ConnectedService extends BaseStreamService {
     }
 
     get connected(): Observable<boolean> {
-        return this.connectedSubject.asObservable();
+        return this._connectedSubject.asObservable();
     }
 
-    protected onEvent(_eventName: string, _data: string): void {
+    protected onEvent(eventName: string, data: string) {
         // Nothing to do
     }
 
-    protected onConnected(): void {
-        if (this.connectedSubject.getValue() === false) {
-            this.connectedSubject.next(true);
+    protected onConnected() {
+        if(this._connectedSubject.getValue() === false) {
+            this._connectedSubject.next(true);
         }
     }
 
-    protected onDisconnected(): void {
-        if (this.connectedSubject.getValue() === true) {
-            this.connectedSubject.next(false);
+    protected onDisconnected() {
+        if(this._connectedSubject.getValue() === true) {
+            this._connectedSubject.next(false);
         }
     }
 }

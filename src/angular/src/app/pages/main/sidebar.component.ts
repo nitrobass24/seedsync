@@ -1,50 +1,47 @@
-import { Component, OnInit, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import {Component, OnInit} from "@angular/core";
 
-import { ROUTE_INFOS } from '../../routes';
-import { ServerCommandService } from '../../services/server/server-command.service';
-import { LoggerService } from '../../services/utils/logger.service';
-import { ConnectedService } from '../../services/utils/connected.service';
-import { StreamServiceRegistry } from '../../services/base/stream-service.registry';
+import {ROUTE_INFOS} from "../../routes";
+import {ServerCommandService} from "../../services/server/server-command.service";
+import {LoggerService} from "../../services/utils/logger.service";
+import {ConnectedService} from "../../services/utils/connected.service";
+import {StreamServiceRegistry} from "../../services/base/stream-service.registry";
 
 @Component({
-    selector: 'app-sidebar',
-    standalone: true,
-    imports: [CommonModule, RouterLink, RouterLinkActive],
-    templateUrl: './sidebar.component.html',
-    styleUrl: './sidebar.component.scss'
+    selector: "app-sidebar",
+    templateUrl: "./sidebar.component.html",
+    styleUrls: ["./sidebar.component.scss"]
 })
+
 export class SidebarComponent implements OnInit {
     routeInfos = ROUTE_INFOS;
 
-    public commandsEnabled = false;
+    public commandsEnabled: boolean;
 
-    private connectedService: ConnectedService;
+    private _connectedService: ConnectedService;
 
-    private logger = inject(LoggerService);
-    private streamServiceRegistry = inject(StreamServiceRegistry);
-    private commandService = inject(ServerCommandService);
-
-    constructor() {
-        this.connectedService = this.streamServiceRegistry.connectedService;
+    constructor(private _logger: LoggerService,
+                _streamServiceRegistry: StreamServiceRegistry,
+                private _commandService: ServerCommandService) {
+        this._connectedService = _streamServiceRegistry.connectedService;
+        this.commandsEnabled = false;
     }
 
-    ngOnInit(): void {
-        this.connectedService.connected.subscribe({
+    // noinspection JSUnusedGlobalSymbols
+    ngOnInit() {
+        this._connectedService.connected.subscribe({
             next: (connected: boolean) => {
                 this.commandsEnabled = connected;
             }
         });
     }
 
-    onCommandRestart(): void {
-        this.commandService.restart().subscribe({
+    onCommandRestart() {
+        this._commandService.restart().subscribe({
             next: reaction => {
                 if (reaction.success) {
-                    this.logger.info(reaction.data);
+                    this._logger.info(reaction.data);
                 } else {
-                    this.logger.error(reaction.errorMessage);
+                    this._logger.error(reaction.errorMessage);
                 }
             }
         });

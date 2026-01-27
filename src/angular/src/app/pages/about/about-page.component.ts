@@ -1,13 +1,20 @@
-import { Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import {Component} from "@angular/core";
+
+declare function require(moduleName: string): any;
+const { version: appVersion } = require('../../../../package.json');
 
 @Component({
-    selector: 'app-about-page',
-    standalone: true,
-    imports: [CommonModule],
-    templateUrl: './about-page.component.html',
-    styleUrl: './about-page.component.scss'
+    selector: "app-about-page",
+    templateUrl: "./about-page.component.html",
+    styleUrls: ["./about-page.component.scss"],
+    providers: [],
 })
+
 export class AboutPageComponent {
-    public version = '0.9.3';
+
+    public version: string;
+
+    constructor() {
+        this.version = appVersion;
+    }
 }

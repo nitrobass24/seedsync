@@ -1,69 +1,59 @@
-import { ViewFileStatus } from './view-file';
+import {Record} from "immutable";
+
+import {ViewFile} from "./view-file";
 
 /**
- * View file options - Describes display related options for view files
+ * View file options
+ * Describes display related options for view files
  */
-export interface ViewFileOptionsData {
+interface IViewFileOptions {
     // Show additional details about the view file
-    readonly showDetails: boolean;
+    showDetails: boolean;
+
     // Method to use to sort the view file list
-    readonly sortMethod: ViewFileOptionsSortMethod;
+    sortMethod: ViewFileOptions.SortMethod;
+
     // Status filter setting
-    readonly selectedStatusFilter: ViewFileStatus | null;
+    selectedStatusFilter: ViewFile.Status;
+
     // Name filter setting
-    readonly nameFilter: string;
+    nameFilter: string;
+
     // Track filter pin status
-    readonly pinFilter: boolean;
+    pinFilter: boolean;
 }
 
-export enum ViewFileOptionsSortMethod {
-    STATUS = 'STATUS',
-    NAME_ASC = 'NAME_ASC',
-    NAME_DESC = 'NAME_DESC'
-}
+
+// Boiler plate code to set up an immutable class
+const DefaultViewFileOptions: IViewFileOptions = {
+    showDetails: null,
+    sortMethod: null,
+    selectedStatusFilter: null,
+    nameFilter: null,
+    pinFilter: null,
+};
+const ViewFileOptionsRecord = Record(DefaultViewFileOptions);
+
 
 /**
- * Immutable ViewFileOptions class
+ * Immutable class that implements the interface
  */
-export class ViewFileOptions implements ViewFileOptionsData {
-    readonly showDetails: boolean;
-    readonly sortMethod: ViewFileOptionsSortMethod;
-    readonly selectedStatusFilter: ViewFileStatus | null;
-    readonly nameFilter: string;
-    readonly pinFilter: boolean;
+export class ViewFileOptions extends ViewFileOptionsRecord implements IViewFileOptions {
+    showDetails: boolean;
+    sortMethod: ViewFileOptions.SortMethod;
+    selectedStatusFilter: ViewFile.Status;
+    nameFilter: string;
+    pinFilter: boolean;
 
-    constructor(data: ViewFileOptionsData) {
-        this.showDetails = data.showDetails;
-        this.sortMethod = data.sortMethod;
-        this.selectedStatusFilter = data.selectedStatusFilter;
-        this.nameFilter = data.nameFilter;
-        this.pinFilter = data.pinFilter;
-        Object.freeze(this);
+    constructor(props) {
+        super(props);
     }
+}
 
-    /**
-     * Create a new ViewFileOptions with updated properties
-     */
-    update(updates: Partial<ViewFileOptionsData>): ViewFileOptions {
-        return new ViewFileOptions({
-            showDetails: updates.showDetails ?? this.showDetails,
-            sortMethod: updates.sortMethod ?? this.sortMethod,
-            selectedStatusFilter: updates.selectedStatusFilter !== undefined ? updates.selectedStatusFilter : this.selectedStatusFilter,
-            nameFilter: updates.nameFilter ?? this.nameFilter,
-            pinFilter: updates.pinFilter ?? this.pinFilter
-        });
-    }
-
-    /**
-     * Create default ViewFileOptions
-     */
-    static createDefault(): ViewFileOptions {
-        return new ViewFileOptions({
-            showDetails: false,
-            sortMethod: ViewFileOptionsSortMethod.STATUS,
-            selectedStatusFilter: null,
-            nameFilter: '',
-            pinFilter: false
-        });
+export module ViewFileOptions {
+    export enum SortMethod {
+        STATUS,
+        NAME_ASC,
+        NAME_DESC
     }
 }

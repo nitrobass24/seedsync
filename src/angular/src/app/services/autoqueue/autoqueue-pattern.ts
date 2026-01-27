@@ -1,31 +1,25 @@
-/**
- * AutoQueue Pattern
- */
-export interface AutoQueuePatternData {
-    readonly pattern: string;
+import {Record} from "immutable";
+
+interface IAutoQueuePattern {
+    pattern: string;
 }
+const DefaultAutoQueuePattern: IAutoQueuePattern = {
+    pattern: null
+};
+const AutoQueuePatternRecord = Record(DefaultAutoQueuePattern);
 
-/**
- * Immutable AutoQueuePattern class
- */
-export class AutoQueuePattern implements AutoQueuePatternData {
-    readonly pattern: string;
 
-    constructor(data: AutoQueuePatternData) {
-        this.pattern = data.pattern;
-        Object.freeze(this);
-    }
+export class AutoQueuePattern extends AutoQueuePatternRecord implements IAutoQueuePattern {
+    pattern: string;
 
-    /**
-     * Create from JSON response
-     */
-    static fromJson(json: AutoQueuePatternJson): AutoQueuePattern {
-        return new AutoQueuePattern({ pattern: json.pattern });
+    constructor(props) {
+        super(props);
     }
 }
 
 /**
- * JSON structure from backend
+ * ServerStatus as serialized by the backend.
+ * Note: naming convention matches that used in JSON
  */
 export interface AutoQueuePatternJson {
     pattern: string;

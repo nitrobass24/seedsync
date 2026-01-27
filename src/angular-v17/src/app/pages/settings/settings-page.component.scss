@@ -1,0 +1,26 @@
+@import '../../common/common';
+
+#settings {
+    padding: 15px;
+
+    #commands {
+        margin-top: 20px;
+        display: flex;
+        justify-content: center;
+
+        .button {
+            @extend %button;
+            padding: 10px 20px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+
+            img {
+                width: 20px;
+                height: 20px;
+                filter: invert(1.0);
+                margin-right: 8px;
+            }
+        }
+    }
+}

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.10.1] - 2026-01-27
+
+### Reverted
+- **Angular 17 rollback** - Reverted to Angular 4 due to runtime issues. Angular 17 code preserved in `src/angular-v17/` for future work.
+
+### Changed
+- **Dockerfile** - Reverted to Node 12 for Angular 4 compatibility
+
+---
+
 ## [0.10.0] - 2026-01-27
 
 ### Changed

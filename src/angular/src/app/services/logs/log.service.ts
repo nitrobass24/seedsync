@@ -1,37 +1,39 @@
-import { Injectable } from '@angular/core';
-import { Observable, ReplaySubject } from 'rxjs';
+import {Injectable} from "@angular/core";
+import {Observable} from "rxjs/Observable";
+import {ReplaySubject} from "rxjs/ReplaySubject";
 
-import { BaseStreamService } from '../base/base-stream.service';
-import { LogRecord, LogRecordJson } from './log-record';
+import {BaseStreamService} from "../base/base-stream.service";
+import {LogRecord} from "./log-record";
 
-@Injectable({
-    providedIn: 'root'
-})
+
+@Injectable()
 export class LogService extends BaseStreamService {
-    private logsSubject = new ReplaySubject<LogRecord>();
+
+    private _logs: ReplaySubject<LogRecord> = new ReplaySubject();
 
     constructor() {
         super();
-        this.registerEventName('log-record');
+        this.registerEventName("log-record");
     }
 
     /**
      * Logs is a hot observable (i.e. no caching)
+     * @returns {Observable<LogRecord>}
      */
     get logs(): Observable<LogRecord> {
-        return this.logsSubject.asObservable();
+        return this._logs.asObservable();
     }
 
-    protected onEvent(_eventName: string, data: string): void {
-        const json: LogRecordJson = JSON.parse(data);
-        this.logsSubject.next(LogRecord.fromJson(json));
+    protected onEvent(eventName: string, data: string) {
+        this._logs.next(LogRecord.fromJson(JSON.parse(data)));
     }
 
-    protected onConnected(): void {
+    protected onConnected() {
         // nothing to do
     }
 
-    protected onDisconnected(): void {
+    protected onDisconnected() {
         // nothing to do
     }
+
 }
