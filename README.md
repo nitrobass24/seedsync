@@ -7,6 +7,9 @@
     <img src="https://img.shields.io/github/stars/nitrobass24/seedsync" alt="Stars">
   </a>
   <a href="https://github.com/nitrobass24/seedsync/pkgs/container/seedsync">
+    <img src="https://ghcr-badge.elias.eu.org/shield/nitrobass24/seedsync/seedsync" alt="Docker Pulls">
+  </a>
+  <a href="https://github.com/nitrobass24/seedsync/pkgs/container/seedsync">
     <img src="https://ghcr-badge.egpl.dev/nitrobass24/seedsync/size" alt="Image Size">
   </a>
   <a href="https://github.com/nitrobass24/seedsync/blob/master/LICENSE.txt">
