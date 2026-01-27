@@ -69,3 +69,13 @@ footer {
   border: 1px solid #e6efed;
   background: #f4faf9;
 }
+
+/* Ensure doc footer (Edit this page) blends with page background */
+.theme-doc-footer,
+.theme-doc-footer-edit-meta-row {
+  background: transparent;
+}
+
+.pagination-nav {
+  background: transparent;
+}
