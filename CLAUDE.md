@@ -14,12 +14,16 @@ SeedSync is a Docker-based tool that syncs files from a remote seedbox to a loca
 ```
 src/
 ├── angular/          # Angular 4 frontend (current)
-├── angular-v17/      # Angular 17 (preserved for future work)
 ├── python/           # Python backend
 ├── docker/           # Docker build files
 └── e2e/              # End-to-end tests
 website/              # Docusaurus documentation site
 ```
+
+## Branches
+
+- **master** - Stable release branch
+- **angular-17-upgrade** - Angular 17 migration work (in progress)
 
 ## Release Process
 
