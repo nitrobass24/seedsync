@@ -16,8 +16,9 @@ RUN ./node_modules/.bin/ng build --configuration production --output-path /build
 # Stage 2: Build scanfs binary with PyInstaller
 # Use older Debian (buster) for broader glibc compatibility on remote seedboxes
 # buster has glibc 2.28, supporting most Linux systems from 2018+
+# Note: Python 3.11 is the latest version available for buster
 # ==============================================================================
-FROM python:3.12-slim-buster AS scanfs-builder
+FROM python:3.11-slim-buster AS scanfs-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     binutils \
