@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Fira+Code:wght@400;500&display=swap');
+
+:root {
+  /* Theme colors tuned to the legacy teal look. */
+  --ifm-color-primary: #009688;
+  --ifm-color-primary-dark: #008679;
+  --ifm-color-primary-darker: #007b6f;
+  --ifm-color-primary-darkest: #006057;
+  --ifm-color-primary-light: #14a394;
+  --ifm-color-primary-lighter: #1ba99b;
+  --ifm-color-primary-lightest: #36b7ab;
+
+  --ifm-font-family-base: 'Source Sans 3', 'Segoe UI', Tahoma, sans-serif;
+  --ifm-font-family-monospace: 'Fira Code', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --ifm-code-font-size: 92%;
+  --ifm-background-color: #e6f0ef;
+  --ifm-background-surface-color: #f6fbfb;
+  --ifm-navbar-background-color: #ffffff;
+  --ifm-toc-border-color: #d7e7e5;
+  --ifm-menu-color-background-active: #e8f4f2;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+}
+
+body {
+  background: linear-gradient(180deg, #e6f0ef 0%, #f6fbfb 220px);
+}
+
+main {
+  background: transparent;
+}
+
+.navbar {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+}
+
+.navbar__brand {
+  gap: 0.6rem;
+}
+
+.navbar__title {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.menu__link--active {
+  font-weight: 600;
+}
+
+.theme-doc-sidebar-container {
+  border-right: 1px solid #e3efed;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  letter-spacing: 0.2px;
+}
+
+.theme-doc-markdown pre {
+  border: 1px solid #e6efed;
+  background: #f4faf9;
+}

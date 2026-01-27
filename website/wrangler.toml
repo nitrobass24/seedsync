@@ -1,0 +1,20 @@
+name = "seedsync-website"
+compatibility_date = "2026-01-26"
+
+# Disable workers.dev when routing a custom domain.
+workers_dev = false
+
+# Fill these in from your Cloudflare dashboard.
+account_id = "YOUR_ACCOUNT_ID"
+zone_id = "YOUR_ZONE_ID"
+
+# Serve the docs under https://nitrobass24.com/seedsync
+route = "nitrobass24.com/seedsync/*"
+
+[assets]
+# Docusaurus outputs static files into ./build.
+directory = "./build"
+# Use static 404 pages for missing routes.
+not_found_handling = "404-page"
+# Keep trailing-slash behavior consistent with Docusaurus.
+html_handling = "auto-trailing-slash"
