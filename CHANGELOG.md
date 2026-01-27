@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.4] - 2026-01-26
+
+### Fixed
+- **Docker entrypoint UID/GID handling** - Fixed container crash when PGID matches an existing group ID in the container (e.g., Synology with GID 101). Now checks for existing UID/GID by ID instead of name, allowing reuse of pre-existing system groups. (#4)
+
+### Changed
+- **Improved entrypoint logging** - Now shows whether existing users/groups are being reused for easier debugging of permission issues
+
+---
+
 ## [0.9.3] - 2026-01-26
 
 ### Security
