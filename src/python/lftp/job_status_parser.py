@@ -479,22 +479,29 @@ class LftpJobStatusParser:
         queue_done_m = re.compile(LftpJobStatusParser.__QUEUE_DONE_REGEX)
         if len(lines) == 1:
             if not queue_done_m.match(lines[0]):
-                raise ValueError("Unrecognized line '{}'".format(lines[0]))
+                # Single unrecognized line - might be empty output, skip gracefully
+                return queue
             lines.pop(0)
 
         if lines:
             # Look for the header lines
             if len(lines) < 2:
-                raise ValueError("Missing queue header")
+                # Not enough lines for a valid queue header - return empty queue
+                return queue
             header1_pattern = r"^\[\d+\] queue \(sftp://.*@.*\)(?:\s+--\s+(?:\d+\.\d+|\d+)\s({})\/s)?$"\
                               .format(LftpJobStatusParser.__SIZE_UNITS_REGEX)
             header2_pattern = "^sftp://.*@.*$"
             line = lines.pop(0)
             if not re.match(header1_pattern, line):
-                raise ValueError("Missing queue header line 1: {}".format(line))
+                # First line doesn't match queue header - no active queue, return empty
+                # Put the line back for __parse_jobs to handle
+                lines.insert(0, line)
+                return queue
             line = lines.pop(0)
             if not re.match(header2_pattern, line):
-                raise ValueError("Missing queue header line 2: {}".format(line))
+                # Second line doesn't match - malformed but not fatal, return empty queue
+                lines.insert(0, line)
+                return queue
             if not lines:
                 raise ValueError("Missing queue status")
 

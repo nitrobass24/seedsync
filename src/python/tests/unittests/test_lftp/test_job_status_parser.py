@@ -64,9 +64,29 @@ class TestLftpJobStatusParser(unittest.TestCase):
 
     def test_empty_output_4(self):
         output = """
-        [0] queue (sftp://someone:@localhost) 
+        [0] queue (sftp://someone:@localhost)
         sftp://someone:@localhost/home/someone
         [0] Done (queue (sftp://someone:@localhost))
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(0, len(statuses))
+
+    def test_empty_output_just_jobs_command(self):
+        """Test handling when lftp returns just the jobs command echo with no data"""
+        output = """
+        jobs -v
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(0, len(statuses))
+
+    def test_empty_output_jobs_command_with_blank_lines(self):
+        """Test handling when lftp returns jobs command with extra blank lines"""
+        output = """
+
+        jobs -v
+
         """
         parser = LftpJobStatusParser()
         statuses = parser.parse(output)
