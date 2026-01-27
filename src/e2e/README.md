@@ -6,22 +6,12 @@
    cd src/e2e
    npm install
    ```
-   
-2. Choose which dev image to run: deb install or docker image
 
-    - deb install
+2. Start the docker image
 
-        ```bash
-        make run-tests-e2e SEEDSYNC_VERSION=latest SEEDSYNC_ARCH=<arch code> DEV=1
-        ```
-
-    - docker image
-
-        ```bash
-        make run-tests-e2e SEEDSYNC_DEB=`readlink -f build/*.deb` SEEDSYNC_OS=<os code> DEV=1
-        ```
-
-        
+    ```bash
+    make run-tests-e2e SEEDSYNC_VERSION=latest SEEDSYNC_ARCH=<arch code> DEV=1
+    ```
 
 3. Compile and run the tests
 
@@ -37,7 +27,7 @@
 ### About
 
 The dev end-to-end tests use the following docker images:
-1. myapp: Installs and runs the seedsync deb package
+1. myapp: Runs the seedsync docker image
 2. chrome: Runs the selenium server
 3. remote: Runs a remote SSH server
 

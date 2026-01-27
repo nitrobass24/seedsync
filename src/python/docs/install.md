@@ -14,23 +14,22 @@ Requirements for the remote server are:
 
 ### Local Machine
 
-The following table describes the installation method supported for each platform.
+SeedSync is deployed via Docker and supports the following platforms:
 
-|  | Docker Image | Deb Package |
-| ------------ | :-------------: | :------------: |
-| Linux/Ubuntu 64-bit | &#9989;️  | &#9989; |
-| Raspberry Pi (v2, v3, v4) | &#9989;  | |
-| Windows | &#9989;  | |
-| MacOS | &#9989;  | |
+| Platform | Supported |
+| ------------ | :-------------: |
+| Linux/Ubuntu 64-bit | &#9989;️ |
+| Raspberry Pi (v2, v3, v4) | &#9989; |
+| Windows | &#9989; |
+| MacOS | &#9989; |
 
 Select the section for your platform:
 
-* [Docker Image (Linux/Ubuntu, Raspberry Pi) ](#install-docker)
+* [Docker Image (Linux/Ubuntu, Raspberry Pi, MacOS)](#install-docker)
 * [Docker Image (Windows)](#install-windows)
-* [Deb Package (Linux/Ubuntu)](#install-ubuntu)
 
 
-## <a name="install-docker"></a> Docker Image (Linux/Ubuntu, Raspberry Pi)
+## <a name="install-docker"></a> Docker Image (Linux/Ubuntu, Raspberry Pi, MacOS)
 
 1. Run the docker image with the following command:
 
@@ -177,24 +176,3 @@ It is strongly recommended that you set up key-based authentication.
 !!! note
     If you are running the docker guest with a non-standard user using the `--user` option,
     then you must make sure that your `.ssh` directory is also readable by that user.
-
-
-## <a name="install-ubuntu"></a> Deb Package (Linux/Ubuntu)
-
-1. Download the deb package from the [latest](https://github.com/nitrobass24/seedsync/releases/latest) release
-
-2. Install the deb package:
-
-        :::bash
-        sudo dpkg -i <deb file>
-
-3. During the first install, you will be prompted for a user name:
-   ![Install prompt for username](https://raw.githubusercontent.com/nitrobass24/seedsync/master/doc/images/install_1.png)
-   This is the user under which the SeedSync service will run. The transferred files will be owned by this user.
-   It is recommended that you set this to your user (and NOT root).
-
-4. After the installation is complete, verify that the application is running by going to [http://localhost:8800](http://localhost:8800) in your browser.
-
-5. Go to the Settings page and fill out the required information.
-   **While password-based login is supported, key-based authentication is highly recommended!**
-   See the [Key-Based Authentication Setup](#key-auth) section for details.
