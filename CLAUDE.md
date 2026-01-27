@@ -123,7 +123,27 @@ Format should match CHANGELOG.md entries with:
 | `MODERNIZATION_PLAN.md` | Project modernization status |
 | `src/docker/build/docker-image/Dockerfile` | Multi-stage Docker build |
 | `.github/workflows/ci.yml` | CI/CD pipeline |
+| `.github/workflows/docs-pages.yml` | Documentation deployment |
 | `website/` | Documentation site (Docusaurus) |
+
+## CI/CD Workflows
+
+### CI (`ci.yml`)
+
+| Trigger | Build & Test | Publish Image | Create Release |
+|---------|--------------|---------------|----------------|
+| PR to master | ✅ | ❌ | ❌ |
+| Push to master | ✅ | ❌ | ❌ |
+| Push tag (v*.*.*) | ✅ | ✅ | ✅ |
+
+- **Build & Test**: Builds Docker image and verifies container starts
+- **Publish Image**: Pushes multi-arch image to ghcr.io (only on release tags)
+- **Create Release**: Creates GitHub release with auto-generated notes (only on release tags)
+
+### Docs (`docs-pages.yml`)
+
+- Triggers only when `website/` directory changes
+- Builds and deploys Docusaurus site to GitHub Pages
 
 ## Common Tasks
 
