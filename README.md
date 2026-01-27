@@ -6,8 +6,8 @@
   <a href="https://github.com/nitrobass24/seedsync">
     <img src="https://img.shields.io/github/stars/nitrobass24/seedsync" alt="Stars">
   </a>
-  <a href="https://github.com/nitrobass24/seedsync/releases">
-    <img src="https://img.shields.io/github/downloads/nitrobass24/seedsync/total" alt="Downloads">
+  <a href="https://github.com/nitrobass24/seedsync/pkgs/container/seedsync">
+    <img src="https://ghcr-badge.egpl.dev/nitrobass24/seedsync/size" alt="Image Size">
   </a>
   <a href="https://github.com/nitrobass24/seedsync/blob/master/LICENSE.txt">
     <img src="https://img.shields.io/github/license/nitrobass24/seedsync" alt="License">
