@@ -22,11 +22,20 @@
 }
 
 body {
+  background: #f6fbfb;
+}
+
+.main-wrapper {
   background: linear-gradient(180deg, #e6f0ef 0%, #f6fbfb 220px);
+  min-height: calc(100vh - 60px);
 }
 
 main {
   background: transparent;
+}
+
+footer {
+  background: #ffffff;
 }
 
 .navbar {
