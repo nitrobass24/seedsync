@@ -135,6 +135,18 @@ class Sshcp:
             before = sp.before.decode().strip() if sp.before != pexpect.EOF else ""
             after = sp.after.decode().strip() if sp.after != pexpect.EOF else ""
             self.logger.warning("Command failed: '{} - {}'".format(before, after))
+
+            # Check for shell not found error (common on servers where bash is at /usr/bin/bash)
+            if "No such file or directory" in before:
+                for shell in ["/bin/bash", "/bin/sh", "/usr/bin/bash"]:
+                    if shell in before:
+                        raise SshcpError(
+                            "Remote user's shell not found: {}. "
+                            "Fix by running on the remote server: "
+                            "sudo ln -s /usr/bin/bash /bin/bash OR "
+                            "sudo chsh -s /bin/sh {}".format(before, self.__user)
+                        )
+
             raise SshcpError(sp.before.decode().strip())
 
         return sp.before.replace(b'\r\n', b'\n').strip()

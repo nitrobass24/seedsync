@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.5] - 2026-01-28
+
+### Fixed
+- **Remote shell not found error** - Improved error messaging when the remote user's shell (e.g., `/bin/bash`) doesn't exist. Now provides clear instructions on how to fix: create a symlink or change the user's shell. (#18)
+
+---
+
 ## [0.10.4] - 2026-01-27
 
 ### Fixed
