@@ -1,57 +1,58 @@
-import {Injectable} from "@angular/core";
-import {Observable} from "rxjs/Observable";
-import {BehaviorSubject} from "rxjs/Rx";
+import { Injectable, inject } from '@angular/core';
+import { BehaviorSubject, Observable } from 'rxjs';
 
-import {Localization} from "../../common/localization";
-import {ServerStatus, ServerStatusJson} from "./server-status";
-import {BaseStreamService} from "../base/base-stream.service";
+import { StreamEventHandler, StreamDispatchService } from '../base/stream-dispatch.service';
+import { Localization } from '../../models/localization';
+import { ServerStatus, ServerStatusJson, serverStatusFromJson } from '../../models/server-status';
 
+@Injectable({ providedIn: 'root' })
+export class ServerStatusService implements StreamEventHandler {
+  private readonly streamDispatch = inject(StreamDispatchService);
 
-@Injectable()
-export class ServerStatusService extends BaseStreamService {
+  private readonly statusSubject = new BehaviorSubject<ServerStatus>({
+    server: {
+      up: false,
+      errorMessage: Localization.Notification.STATUS_CONNECTION_WAITING,
+    },
+    controller: {
+      latestLocalScanTime: null,
+      latestRemoteScanTime: null,
+      latestRemoteScanFailed: false,
+      latestRemoteScanError: null,
+    },
+  });
 
-    private _status: BehaviorSubject<ServerStatus> =
-        new BehaviorSubject(new ServerStatus({
-            server: {
-                up: false,
-                errorMessage: Localization.Notification.STATUS_CONNECTION_WAITING
-            }
-        }));
+  readonly status$: Observable<ServerStatus> = this.statusSubject.asObservable();
 
-    constructor() {
-        super();
-        this.registerEventName("status");
-    }
+  constructor() {
+    this.streamDispatch.registerHandler(this);
+  }
 
-    get status(): Observable<ServerStatus> {
-        return this._status.asObservable();
-    }
+  getEventNames(): string[] {
+    return ['status'];
+  }
 
-    protected onEvent(eventName: string, data: string) {
-        this.parseStatus(data);
-    }
+  onEvent(_eventName: string, data: string): void {
+    const statusJson: ServerStatusJson = JSON.parse(data);
+    this.statusSubject.next(serverStatusFromJson(statusJson));
+  }
 
-    protected onConnected() {
-        // nothing to do
-    }
+  onConnected(): void {
+    // nothing to do
+  }
 
-    protected onDisconnected() {
-        // Notify the clients
-        this._status.next(new ServerStatus({
-            server: {
-                up: false,
-                errorMessage: Localization.Error.SERVER_DISCONNECTED
-            }
-        }));
-    }
-
-    /**
-     * Parse an event and notify subscribers
-     * @param {string} data
-     */
-    private parseStatus(data: string) {
-        const statusJson: ServerStatusJson = JSON.parse(data);
-        const status = ServerStatus.fromJson(statusJson);
-        this._status.next(status);
-    }
+  onDisconnected(): void {
+    this.statusSubject.next({
+      server: {
+        up: false,
+        errorMessage: Localization.Error.SERVER_DISCONNECTED,
+      },
+      controller: {
+        latestLocalScanTime: null,
+        latestRemoteScanTime: null,
+        latestRemoteScanFailed: false,
+        latestRemoteScanError: null,
+      },
+    });
+  }
 }

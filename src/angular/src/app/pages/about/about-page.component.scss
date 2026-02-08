@@ -1,4 +1,4 @@
-@import '../../common/common';
+@use '../../common/common' as *;
 
 #about {
     display: flex;
@@ -17,7 +17,7 @@
                 max-height: 80px;
             }
             span {
-                margin-left: 10px;
+                margin-inline-start: 10px;
                 color: $logo-color;
                 font-family: $logo-font;
                 font-size: 300%;

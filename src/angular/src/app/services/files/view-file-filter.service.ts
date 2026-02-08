@@ -1,115 +1,93 @@
-import {Injectable} from "@angular/core";
+import { Injectable, inject } from '@angular/core';
 
-import {LoggerService} from "../utils/logger.service";
-import {ViewFile} from "./view-file";
-import {ViewFileFilterCriteria, ViewFileService} from "./view-file.service";
-import {ViewFileOptionsService} from "./view-file-options.service";
-
+import { LoggerService } from '../utils/logger.service';
+import { ViewFile, ViewFileStatus } from '../../models/view-file';
+import { ViewFileFilterCriteria, ViewFileService } from './view-file.service';
+import { ViewFileOptionsService } from './view-file-options.service';
 
 class AndFilterCriteria implements ViewFileFilterCriteria {
-    constructor(private a: ViewFileFilterCriteria,
-                private b: ViewFileFilterCriteria) {
-    }
+  constructor(
+    private a: ViewFileFilterCriteria,
+    private b: ViewFileFilterCriteria,
+  ) {}
 
-    meetsCriteria(viewFile: ViewFile): boolean {
-        return this.a.meetsCriteria(viewFile) && this.b.meetsCriteria(viewFile);
-    }
+  meetsCriteria(viewFile: ViewFile): boolean {
+    return this.a.meetsCriteria(viewFile) && this.b.meetsCriteria(viewFile);
+  }
 }
 
 class StatusFilterCriteria implements ViewFileFilterCriteria {
-    constructor(private _status: ViewFile.Status) {}
+  constructor(readonly status: ViewFileStatus | null) {}
 
-    get status(): ViewFile.Status {
-        return this._status;
-    }
-
-    meetsCriteria(viewFile: ViewFile): boolean {
-        return this._status == null || this._status === viewFile.status;
-    }
+  meetsCriteria(viewFile: ViewFile): boolean {
+    return this.status == null || this.status === viewFile.status;
+  }
 }
 
 class NameFilterCriteria implements ViewFileFilterCriteria {
-    private _name: string = null;
-    private _queryCandidates = [];
+  private readonly queryCandidates: string[] = [];
 
-    get name(): string {
-        return this._name;
+  constructor(readonly name: string | null) {
+    if (this.name != null) {
+      const query = this.name.toLowerCase();
+      this.queryCandidates = [
+        query,
+        // treat dots and spaces as the same
+        query.replace(/\s/g, '.'),
+        query.replace(/\./g, ' '),
+      ];
     }
+  }
 
-    constructor(name: string) {
-        this._name = name;
-        if (this._name != null) {
-            const query = this._name.toLowerCase();
-            this._queryCandidates = [
-                query,
-                // treat dots and spaces as the same
-                query.replace(/\s/g, "."),
-                query.replace(/\./g, " "),
-            ];
-        }
+  meetsCriteria(viewFile: ViewFile): boolean {
+    if (this.name == null || this.name === '') {
+      return true;
     }
-
-    meetsCriteria(viewFile: ViewFile): boolean {
-        if (this._name == null || this._name === "") { return true; }
-        const search = viewFile.name.toLowerCase();
-        return this._queryCandidates.reduce(
-            (a: boolean, b: string) => a || search.indexOf(b) >= 0,
-            false  // initial value
-        );
-    }
+    const search = viewFile.name.toLowerCase();
+    return this.queryCandidates.some((candidate) => search.indexOf(candidate) >= 0);
+  }
 }
 
-
-/**
- * ViewFileFilterService class provides filtering services for
- * view files
- *
- * This class responds to changes in the filter settings and
- * applies the appropriate filters to the ViewFileService
- */
-@Injectable()
+@Injectable({ providedIn: 'root' })
 export class ViewFileFilterService {
-    private _statusFilter: StatusFilterCriteria = null;
-    private _nameFilter: NameFilterCriteria = null;
+  private readonly logger = inject(LoggerService);
+  private readonly viewFileService = inject(ViewFileService);
+  private readonly viewFileOptionsService = inject(ViewFileOptionsService);
 
-    constructor(private _logger: LoggerService,
-                private _viewFileService: ViewFileService,
-                private _viewFileOptionsService: ViewFileOptionsService) {
-        this._viewFileOptionsService.options.subscribe(options => {
-            let updateFilterCriteria = false;
+  private statusFilter: StatusFilterCriteria | null = null;
+  private nameFilter: NameFilterCriteria | null = null;
 
-            // Check to see if status filter changed
-            if (this._statusFilter == null ||
-                    this._statusFilter.status !== options.selectedStatusFilter){
-                updateFilterCriteria = true;
-                this._statusFilter = new StatusFilterCriteria(options.selectedStatusFilter);
-                this._logger.debug("Status filter set to: " + options.selectedStatusFilter);
-            }
+  constructor() {
+    this.viewFileOptionsService.options$.subscribe((options) => {
+      let updateFilterCriteria = false;
 
-            // Check to see if the name filter changed
-            if (this._nameFilter == null ||
-                    this._nameFilter.name !== options.nameFilter) {
-                updateFilterCriteria = true;
-                this._nameFilter = new NameFilterCriteria(options.nameFilter);
-                this._logger.debug("Name filter set to: " + options.nameFilter);
-            }
+      if (this.statusFilter == null || this.statusFilter.status !== options.selectedStatusFilter) {
+        updateFilterCriteria = true;
+        this.statusFilter = new StatusFilterCriteria(options.selectedStatusFilter);
+        this.logger.debug('Status filter set to: ' + options.selectedStatusFilter);
+      }
 
-            // Update the filter criteria if necessary
-            if (updateFilterCriteria) {
-                this._viewFileService.setFilterCriteria(this.buildFilterCriteria());
-            }
-        });
+      if (this.nameFilter == null || this.nameFilter.name !== options.nameFilter) {
+        updateFilterCriteria = true;
+        this.nameFilter = new NameFilterCriteria(options.nameFilter);
+        this.logger.debug('Name filter set to: ' + options.nameFilter);
+      }
+
+      if (updateFilterCriteria) {
+        this.viewFileService.setFilterCriteria(this.buildFilterCriteria());
+      }
+    });
+  }
+
+  private buildFilterCriteria(): ViewFileFilterCriteria | null {
+    if (this.statusFilter != null && this.nameFilter != null) {
+      return new AndFilterCriteria(this.statusFilter, this.nameFilter);
+    } else if (this.statusFilter != null) {
+      return this.statusFilter;
+    } else if (this.nameFilter != null) {
+      return this.nameFilter;
+    } else {
+      return null;
     }
-
-    private buildFilterCriteria(): ViewFileFilterCriteria {
-        if (this._statusFilter != null && this._nameFilter != null) {
-            return new AndFilterCriteria(this._statusFilter, this._nameFilter);
-        } else if (this._statusFilter != null) {
-            return this._statusFilter;
-        } else if (this._nameFilter != null) {
-            return this._nameFilter;
-        } else {
-            return null;
-        }
-    }
+  }
 }

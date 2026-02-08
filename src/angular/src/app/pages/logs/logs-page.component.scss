@@ -1,4 +1,4 @@
-@import '../../common/common';
+@use '../../common/common' as *;
 
 #logs {
     padding: 5px 15px;
@@ -48,14 +48,12 @@
         }
 
         &.warning {
-            // copied from bootstrap alert-warning
             color: #8a6d3b;
             background-color: #fcf8e3;
             border-color: #faebcc;
         }
 
         &.error, &.critical {
-            // copied from bootstrap alert-danger
             color: #a94442;
             background-color: #f2dede;
             border-color: #ebccd1;
@@ -64,7 +62,7 @@
         span.traceback {
             display: block;
             white-space: pre-line;
-            margin-left: 30px;
+            margin-inline-start: 30px;
 
             /* break up long text */
             overflow-wrap: normal;

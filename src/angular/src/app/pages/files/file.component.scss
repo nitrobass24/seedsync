@@ -1,4 +1,4 @@
-@import '../../common/common';
+@use '../../common/common' as *;
 
 .file {
     padding: 10px;
@@ -204,6 +204,37 @@
 }
 .file.selected .actions {
     display: flex;
+}
+
+/* Delete confirmation dialog */
+.delete-confirmation {
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 15px;
+    margin-top: 10px;
+    border-radius: 4px;
+
+    .confirmation-content {
+        background-color: white;
+        padding: 20px;
+        border-radius: 4px;
+
+        .confirmation-title {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .confirmation-message {
+            margin-bottom: 15px;
+        }
+
+        .confirmation-buttons {
+            display: flex;
+            flex-direction: row;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+    }
 }
 
 

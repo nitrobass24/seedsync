@@ -1,4 +1,4 @@
-@import '../../common/common';
+@use '../../common/common' as *;
 
 #settings {
     width: 100%;
@@ -57,7 +57,7 @@
 
             flex-direction: row;
             padding: 10px;
-            margin-right: 8px;
+            margin-inline-end: 8px;
             height: 40px;
             font-size: 120%;
 
@@ -68,7 +68,7 @@
             }
 
             .text {
-                margin-left: 5px;
+                margin-inline-start: 5px;
             }
         }
     }
@@ -93,10 +93,10 @@
                 }
             }
             #left {
-                padding-right: 10px;
+                padding-inline-end: 10px;
             }
             #right {
-                padding-left: 10px;
+                padding-inline-start: 10px;
                 margin-top: 0;
             }
         }

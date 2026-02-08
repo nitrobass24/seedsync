@@ -1,0 +1,218 @@
+import {OptionType} from "./option.component";
+
+export interface IOption {
+    type: OptionType;
+    label: string;
+    valuePath: [string, string];
+    description: string;
+}
+export interface IOptionsContext {
+    header: string;
+    id: string;
+    options: IOption[];
+}
+
+export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
+    header: "Server",
+    id: "server",
+    options: [
+        {
+            type: OptionType.Text,
+            label: "Server Address",
+            valuePath: ["lftp", "remote_address"],
+            description: null
+        },
+        {
+            type: OptionType.Text,
+            label: "Server User",
+            valuePath: ["lftp", "remote_username"],
+            description: null
+        },
+        {
+            type: OptionType.Password,
+            label: "Server Password",
+            valuePath: ["lftp", "remote_password"],
+            description: "Required unless SSH key authentication is enabled"
+        },
+        {
+            type: OptionType.Checkbox,
+            label: "Use password-less key-based authentication",
+            valuePath: ["lftp", "use_ssh_key"],
+            description: null
+        },
+        {
+            type: OptionType.Text,
+            label: "Server Directory",
+            valuePath: ["lftp", "remote_path"],
+            description: "Path to your files on the remote server"
+        },
+        {
+            type: OptionType.Text,
+            label: "Local Directory",
+            valuePath: ["lftp", "local_path"],
+            description: "Downloaded files are placed here"
+        },
+        {
+            type: OptionType.Text,
+            label: "Remote SSH Port",
+            valuePath: ["lftp", "remote_port"],
+            description: null,
+        },
+        {
+            type: OptionType.Text,
+            label: "Server Script Path",
+            valuePath: ["lftp", "remote_path_to_scan_script"],
+            description: "Where to install scanner script on remote server"
+        }
+    ]
+};
+
+export const OPTIONS_CONTEXT_DISCOVERY: IOptionsContext = {
+    header: "File Discovery",
+    id: "file-discovery",
+    options: [
+        {
+            type: OptionType.Text,
+            label: "Remote Scan Interval (ms)",
+            valuePath: ["controller", "interval_ms_remote_scan"],
+            description: "How often the remote server is scanned for new files"
+        },
+        {
+            type: OptionType.Text,
+            label: "Local Scan Interval (ms)",
+            valuePath: ["controller", "interval_ms_local_scan"],
+            description: "How often the local directory is scanned"
+        },
+        {
+            type: OptionType.Text,
+            label: "Downloading Scan Interval (ms)",
+            valuePath: ["controller", "interval_ms_downloading_scan"],
+            description: "How often the downloading information is updated"
+        },
+    ]
+};
+
+export const OPTIONS_CONTEXT_CONNECTIONS: IOptionsContext = {
+    header: "Connections",
+    id: "connections",
+    options: [
+        {
+            type: OptionType.Text,
+            label: "Max Parallel Downloads",
+            valuePath: ["lftp", "num_max_parallel_downloads"],
+            description: "How many items download in parallel.\n" +
+                         "(cmd:queue-parallel)"
+        },
+        {
+            type: OptionType.Text,
+            label: "Max Total Connections",
+            valuePath: ["lftp", "num_max_total_connections"],
+            description: "Maximum number of connections.\n" +
+                         "(net:connection-limit)"
+        },
+        {
+            type: OptionType.Text,
+            label: "Max Connections Per File (Single-File)",
+            valuePath: ["lftp", "num_max_connections_per_root_file"],
+            description: "Number of connections for single-file download.\n" +
+                         "(pget:default-n)"
+        },
+        {
+            type: OptionType.Text,
+            label: "Max Connections Per File (Directory)",
+            valuePath: ["lftp", "num_max_connections_per_dir_file"],
+            description: "Number of per-file connections for directory download.\n" +
+                         "(mirror:use-pget-n)"
+        },
+        {
+            type: OptionType.Text,
+            label: "Max Parallel Files (Directory)",
+            valuePath: ["lftp", "num_max_parallel_files_per_download"],
+            description: "Maximum number of files to fetch in parallel for single directory download.\n" +
+                         "(mirror:parallel-transfer-count)"
+        },
+        {
+            type: OptionType.Checkbox,
+            label: "Rename unfinished/downloading files",
+            valuePath: ["lftp", "use_temp_file"],
+            description: "Unfinished and downloading files will be named *.lftp"
+        },
+        {
+            type: OptionType.Text,
+            label: "Bandwidth Limit",
+            valuePath: ["lftp", "net_limit_rate"],
+            description: "Download speed limit. Supports suffixes: K, M (e.g. 500K, 2M). " +
+                         "0 or empty for unlimited.\n" +
+                         "(net:limit-rate)"
+        },
+    ]
+};
+
+export const OPTIONS_CONTEXT_OTHER: IOptionsContext = {
+    header: "Other Settings",
+    id: "other-settings",
+    options: [
+        {
+            type: OptionType.Text,
+            label: "Web GUI Port",
+            valuePath: ["web", "port"],
+            description: null
+        },
+        {
+            type: OptionType.Checkbox,
+            label: "Enable Debug",
+            valuePath: ["general", "debug"],
+            description: "Enables debug logging."
+        },
+    ]
+};
+
+export const OPTIONS_CONTEXT_AUTOQUEUE: IOptionsContext = {
+    header: "AutoQueue",
+    id: "autoqueue",
+    options: [
+        {
+            type: OptionType.Checkbox,
+            label: "Enable AutoQueue",
+            valuePath: ["autoqueue", "enabled"],
+            description: null
+        },
+        {
+            type: OptionType.Checkbox,
+            label: "Restrict to patterns",
+            valuePath: ["autoqueue", "patterns_only"],
+            description: "Only autoqueue files that match a pattern"
+        },
+        {
+            type: OptionType.Checkbox,
+            label: "Enable auto extraction",
+            valuePath: ["autoqueue", "auto_extract"],
+            description: "Automatically extract files"
+        },
+        {
+            type: OptionType.Checkbox,
+            label: "Delete from remote after download",
+            valuePath: ["autoqueue", "auto_delete_remote"],
+            description: "Automatically delete files from the remote server after successful download"
+        },
+    ]
+};
+
+export const OPTIONS_CONTEXT_EXTRACT: IOptionsContext = {
+    header: "Archive Extraction",
+    id: "extraction",
+    options: [
+        {
+            type: OptionType.Checkbox,
+            label: "Extract archives in the downloads directory",
+            valuePath: ["controller", "use_local_path_as_extract_path"],
+            description: null
+        },
+        {
+            type: OptionType.Text,
+            label: "Extract Path",
+            valuePath: ["controller", "extract_path"],
+            description: "When option above is disabled, extract archives to this directory"
+        },
+    ]
+};

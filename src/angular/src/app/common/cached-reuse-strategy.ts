@@ -1,4 +1,4 @@
-import {ActivatedRouteSnapshot, DetachedRouteHandle, RouteReuseStrategy} from "@angular/router";
+import { ActivatedRouteSnapshot, DetachedRouteHandle, RouteReuseStrategy } from "@angular/router";
 
 /**
  * CachedReuseStrategy caches Components so that they are not
@@ -10,22 +10,21 @@ export class CachedReuseStrategy implements RouteReuseStrategy {
 
     handlers: {[key: string]: DetachedRouteHandle} = {};
 
-    // noinspection JSUnusedLocalSymbols
     shouldDetach(route: ActivatedRouteSnapshot): boolean {
         return true;
     }
 
     store(route: ActivatedRouteSnapshot, handle: DetachedRouteHandle): void {
-        this.handlers[route.routeConfig.path] = handle;
+        this.handlers[route.routeConfig!.path!] = handle;
     }
 
     shouldAttach(route: ActivatedRouteSnapshot): boolean {
-        return !!route.routeConfig && !!this.handlers[route.routeConfig.path];
+        return !!route.routeConfig && !!this.handlers[route.routeConfig.path!];
     }
 
-    retrieve(route: ActivatedRouteSnapshot): DetachedRouteHandle {
+    retrieve(route: ActivatedRouteSnapshot): DetachedRouteHandle | null {
         if (!route.routeConfig) { return null; }
-        return this.handlers[route.routeConfig.path];
+        return this.handlers[route.routeConfig.path!];
     }
 
     shouldReuseRoute(future: ActivatedRouteSnapshot, curr: ActivatedRouteSnapshot): boolean {
