@@ -32,7 +32,7 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
             type: OptionType.Password,
             label: "Server Password",
             valuePath: ["lftp", "remote_password"],
-            description: null
+            description: "Required unless SSH key authentication is enabled"
         },
         {
             type: OptionType.Checkbox,
@@ -136,6 +136,14 @@ export const OPTIONS_CONTEXT_CONNECTIONS: IOptionsContext = {
             label: "Rename unfinished/downloading files",
             valuePath: ["lftp", "use_temp_file"],
             description: "Unfinished and downloading files will be named *.lftp"
+        },
+        {
+            type: OptionType.Text,
+            label: "Bandwidth Limit",
+            valuePath: ["lftp", "net_limit_rate"],
+            description: "Download speed limit. Supports suffixes: K, M (e.g. 500K, 2M). " +
+                         "0 or empty for unlimited.\n" +
+                         "(net:limit-rate)"
         },
     ]
 };

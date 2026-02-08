@@ -51,15 +51,11 @@ export class ConfigService extends BaseWebService {
             return Observable.create(observer => {
                 observer.next(new WebReaction(false, null, `Config has no option named ${section}.${option}`));
             });
-        } else if (valueStr.length === 0) {
-            return Observable.create(observer => {
-                observer.next(new WebReaction(
-                    false, null, Localization.Notification.CONFIG_VALUE_BLANK(section, option))
-                );
-            });
         } else {
-            // Double-encode the value
-            const valueEncoded = encodeURIComponent(encodeURIComponent(valueStr));
+            // Double-encode the value, use sentinel for empty strings
+            const valueEncoded = valueStr.length === 0
+                ? "__empty__"
+                : encodeURIComponent(encodeURIComponent(valueStr));
             const url = this.CONFIG_SET_URL(section, option, valueEncoded);
             const obs = this._restService.sendRequest(url);
             obs.subscribe({

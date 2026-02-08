@@ -24,6 +24,8 @@ services:
       - ./dev-config:/config
       # Download destination
       - ./dev-downloads:/downloads
+      # Uncomment to use SSH key authentication
+      # - ~/.ssh/id_rsa:/home/seedsync/.ssh/id_rsa:ro
     restart: unless-stopped
 
 # Uncomment below for a test remote server (for development only)

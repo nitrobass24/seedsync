@@ -1,9 +1,20 @@
 # Changelog
 
-## [0.10.5] - 2026-01-28
+## [0.10.5] - 2026-02-07
 
 ### Fixed
-- **Remote shell not found error** - Improved error messaging when the remote user's shell (e.g., `/bin/bash`) doesn't exist. Now provides clear instructions on how to fix: create a symlink or change the user's shell. (#18)
+- **Delete remote with tilde (~) path** - Fixed "Delete remote" command not working when the remote path uses `~`. Now properly converts tilde to `$HOME` for shell expansion, matching the fix previously applied to the remote scanner. (#27)
+- **Remote shell auto-detection** - SeedSync now automatically detects the available shell on the remote server (`/bin/bash`, `/usr/bin/bash`, `/bin/sh`) instead of failing when `/bin/bash` doesn't exist. Uses SFTP fallback for detection when the login shell is broken. (#18)
+- **SSH key auth no longer requires password** - The password field is now optional when SSH key authentication is enabled. Previously required a dummy value. (#21)
+- **Config serialization of None values** - Fixed `None` values being written as the string "None" in config files, which caused issues with new optional fields.
+
+### Added
+- **Bandwidth/speed limit** - New "Bandwidth Limit" setting in the Connections section allows capping download speed. Supports values like `500K`, `2M`, or raw bytes/sec. Set to `0` or leave empty for unlimited. (#24)
+- **SSH key auth documentation** - README and docker-compose now document how to mount SSH keys for password-less authentication.
+
+### Changed
+- **Shared remote path utilities** - Extracted tilde-aware path escaping into a shared utility module for reuse across scanner and delete operations.
+- **Makefile test target** - Fixed `make test` to install all required Python dependencies.
 
 ---
 

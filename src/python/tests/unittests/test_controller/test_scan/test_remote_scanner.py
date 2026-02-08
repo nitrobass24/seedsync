@@ -468,6 +468,57 @@ class TestRemoteScanner(unittest.TestCase):
         self.assertEqual(Localization.Error.REMOTE_SERVER_SCAN.format("Invalid pickled data"), str(ctx.exception))
         self.assertFalse(ctx.exception.recoverable)
 
+    def test_raises_nonrecoverable_error_on_shell_detection_failure(self):
+        scanner = RemoteScanner(
+            remote_address="my remote address",
+            remote_username="my remote user",
+            remote_password="my password",
+            remote_port=1234,
+            remote_path_to_scan="/remote/path/to/scan",
+            local_path_to_scan_script=TestRemoteScanner.temp_scan_script,
+            remote_path_to_scan_script="/remote/path/to/scan/script"
+        )
+
+        self.mock_ssh.detect_shell.side_effect = SshcpError(
+            "Remote user's login shell not found. "
+            "Available shells on the remote server: /usr/bin/bash. "
+            "Fix by running on the remote server: sudo chsh -s /usr/bin/bash testuser"
+        )
+
+        with self.assertRaises(ScannerError) as ctx:
+            scanner.scan()
+        self.assertIn("login shell not found", str(ctx.exception))
+        self.assertFalse(ctx.exception.recoverable)
+
+    def test_calls_detect_shell_on_first_scan(self):
+        scanner = RemoteScanner(
+            remote_address="my remote address",
+            remote_username="my remote user",
+            remote_password="my password",
+            remote_port=1234,
+            remote_path_to_scan="/remote/path/to/scan",
+            local_path_to_scan_script=TestRemoteScanner.temp_scan_script,
+            remote_path_to_scan_script="/remote/path/to/scan/script"
+        )
+
+        self.ssh_run_command_count = 0
+
+        def ssh_shell(*args):
+            self.ssh_run_command_count += 1
+            if self.ssh_run_command_count == 1:
+                return b''
+            else:
+                return pickle.dumps([])
+        self.mock_ssh.shell.side_effect = ssh_shell
+
+        scanner.scan()
+        self.mock_ssh.detect_shell.assert_called_once()
+
+        # Second scan should not call detect_shell again (it's in _install_scanfs which only runs once)
+        self.mock_ssh.detect_shell.reset_mock()
+        scanner.scan()
+        self.mock_ssh.detect_shell.assert_not_called()
+
     def test_raises_nonrecoverable_error_on_failed_scan(self):
         scanner = RemoteScanner(
             remote_address="my remote address",
