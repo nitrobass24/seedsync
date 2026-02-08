@@ -29,6 +29,10 @@ Some servers require a matching locale. Add these environment variables to the c
 -e LANG=en_US.UTF-8
 ```
 
+## SeedSync can't find a shell on my remote server
+
+SeedSync automatically detects the available shell on the remote server, checking `/bin/bash`, `/usr/bin/bash`, and `/bin/sh` in order. If none of these are available or your provider restricts shell access, check with your provider for the correct shell path.
+
 ## Where are settings stored?
 
 Inside the container at `/config/settings.cfg`.

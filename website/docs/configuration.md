@@ -19,11 +19,21 @@ Open the UI and fill out the Settings page:
 - **Remote Path**: Path on the server to sync
 - **Local Path**: Must be `/downloads` inside the container
 
+## Connections
+
+- **Max Parallel Downloads**: Number of items downloading simultaneously
+- **Max Total Connections**: Overall connection limit
+- **Max Connections Per File**: Per-file connection count for single files and directories
+- **Max Parallel Files**: Number of files fetched in parallel within a directory download
+- **Rename unfinished files**: Downloading files get a `.lftp` extension
+- **Bandwidth Limit**: Cap download speed with values like `500K`, `2M`, or raw bytes/sec. Set to `0` or leave empty for unlimited.
+
 ## AutoQueue
 
 - **Enabled**: Automatically queue new remote files
 - **Patterns only**: Only queue items that match patterns
 - **Auto extract**: Extract archives after download
+- **Delete from remote after download**: Automatically delete files from the remote server after a successful download. When used with auto-extract, extraction runs first.
 
 ## Environment variables
 
