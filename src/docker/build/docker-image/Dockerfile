@@ -1,6 +1,9 @@
 # SeedSync Docker Image - Optimized Build
 # Target size: <200MB (down from 439MB)
 
+# Force AMD64 for scanfs - it runs on remote seedbox servers, not locally
+ARG SCANFS_PLATFORM=linux/amd64
+
 # ==============================================================================
 # Stage 1: Build Angular Frontend
 # ==============================================================================
@@ -18,7 +21,7 @@ RUN npx ng build --configuration=production --output-path /build
 # Bullseye has glibc 2.31, supporting Linux systems from 2021+
 # IMPORTANT: Force AMD64 platform - scanfs runs on remote server, not locally
 # ==============================================================================
-FROM --platform=linux/amd64 python:3.12-slim-bullseye AS scanfs-builder
+FROM --platform=$SCANFS_PLATFORM python:3.12-slim-bullseye AS scanfs-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     binutils \
