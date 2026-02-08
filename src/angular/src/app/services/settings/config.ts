@@ -92,11 +92,13 @@ interface IAutoQueue {
     enabled: boolean;
     patterns_only: boolean;
     auto_extract: boolean;
+    auto_delete_remote: boolean;
 }
 const DefaultAutoQueue: IAutoQueue = {
     enabled: null,
     patterns_only: null,
     auto_extract: null,
+    auto_delete_remote: null,
 };
 const AutoQueueRecord = Record(DefaultAutoQueue);
 

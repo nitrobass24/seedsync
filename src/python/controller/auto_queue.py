@@ -160,6 +160,7 @@ class AutoQueue:
         self.__enabled = context.config.autoqueue.enabled
         self.__patterns_only = context.config.autoqueue.patterns_only
         self.__auto_extract_enabled = context.config.autoqueue.auto_extract
+        self.__auto_delete_remote_enabled = context.config.autoqueue.auto_delete_remote
 
         if self.__enabled:
             persist.add_listener(self.__persist_listener)
@@ -229,6 +230,31 @@ class AutoQueue:
             )
 
         ###
+        # Delete Remote
+        ###
+        files_to_delete_remote = []
+
+        if self.__auto_delete_remote_enabled:
+            delete_remote_candidate_files = []
+
+            # Candidate all new files
+            delete_remote_candidate_files += self.__model_listener.new_files
+
+            # Candidate modified files that just became DOWNLOADED or EXTRACTED
+            for old_file, new_file in self.__model_listener.modified_files:
+                if old_file.state != ModelFile.State.DOWNLOADED and \
+                        old_file.state != ModelFile.State.EXTRACTED and \
+                        new_file.state in (ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED):
+                    delete_remote_candidate_files.append(new_file)
+
+            files_to_delete_remote = self.__filter_candidates(
+                candidates=delete_remote_candidate_files,
+                accept=lambda f:
+                    f.state in (ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED) and
+                    f.remote_size is not None
+            )
+
+        ###
         # Send commands
         ###
 
@@ -248,6 +274,15 @@ class AutoQueue:
                 (" for pattern '{}'".format(pattern.pattern) if pattern else "")
             )
             command = Controller.Command(Controller.Command.Action.EXTRACT, filename)
+            self.__controller.queue_command(command)
+
+        # Send the delete remote commands (after extract so extraction happens first)
+        for filename, pattern in files_to_delete_remote:
+            self.logger.info(
+                "Auto deleting remote '{}'".format(filename) +
+                (" for pattern '{}'".format(pattern.pattern) if pattern else "")
+            )
+            command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, filename)
             self.__controller.queue_command(command)
 
         # Clear the processed files

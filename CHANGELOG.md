@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.6] - 2026-02-07
+
+### Added
+- **Auto-delete from remote after download** - New "Delete from remote after download" option in AutoQueue settings. When enabled, files are automatically deleted from the remote seedbox after successful download, preventing the remote server from filling up. Works correctly with auto-extract — extraction runs before deletion when both are enabled. (#25)
+
+---
+
 ## [0.10.5] - 2026-02-07
 
 ### Fixed
