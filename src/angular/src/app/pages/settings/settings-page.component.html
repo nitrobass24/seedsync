@@ -40,31 +40,21 @@
   </div>
 </div>
 
-<ng-template #optionsList let-header="header" let-options="options" let-id="id">
+<ng-template #optionsList let-header="header" let-options="options">
   <div class="card">
-    <h3 class="card-header" id="heading-{{ id }}">
-      <button
-        class="btn"
-        type="button"
-        data-bs-toggle="collapse"
-        [attr.data-bs-target]="'#collapse-' + id">
-        {{ header }}
-      </button>
-    </h3>
-    <div [id]="'collapse-' + id" class="collapse" data-bs-parent="#accordion">
-      <div class="card-body">
-        @for (option of options; track option.label) {
-          <div>
-            <app-option
-              [type]="option.type"
-              [label]="option.label"
-              [description]="option.description"
-              [value]="getOptionValue(config$ | async, option.valuePath)"
-              (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
-            </app-option>
-          </div>
-        }
-      </div>
+    <h3 class="card-header">{{ header }}</h3>
+    <div class="card-body">
+      @for (option of options; track option.label) {
+        <div>
+          <app-option
+            [type]="option.type"
+            [label]="option.label"
+            [description]="option.description"
+            [value]="getOptionValue(config$ | async, option.valuePath)"
+            (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
+          </app-option>
+        </div>
+      }
     </div>
   </div>
 </ng-template>

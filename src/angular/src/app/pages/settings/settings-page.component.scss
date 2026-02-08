@@ -22,15 +22,7 @@
 
                 .card-header {
                     margin-bottom: 0;
-
-                    .btn {
-                        font-size: 80%;
-                        cursor: default;
-
-                        &:focus {
-                            box-shadow: none;
-                        }
-                    }
+                    font-size: 80%;
                 }
 
                 .card-body {
@@ -81,16 +73,6 @@
         #accordion {
             #left, #right {
                 width: 50%;
-
-                .card-header {
-                    .btn {
-                        pointer-events: none;
-                    }
-                }
-
-                .collapse {
-                    display: inherit;
-                }
             }
             #left {
                 padding-inline-end: 10px;
