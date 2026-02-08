@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.11.0] - 2026-02-08
+
+### Changed
+- **Angular 4 → 21** - Complete frontend rewrite with modern Angular 21
+  - Standalone components replacing NgModule architecture
+  - New Angular control flow syntax (@if, @for, @switch)
+  - `inject()` function replacing constructor dependency injection
+  - Bootstrap 4 → 5.3 with JS bundle for dropdowns
+  - Font Awesome 4 → 7 (Free)
+  - RxJS 5 → 7 with modern pipe operators
+  - Immutable.js removed — plain TypeScript interfaces
+  - Node 12 → 22 for builds
+  - `npm install` → `npm ci` for reproducible builds
+- **Smaller transfer size** - 156 kB gzipped (down from ~300 kB)
+- **Settings page** - Simplified layout with all sections always expanded
+
+### Removed
+- **Angular 4 code** - Old frontend code (`src/angular-old/`, `src/angular-v17/`) removed
+- **Immutable.js** - Replaced with plain TypeScript interfaces
+- **ngx-modialog** - Replaced with inline confirmation patterns
+- **angular-webstorage-service** - Replaced with direct localStorage usage
+- **css-element-queries** - Replaced with native ResizeObserver
+
+---
+
 ## [0.10.6] - 2026-02-07
 
 ### Added

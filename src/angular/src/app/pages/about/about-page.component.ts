@@ -1,5 +1,7 @@
 import { Component } from '@angular/core';
 
+import packageJson from '../../../../package.json';
+
 @Component({
   selector: 'app-about-page',
   standalone: true,
@@ -7,5 +9,5 @@ import { Component } from '@angular/core';
   styleUrls: ['./about-page.component.scss'],
 })
 export class AboutPageComponent {
-  readonly version = '0.10.6';
+  readonly version = packageJson.version;
 }
