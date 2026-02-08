@@ -19,7 +19,7 @@
     @case (OptionType.Checkbox) {
       <label>
         <input type="checkbox"
-               class="form-control"
+               class="form-check-input"
                [disabled]="value() == null"
                [ngModel]="value()"
                (ngModelChange)="onChange($event)" />

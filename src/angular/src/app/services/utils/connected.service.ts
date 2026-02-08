@@ -1,11 +1,16 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 
-import { StreamEventHandler } from '../base/stream-dispatch.service';
+import { StreamEventHandler, StreamDispatchService } from '../base/stream-dispatch.service';
 
 @Injectable({ providedIn: 'root' })
 export class ConnectedService implements StreamEventHandler {
+  private readonly streamDispatch = inject(StreamDispatchService);
   private readonly connectedSubject = new BehaviorSubject<boolean>(false);
+
+  constructor() {
+    this.streamDispatch.registerHandler(this);
+  }
 
   readonly connected$: Observable<boolean> =
     this.connectedSubject.asObservable();

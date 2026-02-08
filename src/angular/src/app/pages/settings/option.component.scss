@@ -29,17 +29,19 @@ span.description {
 }
 
 input[type="checkbox"] {
-    width: auto;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
     margin-inline-end: 10px;
     box-shadow: none;
-    height: 20px;
+    cursor: pointer;
 
     &:focus {
         box-shadow: none;
     }
 
     & ~ .description {
-        margin-inline-start: 23px;
+        margin-inline-start: 30px;
     }
 }
 
