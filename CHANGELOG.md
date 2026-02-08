@@ -16,6 +16,9 @@
 - **Smaller transfer size** - 156 kB gzipped (down from ~300 kB)
 - **Settings page** - Simplified layout with all sections always expanded
 
+### Added
+- **Unit tests** - 125 Vitest tests across 14 new spec files covering all models, pipes, and services
+
 ### Removed
 - **Angular 4 code** - Old frontend code (`src/angular-old/`, `src/angular-v17/`) removed
 - **Immutable.js** - Replaced with plain TypeScript interfaces
