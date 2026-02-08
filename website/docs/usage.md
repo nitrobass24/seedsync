@@ -16,6 +16,8 @@ The Dashboard lists files and folders on the remote server and the local machine
 AutoQueue can automatically queue new files discovered on the remote server.
 
 - **Patterns only** lets you limit auto-queueing to specific matches.
+- **Auto extract** automatically extracts archives after download completes.
+- **Delete from remote** automatically removes files from the remote server after download, keeping your seedbox from filling up. When both auto-extract and delete-from-remote are enabled, extraction always runs before deletion.
 - Patterns are managed from the AutoQueue page.
 
 ## Logs
