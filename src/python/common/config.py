@@ -76,6 +76,10 @@ class Checkers:
         return value
 
     @staticmethod
+    def string_allow_empty(cls: T, name: str, value: str) -> str:
+        return value
+
+    @staticmethod
     def int_non_negative(cls: T, name: str, value: int) -> int:
         if value < 0:
             raise ConfigError("Bad config: {}.{} ({}) must be zero or greater".format(
@@ -228,7 +232,7 @@ class Config(Persist):
     class Lftp(IC):
         remote_address = PROP("remote_address", Checkers.string_nonempty, Converters.null)
         remote_username = PROP("remote_username", Checkers.string_nonempty, Converters.null)
-        remote_password = PROP("remote_password", Checkers.string_nonempty, Converters.null)
+        remote_password = PROP("remote_password", Checkers.string_allow_empty, Converters.null)
         remote_port = PROP("remote_port", Checkers.int_positive, Converters.int)
         remote_path = PROP("remote_path", Checkers.string_nonempty, Converters.null)
         local_path = PROP("local_path", Checkers.string_nonempty, Converters.null)
@@ -246,6 +250,7 @@ class Config(Persist):
                                                 Converters.int)
         num_max_total_connections = PROP("num_max_total_connections", Checkers.int_non_negative, Converters.int)
         use_temp_file = PROP("use_temp_file", Checkers.null, Converters.bool)
+        net_limit_rate = PROP("net_limit_rate", Checkers.string_allow_empty, Converters.null)
 
         def __init__(self):
             super().__init__()
@@ -263,6 +268,7 @@ class Config(Persist):
             self.num_max_connections_per_dir_file = None
             self.num_max_total_connections = None
             self.use_temp_file = None
+            self.net_limit_rate = ""
 
     class Controller(IC):
         interval_ms_remote_scan = PROP("interval_ms_remote_scan", Checkers.int_positive, Converters.int)
@@ -346,7 +352,8 @@ class Config(Persist):
             config_parser.add_section(section)
             section_dict = config_dict[section]
             for key in section_dict:
-                config_parser.set(section, key, str(section_dict[key]))
+                value = section_dict[key]
+                config_parser.set(section, key, "" if value is None else str(value))
         str_io = StringIO()
         config_parser.write(str_io)
         return str_io.getvalue()

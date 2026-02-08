@@ -5,6 +5,7 @@ import shutil
 from typing import Optional
 
 from common import AppOneShotProcess
+from common import escape_remote_path_single, escape_remote_path_double
 from ssh import Sshcp, SshcpError
 
 
@@ -47,7 +48,11 @@ class DeleteRemoteProcess(AppOneShotProcess):
         file_path = os.path.join(self.__remote_path, self.__file_name)
         self.logger.debug("Deleting remote file {}".format(self.__file_name))
         try:
-            out = self.__ssh.shell("rm -rf '{}'".format(file_path))
+            if file_path.startswith("~"):
+                escaped_path = escape_remote_path_double(file_path)
+            else:
+                escaped_path = escape_remote_path_single(file_path)
+            out = self.__ssh.shell("rm -rf {}".format(escaped_path))
             self.logger.debug("Remote delete output: {}".format(out.decode()))
         except SshcpError:
             self.logger.exception("Exception while deleting remote file")

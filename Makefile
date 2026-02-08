@@ -34,8 +34,9 @@ clean:
 # Run Python tests (in container)
 test:
 	docker run --rm -v $(PWD)/src/python:/app/python -w /app/python \
+		-e PYTHONPATH=/app/python \
 		python:3.12-slim-bookworm \
-		sh -c "pip install -q pytest && pytest tests/unittests -v --tb=short"
+		sh -c "pip install -q -r requirements.txt pytest parameterized testfixtures webtest && pytest tests/unittests -v --tb=short"
 
 # Show image size
 size:

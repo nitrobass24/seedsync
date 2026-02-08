@@ -2,6 +2,7 @@
 
 import logging
 import time
+from typing import Optional, List
 
 import pexpect
 
@@ -22,6 +23,9 @@ class Sshcp:
     """
     __TIMEOUT_SECS = 180
 
+    # Common shell paths to check, in order of preference
+    SHELL_CANDIDATES = ["/bin/bash", "/usr/bin/bash", "/bin/sh", "/usr/bin/sh"]
+
     def __init__(self,
                  host: str,
                  port: int,
@@ -33,10 +37,201 @@ class Sshcp:
         self.__port = port
         self.__user = user
         self.__password = password
+        self.__detected_shell: Optional[str] = None
+        self.__shell_detected: bool = False
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def set_base_logger(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild(self.__class__.__name__)
+
+    def detect_shell(self) -> str:
+        """
+        Detect an available shell on the remote server.
+        Tries running a test command via SSH. If the login shell is broken
+        (e.g., /bin/bash not found), uses SFTP to check which shells exist
+        and provides a clear error with remediation steps.
+        Returns the detected shell path. Caches the result for the session.
+        :return: path to the detected shell
+        :raises SshcpError: if no working shell can be found
+        """
+        if self.__shell_detected:
+            return self.__detected_shell
+
+        self.logger.debug("Detecting remote shell...")
+
+        # Try running a simple command to test the login shell
+        try:
+            self._run_shell_command("echo __shell_ok__")
+            # Login shell works fine - detect which shell it is
+            try:
+                out = self._run_shell_command(
+                    "echo __shell_path__$(which bash 2>/dev/null || "
+                    "which sh 2>/dev/null || "
+                    "echo unknown)__end__"
+                )
+                out_str = out.decode()
+                # Parse the shell path from the marker-wrapped output
+                if "__shell_path__" in out_str and "__end__" in out_str:
+                    shell_path = out_str.split("__shell_path__")[1].split("__end__")[0].strip()
+                    if shell_path and shell_path != "unknown":
+                        self.__detected_shell = shell_path
+                    else:
+                        self.__detected_shell = "/bin/sh"
+                else:
+                    self.__detected_shell = "/bin/sh"
+            except SshcpError:
+                # Shell works but couldn't determine path - default to /bin/sh
+                self.__detected_shell = "/bin/sh"
+
+            self.__shell_detected = True
+            self.logger.info("Detected remote shell: {}".format(self.__detected_shell))
+            return self.__detected_shell
+
+        except SshcpError as e:
+            error_str = str(e)
+            if "No such file or directory" not in error_str:
+                # Not a shell-not-found error - re-raise as-is
+                raise
+
+            # Login shell is broken. Use SFTP to check which shells exist.
+            self.logger.warning("Login shell not found on remote server. "
+                                "Checking for available shells via SFTP...")
+
+            available_shells = self._check_remote_shells_via_sftp()
+
+            if available_shells:
+                shells_str = ", ".join(available_shells)
+                raise SshcpError(
+                    "Remote user's login shell not found. "
+                    "Available shells on the remote server: {}. "
+                    "Fix by running on the remote server: "
+                    "sudo chsh -s {} {}".format(
+                        shells_str, available_shells[0], self.__user
+                    )
+                )
+            else:
+                raise SshcpError(
+                    "Remote user's login shell not found and no common shells "
+                    "could be detected. Fix by running on the remote server: "
+                    "sudo chsh -s /bin/sh {} OR "
+                    "sudo ln -s /usr/bin/bash /bin/bash".format(self.__user)
+                )
+
+    def _run_shell_command(self, command: str) -> bytes:
+        """
+        Run a shell command via SSH without going through the public shell()
+        method's quoting logic. Used internally for shell detection.
+        """
+        # Quote the command
+        if '"' in command:
+            quoted = "'{}'".format(command)
+        else:
+            quoted = '"{}"'.format(command)
+
+        flags = [
+            "-p", str(self.__port),
+        ]
+        args = [
+            "{}@{}".format(self.__user, self.__host),
+            quoted
+        ]
+        return self.__run_command(
+            command="ssh",
+            flags=" ".join(flags),
+            args=" ".join(args)
+        )
+
+    def _check_remote_shells_via_sftp(self) -> List[str]:
+        """
+        Check which shell binaries exist on the remote server using SFTP.
+        SFTP does not require a working login shell.
+        Returns a list of available shell paths.
+        """
+        available = []
+        for shell_path in self.SHELL_CANDIDATES:
+            try:
+                self._sftp_stat(shell_path)
+                available.append(shell_path)
+            except SshcpError:
+                pass
+        return available
+
+    def _sftp_stat(self, remote_path: str):
+        """
+        Use sftp to check if a remote file exists.
+        SFTP uses a subsystem, not the login shell, so it works even
+        when the login shell is broken.
+        :raises SshcpError: if the file does not exist or the command fails
+        """
+        flags = [
+            "-P", str(self.__port),
+            "-o", "BatchMode=yes",
+        ]
+
+        # Use sftp batch mode to run 'ls' on the path
+        args = [
+            "-b", "-",  # read commands from stdin
+            "{}@{}".format(self.__user, self.__host),
+        ]
+
+        command_args = ["sftp"]
+        command_args += [
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            "-o", "LogLevel=error",
+        ]
+
+        if self.__password is None:
+            command_args += ["-o", "PasswordAuthentication=no"]
+        else:
+            command_args += ["-o", "PubkeyAuthentication=no"]
+
+        command_args += flags
+        command_args += args
+
+        command = " ".join(command_args)
+        self.logger.debug("SFTP stat command: {}".format(command))
+
+        sp = pexpect.spawn(command)
+        try:
+            if self.__password is not None:
+                i = sp.expect([
+                    'password: ',
+                    pexpect.EOF,
+                ], timeout=30)
+                if i == 1:
+                    sp.close()
+                    raise SshcpError("SFTP connection failed")
+                sp.sendline(self.__password)
+
+            # Wait for sftp prompt
+            i = sp.expect([
+                'sftp>',
+                pexpect.EOF,
+                'password: ',
+            ], timeout=30)
+            if i != 0:
+                sp.close()
+                raise SshcpError("SFTP connection failed")
+
+            # Send ls command to check if file exists
+            sp.sendline("ls {}".format(remote_path))
+            i = sp.expect([
+                'sftp>',
+                pexpect.EOF,
+            ], timeout=30)
+
+            output = sp.before.decode() if sp.before else ""
+            sp.sendline("bye")
+            sp.expect(pexpect.EOF, timeout=10)
+            sp.close()
+
+            if "No such file" in output or "not found" in output or "Can't ls" in output:
+                raise SshcpError("File not found: {}".format(remote_path))
+
+        except pexpect.exceptions.TIMEOUT:
+            sp.close()
+            raise SshcpError("SFTP timed out")
 
     def __run_command(self,
                       command: str,
@@ -135,6 +330,17 @@ class Sshcp:
             before = sp.before.decode().strip() if sp.before != pexpect.EOF else ""
             after = sp.after.decode().strip() if sp.after != pexpect.EOF else ""
             self.logger.warning("Command failed: '{} - {}'".format(before, after))
+
+            # Check for shell not found error (common on servers where bash is at /usr/bin/bash)
+            if "No such file or directory" in before:
+                for shell in self.SHELL_CANDIDATES:
+                    if shell in before:
+                        raise SshcpError(
+                            "Remote user's login shell not found: {}. "
+                            "Run detect_shell() or fix by running on the remote server: "
+                            "sudo chsh -s /bin/sh {}".format(shell, self.__user)
+                        )
+
             raise SshcpError(sp.before.decode().strip())
 
         return sp.before.replace(b'\r\n', b'\n').strip()

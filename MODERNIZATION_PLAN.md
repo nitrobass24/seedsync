@@ -123,6 +123,15 @@ Angular 17 migration was attempted in v0.10.0 but rolled back in v0.10.1 due to 
 
 ---
 
+## v0.10.5 Improvements
+
+| Feature | Issue | Status |
+|---------|-------|--------|
+| Delete remote with tilde path | #27 | ✅ Done |
+| Remote shell auto-detection | #18 | ✅ Done |
+| SSH key auth without password | #21 | ✅ Done |
+| Bandwidth/speed limit setting | #24 | ✅ Done |
+
 ## Future Improvements (Optional)
 
 If you want to continue development:
@@ -131,7 +140,7 @@ If you want to continue development:
 2. **Python scanfs fallback** - Run scanner as Python script instead of binary (for restricted servers)
 3. **Memory profiling** - If high memory usage reported
 4. **Additional tests** - Expand test coverage
-5. **Dark mode** - Requested in issue #133 (upstream)
+5. **Dark mode** - Requested in issue #22
 
 ---
 

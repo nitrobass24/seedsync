@@ -25,6 +25,9 @@ class ConfigHandler(IHandler):
     def __handle_set_config(self, section: str, key: str, value: str):
         # value is double encoded
         value = unquote(value)
+        # Handle empty value sentinel from frontend
+        if value == "__empty__":
+            value = ""
 
         if not self.__config.has_section(section):
             return HTTPResponse(body="There is no section '{}' in config".format(section), status=400)

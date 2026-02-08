@@ -57,6 +57,8 @@ services:
     volumes:
       - ./config:/config
       - /path/to/downloads:/downloads
+      # Uncomment below to use SSH key authentication
+      # - ~/.ssh/id_rsa:/home/seedsync/.ssh/id_rsa:ro
     restart: unless-stopped
 ```
 
@@ -81,14 +83,32 @@ docker run -d \
   ghcr.io/nitrobass24/seedsync:latest
 ```
 
+> **SSH Key Auth**: To use key-based authentication, mount your private key:
+> `-v ~/.ssh/id_rsa:/home/seedsync/.ssh/id_rsa:ro`
+
 ## Configuration
 
 On first run, access the web UI and configure:
 
 1. **Remote Server**: Your seedbox SSH hostname/IP
-2. **SSH Credentials**: Username and password (or SSH key)
+2. **SSH Credentials**: Username and password
 3. **Remote Path**: Directory on the seedbox to sync from
 4. **Local Path**: Maps to `/downloads` in the container
+
+### SSH Key Authentication
+
+To use password-less SSH key authentication:
+
+1. Mount your private key into the container (see volume examples above)
+2. In the web UI Settings, enable **"Use password-less key-based authentication"**
+3. The password field can be left blank when key auth is enabled
+
+### Bandwidth Limiting
+
+You can limit download speed in Settings under the **Connections** section. The **Bandwidth Limit** field accepts:
+- Numeric values in bytes/sec (e.g., `102400` for 100 KB/s)
+- Values with suffixes: `K` for KB/s, `M` for MB/s (e.g., `500K`, `2M`)
+- `0` or empty for unlimited
 
 ## Building from Source
 
@@ -118,6 +138,7 @@ make logs
 |------|-------------|
 | `/config` | Configuration and state files |
 | `/downloads` | Download destination directory |
+| `/home/seedsync/.ssh/id_rsa` | SSH private key (optional, for key-based auth) |
 
 ## Ports
 
@@ -146,6 +167,15 @@ id  # Shows your UID and GID
 - Verify your seedbox allows SSH connections
 - Check that the SSH port is correct (default: 22)
 - Ensure your credentials are correct
+- If using SSH key auth, ensure the key is mounted at `/home/seedsync/.ssh/id_rsa` (read-only is fine)
+
+### Remote Shell Not Found
+
+If you see an error about `/bin/bash` not found, SeedSync will attempt to auto-detect the available shell on your remote server. Check the logs for the detected shell path. If detection fails, create a symlink on the remote server:
+
+```bash
+sudo ln -s /usr/bin/bash /bin/bash
+```
 
 ## Report an Issue
 

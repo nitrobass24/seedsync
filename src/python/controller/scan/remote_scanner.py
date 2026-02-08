@@ -9,25 +9,10 @@ import hashlib
 
 from .scanner_process import IScanner, ScannerError
 from common import overrides, Localization
+from common import escape_remote_path_single as _escape_remote_path_single
+from common import escape_remote_path_double as _escape_remote_path_double
 from ssh import Sshcp, SshcpError
 from system import SystemFile
-
-
-def _escape_remote_path_single(path: str) -> str:
-    """
-    Escape a remote path using single quotes (no variable expansion).
-    """
-    return "'{}'".format(path)
-
-
-def _escape_remote_path_double(path: str) -> str:
-    """
-    Escape a remote path using double quotes (allows $HOME expansion).
-    Converts ~ to $HOME for shell expansion.
-    """
-    if path.startswith("~"):
-        path = "$HOME" + path[1:]
-    return '"{}"'.format(path)
 
 
 class RemoteScanner(IScanner):
@@ -108,6 +93,17 @@ class RemoteScanner(IScanner):
         return remote_files
 
     def _install_scanfs(self):
+        # Detect available shell on first run to provide clear errors
+        # if the login shell is broken (e.g., /bin/bash not found)
+        try:
+            self.__ssh.detect_shell()
+        except SshcpError as e:
+            self.logger.exception("Shell detection failed")
+            raise ScannerError(
+                Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
+                recoverable=False
+            )
+
         # Check md5sum on remote to see if we can skip installation
         with open(self.__local_path_to_scan_script, "rb") as f:
             local_md5sum = hashlib.md5(f.read()).hexdigest()
