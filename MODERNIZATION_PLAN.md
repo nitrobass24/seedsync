@@ -123,6 +123,12 @@ Angular 17 migration was attempted in v0.10.0 but rolled back in v0.10.1 due to 
 
 ---
 
+## v0.10.6 Improvements
+
+| Feature | Issue | Status |
+|---------|-------|--------|
+| Auto-delete from remote after download | #25 | ✅ Done |
+
 ## v0.10.5 Improvements
 
 | Feature | Issue | Status |

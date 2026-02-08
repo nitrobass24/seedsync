@@ -296,12 +296,14 @@ class Config(Persist):
         enabled = PROP("enabled", Checkers.null, Converters.bool)
         patterns_only = PROP("patterns_only", Checkers.null, Converters.bool)
         auto_extract = PROP("auto_extract", Checkers.null, Converters.bool)
+        auto_delete_remote = PROP("auto_delete_remote", Checkers.null, Converters.bool)
 
         def __init__(self):
             super().__init__()
             self.enabled = None
             self.patterns_only = None
             self.auto_extract = None
+            self.auto_delete_remote = None
 
     def __init__(self):
         self.general = Config.General()
