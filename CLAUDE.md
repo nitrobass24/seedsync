@@ -4,7 +4,7 @@
 
 SeedSync is a Docker-based tool that syncs files from a remote seedbox to a local machine using LFTP.
 
-- **Frontend**: Angular 4 (Bootstrap 4)
+- **Frontend**: Angular 21 (Bootstrap 5.3, Font Awesome 7, Vitest)
 - **Backend**: Python 3.12 with Bottle
 - **Container**: Multi-arch Docker image (amd64, arm64)
 - **Registry**: ghcr.io/nitrobass24/seedsync
@@ -13,7 +13,7 @@ SeedSync is a Docker-based tool that syncs files from a remote seedbox to a loca
 
 ```
 src/
-├── angular/          # Angular 4 frontend (current)
+├── angular/          # Angular 21 frontend
 ├── python/           # Python backend
 ├── docker/           # Docker build files
 └── e2e/              # End-to-end tests
@@ -23,7 +23,6 @@ website/              # Docusaurus documentation site
 ## Branches
 
 - **master** - Stable release branch
-- **angular-17-upgrade** - Angular 17 migration work (in progress)
 
 ## Release Process
 
@@ -157,8 +156,8 @@ make stop     # Stop container
 
 ### Testing
 ```bash
-# CI runs on PR to master
-# Tests include: Docker build, container startup, web UI accessibility
+cd src/angular && npx ng test    # Run 125 Vitest unit tests
+# CI also runs: Docker build, container startup, web UI accessibility
 ```
 
 ## GitHub Repository
