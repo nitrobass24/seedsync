@@ -1,53 +1,37 @@
-import {Injectable} from "@angular/core";
+import { Injectable } from '@angular/core';
 
-@Injectable()
-export class LoggerService {
-
-    public level: LoggerService.Level;
-
-    constructor() {
-        this.level = LoggerService.Level.DEBUG;
-    }
-
-    get debug() {
-        if (this.level >= LoggerService.Level.DEBUG) {
-            return console.debug.bind(console);
-        } else {
-            return () => {};
-        }
-    }
-
-    get info() {
-        if (this.level >= LoggerService.Level.INFO) {
-            return console.log.bind(console);
-        } else {
-            return () => {};
-        }
-    }
-
-    // noinspection JSUnusedGlobalSymbols
-    get warn() {
-        if (this.level >= LoggerService.Level.WARN) {
-            return console.warn.bind(console);
-        } else {
-            return () => {};
-        }
-    }
-
-    get error() {
-        if (this.level >= LoggerService.Level.ERROR) {
-            return console.error.bind(console);
-        } else {
-            return () => {};
-        }
-    }
+export enum LogLevel {
+  ERROR,
+  WARN,
+  INFO,
+  DEBUG,
 }
 
-export module LoggerService {
-    export enum Level {
-        ERROR,
-        WARN,
-        INFO,
-        DEBUG,
-    }
+@Injectable({ providedIn: 'root' })
+export class LoggerService {
+  level = LogLevel.DEBUG;
+
+  get debug() {
+    return this.level >= LogLevel.DEBUG
+      ? console.debug.bind(console)
+      : () => {};
+  }
+
+  get info() {
+    return this.level >= LogLevel.INFO
+      ? console.log.bind(console)
+      : () => {};
+  }
+
+  get warn() {
+    return this.level >= LogLevel.WARN
+      ? console.warn.bind(console)
+      : () => {};
+  }
+
+  get error() {
+    return this.level >= LogLevel.ERROR
+      ? console.error.bind(console)
+      : () => {};
+  }
 }

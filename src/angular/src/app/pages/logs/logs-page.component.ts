@@ -1,110 +1,105 @@
 import {
-    AfterContentChecked,
-    ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener,
-    OnInit, ViewChild, ViewContainerRef
-} from "@angular/core";
+  AfterViewChecked,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  ElementRef,
+  HostListener,
+  OnInit,
+  ViewChild,
+  inject,
+} from '@angular/core';
+import { DatePipe } from '@angular/common';
 
-import {LogService} from "../../services/logs/log.service";
-import {LogRecord} from "../../services/logs/log-record";
-import {StreamServiceRegistry} from "../../services/base/stream-service.registry";
-import {Localization} from "../../common/localization";
-import {DomService} from "../../services/utils/dom.service";
-import {Observable} from "rxjs/Observable";
+import { LogService } from '../../services/logs/log.service';
+import { LogRecord, LogLevel } from '../../models/log-record';
+import { DomService } from '../../services/utils/dom.service';
 
 @Component({
-    selector: "app-logs-page",
-    templateUrl: "./logs-page.component.html",
-    styleUrls: ["./logs-page.component.scss"],
-    providers: [],
-    changeDetection: ChangeDetectionStrategy.OnPush
+  selector: 'app-logs-page',
+  standalone: true,
+  imports: [DatePipe],
+  templateUrl: './logs-page.component.html',
+  styleUrls: ['./logs-page.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
+export class LogsPageComponent implements OnInit, AfterViewChecked {
+  readonly LogLevel = LogLevel;
 
-export class LogsPageComponent implements OnInit, AfterContentChecked {
-    public readonly LogRecord = LogRecord;
-    public readonly Localization = Localization;
+  private readonly elementRef = inject(ElementRef);
+  private readonly changeDetector = inject(ChangeDetectorRef);
+  private readonly logService = inject(LogService);
+  private readonly domService = inject(DomService);
 
-    public headerHeight: Observable<number>;
+  readonly headerHeight$ = this.domService.headerHeight$;
 
-    @ViewChild("templateRecord") templateRecord;
-    @ViewChild("templateConnected") templateConnected;
+  records: LogRecord[] = [];
 
-    // Where to insert the cloned content
-    @ViewChild("container", {read: ViewContainerRef}) container;
+  showScrollToTopButton = false;
+  showScrollToBottomButton = false;
 
-    @ViewChild("logHead") logHead;
-    @ViewChild("logTail") logTail;
+  @ViewChild('logHead') logHead!: ElementRef<HTMLElement>;
+  @ViewChild('logTail') logTail!: ElementRef<HTMLElement>;
 
-    public showScrollToTopButton = false;
-    public showScrollToBottomButton = false;
+  private pendingScrollToBottom = false;
 
-    private _logService: LogService;
+  ngOnInit(): void {
+    this.logService.logs$.subscribe({
+      next: (record) => {
+        const shouldScroll =
+          this.elementRef.nativeElement.offsetParent != null &&
+          this.logTail &&
+          LogsPageComponent.isElementInViewport(this.logTail.nativeElement);
 
-    constructor(private _elementRef: ElementRef,
-                private _changeDetector: ChangeDetectorRef,
-                private _streamRegistry: StreamServiceRegistry,
-                private _domService: DomService) {
-        this._logService = _streamRegistry.logService;
-        this.headerHeight = this._domService.headerHeight;
-    }
+        this.records = [...this.records, record];
+        this.changeDetector.detectChanges();
 
-    ngOnInit() {
-        this._logService.logs.subscribe({
-            next: record => {
-                this.insertRecord(record);
-            }
-        });
-    }
-
-    ngAfterContentChecked() {
-        // Refresh button state when tabs is switched away and back
-        this.refreshScrollButtonVisibility();
-    }
-
-    scrollToTop() {
-        // this.logHead.nativeElement.scrollIntoView(true);
-        window.scrollTo(0, 0);
-    }
-
-    scrollToBottom() {
-        window.scrollTo(0, document.body.scrollHeight);
-    }
-
-    @HostListener("window:scroll", ["$event"])
-    checkScroll() {
-        this.refreshScrollButtonVisibility();
-    }
-
-    private insertRecord(record: LogRecord) {
-        // Scroll down if the log is visible and already scrolled to the bottom
-        const scrollToBottom = this._elementRef.nativeElement.offsetParent != null &&
-            LogsPageComponent.isElementInViewport(this.logTail.nativeElement);
-        this.container.createEmbeddedView(this.templateRecord, {record: record});
-        this._changeDetector.detectChanges();
-
-        if (scrollToBottom) {
-            this.scrollToBottom();
+        if (shouldScroll) {
+          this.pendingScrollToBottom = true;
         }
         this.refreshScrollButtonVisibility();
-    }
+      },
+    });
+  }
 
-    private refreshScrollButtonVisibility() {
-        // Show/hide the scroll buttons
-        this.showScrollToTopButton = !LogsPageComponent.isElementInViewport(
-            this.logHead.nativeElement
-        );
-        this.showScrollToBottomButton = !LogsPageComponent.isElementInViewport(
-            this.logTail.nativeElement
-        );
+  ngAfterViewChecked(): void {
+    if (this.pendingScrollToBottom) {
+      this.pendingScrollToBottom = false;
+      this.scrollToBottom();
     }
+    this.refreshScrollButtonVisibility();
+  }
 
-    // Source: https://stackoverflow.com/a/7557433
-    private static isElementInViewport(el): boolean {
-        const rect = el.getBoundingClientRect();
-        return (
-            rect.top >= 0 &&
-            rect.left >= 0 &&
-            rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) && /*or $(window).height() */
-            rect.right <= (window.innerWidth || document.documentElement.clientWidth) /*or $(window).width() */
-        );
-    }
+  scrollToTop(): void {
+    window.scrollTo(0, 0);
+  }
+
+  scrollToBottom(): void {
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+
+  @HostListener('window:scroll')
+  checkScroll(): void {
+    this.refreshScrollButtonVisibility();
+  }
+
+  private refreshScrollButtonVisibility(): void {
+    if (!this.logHead || !this.logTail) return;
+    this.showScrollToTopButton = !LogsPageComponent.isElementInViewport(
+      this.logHead.nativeElement,
+    );
+    this.showScrollToBottomButton = !LogsPageComponent.isElementInViewport(
+      this.logTail.nativeElement,
+    );
+  }
+
+  private static isElementInViewport(el: HTMLElement): boolean {
+    const rect = el.getBoundingClientRect();
+    return (
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+      rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+    );
+  }
 }

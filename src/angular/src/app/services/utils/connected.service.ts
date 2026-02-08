@@ -1,44 +1,37 @@
-import {Injectable} from "@angular/core";
-import {Observable} from "rxjs/Observable";
-import {BehaviorSubject} from "rxjs/Rx";
+import { Injectable, inject } from '@angular/core';
+import { BehaviorSubject, Observable } from 'rxjs';
 
-import {LoggerService} from "./logger.service";
-import {BaseStreamService} from "../base/base-stream.service";
-import {RestService} from "./rest.service";
+import { StreamEventHandler, StreamDispatchService } from '../base/stream-dispatch.service';
 
+@Injectable({ providedIn: 'root' })
+export class ConnectedService implements StreamEventHandler {
+  private readonly streamDispatch = inject(StreamDispatchService);
+  private readonly connectedSubject = new BehaviorSubject<boolean>(false);
 
-/**
- * ConnectedService exposes the connection status to clients
- * as an Observable
- */
-@Injectable()
-export class ConnectedService extends BaseStreamService {
+  constructor() {
+    this.streamDispatch.registerHandler(this);
+  }
 
-    // For clients
-    private _connectedSubject: BehaviorSubject<boolean> = new BehaviorSubject(false);
+  readonly connected$: Observable<boolean> =
+    this.connectedSubject.asObservable();
 
-    constructor() {
-        super();
-        // No events to register
+  getEventNames(): string[] {
+    return [];
+  }
+
+  onEvent(_eventName: string, _data: string): void {
+    // No events to handle
+  }
+
+  onConnected(): void {
+    if (!this.connectedSubject.getValue()) {
+      this.connectedSubject.next(true);
     }
+  }
 
-    get connected(): Observable<boolean> {
-        return this._connectedSubject.asObservable();
+  onDisconnected(): void {
+    if (this.connectedSubject.getValue()) {
+      this.connectedSubject.next(false);
     }
-
-    protected onEvent(eventName: string, data: string) {
-        // Nothing to do
-    }
-
-    protected onConnected() {
-        if(this._connectedSubject.getValue() === false) {
-            this._connectedSubject.next(true);
-        }
-    }
-
-    protected onDisconnected() {
-        if(this._connectedSubject.getValue() === true) {
-            this._connectedSubject.next(false);
-        }
-    }
+  }
 }

@@ -1,48 +1,46 @@
-import {Component, Input, Output, ChangeDetectionStrategy, EventEmitter, OnInit} from "@angular/core";
-import {Subject} from "rxjs/Subject";
-
-@Component({
-    selector: "app-option",
-    providers: [],
-    templateUrl: "./option.component.html",
-    styleUrls: ["./option.component.scss"],
-    changeDetection: ChangeDetectionStrategy.OnPush
-})
-
-export class OptionComponent implements OnInit {
-    @Input() type: OptionType;
-    @Input() label: string;
-    @Input() value: any;
-    @Input() description: string;
-
-    @Output() changeEvent = new EventEmitter<any>();
-
-    // expose to template
-    public OptionType = OptionType;
-
-    private readonly DEBOUNCE_TIME_MS: number = 1000;
-
-    private newValue = new Subject<any>();
-
-    // noinspection JSUnusedGlobalSymbols
-    ngOnInit(): void {
-        // Debounce
-        // References:
-        //      https://angular.io/tutorial/toh-pt6#fix-the-herosearchcomponent-class
-        //      https://stackoverflow.com/a/41965515
-        this.newValue
-            .debounceTime(this.DEBOUNCE_TIME_MS)
-            .distinctUntilChanged()
-            .subscribe({next: val => this.changeEvent.emit(val)});
-    }
-
-    onChange(value: any) {
-        this.newValue.next(value);
-    }
-}
+import { Component, ChangeDetectionStrategy, OnInit, OnDestroy, input, output } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
 
 export enum OptionType {
-    Text,
-    Checkbox,
-    Password
+  Text,
+  Checkbox,
+  Password,
+}
+
+@Component({
+  selector: 'app-option',
+  standalone: true,
+  imports: [FormsModule],
+  templateUrl: './option.component.html',
+  styleUrls: ['./option.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class OptionComponent implements OnInit, OnDestroy {
+  readonly type = input<OptionType>(OptionType.Text);
+  readonly label = input<string>('');
+  readonly value = input<any>(null);
+  readonly description = input<string | null>(null);
+
+  readonly changeEvent = output<any>();
+
+  readonly OptionType = OptionType;
+
+  private readonly DEBOUNCE_TIME_MS = 1000;
+  private readonly newValue = new Subject<any>();
+  private subscription?: Subscription;
+
+  ngOnInit(): void {
+    this.subscription = this.newValue
+      .pipe(debounceTime(this.DEBOUNCE_TIME_MS), distinctUntilChanged())
+      .subscribe({ next: (val) => this.changeEvent.emit(val) });
+  }
+
+  ngOnDestroy(): void {
+    this.subscription?.unsubscribe();
+  }
+
+  onChange(value: any): void {
+    this.newValue.next(value);
+  }
 }

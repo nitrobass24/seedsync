@@ -1,60 +1,55 @@
-import {Injectable} from "@angular/core";
-import {Observable} from "rxjs/Observable";
-import {BehaviorSubject} from "rxjs/Rx";
+import { Injectable } from '@angular/core';
+import { BehaviorSubject, Observable } from 'rxjs';
 
-import * as Immutable from "immutable";
+import { Notification, NotificationLevel } from '../../models/notification';
 
-import {Notification} from "./notification";
-
-
-/**
- * NotificationService manages which notifications are shown or hidden
- */
-@Injectable()
+@Injectable({ providedIn: 'root' })
 export class NotificationService {
+  private notifications: Notification[] = [];
+  private readonly notificationsSubject = new BehaviorSubject<Notification[]>(
+    [],
+  );
 
-    private _notifications: Immutable.List<Notification> = Immutable.List([]);
-    private _notificationsSubject: BehaviorSubject<Immutable.List<Notification>> =
-            new BehaviorSubject(this._notifications);
+  readonly notifications$: Observable<Notification[]> =
+    this.notificationsSubject.asObservable();
 
-    // noinspection UnterminatedStatementJS
-    private _comparator = (a: Notification, b: Notification): number => {
-        // First sort by level
-        if (a.level !== b.level) {
-            const statusPriorities = {
-                [Notification.Level.DANGER]: 0,
-                [Notification.Level.WARNING]: 1,
-                [Notification.Level.INFO]: 2,
-                [Notification.Level.SUCCESS]: 3,
-            };
-            if (statusPriorities[a.level] !== statusPriorities[b.level]) {
-                return statusPriorities[a.level] - statusPriorities[b.level];
-            }
-        }
-        // Then sort by timestamp
-        return b.timestamp - a.timestamp;
+  show(notification: Notification): void {
+    const exists = this.notifications.some(
+      (n) => n.level === notification.level && n.text === notification.text,
+    );
+    if (!exists) {
+      this.notifications = [...this.notifications, notification].sort(
+        this.comparator,
+      );
+      this.notificationsSubject.next(this.notifications);
     }
+  }
 
-    constructor() {}
-
-    get notifications(): Observable<Immutable.List<Notification>> {
-        return this._notificationsSubject.asObservable();
+  hide(notification: Notification): void {
+    const index = this.notifications.findIndex(
+      (n) => n.level === notification.level && n.text === notification.text,
+    );
+    if (index >= 0) {
+      this.notifications = [
+        ...this.notifications.slice(0, index),
+        ...this.notifications.slice(index + 1),
+      ];
+      this.notificationsSubject.next(this.notifications);
     }
+  }
 
-    public show(notification: Notification) {
-        const index = this._notifications.findIndex(value => Immutable.is(value, notification));
-        if (index < 0) {
-            const notifications = this._notifications.push(notification);
-            this._notifications = notifications.sort(this._comparator).toList();
-            this._notificationsSubject.next(this._notifications);
-        }
-    }
+  private readonly comparator = (a: Notification, b: Notification): number => {
+    const priorities: Record<NotificationLevel, number> = {
+      [NotificationLevel.DANGER]: 0,
+      [NotificationLevel.WARNING]: 1,
+      [NotificationLevel.INFO]: 2,
+      [NotificationLevel.SUCCESS]: 3,
+    };
 
-    public hide(notification: Notification) {
-        const index = this._notifications.findIndex(value => Immutable.is(value, notification));
-        if (index >= 0) {
-            this._notifications = this._notifications.remove(index);
-            this._notificationsSubject.next(this._notifications);
-        }
+    if (a.level !== b.level) {
+      const diff = priorities[a.level] - priorities[b.level];
+      if (diff !== 0) return diff;
     }
+    return b.timestamp - a.timestamp;
+  };
 }

@@ -39,21 +39,21 @@ The fork at [github.com/nitrobass24/seedsync](https://github.com/nitrobass24/see
 | Update GitHub Actions | ✅ Done |
 | Update documentation | ✅ Done |
 
-### Phase 4: Angular Modernization ⏸️ PAUSED
+### Phase 4: Angular Modernization ✅
 
-Angular 17 migration was attempted in v0.10.0 but rolled back in v0.10.1 due to runtime issues.
+Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v0.10.0 attempt).
 
 | Task | Status |
 |------|--------|
-| Upgrade Angular 4 → 17 | ⏸️ Rolled back |
-| Standalone components (no NgModules) | ⏸️ Rolled back |
-| Bootstrap 4 → 5.3 | ⏸️ Rolled back |
-| Replace Immutable.js with native TypeScript | ⏸️ Rolled back |
-| Replace ngx-modialog with Angular CDK Dialog | ⏸️ Rolled back |
-| RxJS 5 → 7 pipe operators | ⏸️ Rolled back |
-| Update Dockerfiles to Node 20 | ⏸️ Rolled back |
-
-**Status**: Rolled back to Angular 4. Angular 17 code preserved in `src/angular-v17/` for future work.
+| Upgrade Angular 4 → 21 | ✅ Done |
+| Standalone components (no NgModules) | ✅ Done |
+| Bootstrap 4 → 5.3 with JS bundle | ✅ Done |
+| Replace Immutable.js with native TypeScript | ✅ Done |
+| Replace ngx-modialog with inline patterns | ✅ Done |
+| RxJS 5 → 7 pipe operators | ✅ Done |
+| Update Dockerfile to Node 22 | ✅ Done |
+| Font Awesome 4 → 7 | ✅ Done |
+| Replace css-element-queries with ResizeObserver | ✅ Done |
 
 ---
 
@@ -95,7 +95,7 @@ Angular 17 migration was attempted in v0.10.0 but rolled back in v0.10.1 due to 
 │                     (240 MB)                        │
 │                                                     │
 │  ┌─────────────┐    ┌─────────────┐               │
-│  │  Python 3.12│    │  Angular 4  │               │
+│  │  Python 3.12│    │ Angular 21  │               │
 │  │   Bottle    │◄───│   Web UI    │               │
 │  │  REST API   │    │             │               │
 │  └──────┬──────┘    └─────────────┘               │
@@ -142,7 +142,7 @@ Angular 17 migration was attempted in v0.10.0 but rolled back in v0.10.1 due to 
 
 If you want to continue development:
 
-1. **Angular Upgrade** - Code ready in `src/angular-v17/`, needs debugging before re-merge
+1. ~~**Angular unit tests** - Port old Jasmine tests to Vitest for the Angular 21 codebase~~ ✅ Done — 125 tests across 15 spec files
 2. **Python scanfs fallback** - Run scanner as Python script instead of binary (for restricted servers)
 3. **Memory profiling** - If high memory usage reported
 4. **Additional tests** - Expand test coverage

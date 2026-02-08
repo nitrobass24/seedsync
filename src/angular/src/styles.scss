@@ -1,4 +1,4 @@
-@import 'app/common/common';
+@use 'app/common/common' as *;
 
 html {
     -ms-text-size-adjust: 100%;
@@ -19,7 +19,6 @@ input[type=search]::-webkit-search-cancel-button {
 }
 
 div {
-    /*border: 1px solid black;*/
     /* make padding and border inside box */
     box-sizing: border-box;
 }

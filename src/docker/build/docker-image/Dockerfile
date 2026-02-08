@@ -1,16 +1,19 @@
 # SeedSync Docker Image - Optimized Build
 # Target size: <200MB (down from 439MB)
 
+# Force AMD64 for scanfs - it runs on remote seedbox servers, not locally
+ARG SCANFS_PLATFORM=linux/amd64
+
 # ==============================================================================
 # Stage 1: Build Angular Frontend
 # ==============================================================================
-FROM node:12-buster-slim AS angular-builder
+FROM node:22-bookworm-slim AS angular-builder
 
 WORKDIR /app
 COPY src/angular/package*.json ./
-RUN npm install
+RUN npm ci
 COPY src/angular/ ./
-RUN ./node_modules/.bin/ng build --prod --output-path /build/html
+RUN npx ng build --configuration=production --output-path /build
 
 # ==============================================================================
 # Stage 2: Build scanfs binary with PyInstaller
@@ -18,7 +21,7 @@ RUN ./node_modules/.bin/ng build --prod --output-path /build/html
 # Bullseye has glibc 2.31, supporting Linux systems from 2021+
 # IMPORTANT: Force AMD64 platform - scanfs runs on remote server, not locally
 # ==============================================================================
-FROM --platform=linux/amd64 python:3.12-slim-bullseye AS scanfs-builder
+FROM --platform=$SCANFS_PLATFORM python:3.12-slim-bullseye AS scanfs-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     binutils \
@@ -81,7 +84,7 @@ RUN pip install --no-cache-dir -r /app/python/requirements.txt \
 COPY src/python/ /app/python/
 
 # Copy built artifacts from previous stages
-COPY --from=angular-builder /build/html /app/html
+COPY --from=angular-builder /build/browser /app/html
 COPY --from=scanfs-builder /build/dist/scanfs /app/scanfs
 
 # Copy and set up entrypoint

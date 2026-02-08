@@ -1,9 +1,9 @@
-@import '../../common/common';
+@use '../../common/common' as *;
 
 .form-group {
     margin-bottom: 0;
-    margin-left: 20px;
-    margin-right: 20px;
+    margin-inline-start: 20px;
+    margin-inline-end: 20px;
 }
 
 .error {
@@ -25,21 +25,23 @@ span.description {
     font-size: 80%;
     line-height: initial;
     width: 100%;
-    white-space: pre-line;  // renders newline as <br />
+    white-space: pre-line;
 }
 
 input[type="checkbox"] {
-    width: auto;
-    margin-right: 10px;
-    box-shadow: none;
+    width: 20px;
     height: 20px;
+    min-width: 20px;
+    margin-inline-end: 10px;
+    box-shadow: none;
+    cursor: pointer;
 
     &:focus {
         box-shadow: none;
     }
 
     & ~ .description {
-        margin-left: 23px;
+        margin-inline-start: 30px;
     }
 }
 

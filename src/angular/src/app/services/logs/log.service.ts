@@ -1,39 +1,34 @@
-import {Injectable} from "@angular/core";
-import {Observable} from "rxjs/Observable";
-import {ReplaySubject} from "rxjs/ReplaySubject";
+import { Injectable, inject } from '@angular/core';
+import { Observable, ReplaySubject } from 'rxjs';
 
-import {BaseStreamService} from "../base/base-stream.service";
-import {LogRecord} from "./log-record";
+import { StreamEventHandler, StreamDispatchService } from '../base/stream-dispatch.service';
+import { LogRecord, logRecordFromJson } from '../../models/log-record';
 
+@Injectable({ providedIn: 'root' })
+export class LogService implements StreamEventHandler {
+  private readonly streamDispatch = inject(StreamDispatchService);
 
-@Injectable()
-export class LogService extends BaseStreamService {
+  private readonly logsSubject = new ReplaySubject<LogRecord>();
 
-    private _logs: ReplaySubject<LogRecord> = new ReplaySubject();
+  readonly logs$: Observable<LogRecord> = this.logsSubject.asObservable();
 
-    constructor() {
-        super();
-        this.registerEventName("log-record");
-    }
+  constructor() {
+    this.streamDispatch.registerHandler(this);
+  }
 
-    /**
-     * Logs is a hot observable (i.e. no caching)
-     * @returns {Observable<LogRecord>}
-     */
-    get logs(): Observable<LogRecord> {
-        return this._logs.asObservable();
-    }
+  getEventNames(): string[] {
+    return ['log-record'];
+  }
 
-    protected onEvent(eventName: string, data: string) {
-        this._logs.next(LogRecord.fromJson(JSON.parse(data)));
-    }
+  onEvent(_eventName: string, data: string): void {
+    this.logsSubject.next(logRecordFromJson(JSON.parse(data)));
+  }
 
-    protected onConnected() {
-        // nothing to do
-    }
+  onConnected(): void {
+    // nothing to do
+  }
 
-    protected onDisconnected() {
-        // nothing to do
-    }
-
+  onDisconnected(): void {
+    // nothing to do
+  }
 }

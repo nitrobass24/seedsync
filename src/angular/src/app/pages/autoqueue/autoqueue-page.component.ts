@@ -1,112 +1,90 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit} from "@angular/core";
-import {Observable} from "rxjs/Observable";
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { AsyncPipe } from '@angular/common';
 
-import * as Immutable from "immutable";
-
-import {AutoQueueService} from "../../services/autoqueue/autoqueue.service";
-import {AutoQueuePattern} from "../../services/autoqueue/autoqueue-pattern";
-import {Notification} from "../../services/utils/notification";
-import {NotificationService} from "../../services/utils/notification.service";
-import {ConnectedService} from "../../services/utils/connected.service";
-import {StreamServiceRegistry} from "../../services/base/stream-service.registry";
-import {Config} from "../../services/settings/config";
-import {ConfigService} from "../../services/settings/config.service";
-
+import { AutoQueueService } from '../../services/autoqueue/autoqueue.service';
+import { AutoQueuePattern } from '../../models/autoqueue-pattern';
+import { NotificationService } from '../../services/utils/notification.service';
+import { ConnectedService } from '../../services/utils/connected.service';
+import { ConfigService } from '../../services/settings/config.service';
+import { createNotification, NotificationLevel } from '../../models/notification';
+import { ClickStopPropagationDirective } from '../../common/click-stop-propagation.directive';
 
 @Component({
-    selector: "app-autoqueue-page",
-    templateUrl: "./autoqueue-page.component.html",
-    styleUrls: ["./autoqueue-page.component.scss"],
-    providers: [],
-    changeDetection: ChangeDetectionStrategy.OnPush
+  selector: 'app-autoqueue-page',
+  standalone: true,
+  imports: [FormsModule, AsyncPipe, ClickStopPropagationDirective],
+  templateUrl: './autoqueue-page.component.html',
+  styleUrls: ['./autoqueue-page.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-
 export class AutoQueuePageComponent implements OnInit {
+  private readonly changeDetector = inject(ChangeDetectorRef);
+  private readonly autoqueueService = inject(AutoQueueService);
+  private readonly notifService = inject(NotificationService);
+  private readonly configService = inject(ConfigService);
+  private readonly connectedService = inject(ConnectedService);
 
-    public patterns: Observable<Immutable.List<AutoQueuePattern>>;
-    public newPattern: string;
+  readonly patterns$ = this.autoqueueService.patterns$;
 
-    public config: Observable<Config>;
+  newPattern = '';
+  connected = false;
+  enabled = false;
+  patternsOnly = false;
 
-    public connected: boolean;
-    public enabled: boolean;
-    public patternsOnly: boolean;
+  ngOnInit(): void {
+    this.connectedService.connected$.subscribe({
+      next: (connected: boolean) => {
+        this.connected = connected;
+        if (!this.connected) {
+          this.newPattern = '';
+        }
+      },
+    });
 
-    private _connectedService: ConnectedService;
+    this.configService.config$.subscribe({
+      next: (config) => {
+        if (config != null) {
+          this.enabled = !!config.autoqueue.enabled;
+          this.patternsOnly = !!config.autoqueue.patterns_only;
+        } else {
+          this.enabled = false;
+          this.patternsOnly = false;
+        }
+        this.changeDetector.detectChanges();
+      },
+    });
+  }
 
-    constructor(private _changeDetector: ChangeDetectorRef,
-                private _autoqueueService: AutoQueueService,
-                private _notifService: NotificationService,
-                private _configService: ConfigService,
-                _streamServiceRegistry: StreamServiceRegistry) {
-        this._connectedService = _streamServiceRegistry.connectedService;
-        this.patterns = _autoqueueService.patterns;
-        this.newPattern = "";
-        this.connected = false;
-        this.enabled = false;
-        this.patternsOnly = false;
-    }
+  onAddPattern(): void {
+    this.autoqueueService.add(this.newPattern).subscribe({
+      next: (reaction) => {
+        if (reaction.success) {
+          this.newPattern = '';
+        } else {
+          const notif = createNotification(
+            NotificationLevel.DANGER,
+            reaction.errorMessage!,
+            true,
+          );
+          this.notifService.show(notif);
+        }
+      },
+    });
+  }
 
-    // noinspection JSUnusedGlobalSymbols
-    ngOnInit() {
-        this._connectedService.connected.subscribe({
-            next: (connected: boolean) => {
-                this.connected = connected;
-                if (!this.connected) {
-                    // Clear the input box
-                    this.newPattern = "";
-                }
-            }
-        });
-
-        this._configService.config.subscribe({
-            next: config => {
-                if(config != null) {
-                    this.enabled = config.autoqueue.enabled;
-                    this.patternsOnly = config.autoqueue.patterns_only;
-                } else {
-                    this.enabled = false;
-                    this.patternsOnly = false;
-                }
-                this._changeDetector.detectChanges();
-            }
-        });
-    }
-
-    onAddPattern() {
-        this._autoqueueService.add(this.newPattern).subscribe({
-            next: reaction => {
-                if (reaction.success) {
-                    // Clear the input box
-                    this.newPattern = "";
-                } else {
-                    // Show dismissible notification
-                    const notif = new Notification({
-                        level: Notification.Level.DANGER,
-                        dismissible: true,
-                        text: reaction.errorMessage
-                    });
-                    this._notifService.show(notif);
-                }
-            }
-        });
-    }
-
-    onRemovePattern(pattern: AutoQueuePattern) {
-        this._autoqueueService.remove(pattern.pattern).subscribe({
-            next: reaction => {
-                if (reaction.success) {
-                    // Nothing to do
-                } else {
-                    // Show dismissible notification
-                    const notif = new Notification({
-                        level: Notification.Level.DANGER,
-                        dismissible: true,
-                        text: reaction.errorMessage
-                    });
-                    this._notifService.show(notif);
-                }
-            }
-        });
-    }
+  onRemovePattern(pattern: AutoQueuePattern): void {
+    this.autoqueueService.remove(pattern.pattern).subscribe({
+      next: (reaction) => {
+        if (!reaction.success) {
+          const notif = createNotification(
+            NotificationLevel.DANGER,
+            reaction.errorMessage!,
+            true,
+          );
+          this.notifService.show(notif);
+        }
+      },
+    });
+  }
 }

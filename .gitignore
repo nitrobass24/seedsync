@@ -3,6 +3,7 @@
 /build
 .venv
 package-lock.json
+!src/angular/package-lock.json
 !website/package-lock.json
 src/python/build
 src/python/site

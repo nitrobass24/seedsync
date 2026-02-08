@@ -1,169 +1,118 @@
-import {Injectable} from "@angular/core";
-import {Observable} from "rxjs/Observable";
-import {BehaviorSubject} from "rxjs/Rx";
+import { Injectable, inject } from '@angular/core';
+import { BehaviorSubject, Observable, of } from 'rxjs';
 
-import * as Immutable from "immutable";
+import { ConnectedService } from '../utils/connected.service';
+import { LoggerService } from '../utils/logger.service';
+import { RestService, WebReaction } from '../utils/rest.service';
+import { AutoQueuePattern, AutoQueuePatternJson } from '../../models/autoqueue-pattern';
+import { Localization } from '../../models/localization';
 
-import {LoggerService} from "../utils/logger.service";
-import {BaseWebService} from "../base/base-web.service";
-import {AutoQueuePattern, AutoQueuePatternJson} from "./autoqueue-pattern";
-import {Localization} from "../../common/localization";
-import {StreamServiceRegistry} from "../base/stream-service.registry";
-import {RestService, WebReaction} from "../utils/rest.service";
+@Injectable({ providedIn: 'root' })
+export class AutoQueueService {
+  private readonly AUTOQUEUE_GET_URL = '/server/autoqueue/get';
+  private readonly AUTOQUEUE_ADD_URL = (pattern: string) => `/server/autoqueue/add/${pattern}`;
+  private readonly AUTOQUEUE_REMOVE_URL = (pattern: string) => `/server/autoqueue/remove/${pattern}`;
 
+  private readonly connectedService = inject(ConnectedService);
+  private readonly restService = inject(RestService);
+  private readonly logger = inject(LoggerService);
 
-/**
- * AutoQueueService provides the store for the autoqueue patterns
- */
-@Injectable()
-export class AutoQueueService extends BaseWebService {
+  private readonly patternsSubject = new BehaviorSubject<AutoQueuePattern[]>([]);
 
-    private readonly AUTOQUEUE_GET_URL = "/server/autoqueue/get";
-    private readonly AUTOQUEUE_ADD_URL = (pattern) => `/server/autoqueue/add/${pattern}`;
-    private readonly AUTOQUEUE_REMOVE_URL = (pattern) => `/server/autoqueue/remove/${pattern}`;
+  readonly patterns$: Observable<AutoQueuePattern[]> = this.patternsSubject.asObservable();
 
-    private _patterns: BehaviorSubject<Immutable.List<AutoQueuePattern>> =
-            new BehaviorSubject(Immutable.List([]));
-
-    constructor(_streamServiceProvider: StreamServiceRegistry,
-                private _restService: RestService,
-                private _logger: LoggerService) {
-        super(_streamServiceProvider);
-    }
-
-    /**
-     * Returns an observable that provides that latest patterns
-     * @returns {Observable<Immutable.List<AutoQueuePattern>>}
-     */
-    get patterns(): Observable<Immutable.List<AutoQueuePattern>> {
-        return this._patterns.asObservable();
-    }
-
-    /**
-     * Add a pattern
-     * @param {string} pattern
-     * @returns {Observable<WebReaction>}
-     */
-    public add(pattern: string): Observable<WebReaction> {
-        this._logger.debug("add pattern %O", pattern);
-
-        // Value check
-        if (pattern == null || pattern.trim().length === 0) {
-            return Observable.create(observer => {
-                observer.next(new WebReaction(false, null, Localization.Notification.AUTOQUEUE_PATTERN_EMPTY));
-            });
-        }
-
-        const currentPatterns = this._patterns.getValue();
-        const index = currentPatterns.findIndex(pat => pat.pattern === pattern);
-        if (index >= 0) {
-            return Observable.create(observer => {
-                observer.next(new WebReaction(false, null, `Pattern '${pattern}' already exists.`));
-            });
-        } else {
-            // Double-encode the value
-            const patternEncoded = encodeURIComponent(encodeURIComponent(pattern));
-            const url = this.AUTOQUEUE_ADD_URL(patternEncoded);
-            const obs = this._restService.sendRequest(url);
-            obs.subscribe({
-                next: reaction => {
-                    if (reaction.success) {
-                        // Update our copy and notify clients
-                        const patterns = this._patterns.getValue();
-                        const newPatterns = patterns.push(
-                            new AutoQueuePattern({
-                                pattern: pattern
-                            })
-                        );
-                        this._patterns.next(newPatterns);
-                    }
-                }
-            });
-            return obs;
-        }
-    }
-
-    /**
-     * Remove a pattern
-     * @param {string} pattern
-     * @returns {Observable<WebReaction>}
-     */
-    public remove(pattern: string): Observable<WebReaction> {
-        this._logger.debug("remove pattern %O", pattern);
-
-        const currentPatterns = this._patterns.getValue();
-        const index = currentPatterns.findIndex(pat => pat.pattern === pattern);
-        if (index < 0) {
-            return Observable.create(observer => {
-                observer.next(new WebReaction(false, null, `Pattern '${pattern}' not found.`));
-            });
-        } else {
-            // Double-encode the value
-            const patternEncoded = encodeURIComponent(encodeURIComponent(pattern));
-            const url = this.AUTOQUEUE_REMOVE_URL(patternEncoded);
-            const obs = this._restService.sendRequest(url);
-            obs.subscribe({
-                next: reaction => {
-                    if (reaction.success) {
-                        // Update our copy and notify clients
-                        const patterns = this._patterns.getValue();
-                        const finalIndex = currentPatterns.findIndex(pat => pat.pattern === pattern);
-                        const newPatterns = patterns.remove(finalIndex);
-                        this._patterns.next(newPatterns);
-                    }
-                }
-            });
-            return obs;
-        }
-    }
-
-    protected onConnected() {
-        // Retry the get
+  constructor() {
+    this.connectedService.connected$.subscribe((connected) => {
+      if (connected) {
         this.getPatterns();
+      } else {
+        this.patternsSubject.next([]);
+      }
+    });
+  }
+
+  add(pattern: string): Observable<WebReaction> {
+    this.logger.debug('add pattern %O', pattern);
+
+    if (pattern == null || pattern.trim().length === 0) {
+      return of({
+        success: false,
+        data: null,
+        errorMessage: Localization.Notification.AUTOQUEUE_PATTERN_EMPTY,
+      });
     }
 
-    protected onDisconnected() {
-        // Send empty list
-        this._patterns.next(Immutable.List([]));
+    const currentPatterns = this.patternsSubject.getValue();
+    const index = currentPatterns.findIndex((pat) => pat.pattern === pattern);
+    if (index >= 0) {
+      return of({
+        success: false,
+        data: null,
+        errorMessage: `Pattern '${pattern}' already exists.`,
+      });
     }
 
-    private getPatterns() {
-        this._logger.debug("Getting autoqueue patterns...");
-        this._restService.sendRequest(this.AUTOQUEUE_GET_URL).subscribe({
-            next: reaction => {
-                if (reaction.success) {
-                    const parsed: AutoQueuePatternJson[] = JSON.parse(reaction.data);
-                    const newPatterns: AutoQueuePattern[] = [];
-                    for (const patternJson of parsed) {
-                        newPatterns.push(new AutoQueuePattern({
-                            pattern: patternJson.pattern
-                        }));
-                    }
-                    this._patterns.next(Immutable.List(newPatterns));
-                } else {
-                    this._patterns.next(Immutable.List([]));
-                }
-            }
-        });
+    // Double-encode the value
+    const patternEncoded = encodeURIComponent(encodeURIComponent(pattern));
+    const url = this.AUTOQUEUE_ADD_URL(patternEncoded);
+    const obs = this.restService.sendRequest(url);
+    obs.subscribe({
+      next: (reaction) => {
+        if (reaction.success) {
+          const patterns = this.patternsSubject.getValue();
+          this.patternsSubject.next([...patterns, { pattern }]);
+        }
+      },
+    });
+    return obs;
+  }
+
+  remove(pattern: string): Observable<WebReaction> {
+    this.logger.debug('remove pattern %O', pattern);
+
+    const currentPatterns = this.patternsSubject.getValue();
+    const index = currentPatterns.findIndex((pat) => pat.pattern === pattern);
+    if (index < 0) {
+      return of({
+        success: false,
+        data: null,
+        errorMessage: `Pattern '${pattern}' not found.`,
+      });
     }
+
+    // Double-encode the value
+    const patternEncoded = encodeURIComponent(encodeURIComponent(pattern));
+    const url = this.AUTOQUEUE_REMOVE_URL(patternEncoded);
+    const obs = this.restService.sendRequest(url);
+    obs.subscribe({
+      next: (reaction) => {
+        if (reaction.success) {
+          const patterns = this.patternsSubject.getValue();
+          const finalIndex = patterns.findIndex((pat) => pat.pattern === pattern);
+          if (finalIndex >= 0) {
+            this.patternsSubject.next([
+              ...patterns.slice(0, finalIndex),
+              ...patterns.slice(finalIndex + 1),
+            ]);
+          }
+        }
+      },
+    });
+    return obs;
+  }
+
+  private getPatterns(): void {
+    this.logger.debug('Getting autoqueue patterns...');
+    this.restService.sendRequest(this.AUTOQUEUE_GET_URL).subscribe({
+      next: (reaction) => {
+        if (reaction.success) {
+          const parsed: AutoQueuePatternJson[] = JSON.parse(reaction.data!);
+          const newPatterns: AutoQueuePattern[] = parsed.map((p) => ({ pattern: p.pattern }));
+          this.patternsSubject.next(newPatterns);
+        } else {
+          this.patternsSubject.next([]);
+        }
+      },
+    });
+  }
 }
-
-/**
- * AutoQueueService factory and provider
- */
-export let autoQueueServiceFactory = (
-    _streamServiceRegistry: StreamServiceRegistry,
-    _restService: RestService,
-    _logger: LoggerService
-) => {
-  const autoQueueService = new AutoQueueService(_streamServiceRegistry, _restService, _logger);
-  autoQueueService.onInit();
-  return autoQueueService;
-};
-
-// noinspection JSUnusedGlobalSymbols
-export let AutoQueueServiceProvider = {
-    provide: AutoQueueService,
-    useFactory: autoQueueServiceFactory,
-    deps: [StreamServiceRegistry, RestService, LoggerService]
-};

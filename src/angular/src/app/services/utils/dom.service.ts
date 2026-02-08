@@ -1,24 +1,16 @@
-import {Injectable} from "@angular/core";
-import {Observable} from "rxjs/Observable";
-import {BehaviorSubject} from "rxjs/Rx";
+import { Injectable } from '@angular/core';
+import { BehaviorSubject, Observable } from 'rxjs';
 
-
-/**
- * DomService facilitates inter-component communication related
- * to DOM updates
- */
-@Injectable()
+@Injectable({ providedIn: 'root' })
 export class DomService {
-    private _headerHeight: BehaviorSubject<number> = new BehaviorSubject(0);
+  private readonly headerHeightSubject = new BehaviorSubject<number>(0);
 
-    get headerHeight(): Observable<number>{
-        return this._headerHeight.asObservable();
+  readonly headerHeight$: Observable<number> =
+    this.headerHeightSubject.asObservable();
+
+  setHeaderHeight(height: number): void {
+    if (height !== this.headerHeightSubject.getValue()) {
+      this.headerHeightSubject.next(height);
     }
-
-    public setHeaderHeight(height: number) {
-        if(height !== this._headerHeight.getValue()) {
-            this._headerHeight.next(height);
-        }
-    }
-
+  }
 }
