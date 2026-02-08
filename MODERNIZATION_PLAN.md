@@ -142,7 +142,7 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 
 If you want to continue development:
 
-1. **Angular unit tests** - Port old Jasmine tests to Vitest for the Angular 21 codebase
+1. ~~**Angular unit tests** - Port old Jasmine tests to Vitest for the Angular 21 codebase~~ ✅ Done — 125 tests across 15 spec files
 2. **Python scanfs fallback** - Run scanner as Python script instead of binary (for restricted servers)
 3. **Memory profiling** - If high memory usage reported
 4. **Additional tests** - Expand test coverage
