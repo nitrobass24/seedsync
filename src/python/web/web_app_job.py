@@ -75,7 +75,9 @@ class MyWSGIRefServer(bottle.ServerAdapter):
     @overrides(bottle.ServerAdapter)
     def run(self, handler):
         self.logger.debug("Starting web server")
-        handler = TransLogger(handler, logger=self.logger, setup_console_handler=(not self.quiet))
+        handler = TransLogger(handler, logger=self.logger,
+                               logging_level=logging.DEBUG,
+                               setup_console_handler=(not self.quiet))
         self.server = httpserver.serve(handler, host=self.host, port=str(self.port), start_loop=False,
                                        handler=MyWSGIHandler,
                                        **self.options)
