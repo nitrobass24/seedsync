@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3] - 2026-02-09
+
+### Fixed
+- **Config persistence hardened against data loss** - Config writes now use atomic file operations (temp file + fsync + rename) to prevent truncation if the process is killed mid-write. Missing config sections fall back to defaults instead of triggering a backup-and-reset cycle. A warning is now logged when config parse failure causes fallback to defaults. (#32)
+
+---
+
 ## [0.11.2] - 2026-02-09
 
 ### Changed
