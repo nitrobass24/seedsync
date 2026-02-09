@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1] - 2026-02-08
+
+### Fixed
+- **Config file overwritten on container restart** - Config files from older versions (missing newer properties like `auto_delete_remote` or `net_limit_rate`) no longer cause parse errors that trigger a backup-and-overwrite cycle. Config loading is now resilient to missing keys (uses defaults) and unknown keys/sections (silently ignored), enabling smooth upgrades across versions.
+
+---
+
 ## [0.11.0] - 2026-02-08
 
 ### Changed
