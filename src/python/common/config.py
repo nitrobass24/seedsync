@@ -362,11 +362,11 @@ class Config(Persist):
         config_dict = dict(config_dict)  # copy that we can modify
         config = Config()
 
-        config.general = Config.General.from_dict(Config._check_section(config_dict, "General"))
-        config.lftp = Config.Lftp.from_dict(Config._check_section(config_dict, "Lftp"))
-        config.controller = Config.Controller.from_dict(Config._check_section(config_dict, "Controller"))
-        config.web = Config.Web.from_dict(Config._check_section(config_dict, "Web"))
-        config.autoqueue = Config.AutoQueue.from_dict(Config._check_section(config_dict, "AutoQueue"))
+        config.general = Config.General.from_dict(config_dict.pop("General", {}))
+        config.lftp = Config.Lftp.from_dict(config_dict.pop("Lftp", {}))
+        config.controller = Config.Controller.from_dict(config_dict.pop("Controller", {}))
+        config.web = Config.Web.from_dict(config_dict.pop("Web", {}))
+        config.autoqueue = Config.AutoQueue.from_dict(config_dict.pop("AutoQueue", {}))
 
         Config._check_empty_outer_dict(config_dict)
         return config
