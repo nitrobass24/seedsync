@@ -92,6 +92,12 @@ gh release edit vX.Y.Z --repo nitrobass24/seedsync --notes "$(cat <<'EOF'
 ### Added
 - **New feature** - Description
 
+## Docker Pull
+
+```bash
+docker pull ghcr.io/nitrobass24/seedsync:X.Y.Z
+```
+
 **Full Changelog**: https://github.com/nitrobass24/seedsync/compare/vPREV...vX.Y.Z
 EOF
 )"
@@ -101,6 +107,7 @@ Format should match CHANGELOG.md entries with:
 - Section headers: Fixed, Changed, Added, Removed, Security
 - Bold feature/bug names
 - Issue references where applicable
+- Always include a "Docker Pull" section with the `docker pull` command for the release version
 
 ### 6. Verify Release
 
