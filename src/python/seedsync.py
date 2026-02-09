@@ -314,6 +314,9 @@ class Seedsync:
         config.autoqueue.enabled = True
         config.autoqueue.patterns_only = False
         config.autoqueue.auto_extract = True
+        config.autoqueue.auto_delete_remote = False
+
+        config.lftp.net_limit_rate = ""
 
         return config
 

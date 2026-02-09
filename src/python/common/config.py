@@ -142,26 +142,24 @@ class InnerConfig(ABC):
         """
         Construct and return inner config from a dict
         Dict values can be either native types, or str representations
+        Missing keys use the default value from the class __init__.
+        Extra keys are silently ignored (forward/backward compatibility).
         :param config_dict:
         :return:
         """
         config_dict = dict(config_dict)  # copy that we can modify
 
-        # Loop over all the property name, and set them to the value given in config_dict
-        # Raise error if a matching key is not found in config_dict
+        # Create instance with defaults from __init__
         # noinspection PyCallingNonCallable
         inner_config = cls()
         property_map = {p: getattr(cls, p) for p in dir(cls) if isinstance(getattr(cls, p), property)}
         for name, prop in property_map.items():
-            if name not in config_dict:
-                raise ConfigError("Missing config: {}.{}".format(cls.__name__, name))
-            inner_config.set_property(name, config_dict[name])
-            del config_dict[name]
+            if name in config_dict:
+                inner_config.set_property(name, config_dict[name])
+                del config_dict[name]
+            # If key is missing, keep the default from __init__
 
-        # Raise error if a key in config_dict did not match a property
-        extra_keys = config_dict.keys()
-        if extra_keys:
-            raise ConfigError("Unknown config: {}.{}".format(cls.__name__, next(iter(extra_keys))))
+        # Silently ignore extra keys (from newer/older config versions)
 
         return inner_config
 
@@ -322,9 +320,8 @@ class Config(Persist):
 
     @staticmethod
     def _check_empty_outer_dict(dct: OuterConfigType):
-        extra_keys = dct.keys()
-        if extra_keys:
-            raise ConfigError("Unknown section: {}".format(next(iter(extra_keys))))
+        # Silently ignore unknown sections for forward/backward compatibility
+        pass
 
     @classmethod
     @overrides(Persist)

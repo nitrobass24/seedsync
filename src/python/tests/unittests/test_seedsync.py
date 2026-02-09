@@ -136,6 +136,13 @@ class TestSeedsync(unittest.TestCase):
         config2_dict = config2.as_dict()
         self.assertEqual(config_dict, config2_dict)
 
+    def test_default_config_round_trip_str(self):
+        """Creating default config, converting to string, and parsing back should not raise"""
+        config = Seedsync._create_default_config()
+        config_str = config.to_str()
+        config2 = Config.from_str(config_str)
+        self.assertEqual(config.as_dict(), config2.as_dict())
+
     def test_detect_incomplete_config(self):
         # Test a complete config
         config = Seedsync._create_default_config()

@@ -96,35 +96,6 @@ class TestInnerConfig(unittest.TestCase):
 
 
 class TestConfig(unittest.TestCase):
-    def __check_unknown_error(self, cls, good_dict):
-        """
-        Helper method to check that a config class raises an error on
-        an unknown key
-        :param cls:
-        :param good_dict:
-        :return:
-        """
-        bad_dict = dict(good_dict)
-        bad_dict["unknown"] = "how did this get here"
-        with self.assertRaises(ConfigError) as error:
-            cls.from_dict(bad_dict)
-        self.assertTrue(str(error.exception).startswith("Unknown config"))
-
-    def __check_missing_error(self, cls, good_dict, key):
-        """
-        Helper method to check that a config class raises an error on
-        a missing key
-        :param cls:
-        :param good_dict:
-        :param key:
-        :return:
-        """
-        bad_dict = dict(good_dict)
-        del bad_dict[key]
-        with self.assertRaises(ConfigError) as error:
-            cls.from_dict(bad_dict)
-        self.assertTrue(str(error.exception).startswith("Missing config"))
-
     def __check_empty_error(self, cls, good_dict, key):
         """
         Helper method to check that a config class raises an error on
@@ -152,12 +123,7 @@ class TestConfig(unittest.TestCase):
         :param keys:
         :return:
         """
-        # unknown
-        self.__check_unknown_error(cls, good_dict)
-
         for key in keys:
-            # missing key
-            self.__check_missing_error(cls, good_dict, key)
             # empty value
             self.__check_empty_error(cls, good_dict, key)
 
@@ -453,15 +419,15 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(True, config.autoqueue.auto_extract)
         self.assertEqual(False, config.autoqueue.auto_delete_remote)
 
-        # unknown section error
+        # unknown sections are silently ignored (forward/backward compatibility)
         config_file.write("""
         [Unknown]
         key=value
         """)
         config_file.flush()
-        with self.assertRaises(ConfigError) as error:
-            Config.from_file(config_file.name)
-        self.assertTrue(str(error.exception).startswith("Unknown section"))
+        config2 = Config.from_file(config_file.name)
+        # Should load without error, known sections still valid
+        self.assertEqual(False, config2.general.debug)
 
         # Remove config file
         config_file.close()
@@ -576,3 +542,75 @@ class TestConfig(unittest.TestCase):
         """
         with self.assertRaises(PersistError):
             Config.from_str(content)
+
+    def test_from_dict_missing_key_uses_default(self):
+        """Missing keys in from_dict should use the __init__ default value"""
+        # Config.General has defaults: debug=None, verbose=None
+        # Config.AutoQueue has defaults: enabled=None, etc.
+        # Use Config.Web which has a single property 'port' with default None
+        # Test with Lftp which has net_limit_rate defaulting to ""
+        good_dict = {
+            "remote_address": "addr",
+            "remote_username": "user",
+            "remote_password": "pass",
+            "remote_port": "22",
+            "remote_path": "/remote",
+            "local_path": "/local",
+            "remote_path_to_scan_script": "/scan",
+            "use_ssh_key": "False",
+            "num_max_parallel_downloads": "1",
+            "num_max_parallel_files_per_download": "1",
+            "num_max_connections_per_root_file": "1",
+            "num_max_connections_per_dir_file": "1",
+            "num_max_total_connections": "0",
+            "use_temp_file": "False",
+            # net_limit_rate intentionally omitted
+        }
+        lftp = Config.Lftp.from_dict(good_dict)
+        self.assertEqual("addr", lftp.remote_address)
+        # net_limit_rate should get default from __init__ which is ""
+        self.assertEqual("", lftp.net_limit_rate)
+
+    def test_from_dict_extra_key_ignored(self):
+        """Extra keys in from_dict should be silently ignored"""
+        good_dict = {"c_prop1": "1", "a_prop2": "2", "b_prop3": "3", "extra_key": "extra_value"}
+        result = DummyInnerConfig.from_dict(good_dict)
+        self.assertEqual("1", result.c_prop1)
+        self.assertEqual("2", result.a_prop2)
+        self.assertEqual("3", result.b_prop3)
+
+    def test_default_config_round_trip(self):
+        """Default config should survive a write-then-read round trip"""
+        config = Config()
+        config.general.debug = False
+        config.general.verbose = False
+        config.lftp.remote_address = "addr"
+        config.lftp.remote_username = "user"
+        config.lftp.remote_password = ""
+        config.lftp.remote_port = 22
+        config.lftp.remote_path = "/remote"
+        config.lftp.local_path = "/local"
+        config.lftp.remote_path_to_scan_script = "/scan"
+        config.lftp.use_ssh_key = False
+        config.lftp.num_max_parallel_downloads = 1
+        config.lftp.num_max_parallel_files_per_download = 1
+        config.lftp.num_max_connections_per_root_file = 1
+        config.lftp.num_max_connections_per_dir_file = 1
+        config.lftp.num_max_total_connections = 0
+        config.lftp.use_temp_file = False
+        config.lftp.net_limit_rate = ""
+        config.controller.interval_ms_remote_scan = 1000
+        config.controller.interval_ms_local_scan = 1000
+        config.controller.interval_ms_downloading_scan = 1000
+        config.controller.extract_path = "/tmp"
+        config.controller.use_local_path_as_extract_path = True
+        config.web.port = 8800
+        config.autoqueue.enabled = True
+        config.autoqueue.patterns_only = False
+        config.autoqueue.auto_extract = True
+        config.autoqueue.auto_delete_remote = False
+
+        # Round trip: to string, then back from string
+        config_str = config.to_str()
+        config2 = Config.from_str(config_str)
+        self.assertEqual(config.as_dict(), config2.as_dict())
