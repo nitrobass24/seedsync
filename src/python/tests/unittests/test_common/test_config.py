@@ -579,6 +579,48 @@ class TestConfig(unittest.TestCase):
         self.assertEqual("2", result.a_prop2)
         self.assertEqual("3", result.b_prop3)
 
+    def test_from_dict_missing_section_uses_defaults(self):
+        """Missing sections in from_dict should use defaults instead of raising"""
+        # Only General section present - all others should get defaults
+        config_dict = {
+            "General": {"debug": "True", "verbose": "False"},
+        }
+        config = Config.from_dict(config_dict)
+        self.assertEqual(True, config.general.debug)
+        self.assertEqual(False, config.general.verbose)
+        # Other sections should have default (None) values
+        self.assertIsNone(config.lftp.remote_address)
+        self.assertIsNone(config.controller.interval_ms_remote_scan)
+        self.assertIsNone(config.web.port)
+        self.assertIsNone(config.autoqueue.enabled)
+
+    def test_from_dict_empty_uses_all_defaults(self):
+        """Completely empty dict should return config with all defaults"""
+        config = Config.from_dict({})
+        self.assertIsNone(config.general.debug)
+        self.assertIsNone(config.lftp.remote_address)
+        self.assertIsNone(config.controller.interval_ms_remote_scan)
+        self.assertIsNone(config.web.port)
+        self.assertIsNone(config.autoqueue.enabled)
+
+    def test_from_str_missing_section_uses_defaults(self):
+        """Parsing a config string with missing sections should use defaults"""
+        content = """
+        [General]
+        debug=True
+        verbose=False
+
+        [Web]
+        port=9999
+        """
+        config = Config.from_str(content)
+        self.assertEqual(True, config.general.debug)
+        self.assertEqual(9999, config.web.port)
+        # Missing sections get defaults
+        self.assertIsNone(config.lftp.remote_address)
+        self.assertIsNone(config.controller.interval_ms_remote_scan)
+        self.assertIsNone(config.autoqueue.enabled)
+
     def test_default_config_round_trip(self):
         """Default config should survive a write-then-read round trip"""
         config = Config()

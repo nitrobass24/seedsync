@@ -47,9 +47,9 @@ class Seedsync:
         if os.path.isfile(self.config_path):
             try:
                 config = Config.from_file(self.config_path)
-            except (ConfigError, PersistError):
+            except (ConfigError, PersistError) as e:
+                logging.warning("Failed to load config ({}), backing up and using defaults".format(str(e)))
                 Seedsync.__backup_file(self.config_path)
-                # set config to default
                 create_default_config = True
         else:
             create_default_config = True

@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import os
+import tempfile
 from abc import ABC, abstractmethod
 from typing import Type, TypeVar
 
@@ -50,8 +51,20 @@ class Persist(Serializable):
             return cls.from_str(f.read())
 
     def to_file(self, file_path: str):
-        with open(file_path, "w") as f:
-            f.write(self.to_str())
+        dir_name = os.path.dirname(file_path) or '.'
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix='.tmp_persist_')
+        try:
+            with os.fdopen(fd, 'w') as f:
+                f.write(self.to_str())
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, file_path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     @classmethod
     @abstractmethod

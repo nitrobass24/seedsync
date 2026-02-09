@@ -5,6 +5,8 @@ import tempfile
 import shutil
 import os
 
+from unittest.mock import patch
+
 from common import overrides, Persist, AppError, Localization
 
 
@@ -68,3 +70,35 @@ class TestPersist(unittest.TestCase):
         self.assertTrue(os.path.isfile(file_path))
         with open(file_path, "r") as f:
             self.assertEqual("write out some new content", f.read())
+
+    def test_to_file_atomic_preserves_content_on_write_error(self):
+        """If to_str() raises, the original file must not be corrupted"""
+        file_path = os.path.join(self.temp_dir, "persist")
+        with open(file_path, "w") as f:
+            f.write("original content")
+
+        persist = DummyPersist()
+        persist.my_content = "new content"
+
+        # Simulate an error during write by making os.fsync raise
+        with patch("os.fsync", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                persist.to_file(file_path)
+
+        # Original file should be untouched
+        with open(file_path, "r") as f:
+            self.assertEqual("original content", f.read())
+
+        # No temp files should be left behind
+        remaining = [f for f in os.listdir(self.temp_dir) if f.startswith(".tmp_persist_")]
+        self.assertEqual([], remaining)
+
+    def test_to_file_no_temp_file_left_on_success(self):
+        """Successful write should not leave temp files behind"""
+        file_path = os.path.join(self.temp_dir, "persist")
+        persist = DummyPersist()
+        persist.my_content = "some content"
+        persist.to_file(file_path)
+
+        remaining = [f for f in os.listdir(self.temp_dir) if f.startswith(".tmp_persist_")]
+        self.assertEqual([], remaining)
