@@ -16,4 +16,9 @@
     <img src="assets/icons/refresh.svg" />
     <span class="text">Restart</span>
   </a>
+
+  <a class="button" (click)="onToggleTheme()">
+    <i class="fa-icon" [class.fa-solid]="true" [class.fa-moon]="theme === 'light'" [class.fa-sun]="theme === 'dark'"></i>
+    <span class="text">{{ theme === 'light' ? 'Dark Mode' : 'Light Mode' }}</span>
+  </a>
 </div>

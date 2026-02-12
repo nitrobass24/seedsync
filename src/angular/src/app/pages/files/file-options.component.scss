@@ -3,7 +3,7 @@
 // Common dropdown template
 %dropdown {
     button {
-        background-color: $primary-color;
+        background-color: var(--ss-primary);
         color: white;
         height: 34px;
         width: 100%;
@@ -37,8 +37,8 @@
     }
 
     .dropdown-menu {
-        background-color: $primary-color;
-        border: 1px solid $primary-dark-color;
+        background-color: var(--ss-primary);
+        border: 1px solid var(--ss-primary-dark);
         color: white;
         padding: 0;
         cursor: default;
@@ -55,17 +55,17 @@
 
             &.active,
             &.active:hover {
-                background-color: $secondary-dark-color;
+                background-color: var(--ss-secondary-dark);
             }
 
             &:hover,
             &:active {
-                background-color: $primary-color;
+                background-color: var(--ss-primary);
             }
 
             &.disabled {
                 opacity: .65;
-                background-color: $primary-color;
+                background-color: var(--ss-primary);
             }
 
             .icon {
@@ -105,8 +105,8 @@
 
 
 %toggle {
-    background-color: $primary-color;
-    border: 1px solid $primary-dark-color;
+    background-color: var(--ss-primary);
+    border: 1px solid var(--ss-primary-dark);
     color: white;
     height: 34px;
     cursor: default;
@@ -119,18 +119,18 @@
 
     &.active,
     &.active:hover{
-        background-color: $secondary-dark-color;
-        border-color: $secondary-darker-color;
+        background-color: var(--ss-secondary-dark);
+        border-color: var(--ss-secondary-darker);
     }
 
     &:hover,
     &:active {
-        background-color: $primary-color;
+        background-color: var(--ss-primary);
     }
 
     &.disabled {
         opacity: .65;
-        background-color: $primary-color;
+        background-color: var(--ss-primary);
     }
 
     .selection {
@@ -157,7 +157,7 @@
 #file-options {
     position: static;
     z-index: $zindex-file-options;
-    background-color: $header-color;
+    background-color: var(--ss-header-bg);
     padding: 0 8px 8px 8px;
 
     display: flex;

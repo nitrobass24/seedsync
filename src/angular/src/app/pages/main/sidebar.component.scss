@@ -18,13 +18,13 @@
     user-select: none;
 
     &:active {
-      background-color: $primary-color;
+      background-color: var(--ss-primary);
     }
 
     &.selected {
-      background-color: $secondary-color;
+      background-color: var(--ss-secondary);
       color: white;
-      border-color: #6ac19e;
+      border-color: var(--ss-sidebar-selected-border);
 
       img {
         filter: invert(1.0);
@@ -42,11 +42,29 @@
       margin-inline-end: 4px;
       margin-bottom: 2px;
     }
+
+    .fa-icon {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      margin-inline-end: 4px;
+      margin-bottom: 2px;
+      text-align: center;
+      font-size: 16px;
+      line-height: 18px;
+    }
   }
 
   hr {
     margin-top: 3px;
     margin-bottom: 3px;
-    border: 1px solid $header-dark-color;
+    border: 1px solid var(--ss-header-dark);
   }
+}
+
+:host-context([data-bs-theme="dark"]) #sidebar .button img {
+  filter: invert(0.85);
+}
+:host-context([data-bs-theme="dark"]) #sidebar .button.selected img {
+  filter: invert(1.0);
 }

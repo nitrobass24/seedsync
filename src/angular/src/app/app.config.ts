@@ -11,6 +11,7 @@ import { ModelFileService } from './services/files/model-file.service';
 import { LogService } from './services/logs/log.service';
 import { ViewFileFilterService } from './services/files/view-file-filter.service';
 import { ViewFileSortService } from './services/files/view-file-sort.service';
+import { ThemeService } from './services/utils/theme.service';
 
 function initializeStreaming(): () => void {
   // Eagerly inject all SSE handler services so they register with StreamDispatchService.
@@ -23,6 +24,9 @@ function initializeStreaming(): () => void {
   // Eagerly inject filter/sort services so they subscribe to options changes
   inject(ViewFileFilterService);
   inject(ViewFileSortService);
+
+  // Eagerly inject theme service so it applies the saved theme on startup
+  inject(ThemeService);
 
   const streamDispatch = inject(StreamDispatchService);
   return () => streamDispatch.start();
