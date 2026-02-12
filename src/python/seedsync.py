@@ -47,6 +47,7 @@ class Seedsync:
         if os.path.isfile(self.config_path):
             try:
                 config = Config.from_file(self.config_path)
+                Seedsync._backfill_config_defaults(config)
             except (ConfigError, PersistError) as e:
                 logging.warning("Failed to load config ({}), backing up and using defaults".format(str(e)))
                 Seedsync.__backup_file(self.config_path)
@@ -328,6 +329,27 @@ class Seedsync:
         config.lftp.net_reconnect_interval_multiplier = 1
 
         return config
+
+    @staticmethod
+    def _backfill_config_defaults(config: Config):
+        """
+        Backfill default values for config properties added after the initial release.
+        Called when loading an existing config file that predates newer properties.
+        """
+        if config.lftp.net_socket_buffer is None:
+            config.lftp.net_socket_buffer = 8388608
+        if config.lftp.pget_min_chunk_size is None:
+            config.lftp.pget_min_chunk_size = "100M"
+        if config.lftp.mirror_parallel_directories is None:
+            config.lftp.mirror_parallel_directories = True
+        if config.lftp.net_timeout is None:
+            config.lftp.net_timeout = 20
+        if config.lftp.net_max_retries is None:
+            config.lftp.net_max_retries = 2
+        if config.lftp.net_reconnect_interval_base is None:
+            config.lftp.net_reconnect_interval_base = 3
+        if config.lftp.net_reconnect_interval_multiplier is None:
+            config.lftp.net_reconnect_interval_multiplier = 1
 
     @staticmethod
     def _detect_incomplete_config(config: Config) -> bool:
