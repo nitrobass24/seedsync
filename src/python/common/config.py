@@ -155,7 +155,14 @@ class InnerConfig(ABC):
         property_map = {p: getattr(cls, p) for p in dir(cls) if isinstance(getattr(cls, p), property)}
         for name, prop in property_map.items():
             if name in config_dict:
-                inner_config.set_property(name, config_dict[name])
+                value = config_dict[name]
+                # to_str() serializes None as "". When reading back, treat
+                # empty strings as missing if the default is None, so that
+                # the None → "" → None round-trip is preserved.
+                if type(value) is str and value == "" and getattr(inner_config, name) is None:
+                    del config_dict[name]
+                    continue
+                inner_config.set_property(name, value)
                 del config_dict[name]
             # If key is missing, keep the default from __init__
 

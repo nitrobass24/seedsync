@@ -749,6 +749,46 @@ class TestConfig(unittest.TestCase):
         self.assertIsNone(controller.use_staging)
         self.assertIsNone(controller.staging_path)
 
+    def test_empty_string_for_none_default_stays_none(self):
+        """Empty strings in config file for properties with None defaults should stay None"""
+        # This simulates a config saved when the property was None:
+        # to_str() writes None as "", and from_dict() should restore it as None
+        good_dict = {
+            "remote_address": "addr",
+            "remote_username": "user",
+            "remote_password": "pass",
+            "remote_port": "22",
+            "remote_path": "/remote",
+            "local_path": "/local",
+            "remote_path_to_scan_script": "/scan",
+            "use_ssh_key": "False",
+            "num_max_parallel_downloads": "1",
+            "num_max_parallel_files_per_download": "1",
+            "num_max_connections_per_root_file": "1",
+            "num_max_connections_per_dir_file": "1",
+            "num_max_total_connections": "0",
+            "use_temp_file": "False",
+            "net_limit_rate": "",
+            "net_socket_buffer": "",
+            "pget_min_chunk_size": "",
+            "mirror_parallel_directories": "",
+            "net_timeout": "",
+            "net_max_retries": "",
+            "net_reconnect_interval_base": "",
+            "net_reconnect_interval_multiplier": ""
+        }
+        lftp = Config.Lftp.from_dict(good_dict)
+        # net_limit_rate has "" as __init__ default, so "" stays as ""
+        self.assertEqual("", lftp.net_limit_rate)
+        # Properties with None __init__ defaults: "" restores to None
+        self.assertIsNone(lftp.net_socket_buffer)
+        self.assertIsNone(lftp.pget_min_chunk_size)
+        self.assertIsNone(lftp.mirror_parallel_directories)
+        self.assertIsNone(lftp.net_timeout)
+        self.assertIsNone(lftp.net_max_retries)
+        self.assertIsNone(lftp.net_reconnect_interval_base)
+        self.assertIsNone(lftp.net_reconnect_interval_multiplier)
+
     def test_lftp_missing_advanced_keys_uses_defaults(self):
         """Advanced LFTP properties missing from config should use None defaults (backward compat)"""
         good_dict = {
