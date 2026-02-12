@@ -319,14 +319,12 @@ class Lftp:
         self.__set(Lftp.__SET_SFTP_CONNECT_PROGRAM, program)
 
     @property
-    def net_socket_buffer(self) -> int:
-        return int(self.__get(Lftp.__SET_NET_SOCKET_BUFFER))
+    def net_socket_buffer(self) -> str:
+        return self.__get(Lftp.__SET_NET_SOCKET_BUFFER)
 
     @net_socket_buffer.setter
-    def net_socket_buffer(self, value: int):
-        if value < 0:
-            raise ValueError("Socket buffer size must be zero or greater")
-        self.__set(Lftp.__SET_NET_SOCKET_BUFFER, str(value))
+    def net_socket_buffer(self, value: str):
+        self.__set(Lftp.__SET_NET_SOCKET_BUFFER, value)
 
     @property
     def mirror_parallel_directories(self) -> bool:

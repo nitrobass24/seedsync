@@ -320,7 +320,7 @@ class Seedsync:
         config.autoqueue.auto_delete_remote = False
 
         config.lftp.net_limit_rate = ""
-        config.lftp.net_socket_buffer = 8388608
+        config.lftp.net_socket_buffer = "8M"
         config.lftp.pget_min_chunk_size = "100M"
         config.lftp.mirror_parallel_directories = True
         config.lftp.net_timeout = 20
@@ -337,7 +337,7 @@ class Seedsync:
         Called when loading an existing config file that predates newer properties.
         """
         if config.lftp.net_socket_buffer is None:
-            config.lftp.net_socket_buffer = 8388608
+            config.lftp.net_socket_buffer = "8M"
         if config.lftp.pget_min_chunk_size is None:
             config.lftp.pget_min_chunk_size = "100M"
         if config.lftp.mirror_parallel_directories is None:
