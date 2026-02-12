@@ -264,7 +264,9 @@ class TestConfig(unittest.TestCase):
             "interval_ms_local_scan": "10000",
             "interval_ms_downloading_scan": "2000",
             "extract_path": "/extract/path",
-            "use_local_path_as_extract_path": "True"
+            "use_local_path_as_extract_path": "True",
+            "use_staging": "False",
+            "staging_path": "/staging/path"
         }
         controller = Config.Controller.from_dict(good_dict)
         self.assertEqual(30000, controller.interval_ms_remote_scan)
@@ -272,6 +274,8 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(2000, controller.interval_ms_downloading_scan)
         self.assertEqual("/extract/path", controller.extract_path)
         self.assertEqual(True, controller.use_local_path_as_extract_path)
+        self.assertEqual(False, controller.use_staging)
+        self.assertEqual("/staging/path", controller.staging_path)
 
         self.check_common(Config.Controller,
                           good_dict,
@@ -280,7 +284,9 @@ class TestConfig(unittest.TestCase):
                               "interval_ms_local_scan",
                               "interval_ms_downloading_scan",
                               "extract_path",
-                              "use_local_path_as_extract_path"
+                              "use_local_path_as_extract_path",
+                              "use_staging",
+                              "staging_path"
                           })
 
         # bad values
@@ -292,6 +298,8 @@ class TestConfig(unittest.TestCase):
         self.check_bad_value_error(Config.Controller, good_dict, "interval_ms_downloading_scan", "0")
         self.check_bad_value_error(Config.Controller, good_dict, "use_local_path_as_extract_path", "SomeString")
         self.check_bad_value_error(Config.Controller, good_dict, "use_local_path_as_extract_path", "-1")
+        self.check_bad_value_error(Config.Controller, good_dict, "use_staging", "SomeString")
+        self.check_bad_value_error(Config.Controller, good_dict, "use_staging", "-1")
 
     def test_web(self):
         good_dict = {
@@ -374,6 +382,8 @@ class TestConfig(unittest.TestCase):
         interval_ms_downloading_scan=2000
         extract_path=/path/where/to/extract/stuff
         use_local_path_as_extract_path=False
+        use_staging=True
+        staging_path=/path/to/staging
 
         [Web]
         port=88
@@ -411,6 +421,8 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(2000, config.controller.interval_ms_downloading_scan)
         self.assertEqual("/path/where/to/extract/stuff", config.controller.extract_path)
         self.assertEqual(False, config.controller.use_local_path_as_extract_path)
+        self.assertEqual(True, config.controller.use_staging)
+        self.assertEqual("/path/to/staging", config.controller.staging_path)
 
         self.assertEqual(88, config.web.port)
 
@@ -459,6 +471,8 @@ class TestConfig(unittest.TestCase):
         config.controller.interval_ms_downloading_scan = 9012
         config.controller.extract_path = "/path/extract/stuff"
         config.controller.use_local_path_as_extract_path = True
+        config.controller.use_staging = False
+        config.controller.staging_path = "/staging"
         config.web.port = 13
         config.autoqueue.enabled = True
         config.autoqueue.patterns_only = True
@@ -497,6 +511,8 @@ class TestConfig(unittest.TestCase):
         interval_ms_downloading_scan = 9012
         extract_path = /path/extract/stuff
         use_local_path_as_extract_path = True
+        use_staging = False
+        staging_path = /staging
 
         [Web]
         port = 13
@@ -646,6 +662,8 @@ class TestConfig(unittest.TestCase):
         config.controller.interval_ms_downloading_scan = 1000
         config.controller.extract_path = "/tmp"
         config.controller.use_local_path_as_extract_path = True
+        config.controller.use_staging = False
+        config.controller.staging_path = "/staging"
         config.web.port = 8800
         config.autoqueue.enabled = True
         config.autoqueue.patterns_only = False
@@ -656,3 +674,57 @@ class TestConfig(unittest.TestCase):
         config_str = config.to_str()
         config2 = Config.from_str(config_str)
         self.assertEqual(config.as_dict(), config2.as_dict())
+
+    def test_controller_staging_missing_keys_use_defaults(self):
+        """Staging properties missing from config should use None defaults (backward compat)"""
+        good_dict = {
+            "interval_ms_remote_scan": "30000",
+            "interval_ms_local_scan": "10000",
+            "interval_ms_downloading_scan": "2000",
+            "extract_path": "/extract/path",
+            "use_local_path_as_extract_path": "True"
+            # use_staging and staging_path intentionally omitted
+        }
+        controller = Config.Controller.from_dict(good_dict)
+        self.assertEqual(30000, controller.interval_ms_remote_scan)
+        self.assertEqual("/extract/path", controller.extract_path)
+        self.assertIsNone(controller.use_staging)
+        self.assertIsNone(controller.staging_path)
+
+    def test_controller_staging_round_trip(self):
+        """Staging properties should survive a serialization round trip"""
+        config = Config()
+        config.general.debug = False
+        config.general.verbose = False
+        config.lftp.remote_address = "addr"
+        config.lftp.remote_username = "user"
+        config.lftp.remote_password = ""
+        config.lftp.remote_port = 22
+        config.lftp.remote_path = "/remote"
+        config.lftp.local_path = "/local"
+        config.lftp.remote_path_to_scan_script = "/scan"
+        config.lftp.use_ssh_key = False
+        config.lftp.num_max_parallel_downloads = 1
+        config.lftp.num_max_parallel_files_per_download = 1
+        config.lftp.num_max_connections_per_root_file = 1
+        config.lftp.num_max_connections_per_dir_file = 1
+        config.lftp.num_max_total_connections = 0
+        config.lftp.use_temp_file = False
+        config.lftp.net_limit_rate = ""
+        config.controller.interval_ms_remote_scan = 1000
+        config.controller.interval_ms_local_scan = 1000
+        config.controller.interval_ms_downloading_scan = 1000
+        config.controller.extract_path = "/tmp"
+        config.controller.use_local_path_as_extract_path = True
+        config.controller.use_staging = True
+        config.controller.staging_path = "/my/staging"
+        config.web.port = 8800
+        config.autoqueue.enabled = True
+        config.autoqueue.patterns_only = False
+        config.autoqueue.auto_extract = True
+        config.autoqueue.auto_delete_remote = False
+
+        config_str = config.to_str()
+        config2 = Config.from_str(config_str)
+        self.assertEqual(True, config2.controller.use_staging)
+        self.assertEqual("/my/staging", config2.controller.staging_path)

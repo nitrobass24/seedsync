@@ -35,6 +35,32 @@ Open the UI and fill out the Settings page:
 - **Auto extract**: Extract archives after download
 - **Delete from remote after download**: Automatically delete files from the remote server after a successful download. When used with auto-extract, extraction runs first.
 
+## Staging Directory
+
+Use a fast staging disk (e.g. NVMe) for downloads and extraction, then automatically move completed files to your final downloads folder.
+
+- **Use staging directory**: Enable or disable the staging workflow
+- **Staging Path**: Path inside the container where files are temporarily downloaded and extracted
+
+When enabled, the download flow becomes:
+
+1. LFTP downloads to the **staging path** (fast disk)
+2. Archives are extracted **in staging** (fast disk)
+3. Completed files are moved to `/downloads` (final location)
+4. Staging copy is deleted after size verification
+
+:::tip
+Mount your fast disk as a Docker volume and set the staging path in the UI. For example:
+
+```yaml
+volumes:
+  - /mnt/nvme/staging:/staging
+  - /mnt/hdd/downloads:/downloads
+```
+
+Then set **Staging Path** to `/staging` in Settings.
+:::
+
 ## Environment variables
 
 | Variable | Default | Description |

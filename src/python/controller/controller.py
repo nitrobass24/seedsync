@@ -16,6 +16,7 @@ from model import ModelError, ModelFile, Model, ModelDiff, ModelDiffUtil, IModel
 from lftp import Lftp, LftpError, LftpJobStatus
 from .controller_persist import ControllerPersist
 from .delete import DeleteLocalProcess, DeleteRemoteProcess
+from .move import MoveProcess
 
 
 class ControllerError(AppError):
@@ -100,6 +101,12 @@ class Controller:
         self.__model_builder.set_downloaded_files(self.__persist.downloaded_file_names)
         self.__model_builder.set_extracted_files(self.__persist.extracted_file_names)
 
+        # Determine effective local path: use staging_path when staging is enabled
+        if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
+            self.__effective_local_path = self.__context.config.controller.staging_path
+        else:
+            self.__effective_local_path = self.__context.config.lftp.local_path
+
         # Lftp
         self.__lftp = Lftp(address=self.__context.config.lftp.remote_address,
                            port=self.__context.config.lftp.remote_port,
@@ -107,7 +114,7 @@ class Controller:
                            password=self.__password)
         self.__lftp.set_base_logger(self.logger)
         self.__lftp.set_base_remote_dir_path(self.__context.config.lftp.remote_path)
-        self.__lftp.set_base_local_dir_path(self.__context.config.lftp.local_path)
+        self.__lftp.set_base_local_dir_path(self.__effective_local_path)
         # Configure Lftp
         self.__lftp.num_parallel_jobs = self.__context.config.lftp.num_max_parallel_downloads
         self.__lftp.num_parallel_files = self.__context.config.lftp.num_max_parallel_files_per_download
@@ -121,9 +128,9 @@ class Controller:
         self.__lftp.set_verbose_logging(self.__context.config.general.verbose)
 
         # Setup the scanners and scanner processes
-        self.__active_scanner = ActiveScanner(self.__context.config.lftp.local_path)
+        self.__active_scanner = ActiveScanner(self.__effective_local_path)
         self.__local_scanner = LocalScanner(
-            local_path=self.__context.config.lftp.local_path,
+            local_path=self.__effective_local_path,
             use_temp_file=self.__context.config.lftp.use_temp_file
         )
         self.__remote_scanner = RemoteScanner(
@@ -151,13 +158,15 @@ class Controller:
         )
 
         # Setup extract process
-        if self.__context.config.controller.use_local_path_as_extract_path:
+        if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
+            out_dir_path = self.__context.config.controller.staging_path
+        elif self.__context.config.controller.use_local_path_as_extract_path:
             out_dir_path = self.__context.config.lftp.local_path
         else:
             out_dir_path = self.__context.config.controller.extract_path
         self.__extract_process = ExtractProcess(
             out_dir_path=out_dir_path,
-            local_path=self.__context.config.lftp.local_path
+            local_path=self.__effective_local_path
         )
 
         # Setup multiprocess logging
@@ -173,6 +182,9 @@ class Controller:
 
         # Keep track of active command processes
         self.__active_command_processes = []
+
+        # Keep track of active move processes (staging -> final)
+        self.__active_move_processes = []
 
         self.__started = False
 
@@ -333,6 +345,10 @@ class Controller:
         if latest_extracted_results:
             for result in latest_extracted_results:
                 self.__persist.extracted_file_names.add(result.name)
+                # Spawn move from staging to final local_path when staging is enabled
+                if self.__context.config.controller.use_staging and \
+                        self.__context.config.controller.staging_path:
+                    self.__spawn_move_process(result.name)
             self.__model_builder.set_extracted_files(self.__persist.extracted_file_names)
 
         # Build the new model, if needed
@@ -469,7 +485,7 @@ class Controller:
                     continue
                 else:
                     process = DeleteLocalProcess(
-                        local_path=self.__context.config.lftp.local_path,
+                        local_path=self.__effective_local_path,
                         file_name=file.name
                     )
                     process.set_multiprocessing_logger(self.__mp_logger)
@@ -529,6 +545,22 @@ class Controller:
         self.__mp_logger.propagate_exception()
         self.__extract_process.propagate_exception()
 
+    def __spawn_move_process(self, file_name: str):
+        """
+        Spawn a MoveProcess to move a file from staging to the final local_path
+        :param file_name:
+        :return:
+        """
+        process = MoveProcess(
+            source_path=self.__context.config.controller.staging_path,
+            dest_path=self.__context.config.lftp.local_path,
+            file_name=file_name
+        )
+        process.set_multiprocessing_logger(self.__mp_logger)
+        self.__active_move_processes.append(process)
+        process.start()
+        self.logger.info("Spawned move process for {} (staging -> local)".format(file_name))
+
     def __cleanup_commands(self):
         """
         Cleanup the list of active commands and do any callbacks
@@ -544,3 +576,14 @@ class Controller:
                 # Propagate the exception
                 command_process.process.propagate_exception()
         self.__active_command_processes = still_active_processes
+
+        # Cleanup completed move processes
+        still_active_moves = []
+        for move_process in self.__active_move_processes:
+            if move_process.is_alive():
+                still_active_moves.append(move_process)
+            else:
+                move_process.propagate_exception()
+                # Force a local scan so the moved file is detected in its final location
+                self.__local_scan_process.force_scan()
+        self.__active_move_processes = still_active_moves
