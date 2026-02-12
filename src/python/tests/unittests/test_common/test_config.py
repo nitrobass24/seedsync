@@ -192,7 +192,14 @@ class TestConfig(unittest.TestCase):
             "num_max_connections_per_dir_file": "6",
             "num_max_total_connections": "7",
             "use_temp_file": "True",
-            "net_limit_rate": "500K"
+            "net_limit_rate": "500K",
+            "net_socket_buffer": "8388608",
+            "pget_min_chunk_size": "100M",
+            "mirror_parallel_directories": "True",
+            "net_timeout": "20",
+            "net_max_retries": "2",
+            "net_reconnect_interval_base": "3",
+            "net_reconnect_interval_multiplier": "1"
         }
         lftp = Config.Lftp.from_dict(good_dict)
         self.assertEqual("remote.server.com", lftp.remote_address)
@@ -210,6 +217,13 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(7, lftp.num_max_total_connections)
         self.assertEqual(True, lftp.use_temp_file)
         self.assertEqual("500K", lftp.net_limit_rate)
+        self.assertEqual(8388608, lftp.net_socket_buffer)
+        self.assertEqual("100M", lftp.pget_min_chunk_size)
+        self.assertEqual(True, lftp.mirror_parallel_directories)
+        self.assertEqual(20, lftp.net_timeout)
+        self.assertEqual(2, lftp.net_max_retries)
+        self.assertEqual(3, lftp.net_reconnect_interval_base)
+        self.assertEqual(1, lftp.net_reconnect_interval_multiplier)
 
         self.check_common(Config.Lftp,
                           good_dict,
@@ -226,7 +240,13 @@ class TestConfig(unittest.TestCase):
                               "num_max_connections_per_root_file",
                               "num_max_connections_per_dir_file",
                               "num_max_total_connections",
-                              "use_temp_file"
+                              "use_temp_file",
+                              "net_socket_buffer",
+                              "mirror_parallel_directories",
+                              "net_timeout",
+                              "net_max_retries",
+                              "net_reconnect_interval_base",
+                              "net_reconnect_interval_multiplier"
                           })
 
         # remote_password allows empty values (for SSH key auth)
@@ -240,6 +260,12 @@ class TestConfig(unittest.TestCase):
         empty_rate_dict["net_limit_rate"] = ""
         lftp_empty_rate = Config.Lftp.from_dict(empty_rate_dict)
         self.assertEqual("", lftp_empty_rate.net_limit_rate)
+
+        # pget_min_chunk_size allows empty values
+        empty_chunk_dict = dict(good_dict)
+        empty_chunk_dict["pget_min_chunk_size"] = ""
+        lftp_empty_chunk = Config.Lftp.from_dict(empty_chunk_dict)
+        self.assertEqual("", lftp_empty_chunk.pget_min_chunk_size)
 
         # bad values
         self.check_bad_value_error(Config.Lftp, good_dict, "remote_port", "-1")
@@ -257,6 +283,13 @@ class TestConfig(unittest.TestCase):
         self.check_bad_value_error(Config.Lftp, good_dict, "num_max_total_connections", "-1")
         self.check_bad_value_error(Config.Lftp, good_dict, "use_temp_file", "-1")
         self.check_bad_value_error(Config.Lftp, good_dict, "use_temp_file", "SomeString")
+        self.check_bad_value_error(Config.Lftp, good_dict, "net_socket_buffer", "-1")
+        self.check_bad_value_error(Config.Lftp, good_dict, "mirror_parallel_directories", "-1")
+        self.check_bad_value_error(Config.Lftp, good_dict, "mirror_parallel_directories", "SomeString")
+        self.check_bad_value_error(Config.Lftp, good_dict, "net_timeout", "-1")
+        self.check_bad_value_error(Config.Lftp, good_dict, "net_max_retries", "-1")
+        self.check_bad_value_error(Config.Lftp, good_dict, "net_reconnect_interval_base", "-1")
+        self.check_bad_value_error(Config.Lftp, good_dict, "net_reconnect_interval_multiplier", "-1")
 
     def test_controller(self):
         good_dict = {
@@ -466,6 +499,13 @@ class TestConfig(unittest.TestCase):
         config.lftp.num_max_total_connections = 4
         config.lftp.use_temp_file = True
         config.lftp.net_limit_rate = "500K"
+        config.lftp.net_socket_buffer = 8388608
+        config.lftp.pget_min_chunk_size = "100M"
+        config.lftp.mirror_parallel_directories = True
+        config.lftp.net_timeout = 20
+        config.lftp.net_max_retries = 2
+        config.lftp.net_reconnect_interval_base = 3
+        config.lftp.net_reconnect_interval_multiplier = 1
         config.controller.interval_ms_remote_scan = 1234
         config.controller.interval_ms_local_scan = 5678
         config.controller.interval_ms_downloading_scan = 9012
@@ -504,6 +544,13 @@ class TestConfig(unittest.TestCase):
         num_max_total_connections = 4
         use_temp_file = True
         net_limit_rate = 500K
+        net_socket_buffer = 8388608
+        pget_min_chunk_size = 100M
+        mirror_parallel_directories = True
+        net_timeout = 20
+        net_max_retries = 2
+        net_reconnect_interval_base = 3
+        net_reconnect_interval_multiplier = 1
 
         [Controller]
         interval_ms_remote_scan = 1234
@@ -657,6 +704,13 @@ class TestConfig(unittest.TestCase):
         config.lftp.num_max_total_connections = 0
         config.lftp.use_temp_file = False
         config.lftp.net_limit_rate = ""
+        config.lftp.net_socket_buffer = 8388608
+        config.lftp.pget_min_chunk_size = "100M"
+        config.lftp.mirror_parallel_directories = True
+        config.lftp.net_timeout = 20
+        config.lftp.net_max_retries = 2
+        config.lftp.net_reconnect_interval_base = 3
+        config.lftp.net_reconnect_interval_multiplier = 1
         config.controller.interval_ms_remote_scan = 1000
         config.controller.interval_ms_local_scan = 1000
         config.controller.interval_ms_downloading_scan = 1000
@@ -691,6 +745,37 @@ class TestConfig(unittest.TestCase):
         self.assertIsNone(controller.use_staging)
         self.assertIsNone(controller.staging_path)
 
+    def test_lftp_missing_advanced_keys_uses_defaults(self):
+        """Advanced LFTP properties missing from config should use None defaults (backward compat)"""
+        good_dict = {
+            "remote_address": "addr",
+            "remote_username": "user",
+            "remote_password": "pass",
+            "remote_port": "22",
+            "remote_path": "/remote",
+            "local_path": "/local",
+            "remote_path_to_scan_script": "/scan",
+            "use_ssh_key": "False",
+            "num_max_parallel_downloads": "1",
+            "num_max_parallel_files_per_download": "1",
+            "num_max_connections_per_root_file": "1",
+            "num_max_connections_per_dir_file": "1",
+            "num_max_total_connections": "0",
+            "use_temp_file": "False",
+            "net_limit_rate": "500K"
+            # All advanced keys intentionally omitted
+        }
+        lftp = Config.Lftp.from_dict(good_dict)
+        self.assertEqual("addr", lftp.remote_address)
+        self.assertEqual("500K", lftp.net_limit_rate)
+        self.assertIsNone(lftp.net_socket_buffer)
+        self.assertIsNone(lftp.pget_min_chunk_size)
+        self.assertIsNone(lftp.mirror_parallel_directories)
+        self.assertIsNone(lftp.net_timeout)
+        self.assertIsNone(lftp.net_max_retries)
+        self.assertIsNone(lftp.net_reconnect_interval_base)
+        self.assertIsNone(lftp.net_reconnect_interval_multiplier)
+
     def test_controller_staging_round_trip(self):
         """Staging properties should survive a serialization round trip"""
         config = Config()
@@ -711,6 +796,13 @@ class TestConfig(unittest.TestCase):
         config.lftp.num_max_total_connections = 0
         config.lftp.use_temp_file = False
         config.lftp.net_limit_rate = ""
+        config.lftp.net_socket_buffer = 8388608
+        config.lftp.pget_min_chunk_size = "100M"
+        config.lftp.mirror_parallel_directories = True
+        config.lftp.net_timeout = 20
+        config.lftp.net_max_retries = 2
+        config.lftp.net_reconnect_interval_base = 3
+        config.lftp.net_reconnect_interval_multiplier = 1
         config.controller.interval_ms_remote_scan = 1000
         config.controller.interval_ms_local_scan = 1000
         config.controller.interval_ms_downloading_scan = 1000

@@ -249,6 +249,15 @@ class Config(Persist):
         num_max_total_connections = PROP("num_max_total_connections", Checkers.int_non_negative, Converters.int)
         use_temp_file = PROP("use_temp_file", Checkers.null, Converters.bool)
         net_limit_rate = PROP("net_limit_rate", Checkers.string_allow_empty, Converters.null)
+        net_socket_buffer = PROP("net_socket_buffer", Checkers.int_non_negative, Converters.int)
+        pget_min_chunk_size = PROP("pget_min_chunk_size", Checkers.string_allow_empty, Converters.null)
+        mirror_parallel_directories = PROP("mirror_parallel_directories", Checkers.null, Converters.bool)
+        net_timeout = PROP("net_timeout", Checkers.int_non_negative, Converters.int)
+        net_max_retries = PROP("net_max_retries", Checkers.int_non_negative, Converters.int)
+        net_reconnect_interval_base = PROP("net_reconnect_interval_base", Checkers.int_non_negative, Converters.int)
+        net_reconnect_interval_multiplier = PROP("net_reconnect_interval_multiplier",
+                                                  Checkers.int_non_negative,
+                                                  Converters.int)
 
         def __init__(self):
             super().__init__()
@@ -267,6 +276,13 @@ class Config(Persist):
             self.num_max_total_connections = None
             self.use_temp_file = None
             self.net_limit_rate = ""
+            self.net_socket_buffer = None
+            self.pget_min_chunk_size = None
+            self.mirror_parallel_directories = None
+            self.net_timeout = None
+            self.net_max_retries = None
+            self.net_reconnect_interval_base = None
+            self.net_reconnect_interval_multiplier = None
 
     class Controller(IC):
         interval_ms_remote_scan = PROP("interval_ms_remote_scan", Checkers.int_positive, Converters.int)

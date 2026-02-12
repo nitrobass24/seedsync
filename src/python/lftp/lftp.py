@@ -41,6 +41,12 @@ class Lftp:
     __SET_TEMP_FILE_NAME = "xfer:temp-file-name"
     __SET_SFTP_AUTO_CONFIRM = "sftp:auto-confirm"
     __SET_SFTP_CONNECT_PROGRAM = "sftp:connect-program"
+    __SET_NET_SOCKET_BUFFER = "net:socket-buffer"
+    __SET_MIRROR_PARALLEL_DIRECTORIES = "mirror:parallel-directories"
+    __SET_NET_TIMEOUT = "net:timeout"
+    __SET_NET_MAX_RETRIES = "net:max-retries"
+    __SET_NET_RECONNECT_INTERVAL_BASE = "net:reconnect-interval-base"
+    __SET_NET_RECONNECT_INTERVAL_MULTIPLIER = "net:reconnect-interval-multiplier"
 
     def __init__(self,
                  address: str,
@@ -311,6 +317,64 @@ class Lftp:
     @sftp_connect_program.setter
     def sftp_connect_program(self, program: str):
         self.__set(Lftp.__SET_SFTP_CONNECT_PROGRAM, program)
+
+    @property
+    def net_socket_buffer(self) -> int:
+        return int(self.__get(Lftp.__SET_NET_SOCKET_BUFFER))
+
+    @net_socket_buffer.setter
+    def net_socket_buffer(self, value: int):
+        if value < 0:
+            raise ValueError("Socket buffer size must be zero or greater")
+        self.__set(Lftp.__SET_NET_SOCKET_BUFFER, str(value))
+
+    @property
+    def mirror_parallel_directories(self) -> bool:
+        return Lftp.__to_bool(self.__get(Lftp.__SET_MIRROR_PARALLEL_DIRECTORIES))
+
+    @mirror_parallel_directories.setter
+    def mirror_parallel_directories(self, value: bool):
+        self.__set(Lftp.__SET_MIRROR_PARALLEL_DIRECTORIES, str(int(value)))
+
+    @property
+    def net_timeout(self) -> int:
+        return int(self.__get(Lftp.__SET_NET_TIMEOUT))
+
+    @net_timeout.setter
+    def net_timeout(self, value: int):
+        if value < 0:
+            raise ValueError("Network timeout must be zero or greater")
+        self.__set(Lftp.__SET_NET_TIMEOUT, str(value))
+
+    @property
+    def net_max_retries(self) -> int:
+        return int(self.__get(Lftp.__SET_NET_MAX_RETRIES))
+
+    @net_max_retries.setter
+    def net_max_retries(self, value: int):
+        if value < 0:
+            raise ValueError("Max retries must be zero or greater")
+        self.__set(Lftp.__SET_NET_MAX_RETRIES, str(value))
+
+    @property
+    def net_reconnect_interval_base(self) -> int:
+        return int(self.__get(Lftp.__SET_NET_RECONNECT_INTERVAL_BASE))
+
+    @net_reconnect_interval_base.setter
+    def net_reconnect_interval_base(self, value: int):
+        if value < 0:
+            raise ValueError("Reconnect interval base must be zero or greater")
+        self.__set(Lftp.__SET_NET_RECONNECT_INTERVAL_BASE, str(value))
+
+    @property
+    def net_reconnect_interval_multiplier(self) -> int:
+        return int(self.__get(Lftp.__SET_NET_RECONNECT_INTERVAL_MULTIPLIER))
+
+    @net_reconnect_interval_multiplier.setter
+    def net_reconnect_interval_multiplier(self, value: int):
+        if value < 0:
+            raise ValueError("Reconnect interval multiplier must be zero or greater")
+        self.__set(Lftp.__SET_NET_RECONNECT_INTERVAL_MULTIPLIER, str(value))
 
     def status(self) -> List[LftpJobStatus]:
         """

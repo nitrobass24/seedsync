@@ -23,6 +23,13 @@ export interface Lftp {
   num_max_total_connections: number | null;
   use_temp_file: boolean | null;
   net_limit_rate: string | null;
+  net_socket_buffer: number | null;
+  pget_min_chunk_size: string | null;
+  mirror_parallel_directories: boolean | null;
+  net_timeout: number | null;
+  net_max_retries: number | null;
+  net_reconnect_interval_base: number | null;
+  net_reconnect_interval_multiplier: number | null;
 }
 
 export interface Controller {
@@ -74,6 +81,13 @@ export const DEFAULT_LFTP: Lftp = {
   num_max_total_connections: null,
   use_temp_file: null,
   net_limit_rate: null,
+  net_socket_buffer: null,
+  pget_min_chunk_size: null,
+  mirror_parallel_directories: null,
+  net_timeout: null,
+  net_max_retries: null,
+  net_reconnect_interval_base: null,
+  net_reconnect_interval_multiplier: null,
 };
 
 export const DEFAULT_CONTROLLER: Controller = {
