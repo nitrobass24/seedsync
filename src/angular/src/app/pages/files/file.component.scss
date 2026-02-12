@@ -6,7 +6,7 @@
 
 /* selected file */
 .file.selected {
-    background-color: $secondary-color;
+    background-color: var(--ss-secondary);
 }
 
 /* content */
@@ -59,7 +59,7 @@
             flex-direction: column;
 
             .details-text {
-                color: darkgray;
+                color: var(--ss-text-muted);
                 font-size: 80%;
                 line-height: 120%;
 
@@ -170,8 +170,8 @@
 
     .loader {
         display: none;
-        border: 5px solid white;
-        border-top: 5px solid $secondary-dark-color;
+        border: 5px solid var(--ss-loader-border);
+        border-top: 5px solid var(--ss-secondary-dark);
         border-radius: 50%;
         width: 25px;
         height: 25px;
@@ -186,8 +186,8 @@
     // Show loader icon when loading
     &.loading {
         opacity: 1.0;
-        background-color: $secondary-dark-color;
-        border-color: $secondary-darker-color;
+        background-color: var(--ss-secondary-dark);
+        border-color: var(--ss-secondary-darker);
 
         img {
             display: none;
@@ -208,13 +208,13 @@
 
 /* Delete confirmation dialog */
 .delete-confirmation {
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: var(--ss-overlay);
     padding: 15px;
     margin-top: 10px;
     border-radius: 4px;
 
     .confirmation-content {
-        background-color: white;
+        background-color: var(--ss-confirmation-bg);
         padding: 20px;
         border-radius: 4px;
 
@@ -242,7 +242,7 @@
 @media only screen and (min-width: $medium-min-width) {
     /* enable row hover */
     .file:not(.selected):hover {
-        background-color: $secondary-light-color;
+        background-color: var(--ss-secondary-light);
     }
 
     /* width */

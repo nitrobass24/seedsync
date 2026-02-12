@@ -1,5 +1,134 @@
 @use 'app/common/common' as *;
 
+// ── Light-mode custom properties (default) ──
+:root {
+    --ss-primary: #337BB7;
+    --ss-primary-dark: #2e6da4;
+    --ss-primary-light: #D7E7F4;
+    --ss-primary-lighter: #F6F6F6;
+    --ss-primary-active: #286090;
+
+    --ss-secondary: #79DFB6;
+    --ss-secondary-light: #C5F0DE;
+    --ss-secondary-dark: #32AD7B;
+    --ss-secondary-darker: #077F4F;
+
+    --ss-header-bg: #DDDDDD;
+    --ss-header-dark: #D3D3D3;
+
+    --ss-logo: #118247;
+
+    --ss-text: #212529;
+    --ss-text-muted: darkgray;
+    --ss-text-description: darkgrey;
+
+    --ss-bg: #ffffff;
+    --ss-bg-surface: #ffffff;
+    --ss-border: #ddd;
+
+    --ss-sidebar-selected-border: #6ac19e;
+
+    // File list header
+    --ss-file-header-bg: #000;
+    --ss-file-header-text: #fff;
+
+    // Delete confirmation
+    --ss-overlay: rgba(0, 0, 0, 0.5);
+    --ss-confirmation-bg: #ffffff;
+
+    // Log severity
+    --ss-log-debug: darkgray;
+    --ss-log-info: black;
+    --ss-log-warning-text: #8a6d3b;
+    --ss-log-warning-bg: #fcf8e3;
+    --ss-log-warning-border: #faebcc;
+    --ss-log-error-text: #a94442;
+    --ss-log-error-bg: #f2dede;
+    --ss-log-error-border: #ebccd1;
+
+    // Log connected divider
+    --ss-log-divider: #e3e3e3;
+    --ss-log-divider-bg: #f5f5f5;
+
+    // Settings option error
+    --ss-option-error-bg: #f2dede;
+    --ss-option-error-text: #a94442;
+    --ss-option-error-border: #a94442;
+
+    // Autoqueue action buttons
+    --ss-action-remove: red;
+    --ss-action-remove-border: darkred;
+    --ss-action-remove-active: darkred;
+    --ss-action-add: green;
+    --ss-action-add-border: darkgreen;
+    --ss-action-add-active: darkgreen;
+
+    // Button loader
+    --ss-loader-border: white;
+    --ss-loader-spin: #32AD7B;
+}
+
+// ── Dark-mode overrides ──
+[data-bs-theme="dark"] {
+    --ss-primary: #4a9fd8;
+    --ss-primary-dark: #3a7fb8;
+    --ss-primary-light: #1e2d3d;
+    --ss-primary-lighter: #2a2a2a;
+    --ss-primary-active: #3580b0;
+
+    --ss-secondary: #5cbf96;
+    --ss-secondary-light: #1a3d2e;
+    --ss-secondary-dark: #3ab88a;
+    --ss-secondary-darker: #1a9e6a;
+
+    --ss-header-bg: #2b2b2b;
+    --ss-header-dark: #333333;
+
+    --ss-logo: #3ec97d;
+
+    --ss-text: #e0e0e0;
+    --ss-text-muted: #888888;
+    --ss-text-description: #999999;
+
+    --ss-bg: #1a1a1a;
+    --ss-bg-surface: #242424;
+    --ss-border: #444;
+
+    --ss-sidebar-selected-border: #3aaa7e;
+
+    --ss-file-header-bg: #333;
+    --ss-file-header-text: #e0e0e0;
+
+    --ss-overlay: rgba(0, 0, 0, 0.7);
+    --ss-confirmation-bg: #2a2a2a;
+
+    --ss-log-debug: #888888;
+    --ss-log-info: #e0e0e0;
+    --ss-log-warning-text: #e0c56e;
+    --ss-log-warning-bg: #3a3520;
+    --ss-log-warning-border: #5a4e2a;
+    --ss-log-error-text: #e87c7a;
+    --ss-log-error-bg: #3a2020;
+    --ss-log-error-border: #5a3030;
+
+    --ss-log-divider: #444;
+    --ss-log-divider-bg: #2a2a2a;
+
+    --ss-option-error-bg: #3a2020;
+    --ss-option-error-text: #e87c7a;
+    --ss-option-error-border: #5a3030;
+
+    --ss-action-remove: #cc3333;
+    --ss-action-remove-border: #992222;
+    --ss-action-remove-active: #992222;
+    --ss-action-add: #22aa44;
+    --ss-action-add-border: #118833;
+    --ss-action-add-active: #118833;
+
+    --ss-loader-border: #444;
+    --ss-loader-spin: #3ab88a;
+}
+
 html {
     -ms-text-size-adjust: 100%;
     -webkit-text-size-adjust: 100%;
@@ -11,6 +140,8 @@ html, body {
     font-size: 15px;
     line-height: 1.5;
     margin: 0;
+    color: var(--ss-text);
+    background-color: var(--ss-bg);
 }
 
 /* show the input search cancel button */

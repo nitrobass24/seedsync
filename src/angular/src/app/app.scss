@@ -23,7 +23,7 @@
 }
 
 #title-bar {
-  background-color: $header-color;
+  background-color: var(--ss-header-bg);
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -40,7 +40,7 @@
 }
 
 #top-sidebar {
-  background-color: $primary-light-color;
+  background-color: var(--ss-primary-light);
   width: $sidebar-width;
   height: 100%;
   position: fixed;
@@ -69,7 +69,7 @@
       font-size: 140%;
       cursor: default;
       user-select: none;
-      color: $logo-color;
+      color: var(--ss-logo);
       font-family: $logo-font;
     }
 
@@ -126,7 +126,7 @@
   text-align: start;
 
   &:active {
-    background-color: $header-dark-color;
+    background-color: var(--ss-header-dark);
   }
 }
 

@@ -40,23 +40,23 @@
         word-break: break-all;
 
         &.debug {
-            color: darkgray;
+            color: var(--ss-log-debug);
         }
 
         &.info {
-            color: black;
+            color: var(--ss-log-info);
         }
 
         &.warning {
-            color: #8a6d3b;
-            background-color: #fcf8e3;
-            border-color: #faebcc;
+            color: var(--ss-log-warning-text);
+            background-color: var(--ss-log-warning-bg);
+            border-color: var(--ss-log-warning-border);
         }
 
         &.error, &.critical {
-            color: #a94442;
-            background-color: #f2dede;
-            border-color: #ebccd1;
+            color: var(--ss-log-error-text);
+            background-color: var(--ss-log-error-bg);
+            border-color: var(--ss-log-error-border);
         }
 
         span.traceback {
@@ -75,11 +75,11 @@
         height: 12px;
         width: 100%;
         text-align: center;
-        border-bottom: 1px solid #e3e3e3;
+        border-bottom: 1px solid var(--ss-log-divider);
         margin-bottom: 15px;
 
         span {
-            background-color: #f5f5f5;
+            background-color: var(--ss-log-divider-bg);
             font-size: 10px;
             padding: 5px;
         }

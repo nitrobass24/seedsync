@@ -5,6 +5,7 @@ import { ROUTE_INFOS } from '../../routes';
 import { ServerCommandService } from '../../services/server/server-command.service';
 import { LoggerService } from '../../services/utils/logger.service';
 import { ConnectedService } from '../../services/utils/connected.service';
+import { ThemeService, Theme } from '../../services/utils/theme.service';
 
 @Component({
   selector: 'app-sidebar',
@@ -17,15 +18,23 @@ export class SidebarComponent implements OnInit {
   routeInfos = ROUTE_INFOS;
 
   public commandsEnabled = false;
+  public theme: Theme = 'light';
 
   private readonly _logger = inject(LoggerService);
   private readonly _connectedService = inject(ConnectedService);
   private readonly _commandService = inject(ServerCommandService);
+  private readonly _themeService = inject(ThemeService);
 
   ngOnInit() {
     this._connectedService.connected$.subscribe({
       next: (connected: boolean) => {
         this.commandsEnabled = connected;
+      }
+    });
+
+    this._themeService.theme$.subscribe({
+      next: (theme: Theme) => {
+        this.theme = theme;
       }
     });
   }
@@ -40,5 +49,9 @@ export class SidebarComponent implements OnInit {
         }
       }
     });
+  }
+
+  onToggleTheme() {
+    this._themeService.toggle();
   }
 }

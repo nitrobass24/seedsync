@@ -50,32 +50,32 @@
             }
 
             .button {
-                background-color: red;
-                border-color: darkred;
+                background-color: var(--ss-action-remove);
+                border-color: var(--ss-action-remove-border);
 
                 &:active {
-                    background-color: darkred;
+                    background-color: var(--ss-action-remove-active);
                 }
 
                 &[disabled] {
                     opacity: .65;
-                    background-color: red;
+                    background-color: var(--ss-action-remove);
                 }
             }
         }
 
         #add-pattern {
             .button {
-                background-color: green;
-                border-color: darkgreen;
+                background-color: var(--ss-action-add);
+                border-color: var(--ss-action-add-border);
 
                 &:active {
-                    background-color: darkgreen;
+                    background-color: var(--ss-action-add-active);
                 }
 
                 &[disabled] {
                     opacity: .65;
-                    background-color: green;
+                    background-color: var(--ss-action-add);
                 }
             }
 
