@@ -128,6 +128,20 @@ class Controller:
         self.__lftp.temp_file_name = "*" + Constants.LFTP_TEMP_FILE_SUFFIX
         if self.__context.config.lftp.net_limit_rate:
             self.__lftp.rate_limit = self.__context.config.lftp.net_limit_rate
+        if self.__context.config.lftp.net_socket_buffer is not None:
+            self.__lftp.net_socket_buffer = self.__context.config.lftp.net_socket_buffer
+        if self.__context.config.lftp.pget_min_chunk_size:
+            self.__lftp.min_chunk_size = self.__context.config.lftp.pget_min_chunk_size
+        if self.__context.config.lftp.mirror_parallel_directories is not None:
+            self.__lftp.mirror_parallel_directories = self.__context.config.lftp.mirror_parallel_directories
+        if self.__context.config.lftp.net_timeout is not None:
+            self.__lftp.net_timeout = self.__context.config.lftp.net_timeout
+        if self.__context.config.lftp.net_max_retries is not None:
+            self.__lftp.net_max_retries = self.__context.config.lftp.net_max_retries
+        if self.__context.config.lftp.net_reconnect_interval_base is not None:
+            self.__lftp.net_reconnect_interval_base = self.__context.config.lftp.net_reconnect_interval_base
+        if self.__context.config.lftp.net_reconnect_interval_multiplier is not None:
+            self.__lftp.net_reconnect_interval_multiplier = self.__context.config.lftp.net_reconnect_interval_multiplier
         self.__lftp.set_verbose_logging(self.__context.config.general.verbose)
 
         # Setup the scanners and scanner processes
@@ -193,6 +207,9 @@ class Controller:
 
         # Keep track of active move processes (staging -> final)
         self.__active_move_processes = []
+        # Track files that have been moved from staging to final location
+        # to prevent duplicate moves (e.g. when model re-detects DOWNLOADED after move)
+        self.__moved_file_names: Set[str] = set()
 
         self.__started = False
 
@@ -393,6 +410,11 @@ class Controller:
                 elif diff.change == ModelDiff.Change.UPDATED:
                     self.__model.update_file(diff.new_file)
 
+                # Clear move tracking when a file is re-queued for download
+                # so that a fresh download to staging will trigger a new move
+                if diff.new_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
+                    self.__moved_file_names.discard(diff.new_file.name)
+
                 # Detect if a file was just Downloaded
                 #   an Added file in Downloaded state
                 #   an Updated file transitioning to Downloaded state
@@ -583,6 +605,13 @@ class Controller:
         :param file_name:
         :return:
         """
+        # Skip if this file was already moved (prevents duplicate moves when
+        # model re-detects DOWNLOADED after a move completes)
+        if file_name in self.__moved_file_names:
+            self.logger.debug("Skipping move for {} - already moved".format(file_name))
+            return
+
+        self.__moved_file_names.add(file_name)
         process = MoveProcess(
             source_path=self.__context.config.controller.staging_path,
             dest_path=self.__context.config.lftp.local_path,
