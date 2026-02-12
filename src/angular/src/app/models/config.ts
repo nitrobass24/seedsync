@@ -31,6 +31,8 @@ export interface Controller {
   interval_ms_downloading_scan: number | null;
   extract_path: string | null;
   use_local_path_as_extract_path: boolean | null;
+  staging_path: string | null;
+  use_staging: boolean | null;
 }
 
 export interface Web {
@@ -80,6 +82,8 @@ export const DEFAULT_CONTROLLER: Controller = {
   interval_ms_downloading_scan: null,
   extract_path: null,
   use_local_path_as_extract_path: null,
+  staging_path: null,
+  use_staging: null,
 };
 
 export const DEFAULT_WEB: Web = {

@@ -14,6 +14,7 @@ This is the modernized fork of `ipsingh06/seedsync`, with updated dependencies a
 - Sync files quickly using LFTP
 - Queue or auto-queue transfers by pattern
 - Extract archives after download
+- Stage downloads on a fast disk, then move to final location
 - Manage local and remote deletes
 - Monitor transfer status from the web UI
 

@@ -204,6 +204,25 @@ export const OPTIONS_CONTEXT_AUTOQUEUE: IOptionsContext = {
   ],
 };
 
+export const OPTIONS_CONTEXT_STAGING: IOptionsContext = {
+  header: 'Staging Directory',
+  id: 'staging',
+  options: [
+    {
+      type: OptionType.Checkbox,
+      label: 'Use staging directory',
+      valuePath: ['controller', 'use_staging'],
+      description: 'Download files to a staging directory before moving to the final location',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Staging Path',
+      valuePath: ['controller', 'staging_path'],
+      description: 'Temporary directory where files are downloaded before being moved',
+    },
+  ],
+};
+
 export const OPTIONS_CONTEXT_EXTRACT: IOptionsContext = {
   header: 'Archive Extraction',
   id: 'extraction',
