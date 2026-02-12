@@ -131,9 +131,12 @@ class Controller:
         self.__lftp.set_verbose_logging(self.__context.config.general.verbose)
 
         # Setup the scanners and scanner processes
+        # ActiveScanner scans the effective path (staging when enabled) for in-progress downloads
         self.__active_scanner = ActiveScanner(self.__effective_local_path)
+        # LocalScanner always scans the final local_path so moved files are detected
+        # (ActiveScanner handles the staging path during downloads)
         self.__local_scanner = LocalScanner(
-            local_path=self.__effective_local_path,
+            local_path=self.__context.config.lftp.local_path,
             use_temp_file=self.__context.config.lftp.use_temp_file
         )
         self.__remote_scanner = RemoteScanner(
@@ -514,7 +517,7 @@ class Controller:
                     continue
                 else:
                     process = DeleteLocalProcess(
-                        local_path=self.__effective_local_path,
+                        local_path=self.__context.config.lftp.local_path,
                         file_name=file.name
                     )
                     process.set_multiprocessing_logger(self.__mp_logger)
