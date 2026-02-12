@@ -23,7 +23,7 @@ export interface Lftp {
   num_max_total_connections: number | null;
   use_temp_file: boolean | null;
   net_limit_rate: string | null;
-  net_socket_buffer: number | null;
+  net_socket_buffer: string | null;
   pget_min_chunk_size: string | null;
   mirror_parallel_directories: boolean | null;
   net_timeout: number | null;

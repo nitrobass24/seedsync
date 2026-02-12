@@ -193,7 +193,7 @@ class TestConfig(unittest.TestCase):
             "num_max_total_connections": "7",
             "use_temp_file": "True",
             "net_limit_rate": "500K",
-            "net_socket_buffer": "8388608",
+            "net_socket_buffer": "8M",
             "pget_min_chunk_size": "100M",
             "mirror_parallel_directories": "True",
             "net_timeout": "20",
@@ -217,7 +217,7 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(7, lftp.num_max_total_connections)
         self.assertEqual(True, lftp.use_temp_file)
         self.assertEqual("500K", lftp.net_limit_rate)
-        self.assertEqual(8388608, lftp.net_socket_buffer)
+        self.assertEqual("8M", lftp.net_socket_buffer)
         self.assertEqual("100M", lftp.pget_min_chunk_size)
         self.assertEqual(True, lftp.mirror_parallel_directories)
         self.assertEqual(20, lftp.net_timeout)
@@ -241,7 +241,6 @@ class TestConfig(unittest.TestCase):
                               "num_max_connections_per_dir_file",
                               "num_max_total_connections",
                               "use_temp_file",
-                              "net_socket_buffer",
                               "mirror_parallel_directories",
                               "net_timeout",
                               "net_max_retries",
@@ -260,6 +259,12 @@ class TestConfig(unittest.TestCase):
         empty_rate_dict["net_limit_rate"] = ""
         lftp_empty_rate = Config.Lftp.from_dict(empty_rate_dict)
         self.assertEqual("", lftp_empty_rate.net_limit_rate)
+
+        # net_socket_buffer allows empty values and suffixed values
+        empty_buf_dict = dict(good_dict)
+        empty_buf_dict["net_socket_buffer"] = ""
+        lftp_empty_buf = Config.Lftp.from_dict(empty_buf_dict)
+        self.assertEqual("", lftp_empty_buf.net_socket_buffer)
 
         # pget_min_chunk_size allows empty values
         empty_chunk_dict = dict(good_dict)
@@ -283,7 +288,6 @@ class TestConfig(unittest.TestCase):
         self.check_bad_value_error(Config.Lftp, good_dict, "num_max_total_connections", "-1")
         self.check_bad_value_error(Config.Lftp, good_dict, "use_temp_file", "-1")
         self.check_bad_value_error(Config.Lftp, good_dict, "use_temp_file", "SomeString")
-        self.check_bad_value_error(Config.Lftp, good_dict, "net_socket_buffer", "-1")
         self.check_bad_value_error(Config.Lftp, good_dict, "mirror_parallel_directories", "-1")
         self.check_bad_value_error(Config.Lftp, good_dict, "mirror_parallel_directories", "SomeString")
         self.check_bad_value_error(Config.Lftp, good_dict, "net_timeout", "-1")
@@ -499,7 +503,7 @@ class TestConfig(unittest.TestCase):
         config.lftp.num_max_total_connections = 4
         config.lftp.use_temp_file = True
         config.lftp.net_limit_rate = "500K"
-        config.lftp.net_socket_buffer = 8388608
+        config.lftp.net_socket_buffer = "8M"
         config.lftp.pget_min_chunk_size = "100M"
         config.lftp.mirror_parallel_directories = True
         config.lftp.net_timeout = 20
@@ -544,7 +548,7 @@ class TestConfig(unittest.TestCase):
         num_max_total_connections = 4
         use_temp_file = True
         net_limit_rate = 500K
-        net_socket_buffer = 8388608
+        net_socket_buffer = 8M
         pget_min_chunk_size = 100M
         mirror_parallel_directories = True
         net_timeout = 20
@@ -704,7 +708,7 @@ class TestConfig(unittest.TestCase):
         config.lftp.num_max_total_connections = 0
         config.lftp.use_temp_file = False
         config.lftp.net_limit_rate = ""
-        config.lftp.net_socket_buffer = 8388608
+        config.lftp.net_socket_buffer = "8M"
         config.lftp.pget_min_chunk_size = "100M"
         config.lftp.mirror_parallel_directories = True
         config.lftp.net_timeout = 20
@@ -796,7 +800,7 @@ class TestConfig(unittest.TestCase):
         config.lftp.num_max_total_connections = 0
         config.lftp.use_temp_file = False
         config.lftp.net_limit_rate = ""
-        config.lftp.net_socket_buffer = 8388608
+        config.lftp.net_socket_buffer = "8M"
         config.lftp.pget_min_chunk_size = "100M"
         config.lftp.mirror_parallel_directories = True
         config.lftp.net_timeout = 20

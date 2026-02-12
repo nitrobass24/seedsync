@@ -232,7 +232,8 @@ export const OPTIONS_CONTEXT_ADVANCED_LFTP: IOptionsContext = {
       label: 'Socket Buffer Size',
       valuePath: ['lftp', 'net_socket_buffer'],
       description:
-        'Size of the socket buffer in bytes. Larger values improve throughput on fast links.\n' +
+        'Socket buffer size. Supports suffixes: K, M (e.g. 8M, 16M). ' +
+        'Larger values improve throughput on fast links.\n' +
         '(net:socket-buffer)',
     },
     {

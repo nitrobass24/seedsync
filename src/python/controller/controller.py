@@ -128,7 +128,7 @@ class Controller:
         self.__lftp.temp_file_name = "*" + Constants.LFTP_TEMP_FILE_SUFFIX
         if self.__context.config.lftp.net_limit_rate:
             self.__lftp.rate_limit = self.__context.config.lftp.net_limit_rate
-        if self.__context.config.lftp.net_socket_buffer is not None:
+        if self.__context.config.lftp.net_socket_buffer:
             self.__lftp.net_socket_buffer = self.__context.config.lftp.net_socket_buffer
         if self.__context.config.lftp.pget_min_chunk_size:
             self.__lftp.min_chunk_size = self.__context.config.lftp.pget_min_chunk_size

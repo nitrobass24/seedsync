@@ -249,7 +249,7 @@ class Config(Persist):
         num_max_total_connections = PROP("num_max_total_connections", Checkers.int_non_negative, Converters.int)
         use_temp_file = PROP("use_temp_file", Checkers.null, Converters.bool)
         net_limit_rate = PROP("net_limit_rate", Checkers.string_allow_empty, Converters.null)
-        net_socket_buffer = PROP("net_socket_buffer", Checkers.int_non_negative, Converters.int)
+        net_socket_buffer = PROP("net_socket_buffer", Checkers.string_allow_empty, Converters.null)
         pget_min_chunk_size = PROP("pget_min_chunk_size", Checkers.string_allow_empty, Converters.null)
         mirror_parallel_directories = PROP("mirror_parallel_directories", Checkers.null, Converters.bool)
         net_timeout = PROP("net_timeout", Checkers.int_non_negative, Converters.int)
