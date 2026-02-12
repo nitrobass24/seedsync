@@ -388,6 +388,15 @@ class Controller:
                     self.__persist.downloaded_file_names.add(diff.new_file.name)
                     self.__model_builder.set_downloaded_files(self.__persist.downloaded_file_names)
 
+                    # Move from staging to final location for non-extractable files
+                    # (extractable files are moved after extraction completes)
+                    if self.__context.config.controller.use_staging and \
+                            self.__context.config.controller.staging_path:
+                        will_auto_extract = self.__context.config.autoqueue.auto_extract and \
+                                            diff.new_file.is_extractable
+                        if not will_auto_extract:
+                            self.__spawn_move_process(diff.new_file.name)
+
             # Prune the extracted files list of any files that were deleted locally
             # This prevents these files from going to EXTRACTED state if they are re-downloaded
             remove_extracted_file_names = set()
