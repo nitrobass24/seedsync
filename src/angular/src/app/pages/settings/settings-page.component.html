@@ -26,6 +26,28 @@
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_DISCOVERY">
       </ng-container>
 
+      <div class="card">
+        <h3 class="card-header collapsible-header" (click)="toggleAdvancedLftp()">
+          {{ OPTIONS_CONTEXT_ADVANCED_LFTP.header }}
+          <span class="collapse-indicator">{{ advancedLftpCollapsed ? '&#9654;' : '&#9660;' }}</span>
+        </h3>
+        @if (!advancedLftpCollapsed) {
+          <div class="card-body">
+            @for (option of OPTIONS_CONTEXT_ADVANCED_LFTP.options; track option.label) {
+              <div>
+                <app-option
+                  [type]="option.type"
+                  [label]="option.label"
+                  [description]="option.description"
+                  [value]="getOptionValue(config$ | async, option.valuePath)"
+                  (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
+                </app-option>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
       <ng-container
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_OTHER">
       </ng-container>

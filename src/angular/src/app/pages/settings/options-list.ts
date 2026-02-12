@@ -223,6 +223,69 @@ export const OPTIONS_CONTEXT_STAGING: IOptionsContext = {
   ],
 };
 
+export const OPTIONS_CONTEXT_ADVANCED_LFTP: IOptionsContext = {
+  header: 'Advanced LFTP',
+  id: 'advanced-lftp',
+  options: [
+    {
+      type: OptionType.Text,
+      label: 'Socket Buffer Size',
+      valuePath: ['lftp', 'net_socket_buffer'],
+      description:
+        'Size of the socket buffer in bytes. Larger values improve throughput on fast links.\n' +
+        '(net:socket-buffer)',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Min Chunk Size',
+      valuePath: ['lftp', 'pget_min_chunk_size'],
+      description:
+        'Minimum chunk size for parallel file downloads. Supports suffixes: K, M, G (e.g. 100M).\n' +
+        '(pget:min-chunk-size)',
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Parallel Directories',
+      valuePath: ['lftp', 'mirror_parallel_directories'],
+      description:
+        'Download directory contents in parallel rather than sequentially.\n' +
+        '(mirror:parallel-directories)',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Network Timeout (s)',
+      valuePath: ['lftp', 'net_timeout'],
+      description:
+        'Seconds to wait for network operations before timing out.\n' +
+        '(net:timeout)',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Max Retries',
+      valuePath: ['lftp', 'net_max_retries'],
+      description:
+        'Maximum number of retries on network errors. 0 for unlimited.\n' +
+        '(net:max-retries)',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Reconnect Interval Base (s)',
+      valuePath: ['lftp', 'net_reconnect_interval_base'],
+      description:
+        'Base delay in seconds before reconnecting after a failure.\n' +
+        '(net:reconnect-interval-base)',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Reconnect Interval Multiplier',
+      valuePath: ['lftp', 'net_reconnect_interval_multiplier'],
+      description:
+        'Multiplier applied to the reconnect delay after each consecutive failure.\n' +
+        '(net:reconnect-interval-multiplier)',
+    },
+  ],
+};
+
 export const OPTIONS_CONTEXT_EXTRACT: IOptionsContext = {
   header: 'Archive Extraction',
   id: 'extraction',

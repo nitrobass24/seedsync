@@ -28,6 +28,22 @@
                 .card-body {
                     padding: 10px 0;
                 }
+
+                .collapsible-header {
+                    cursor: pointer;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+
+                    &:hover {
+                        opacity: 0.8;
+                    }
+
+                    .collapse-indicator {
+                        font-size: 70%;
+                        margin-inline-start: 8px;
+                    }
+                }
             }
         }
 
