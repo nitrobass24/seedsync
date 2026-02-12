@@ -1,7 +1,8 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import os
 from abc import ABC, abstractmethod
-from typing import List, Callable
+from typing import List, Callable, Set
 from threading import Lock
 from queue import Queue
 from enum import Enum
@@ -104,6 +105,8 @@ class Controller:
         # Determine effective local path: use staging_path when staging is enabled
         if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
             self.__effective_local_path = self.__context.config.controller.staging_path
+            # Ensure the staging directory exists so scanners don't crash
+            os.makedirs(self.__effective_local_path, exist_ok=True)
         else:
             self.__effective_local_path = self.__context.config.lftp.local_path
 
@@ -179,6 +182,8 @@ class Controller:
         # Keep track of active files
         self.__active_downloading_file_names = []
         self.__active_extracting_file_names = []
+        # Track previous cycle's downloading files to detect completed downloads
+        self.__prev_downloading_file_names: Set[str] = set()
 
         # Keep track of active command processes
         self.__active_command_processes = []
@@ -318,18 +323,33 @@ class Controller:
 
         # Update list of active file names
         if lftp_statuses is not None:
-            self.__active_downloading_file_names = [
+            current_downloading = set(
                 s.name for s in lftp_statuses if s.state == LftpJobStatus.State.RUNNING
-            ]
+            )
+            # Detect files that just completed downloading (were in previous cycle but not now)
+            just_completed = self.__prev_downloading_file_names - current_downloading
+            if just_completed:
+                for name in just_completed:
+                    self.logger.info("Download completed (LFTP job finished): {}".format(name))
+                # Force a local scan so the completed file is picked up
+                self.__local_scan_process.force_scan()
+
+            self.__active_downloading_file_names = list(current_downloading)
+            self.__prev_downloading_file_names = current_downloading
+        else:
+            just_completed = set()
+
         if latest_extract_statuses is not None:
             self.__active_extracting_file_names = [
                 s.name for s in latest_extract_statuses.statuses if s.state == ExtractStatus.State.EXTRACTING
             ]
 
         # Update the active scanner's state
-        self.__active_scanner.set_active_files(
-            self.__active_downloading_file_names + self.__active_extracting_file_names
-        )
+        # Include just-completed downloads for one extra scan cycle so their final
+        # local file sizes are captured before they leave the active scanner
+        active_files = self.__active_downloading_file_names + self.__active_extracting_file_names
+        active_files += list(just_completed)
+        self.__active_scanner.set_active_files(active_files)
 
         # Update model builder state
         if latest_remote_scan is not None:
@@ -387,6 +407,15 @@ class Controller:
                 if downloaded:
                     self.__persist.downloaded_file_names.add(diff.new_file.name)
                     self.__model_builder.set_downloaded_files(self.__persist.downloaded_file_names)
+
+                    # Move from staging to final location for non-extractable files
+                    # (extractable files are moved after extraction completes)
+                    if self.__context.config.controller.use_staging and \
+                            self.__context.config.controller.staging_path:
+                        will_auto_extract = self.__context.config.autoqueue.auto_extract and \
+                                            diff.new_file.is_extractable
+                        if not will_auto_extract:
+                            self.__spawn_move_process(diff.new_file.name)
 
             # Prune the extracted files list of any files that were deleted locally
             # This prevents these files from going to EXTRACTED state if they are re-downloaded

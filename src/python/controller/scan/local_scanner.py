@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import os
 import logging
 from typing import List
 
@@ -13,6 +14,7 @@ class LocalScanner(IScanner):
     Scanner implementation to scan the local filesystem
     """
     def __init__(self, local_path: str, use_temp_file: bool):
+        self.__local_path = local_path
         self.__scanner = SystemScanner(local_path)
         if use_temp_file:
             self.__scanner.set_lftp_temp_suffix(Constants.LFTP_TEMP_FILE_SUFFIX)
@@ -24,6 +26,11 @@ class LocalScanner(IScanner):
 
     @overrides(IScanner)
     def scan(self) -> List[SystemFile]:
+        # If the scan path doesn't exist yet (e.g. staging directory not created),
+        # return empty results instead of crashing the scanner process
+        if not os.path.isdir(self.__local_path):
+            self.logger.warning("Scan path does not exist: {}".format(self.__local_path))
+            return []
         try:
             result = self.__scanner.scan()
         except SystemScannerError:
