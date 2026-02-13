@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.12.0] - 2026-02-13
+
+### Added
+- **Staging directory** — Downloads land on a fast staging disk (e.g. NVMe/SSD) first, then automatically move to the final destination after completion. (#36)
+- **Dark mode** — Theme toggle with a 3-surface elevation system and semantic color tokens. (#37, #51)
+- **Advanced LFTP settings** — Exposes tunable LFTP options in Settings — parallel connections, max total connections (0 = unlimited), and socket buffer size with human-readable suffixes (`8M`, `16M`). (#40, #44)
+- **Remote server diagnostics** — Runs diagnostics against the remote seedbox on first connection, surfacing server environment info. (#41)
+- **Graceful config upgrades** — New config keys are automatically backfilled with defaults and saved to disk — no manual edits needed after upgrading. (#45)
+
+### Changed
+- **Settings layout** — Moved File Discovery below Archive Extraction in the left column. (#48)
+
+### Fixed
+- Fix crash when a remote file is removed during sync (#49)
+- Preserve DOWNLOADED state after remote file is auto-deleted (#50)
+- Fix dashboard status sort: groups ordered logically, oldest-first within each group (#47)
+
+---
+
 ## [0.11.3] - 2026-02-09
 
 ### Fixed
