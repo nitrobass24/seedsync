@@ -412,7 +412,8 @@ class Controller:
 
                 # Clear move tracking when a file is re-queued for download
                 # so that a fresh download to staging will trigger a new move
-                if diff.new_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
+                if diff.new_file is not None and \
+                        diff.new_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
                     self.__moved_file_names.discard(diff.new_file.name)
 
                 # Detect if a file was just Downloaded
