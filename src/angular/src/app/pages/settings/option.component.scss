@@ -48,3 +48,26 @@ input[type="checkbox"] {
 input[type="text"] {
     width: 100%;
 }
+
+// ── Dark mode refinements ──
+:host-context([data-bs-theme="dark"]) {
+    input[type="text"] {
+        background-color: #1D222B;
+        border: 1px solid #252C37;
+        color: #E6EAF2;
+
+        &::placeholder {
+            color: #525A6B;
+        }
+
+        &:focus {
+            border-color: #4C8DFF;
+            outline: none;
+            box-shadow: none;
+        }
+    }
+
+    input[type="checkbox"] {
+        accent-color: #3ECF8E;
+    }
+}

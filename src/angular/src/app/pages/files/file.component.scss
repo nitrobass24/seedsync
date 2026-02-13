@@ -271,3 +271,126 @@
     .content .eta {display: inline;}
     .content .speed .speed-eta {display: none;}
 }
+
+// ── Dark mode refinements ──
+@keyframes subtlePulse {
+    0%   { opacity: 0.9; }
+    50%  { opacity: 1; }
+    100% { opacity: 0.9; }
+}
+
+:host-context([data-bs-theme="dark"]) {
+    // Row hover with transition
+    .file:not(.selected) {
+        transition: background 120ms ease;
+    }
+    .file:not(.selected):hover {
+        background-color: var(--ss-surface-hover, #252C37);
+    }
+
+    // Selected file - muted for dark
+    .file.selected {
+        background-color: #252C37;
+    }
+
+    // ── Typography hierarchy ──
+    .content .name .text .title {
+        color: #E6EAF2;
+    }
+
+    .content .eta {
+        color: #C7CEDB;
+        font-weight: 500;
+    }
+
+    .content .speed {
+        color: #8A93A6;
+    }
+
+    .content .size_info {
+        color: #6B7280;
+    }
+
+    .content .status .text {
+        color: #8A93A6;
+    }
+
+    // ── File type icons ──
+    .content .name > img {
+        filter: brightness(0) saturate(100%) invert(85%) sepia(5%) saturate(400%) hue-rotate(190deg);
+    }
+
+    // ── Progress bar redesign ──
+    .content .progress {
+        background-color: #2A3140;
+        border-radius: 6px;
+        overflow: hidden;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+    }
+
+    .content .progress-bar {
+        background-color: #4C8DFF;
+        border-radius: 6px;
+        // Remove Bootstrap stripe/animation in dark mode
+        background-image: none;
+        animation: none;
+
+        // Subtle pulse for active downloads
+        &.progress-bar-animated {
+            background-image: none;
+            animation: subtlePulse 2.4s infinite;
+        }
+    }
+
+    // ── Status icon semantic tinting ──
+    .content .status {
+        img#downloading {
+            filter: brightness(0) saturate(100%) invert(52%) sepia(88%) saturate(1200%) hue-rotate(203deg) brightness(102%) contrast(101%);
+        }
+        img#downloaded {
+            filter: brightness(0) saturate(100%) invert(72%) sepia(30%) saturate(800%) hue-rotate(105deg) brightness(95%) contrast(90%);
+        }
+        img#queued {
+            filter: brightness(0) saturate(100%) invert(70%) sepia(60%) saturate(600%) hue-rotate(5deg) brightness(100%) contrast(95%);
+        }
+        img#extracted {
+            filter: brightness(0) saturate(100%) invert(72%) sepia(30%) saturate(800%) hue-rotate(105deg) brightness(95%) contrast(90%);
+        }
+        img#stopped {
+            filter: brightness(0) saturate(100%) invert(85%) sepia(5%) saturate(400%) hue-rotate(190deg);
+        }
+        img#default-remote {
+            filter: brightness(0) saturate(100%) invert(60%) sepia(5%) saturate(300%) hue-rotate(190deg);
+        }
+        img#deleted {
+            filter: brightness(0) saturate(100%) invert(50%) sepia(40%) saturate(800%) hue-rotate(320deg) brightness(100%) contrast(95%);
+        }
+        img#extracting {
+            filter: brightness(0) saturate(100%) invert(52%) sepia(88%) saturate(1200%) hue-rotate(203deg) brightness(102%) contrast(101%);
+        }
+    }
+
+    // ── Dim 0% progress rows ──
+    .file:has(.progress-bar[aria-valuenow="0"]) {
+        opacity: 0.85;
+    }
+
+    // ── Action buttons ──
+    .actions .button {
+        background-color: #1D222B;
+        border-color: #252C37;
+
+        &:active {
+            background-color: #252C37;
+        }
+
+        img {
+            filter: brightness(0) saturate(100%) invert(85%) sepia(5%) saturate(400%) hue-rotate(190deg);
+        }
+    }
+
+    // ── Delete confirmation ──
+    .delete-confirmation .confirmation-content {
+        border: 1px solid #252C37;
+    }
+}

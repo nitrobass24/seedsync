@@ -85,3 +85,31 @@
         }
     }
 }
+
+// ── Dark mode refinements ──
+:host-context([data-bs-theme="dark"]) {
+    #autoqueue #controls {
+        .pattern .text {
+            color: #C7CEDB;
+        }
+
+        #add-pattern input {
+            background-color: #1D222B;
+            border: 1px solid #252C37;
+            color: #E6EAF2;
+
+            &::placeholder {
+                color: #525A6B;
+            }
+
+            &:focus {
+                border-color: #4C8DFF;
+                box-shadow: none;
+            }
+        }
+
+        .button span {
+            color: white;
+        }
+    }
+}

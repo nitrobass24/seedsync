@@ -162,3 +162,25 @@
     display: none;
   }
 }
+
+// ── Dark mode refinements ──
+:host-context([data-bs-theme="dark"]) {
+  #top-sidebar {
+    border-right: 1px solid #252C37;
+    box-shadow: none;
+  }
+
+  #outside-sidebar {
+    opacity: 0.6;
+  }
+
+  #title-bar {
+    border-bottom: 1px solid #252C37;
+  }
+
+  #sidebar-btn-open {
+    &:active {
+      background-color: #252C37;
+    }
+  }
+}

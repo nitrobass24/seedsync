@@ -69,64 +69,100 @@
 }
 
 // ── Dark-mode overrides ──
+// 3-surface elevation system for proper luminance hierarchy
 [data-bs-theme="dark"] {
-    --ss-primary: #4a9fd8;
-    --ss-primary-dark: #3a7fb8;
-    --ss-primary-light: #1e2d3d;
-    --ss-primary-lighter: #2a2a2a;
-    --ss-primary-active: #3580b0;
+    // ── Elevation surfaces ──
+    --ss-surface-app: #0F1115;
+    --ss-surface-primary: #161A21;
+    --ss-surface-secondary: #1D222B;
+    --ss-surface-hover: #252C37;
 
-    --ss-secondary: #5cbf96;
-    --ss-secondary-light: #1a3d2e;
-    --ss-secondary-dark: #3ab88a;
-    --ss-secondary-darker: #1a9e6a;
+    // ── Brand colors (muted for dark) ──
+    --ss-primary: #4C8DFF;
+    --ss-primary-dark: #3A6FCC;
+    --ss-primary-light: #151922;
+    --ss-primary-lighter: #1D222B;
+    --ss-primary-active: #3A6FCC;
 
-    --ss-header-bg: #2b2b2b;
-    --ss-header-dark: #333333;
+    --ss-secondary: #3ECF8E;
+    --ss-secondary-light: #252C37;
+    --ss-secondary-dark: #3ECF8E;
+    --ss-secondary-darker: #2BA86E;
 
-    --ss-logo: #3ec97d;
+    // ── Header / toolbar ──
+    --ss-header-bg: #161A21;
+    --ss-header-dark: #252C37;
 
-    --ss-text: #e0e0e0;
-    --ss-text-muted: #888888;
-    --ss-text-description: #999999;
+    --ss-logo: #3ECF8E;
 
-    --ss-bg: #1a1a1a;
-    --ss-bg-surface: #242424;
-    --ss-border: #444;
+    // ── Typography hierarchy ──
+    --ss-text: #E6EAF2;
+    --ss-text-muted: #8A93A6;
+    --ss-text-description: #6B7280;
+    --ss-text-eta: #C7CEDB;
+    --ss-text-speed: #8A93A6;
+    --ss-text-label: #525A6B;
 
-    --ss-sidebar-selected-border: #3aaa7e;
+    // ── Surfaces & borders ──
+    --ss-bg: #0F1115;
+    --ss-bg-surface: #161A21;
+    --ss-border: #252C37;
 
-    --ss-file-header-bg: #333;
-    --ss-file-header-text: #e0e0e0;
+    // ── Sidebar ──
+    --ss-sidebar-bg: #151922;
+    --ss-sidebar-selected-border: #3ECF8E;
 
+    // ── File list header ──
+    --ss-file-header-bg: #161A21;
+    --ss-file-header-text: #8A93A6;
+
+    // ── Overlays ──
     --ss-overlay: rgba(0, 0, 0, 0.7);
-    --ss-confirmation-bg: #2a2a2a;
+    --ss-confirmation-bg: #1D222B;
 
-    --ss-log-debug: #888888;
-    --ss-log-info: #e0e0e0;
-    --ss-log-warning-text: #e0c56e;
-    --ss-log-warning-bg: #3a3520;
-    --ss-log-warning-border: #5a4e2a;
-    --ss-log-error-text: #e87c7a;
-    --ss-log-error-bg: #3a2020;
-    --ss-log-error-border: #5a3030;
+    // ── Status semantic colors ──
+    --ss-status-downloading: #4C8DFF;
+    --ss-status-completed: #3ECF8E;
+    --ss-status-queued: #F5A524;
+    --ss-status-error: #FF5C7A;
 
-    --ss-log-divider: #444;
-    --ss-log-divider-bg: #2a2a2a;
+    // ── Progress bar ──
+    --ss-progress-track: #2A3140;
+    --ss-progress-fill: #4C8DFF;
 
-    --ss-option-error-bg: #3a2020;
-    --ss-option-error-text: #e87c7a;
-    --ss-option-error-border: #5a3030;
+    // ── Log severity ──
+    --ss-log-debug: #525A6B;
+    --ss-log-info: #C7CEDB;
+    --ss-log-warning-text: #F5A524;
+    --ss-log-warning-bg: #1D1A10;
+    --ss-log-warning-border: #3A3118;
+    --ss-log-error-text: #FF5C7A;
+    --ss-log-error-bg: #1D1015;
+    --ss-log-error-border: #3A1822;
 
-    --ss-action-remove: #cc3333;
-    --ss-action-remove-border: #992222;
-    --ss-action-remove-active: #992222;
-    --ss-action-add: #22aa44;
-    --ss-action-add-border: #118833;
-    --ss-action-add-active: #118833;
+    // ── Log divider ──
+    --ss-log-divider: #252C37;
+    --ss-log-divider-bg: #161A21;
 
-    --ss-loader-border: #444;
-    --ss-loader-spin: #3ab88a;
+    // ── Settings option error ──
+    --ss-option-error-bg: #1D1015;
+    --ss-option-error-text: #FF5C7A;
+    --ss-option-error-border: #3A1822;
+
+    // ── Action buttons ──
+    --ss-action-remove: #FF5C7A;
+    --ss-action-remove-border: #CC4A62;
+    --ss-action-remove-active: #CC4A62;
+    --ss-action-add: #3ECF8E;
+    --ss-action-add-border: #2BA86E;
+    --ss-action-add-active: #2BA86E;
+
+    // ── Loader ──
+    --ss-loader-border: #252C37;
+    --ss-loader-spin: #3ECF8E;
+
+    // ── Icons ──
+    --ss-icon-default: #C7CEDB;
 }
 
 html {
