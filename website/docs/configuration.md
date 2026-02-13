@@ -22,7 +22,7 @@ Open the UI and fill out the Settings page:
 ## Connections
 
 - **Max Parallel Downloads**: Number of items downloading simultaneously
-- **Max Total Connections**: Overall connection limit
+- **Max Total Connections**: Overall connection limit (`0` = unlimited)
 - **Max Connections Per File**: Per-file connection count for single files and directories
 - **Max Parallel Files**: Number of files fetched in parallel within a directory download
 - **Rename unfinished files**: Downloading files get a `.lftp` extension
@@ -80,6 +80,18 @@ Then set **Staging Path** to `/staging` in Settings.
 | Port | Description |
 | --- | --- |
 | `8800` | Web UI |
+
+## Advanced LFTP
+
+These settings are collapsed by default under **Advanced LFTP** in the Settings page. They map directly to LFTP configuration options and are useful for tuning performance on fast or unreliable links.
+
+- **Socket Buffer Size**: Socket buffer size. Supports suffixes like `8M`, `16M`. Larger values improve throughput on fast links. (`net:socket-buffer`)
+- **Min Chunk Size**: Minimum chunk size for parallel file downloads. Supports suffixes like `100M`. (`pget:min-chunk-size`)
+- **Parallel Directories**: Download directory contents in parallel rather than sequentially. (`mirror:parallel-directories`)
+- **Network Timeout (s)**: Seconds to wait for network operations before timing out. (`net:timeout`)
+- **Max Retries**: Maximum number of retries on network errors. `0` for unlimited. (`net:max-retries`)
+- **Reconnect Interval Base (s)**: Base delay in seconds before reconnecting after a failure. (`net:reconnect-interval-base`)
+- **Reconnect Interval Multiplier**: Multiplier applied to the reconnect delay after each consecutive failure. (`net:reconnect-interval-multiplier`)
 
 ## Advanced config file
 
