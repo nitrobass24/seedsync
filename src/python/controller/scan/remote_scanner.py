@@ -2,6 +2,7 @@
 
 import logging
 import pickle
+import re
 from typing import List
 import os
 from typing import Optional
@@ -19,6 +20,9 @@ class RemoteScanner(IScanner):
     """
     Scanner implementation to scan the remote filesystem
     """
+    _REQUIRED_ARCH = "x86_64"
+    _MIN_GLIBC_VERSION = (2, 31)
+
     def __init__(self,
                  remote_address: str,
                  remote_username: str,
@@ -104,6 +108,8 @@ class RemoteScanner(IScanner):
                 recoverable=False
             )
 
+        self._log_remote_diagnostics()
+
         # Check md5sum on remote to see if we can skip installation
         with open(self.__local_path_to_scan_script, "rb") as f:
             local_md5sum = hashlib.md5(f.read()).hexdigest()
@@ -142,4 +148,44 @@ class RemoteScanner(IScanner):
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
                 recoverable=False
+            )
+
+    def _log_remote_diagnostics(self):
+        """Log remote OS, architecture, and glibc version. Warn on incompatibilities."""
+        try:
+            cmd = (
+                "uname -m && "
+                "(grep ^PRETTY_NAME /etc/os-release 2>/dev/null || echo unknown) && "
+                "(ldd --version 2>&1 | head -1 || echo unknown)"
+            )
+            out = self.__ssh.shell(cmd).decode().strip()
+            lines = out.splitlines()
+            arch = lines[0].strip() if len(lines) > 0 else "unknown"
+            os_name = lines[1].strip().replace("PRETTY_NAME=", "").strip('"') if len(lines) > 1 else "unknown"
+            glibc_line = lines[2].strip() if len(lines) > 2 else "unknown"
+
+            self.logger.info("Remote server: os={}, arch={}, glibc={}".format(os_name, arch, glibc_line))
+
+            if arch != self._REQUIRED_ARCH:
+                self.logger.warning(
+                    "Remote architecture is {}. scanfs requires x86_64 (amd64).".format(arch)
+                )
+
+            self._check_glibc_version(glibc_line)
+
+        except SshcpError:
+            self.logger.warning("Failed to collect remote server diagnostics")
+
+    def _check_glibc_version(self, glibc_line: str):
+        """Parse glibc version string and warn if too old."""
+        match = re.search(r'(\d+)\.(\d+)', glibc_line)
+        if not match:
+            self.logger.warning("Could not determine remote glibc version")
+            return
+        major, minor = int(match.group(1)), int(match.group(2))
+        if (major, minor) < self._MIN_GLIBC_VERSION:
+            self.logger.warning(
+                "Remote glibc {}.{} is older than required {}.{}. scanfs may fail to run.".format(
+                    major, minor, self._MIN_GLIBC_VERSION[0], self._MIN_GLIBC_VERSION[1]
+                )
             )
