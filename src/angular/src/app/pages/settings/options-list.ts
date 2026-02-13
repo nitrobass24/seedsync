@@ -109,7 +109,7 @@ export const OPTIONS_CONTEXT_CONNECTIONS: IOptionsContext = {
       label: 'Max Total Connections',
       valuePath: ['lftp', 'num_max_total_connections'],
       description:
-        'Maximum number of connections.\n' + '(net:connection-limit)',
+        'Maximum number of connections. 0 for unlimited.\n' + '(net:connection-limit)',
     },
     {
       type: OptionType.Text,
