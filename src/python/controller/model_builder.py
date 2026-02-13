@@ -296,6 +296,15 @@ class ModelBuilder:
                     if all_downloaded:
                         model_file.state = ModelFile.State.DOWNLOADED
 
+            # next we check if file was previously downloaded but remote was deleted
+            # (e.g. auto-delete-remote). The file still exists locally but we can
+            # no longer verify local_size >= remote_size, so use the persist.
+            if model_file.state == ModelFile.State.DEFAULT and \
+                    model_file.local_size is not None and \
+                    model_file.remote_size is None and \
+                    model_file.name in self.__downloaded_files:
+                model_file.state = ModelFile.State.DOWNLOADED
+
             # next we determine if root was Deleted
             # root is Deleted if it does not exist locally, but was downloaded in the past
             if model_file.state == ModelFile.State.DEFAULT and \
