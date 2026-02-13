@@ -92,3 +92,21 @@
         font-size: 95%;
     }
 }
+
+// ── Dark mode refinements ──
+:host-context([data-bs-theme="dark"]) {
+    #logs {
+        .connected span {
+            background-color: #161A21;
+        }
+
+        .btn-scroll {
+            background-color: #1D222B;
+            border-color: #252C37;
+
+            &:active {
+                background-color: #252C37;
+            }
+        }
+    }
+}

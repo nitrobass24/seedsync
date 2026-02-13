@@ -43,3 +43,23 @@
         background-color: var(--ss-file-header-bg);
     }
 }
+
+// ── Dark mode refinements ──
+:host-context([data-bs-theme="dark"]) {
+    #file-list > div:nth-child(even) {
+        background-color: rgba(255, 255, 255, 0.02);
+    }
+
+    #file-list > div {
+        border-bottom-color: rgba(255, 255, 255, 0.04);
+        transition: background 120ms ease;
+    }
+
+    #file-list > div:last-child {
+        border-bottom: none;
+    }
+
+    #header div {
+        border-bottom: 1px solid #252C37;
+    }
+}

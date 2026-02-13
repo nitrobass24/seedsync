@@ -62,9 +62,41 @@
   }
 }
 
-:host-context([data-bs-theme="dark"]) #sidebar .button img {
-  filter: invert(0.85);
-}
-:host-context([data-bs-theme="dark"]) #sidebar .button.selected img {
-  filter: invert(1.0);
+// ── Dark mode sidebar ──
+:host-context([data-bs-theme="dark"]) #sidebar {
+  .button {
+    color: #8A93A6;
+    transition: background 120ms ease, color 120ms ease;
+
+    &:hover {
+      background-color: #202634;
+      color: #C7CEDB;
+    }
+
+    &:active {
+      background-color: #252C37;
+    }
+
+    &.selected {
+      background-color: #252C37;
+      color: #FFFFFF;
+      border-color: #3ECF8E;
+
+      img {
+        filter: invert(1.0);
+      }
+    }
+
+    img {
+      filter: brightness(0) saturate(100%) invert(85%) sepia(5%) saturate(400%) hue-rotate(190deg);
+    }
+
+    .fa-icon {
+      color: #C7CEDB;
+    }
+  }
+
+  hr {
+    border-color: #252C37;
+  }
 }
