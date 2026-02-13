@@ -28,6 +28,22 @@
                 .card-body {
                     padding: 10px 0;
                 }
+
+                .collapsible-header {
+                    cursor: pointer;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+
+                    &:hover {
+                        opacity: 0.8;
+                    }
+
+                    .collapse-indicator {
+                        font-size: 70%;
+                        margin-inline-start: 8px;
+                    }
+                }
             }
         }
 
@@ -81,6 +97,40 @@
                 padding-inline-start: 10px;
                 margin-top: 0;
             }
+        }
+    }
+}
+
+// ── Dark mode refinements ──
+:host-context([data-bs-theme="dark"]) {
+    #settings #accordion #left,
+    #settings #accordion #right {
+        .card {
+            background-color: transparent;
+            border: 1px solid #252C37;
+
+            .card-header {
+                background-color: #161A21;
+                border-bottom: 1px solid #252C37;
+                color: #8A93A6;
+            }
+
+            .collapsible-header:hover {
+                opacity: 0.9;
+            }
+        }
+    }
+
+    #settings #commands .button {
+        background-color: #1D222B;
+        border-color: #252C37;
+
+        &:active {
+            background-color: #252C37;
+        }
+
+        img {
+            filter: brightness(0) saturate(100%) invert(85%) sepia(5%) saturate(400%) hue-rotate(190deg);
         }
     }
 }

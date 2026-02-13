@@ -155,7 +155,14 @@ class InnerConfig(ABC):
         property_map = {p: getattr(cls, p) for p in dir(cls) if isinstance(getattr(cls, p), property)}
         for name, prop in property_map.items():
             if name in config_dict:
-                inner_config.set_property(name, config_dict[name])
+                value = config_dict[name]
+                # to_str() serializes None as "". When reading back, treat
+                # empty strings as missing if the default is None, so that
+                # the None → "" → None round-trip is preserved.
+                if type(value) is str and value == "" and getattr(inner_config, name) is None:
+                    del config_dict[name]
+                    continue
+                inner_config.set_property(name, value)
                 del config_dict[name]
             # If key is missing, keep the default from __init__
 
@@ -249,6 +256,15 @@ class Config(Persist):
         num_max_total_connections = PROP("num_max_total_connections", Checkers.int_non_negative, Converters.int)
         use_temp_file = PROP("use_temp_file", Checkers.null, Converters.bool)
         net_limit_rate = PROP("net_limit_rate", Checkers.string_allow_empty, Converters.null)
+        net_socket_buffer = PROP("net_socket_buffer", Checkers.string_allow_empty, Converters.null)
+        pget_min_chunk_size = PROP("pget_min_chunk_size", Checkers.string_allow_empty, Converters.null)
+        mirror_parallel_directories = PROP("mirror_parallel_directories", Checkers.null, Converters.bool)
+        net_timeout = PROP("net_timeout", Checkers.int_non_negative, Converters.int)
+        net_max_retries = PROP("net_max_retries", Checkers.int_non_negative, Converters.int)
+        net_reconnect_interval_base = PROP("net_reconnect_interval_base", Checkers.int_non_negative, Converters.int)
+        net_reconnect_interval_multiplier = PROP("net_reconnect_interval_multiplier",
+                                                  Checkers.int_non_negative,
+                                                  Converters.int)
 
         def __init__(self):
             super().__init__()
@@ -267,6 +283,13 @@ class Config(Persist):
             self.num_max_total_connections = None
             self.use_temp_file = None
             self.net_limit_rate = ""
+            self.net_socket_buffer = None
+            self.pget_min_chunk_size = None
+            self.mirror_parallel_directories = None
+            self.net_timeout = None
+            self.net_max_retries = None
+            self.net_reconnect_interval_base = None
+            self.net_reconnect_interval_multiplier = None
 
     class Controller(IC):
         interval_ms_remote_scan = PROP("interval_ms_remote_scan", Checkers.int_positive, Converters.int)
@@ -274,6 +297,8 @@ class Config(Persist):
         interval_ms_downloading_scan = PROP("interval_ms_downloading_scan", Checkers.int_positive, Converters.int)
         extract_path = PROP("extract_path", Checkers.string_nonempty, Converters.null)
         use_local_path_as_extract_path = PROP("use_local_path_as_extract_path", Checkers.null, Converters.bool)
+        use_staging = PROP("use_staging", Checkers.null, Converters.bool)
+        staging_path = PROP("staging_path", Checkers.string_nonempty, Converters.null)
 
         def __init__(self):
             super().__init__()
@@ -282,6 +307,8 @@ class Config(Persist):
             self.interval_ms_downloading_scan = None
             self.extract_path = None
             self.use_local_path_as_extract_path = None
+            self.use_staging = None
+            self.staging_path = None
 
     class Web(InnerConfig):
         port = PROP("port", Checkers.int_positive, Converters.int)

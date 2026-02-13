@@ -27,9 +27,9 @@ $zindex-file-options: 201;
 $zindex-file-search: 100;
 
 %button {
-    background-color: $primary-color;
+    background-color: var(--ss-primary);
     color: white;
-    border: 1px solid $primary-dark-color;
+    border: 1px solid var(--ss-primary-dark);
     border-radius: 4px;
     display: flex;
     flex-direction: column;
@@ -39,16 +39,16 @@ $zindex-file-search: 100;
     user-select: none;
 
     &:active {
-        background-color: #286090;
+        background-color: var(--ss-primary-active);
     }
 
     &[disabled] {
         opacity: .65;
-        background-color: $primary-color;
+        background-color: var(--ss-primary);
     }
 
     &.selected {
-        background-color: $secondary-color;
-        border-color: $secondary-darker-color;
+        background-color: var(--ss-secondary);
+        border-color: var(--ss-secondary-darker);
     }
 }

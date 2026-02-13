@@ -1,7 +1,8 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import os
 from abc import ABC, abstractmethod
-from typing import List, Callable
+from typing import List, Callable, Set
 from threading import Lock
 from queue import Queue
 from enum import Enum
@@ -16,6 +17,7 @@ from model import ModelError, ModelFile, Model, ModelDiff, ModelDiffUtil, IModel
 from lftp import Lftp, LftpError, LftpJobStatus
 from .controller_persist import ControllerPersist
 from .delete import DeleteLocalProcess, DeleteRemoteProcess
+from .move import MoveProcess
 
 
 class ControllerError(AppError):
@@ -100,6 +102,14 @@ class Controller:
         self.__model_builder.set_downloaded_files(self.__persist.downloaded_file_names)
         self.__model_builder.set_extracted_files(self.__persist.extracted_file_names)
 
+        # Determine effective local path: use staging_path when staging is enabled
+        if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
+            self.__effective_local_path = self.__context.config.controller.staging_path
+            # Ensure the staging directory exists so scanners don't crash
+            os.makedirs(self.__effective_local_path, exist_ok=True)
+        else:
+            self.__effective_local_path = self.__context.config.lftp.local_path
+
         # Lftp
         self.__lftp = Lftp(address=self.__context.config.lftp.remote_address,
                            port=self.__context.config.lftp.remote_port,
@@ -107,7 +117,7 @@ class Controller:
                            password=self.__password)
         self.__lftp.set_base_logger(self.logger)
         self.__lftp.set_base_remote_dir_path(self.__context.config.lftp.remote_path)
-        self.__lftp.set_base_local_dir_path(self.__context.config.lftp.local_path)
+        self.__lftp.set_base_local_dir_path(self.__effective_local_path)
         # Configure Lftp
         self.__lftp.num_parallel_jobs = self.__context.config.lftp.num_max_parallel_downloads
         self.__lftp.num_parallel_files = self.__context.config.lftp.num_max_parallel_files_per_download
@@ -118,10 +128,27 @@ class Controller:
         self.__lftp.temp_file_name = "*" + Constants.LFTP_TEMP_FILE_SUFFIX
         if self.__context.config.lftp.net_limit_rate:
             self.__lftp.rate_limit = self.__context.config.lftp.net_limit_rate
+        if self.__context.config.lftp.net_socket_buffer:
+            self.__lftp.net_socket_buffer = self.__context.config.lftp.net_socket_buffer
+        if self.__context.config.lftp.pget_min_chunk_size:
+            self.__lftp.min_chunk_size = self.__context.config.lftp.pget_min_chunk_size
+        if self.__context.config.lftp.mirror_parallel_directories is not None:
+            self.__lftp.mirror_parallel_directories = self.__context.config.lftp.mirror_parallel_directories
+        if self.__context.config.lftp.net_timeout is not None:
+            self.__lftp.net_timeout = self.__context.config.lftp.net_timeout
+        if self.__context.config.lftp.net_max_retries is not None:
+            self.__lftp.net_max_retries = self.__context.config.lftp.net_max_retries
+        if self.__context.config.lftp.net_reconnect_interval_base is not None:
+            self.__lftp.net_reconnect_interval_base = self.__context.config.lftp.net_reconnect_interval_base
+        if self.__context.config.lftp.net_reconnect_interval_multiplier is not None:
+            self.__lftp.net_reconnect_interval_multiplier = self.__context.config.lftp.net_reconnect_interval_multiplier
         self.__lftp.set_verbose_logging(self.__context.config.general.verbose)
 
         # Setup the scanners and scanner processes
-        self.__active_scanner = ActiveScanner(self.__context.config.lftp.local_path)
+        # ActiveScanner scans the effective path (staging when enabled) for in-progress downloads
+        self.__active_scanner = ActiveScanner(self.__effective_local_path)
+        # LocalScanner always scans the final local_path so moved files are detected
+        # (ActiveScanner handles the staging path during downloads)
         self.__local_scanner = LocalScanner(
             local_path=self.__context.config.lftp.local_path,
             use_temp_file=self.__context.config.lftp.use_temp_file
@@ -151,13 +178,15 @@ class Controller:
         )
 
         # Setup extract process
-        if self.__context.config.controller.use_local_path_as_extract_path:
+        if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
+            out_dir_path = self.__context.config.controller.staging_path
+        elif self.__context.config.controller.use_local_path_as_extract_path:
             out_dir_path = self.__context.config.lftp.local_path
         else:
             out_dir_path = self.__context.config.controller.extract_path
         self.__extract_process = ExtractProcess(
             out_dir_path=out_dir_path,
-            local_path=self.__context.config.lftp.local_path
+            local_path=self.__effective_local_path
         )
 
         # Setup multiprocess logging
@@ -170,9 +199,17 @@ class Controller:
         # Keep track of active files
         self.__active_downloading_file_names = []
         self.__active_extracting_file_names = []
+        # Track previous cycle's downloading files to detect completed downloads
+        self.__prev_downloading_file_names: Set[str] = set()
 
         # Keep track of active command processes
         self.__active_command_processes = []
+
+        # Keep track of active move processes (staging -> final)
+        self.__active_move_processes = []
+        # Track files that have been moved from staging to final location
+        # to prevent duplicate moves (e.g. when model re-detects DOWNLOADED after move)
+        self.__moved_file_names: Set[str] = set()
 
         self.__started = False
 
@@ -306,18 +343,33 @@ class Controller:
 
         # Update list of active file names
         if lftp_statuses is not None:
-            self.__active_downloading_file_names = [
+            current_downloading = set(
                 s.name for s in lftp_statuses if s.state == LftpJobStatus.State.RUNNING
-            ]
+            )
+            # Detect files that just completed downloading (were in previous cycle but not now)
+            just_completed = self.__prev_downloading_file_names - current_downloading
+            if just_completed:
+                for name in just_completed:
+                    self.logger.info("Download completed (LFTP job finished): {}".format(name))
+                # Force a local scan so the completed file is picked up
+                self.__local_scan_process.force_scan()
+
+            self.__active_downloading_file_names = list(current_downloading)
+            self.__prev_downloading_file_names = current_downloading
+        else:
+            just_completed = set()
+
         if latest_extract_statuses is not None:
             self.__active_extracting_file_names = [
                 s.name for s in latest_extract_statuses.statuses if s.state == ExtractStatus.State.EXTRACTING
             ]
 
         # Update the active scanner's state
-        self.__active_scanner.set_active_files(
-            self.__active_downloading_file_names + self.__active_extracting_file_names
-        )
+        # Include just-completed downloads for one extra scan cycle so their final
+        # local file sizes are captured before they leave the active scanner
+        active_files = self.__active_downloading_file_names + self.__active_extracting_file_names
+        active_files += list(just_completed)
+        self.__active_scanner.set_active_files(active_files)
 
         # Update model builder state
         if latest_remote_scan is not None:
@@ -333,6 +385,10 @@ class Controller:
         if latest_extracted_results:
             for result in latest_extracted_results:
                 self.__persist.extracted_file_names.add(result.name)
+                # Spawn move from staging to final local_path when staging is enabled
+                if self.__context.config.controller.use_staging and \
+                        self.__context.config.controller.staging_path:
+                    self.__spawn_move_process(result.name)
             self.__model_builder.set_extracted_files(self.__persist.extracted_file_names)
 
         # Build the new model, if needed
@@ -354,6 +410,12 @@ class Controller:
                 elif diff.change == ModelDiff.Change.UPDATED:
                     self.__model.update_file(diff.new_file)
 
+                # Clear move tracking when a file is re-queued for download
+                # so that a fresh download to staging will trigger a new move
+                if diff.new_file is not None and \
+                        diff.new_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
+                    self.__moved_file_names.discard(diff.new_file.name)
+
                 # Detect if a file was just Downloaded
                 #   an Added file in Downloaded state
                 #   an Updated file transitioning to Downloaded state
@@ -371,6 +433,15 @@ class Controller:
                 if downloaded:
                     self.__persist.downloaded_file_names.add(diff.new_file.name)
                     self.__model_builder.set_downloaded_files(self.__persist.downloaded_file_names)
+
+                    # Move from staging to final location for non-extractable files
+                    # (extractable files are moved after extraction completes)
+                    if self.__context.config.controller.use_staging and \
+                            self.__context.config.controller.staging_path:
+                        will_auto_extract = self.__context.config.autoqueue.auto_extract and \
+                                            diff.new_file.is_extractable
+                        if not will_auto_extract:
+                            self.__spawn_move_process(diff.new_file.name)
 
             # Prune the extracted files list of any files that were deleted locally
             # This prevents these files from going to EXTRACTED state if they are re-downloaded
@@ -529,6 +600,29 @@ class Controller:
         self.__mp_logger.propagate_exception()
         self.__extract_process.propagate_exception()
 
+    def __spawn_move_process(self, file_name: str):
+        """
+        Spawn a MoveProcess to move a file from staging to the final local_path
+        :param file_name:
+        :return:
+        """
+        # Skip if this file was already moved (prevents duplicate moves when
+        # model re-detects DOWNLOADED after a move completes)
+        if file_name in self.__moved_file_names:
+            self.logger.debug("Skipping move for {} - already moved".format(file_name))
+            return
+
+        self.__moved_file_names.add(file_name)
+        process = MoveProcess(
+            source_path=self.__context.config.controller.staging_path,
+            dest_path=self.__context.config.lftp.local_path,
+            file_name=file_name
+        )
+        process.set_multiprocessing_logger(self.__mp_logger)
+        self.__active_move_processes.append(process)
+        process.start()
+        self.logger.info("Spawned move process for {} (staging -> local)".format(file_name))
+
     def __cleanup_commands(self):
         """
         Cleanup the list of active commands and do any callbacks
@@ -544,3 +638,14 @@ class Controller:
                 # Propagate the exception
                 command_process.process.propagate_exception()
         self.__active_command_processes = still_active_processes
+
+        # Cleanup completed move processes
+        still_active_moves = []
+        for move_process in self.__active_move_processes:
+            if move_process.is_alive():
+                still_active_moves.append(move_process)
+            else:
+                move_process.propagate_exception()
+                # Force a local scan so the moved file is detected in its final location
+                self.__local_scan_process.force_scan()
+        self.__active_move_processes = still_active_moves

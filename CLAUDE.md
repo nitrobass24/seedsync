@@ -23,6 +23,24 @@ website/              # Docusaurus documentation site
 ## Branches
 
 - **master** - Stable release branch
+- **develop** - Integration branch for all new work
+
+## Git Workflow
+
+All work MUST follow this branching discipline:
+
+1. **Always start from `develop`**: Before writing any code, checkout `develop` and pull latest:
+   ```bash
+   git checkout develop && git pull origin develop
+   ```
+2. **Create a feature branch**: Every task (feature, bugfix, refactor) gets its own branch off `develop`:
+   ```bash
+   git checkout -b feat/short-description   # or fix/short-description
+   ```
+3. **Commit only to the feature branch**: Never commit directly to `develop` or `master`.
+4. **One concern per branch**: Do not mix unrelated changes into the same branch. If you discover a separate issue while working, finish or stash your current work, then create a new branch for the other issue.
+5. **Open a PR to `develop`**: When the work is complete, push the feature branch and open a PR targeting `develop`. Include a summary and test plan.
+6. **Do not carry dirty working-tree changes across branches**: Before switching branches, either commit or stash. Never rely on uncommitted edits surviving a `git checkout`.
 
 ## Release Process
 

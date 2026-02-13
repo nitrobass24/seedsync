@@ -2,11 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, develop]
     tags:
       - v[0-9]+.[0-9]+.[0-9]+
   pull_request:
-    branches: [master]
+    branches: [master, develop]
   workflow_dispatch:
 
 env:
@@ -45,7 +45,7 @@ jobs:
 
   publish:
     name: Publish Docker Image
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/develop'
     needs: [build-and-test]
     runs-on: ubuntu-latest
     permissions:
@@ -76,7 +76,8 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
 
       - name: Build and push
         uses: docker/build-push-action@v5

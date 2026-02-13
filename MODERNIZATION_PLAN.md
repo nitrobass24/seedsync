@@ -138,6 +138,16 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 | SSH key auth without password | #21 | ✅ Done |
 | Bandwidth/speed limit setting | #24 | ✅ Done |
 
+## v0.12.0 Improvements
+
+| Feature | PR(s) | Status |
+|---------|-------|--------|
+| Staging directory for fast-disk downloads | #36 | ✅ Done |
+| Dark mode with theme toggle | #37, #51 | ✅ Done |
+| Advanced LFTP settings | #40, #44 | ✅ Done |
+| Remote server diagnostics | #41 | ✅ Done |
+| Graceful config upgrades | #45 | ✅ Done |
+
 ## Future Improvements (Optional)
 
 If you want to continue development:
@@ -146,7 +156,7 @@ If you want to continue development:
 2. **Python scanfs fallback** - Run scanner as Python script instead of binary (for restricted servers)
 3. **Memory profiling** - If high memory usage reported
 4. **Additional tests** - Expand test coverage
-5. **Dark mode** - Requested in issue #22
+5. ~~**Dark mode** - Requested in issue #22~~ ✅ Done in v0.12.0
 
 ---
 

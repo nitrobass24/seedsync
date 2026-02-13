@@ -162,7 +162,11 @@ class AutoQueue:
         self.__auto_extract_enabled = context.config.autoqueue.auto_extract
         self.__auto_delete_remote_enabled = context.config.autoqueue.auto_delete_remote
 
-        if self.__enabled:
+        # Register listeners if ANY auto feature is active (auto-queue, auto-extract,
+        # or auto-delete-remote). Previously, all features were gated behind __enabled,
+        # meaning auto_delete_remote wouldn't fire when auto-queue was disabled.
+        any_auto_feature = self.__enabled or self.__auto_extract_enabled or self.__auto_delete_remote_enabled
+        if any_auto_feature:
             persist.add_listener(self.__persist_listener)
 
             initial_model_files = self.__controller.get_model_files_and_add_listener(self.__model_listener)
@@ -180,26 +184,31 @@ class AutoQueue:
         Advance the auto queue state
         :return:
         """
-        if not self.__enabled:
+        # Skip entirely if no auto features are active
+        any_auto_feature = self.__enabled or self.__auto_extract_enabled or self.__auto_delete_remote_enabled
+        if not any_auto_feature:
             return
 
         ###
-        # Queue
+        # Queue (only when auto-queue is enabled)
         ###
-        queue_candidate_files = []
+        files_to_queue = []
 
-        # Candidate all new files
-        queue_candidate_files += self.__model_listener.new_files
+        if self.__enabled:
+            queue_candidate_files = []
 
-        # Candidate modified files where the remote size changed
-        for old_file, new_file in self.__model_listener.modified_files:
-            if old_file.remote_size != new_file.remote_size:
-                queue_candidate_files.append(new_file)
+            # Candidate all new files
+            queue_candidate_files += self.__model_listener.new_files
 
-        files_to_queue = self.__filter_candidates(
-            candidates=queue_candidate_files,
-            accept=lambda f: f.remote_size is not None and f.state == ModelFile.State.DEFAULT
-        )
+            # Candidate modified files where the remote size changed
+            for old_file, new_file in self.__model_listener.modified_files:
+                if old_file.remote_size != new_file.remote_size:
+                    queue_candidate_files.append(new_file)
+
+            files_to_queue = self.__filter_candidates(
+                candidates=queue_candidate_files,
+                accept=lambda f: f.remote_size is not None and f.state == ModelFile.State.DEFAULT
+            )
 
         ###
         # Extract

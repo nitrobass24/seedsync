@@ -18,7 +18,9 @@ import {
   OPTIONS_CONTEXT_CONNECTIONS,
   OPTIONS_CONTEXT_OTHER,
   OPTIONS_CONTEXT_AUTOQUEUE,
+  OPTIONS_CONTEXT_STAGING,
   OPTIONS_CONTEXT_EXTRACT,
+  OPTIONS_CONTEXT_ADVANCED_LFTP,
 } from './options-list';
 
 @Component({
@@ -35,7 +37,11 @@ export class SettingsPageComponent implements OnInit {
   readonly OPTIONS_CONTEXT_CONNECTIONS = OPTIONS_CONTEXT_CONNECTIONS;
   readonly OPTIONS_CONTEXT_OTHER = OPTIONS_CONTEXT_OTHER;
   readonly OPTIONS_CONTEXT_AUTOQUEUE = OPTIONS_CONTEXT_AUTOQUEUE;
+  readonly OPTIONS_CONTEXT_STAGING = OPTIONS_CONTEXT_STAGING;
   readonly OPTIONS_CONTEXT_EXTRACT = OPTIONS_CONTEXT_EXTRACT;
+  readonly OPTIONS_CONTEXT_ADVANCED_LFTP = OPTIONS_CONTEXT_ADVANCED_LFTP;
+
+  advancedLftpCollapsed = true;
 
   private readonly logger = inject(LoggerService);
   private readonly configService = inject(ConfigService);
@@ -100,6 +106,10 @@ export class SettingsPageComponent implements OnInit {
         }
       },
     });
+  }
+
+  toggleAdvancedLftp(): void {
+    this.advancedLftpCollapsed = !this.advancedLftpCollapsed;
   }
 
   onCommandRestart(): void {

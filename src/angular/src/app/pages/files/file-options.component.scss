@@ -3,7 +3,7 @@
 // Common dropdown template
 %dropdown {
     button {
-        background-color: $primary-color;
+        background-color: var(--ss-primary);
         color: white;
         height: 34px;
         width: 100%;
@@ -37,8 +37,8 @@
     }
 
     .dropdown-menu {
-        background-color: $primary-color;
-        border: 1px solid $primary-dark-color;
+        background-color: var(--ss-primary);
+        border: 1px solid var(--ss-primary-dark);
         color: white;
         padding: 0;
         cursor: default;
@@ -55,17 +55,17 @@
 
             &.active,
             &.active:hover {
-                background-color: $secondary-dark-color;
+                background-color: var(--ss-secondary-dark);
             }
 
             &:hover,
             &:active {
-                background-color: $primary-color;
+                background-color: var(--ss-primary);
             }
 
             &.disabled {
                 opacity: .65;
-                background-color: $primary-color;
+                background-color: var(--ss-primary);
             }
 
             .icon {
@@ -105,8 +105,8 @@
 
 
 %toggle {
-    background-color: $primary-color;
-    border: 1px solid $primary-dark-color;
+    background-color: var(--ss-primary);
+    border: 1px solid var(--ss-primary-dark);
     color: white;
     height: 34px;
     cursor: default;
@@ -119,18 +119,18 @@
 
     &.active,
     &.active:hover{
-        background-color: $secondary-dark-color;
-        border-color: $secondary-darker-color;
+        background-color: var(--ss-secondary-dark);
+        border-color: var(--ss-secondary-darker);
     }
 
     &:hover,
     &:active {
-        background-color: $primary-color;
+        background-color: var(--ss-primary);
     }
 
     &.disabled {
         opacity: .65;
-        background-color: $primary-color;
+        background-color: var(--ss-primary);
     }
 
     .selection {
@@ -157,7 +157,7 @@
 #file-options {
     position: static;
     z-index: $zindex-file-options;
-    background-color: $header-color;
+    background-color: var(--ss-header-bg);
     padding: 0 8px 8px 8px;
 
     display: flex;
@@ -323,5 +323,90 @@
     // Bit of extra padding at top when title disappears
     #file-options {
         padding-top: 8px;
+    }
+}
+
+// ── Dark mode refinements ──
+:host-context([data-bs-theme="dark"]) {
+    #filter-status,
+    #sort-status {
+        button {
+            background-color: #1D222B;
+            border: 1px solid #252C37;
+            color: #C7CEDB;
+        }
+
+        .dropdown-menu {
+            background-color: #1D222B;
+            border-color: #252C37;
+
+            .dropdown-item {
+                color: #C7CEDB;
+
+                &:hover {
+                    background-color: #252C37;
+                }
+
+                &.active,
+                &.active:hover {
+                    background-color: #3ECF8E;
+                    color: #0F1115;
+                }
+
+                &.disabled {
+                    background-color: #1D222B;
+                    color: #525A6B;
+                }
+            }
+        }
+
+        .icon img {
+            filter: brightness(0) saturate(100%) invert(85%) sepia(5%) saturate(400%) hue-rotate(190deg);
+        }
+    }
+
+    #toggle-details {
+        background-color: #1D222B;
+        border-color: #252C37;
+        color: #C7CEDB;
+
+        &.active,
+        &.active:hover {
+            background-color: #3ECF8E;
+            color: #0F1115;
+            border-color: #2BA86E;
+        }
+    }
+
+    #filter-search {
+        input {
+            background-color: #1D222B;
+            border: 1px solid #252C37;
+            color: #E6EAF2;
+
+            &::placeholder {
+                color: #525A6B;
+            }
+
+            &:focus {
+                border-color: #4C8DFF;
+                box-shadow: none;
+            }
+        }
+
+        img {
+            filter: brightness(0) saturate(100%) invert(85%) sepia(5%) saturate(400%) hue-rotate(190deg);
+        }
+    }
+
+    #small-buttons #pin-filter {
+        background-color: #1D222B;
+        border-color: #252C37;
+
+        &.active,
+        &.active:hover {
+            background-color: #3ECF8E;
+            border-color: #2BA86E;
+        }
     }
 }

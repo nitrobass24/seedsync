@@ -7,9 +7,9 @@
 }
 
 .error {
-    background-color: #f2dede;
-    color: #a94442;
-    border: 1px solid #a94442;
+    background-color: var(--ss-option-error-bg);
+    color: var(--ss-option-error-text);
+    border: 1px solid var(--ss-option-error-border);
 }
 
 label {
@@ -21,7 +21,7 @@ label {
 }
 
 span.description {
-    color: darkgrey;
+    color: var(--ss-text-description);
     font-size: 80%;
     line-height: initial;
     width: 100%;
@@ -47,4 +47,27 @@ input[type="checkbox"] {
 
 input[type="text"] {
     width: 100%;
+}
+
+// ── Dark mode refinements ──
+:host-context([data-bs-theme="dark"]) {
+    input[type="text"] {
+        background-color: #1D222B;
+        border: 1px solid #252C37;
+        color: #E6EAF2;
+
+        &::placeholder {
+            color: #525A6B;
+        }
+
+        &:focus {
+            border-color: #4C8DFF;
+            outline: none;
+            box-shadow: none;
+        }
+    }
+
+    input[type="checkbox"] {
+        accent-color: #3ECF8E;
+    }
 }

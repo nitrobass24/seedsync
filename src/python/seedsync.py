@@ -47,6 +47,8 @@ class Seedsync:
         if os.path.isfile(self.config_path):
             try:
                 config = Config.from_file(self.config_path)
+                if Seedsync._backfill_config_defaults(config):
+                    config.to_file(self.config_path)
             except (ConfigError, PersistError) as e:
                 logging.warning("Failed to load config ({}), backing up and using defaults".format(str(e)))
                 Seedsync.__backup_file(self.config_path)
@@ -297,10 +299,10 @@ class Seedsync:
         config.lftp.remote_path_to_scan_script = "/tmp"
         config.lftp.use_ssh_key = False
         config.lftp.num_max_parallel_downloads = 2
-        config.lftp.num_max_parallel_files_per_download = 4
-        config.lftp.num_max_connections_per_root_file = 4
-        config.lftp.num_max_connections_per_dir_file = 4
-        config.lftp.num_max_total_connections = 16
+        config.lftp.num_max_parallel_files_per_download = 3
+        config.lftp.num_max_connections_per_root_file = 20
+        config.lftp.num_max_connections_per_dir_file = 20
+        config.lftp.num_max_total_connections = 0
         config.lftp.use_temp_file = False
 
         config.controller.interval_ms_remote_scan = 30000
@@ -308,17 +310,46 @@ class Seedsync:
         config.controller.interval_ms_downloading_scan = 1000
         config.controller.extract_path = "/tmp"
         config.controller.use_local_path_as_extract_path = True
+        config.controller.use_staging = False
+        config.controller.staging_path = "/staging"
 
         config.web.port = 8800
 
-        config.autoqueue.enabled = True
+        config.autoqueue.enabled = False
         config.autoqueue.patterns_only = False
         config.autoqueue.auto_extract = True
         config.autoqueue.auto_delete_remote = False
 
         config.lftp.net_limit_rate = ""
+        config.lftp.net_socket_buffer = "8M"
+        config.lftp.pget_min_chunk_size = "100M"
+        config.lftp.mirror_parallel_directories = True
+        config.lftp.net_timeout = 20
+        config.lftp.net_max_retries = 2
+        config.lftp.net_reconnect_interval_base = 3
+        config.lftp.net_reconnect_interval_multiplier = 1
 
         return config
+
+    @staticmethod
+    def _backfill_config_defaults(config: Config) -> bool:
+        """
+        Fill in default values for any config properties that are None.
+        Uses _create_default_config() as the single source of truth.
+        Returns True if any properties were backfilled.
+        """
+        defaults = Seedsync._create_default_config()
+        changed = False
+        for section_attr in ['general', 'lftp', 'controller', 'web', 'autoqueue']:
+            section = getattr(config, section_attr)
+            default_section = getattr(defaults, section_attr)
+            for key in section.as_dict():
+                if getattr(section, key) is None:
+                    default_value = getattr(default_section, key)
+                    if default_value is not None:
+                        setattr(section, key, default_value)
+                        changed = True
+        return changed
 
     @staticmethod
     def _detect_incomplete_config(config: Config) -> bool:

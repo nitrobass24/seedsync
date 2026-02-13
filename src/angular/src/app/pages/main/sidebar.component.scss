@@ -18,13 +18,13 @@
     user-select: none;
 
     &:active {
-      background-color: $primary-color;
+      background-color: var(--ss-primary);
     }
 
     &.selected {
-      background-color: $secondary-color;
+      background-color: var(--ss-secondary);
       color: white;
-      border-color: #6ac19e;
+      border-color: var(--ss-sidebar-selected-border);
 
       img {
         filter: invert(1.0);
@@ -42,11 +42,61 @@
       margin-inline-end: 4px;
       margin-bottom: 2px;
     }
+
+    .fa-icon {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      margin-inline-end: 4px;
+      margin-bottom: 2px;
+      text-align: center;
+      font-size: 16px;
+      line-height: 18px;
+    }
   }
 
   hr {
     margin-top: 3px;
     margin-bottom: 3px;
-    border: 1px solid $header-dark-color;
+    border: 1px solid var(--ss-header-dark);
+  }
+}
+
+// ── Dark mode sidebar ──
+:host-context([data-bs-theme="dark"]) #sidebar {
+  .button {
+    color: #8A93A6;
+    transition: background 120ms ease, color 120ms ease;
+
+    &:hover {
+      background-color: #202634;
+      color: #C7CEDB;
+    }
+
+    &:active {
+      background-color: #252C37;
+    }
+
+    &.selected {
+      background-color: #252C37;
+      color: #FFFFFF;
+      border-color: #3ECF8E;
+
+      img {
+        filter: invert(1.0);
+      }
+    }
+
+    img {
+      filter: brightness(0) saturate(100%) invert(85%) sepia(5%) saturate(400%) hue-rotate(190deg);
+    }
+
+    .fa-icon {
+      color: #C7CEDB;
+    }
+  }
+
+  hr {
+    border-color: #252C37;
   }
 }

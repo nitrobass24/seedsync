@@ -18,7 +18,7 @@
             }
             span {
                 margin-inline-start: 10px;
-                color: $logo-color;
+                color: var(--ss-logo);
                 font-family: $logo-font;
                 font-size: 300%;
                 cursor: default;

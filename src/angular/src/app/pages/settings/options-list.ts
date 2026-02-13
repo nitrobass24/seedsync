@@ -109,7 +109,7 @@ export const OPTIONS_CONTEXT_CONNECTIONS: IOptionsContext = {
       label: 'Max Total Connections',
       valuePath: ['lftp', 'num_max_total_connections'],
       description:
-        'Maximum number of connections.\n' + '(net:connection-limit)',
+        'Maximum number of connections. 0 for unlimited.\n' + '(net:connection-limit)',
     },
     {
       type: OptionType.Text,
@@ -200,6 +200,89 @@ export const OPTIONS_CONTEXT_AUTOQUEUE: IOptionsContext = {
       valuePath: ['autoqueue', 'auto_delete_remote'],
       description:
         'Automatically delete files from the remote server after successful download',
+    },
+  ],
+};
+
+export const OPTIONS_CONTEXT_STAGING: IOptionsContext = {
+  header: 'Staging Directory',
+  id: 'staging',
+  options: [
+    {
+      type: OptionType.Checkbox,
+      label: 'Use staging directory',
+      valuePath: ['controller', 'use_staging'],
+      description: 'Download files to a staging directory before moving to the final location',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Staging Path',
+      valuePath: ['controller', 'staging_path'],
+      description: 'Temporary directory where files are downloaded before being moved',
+    },
+  ],
+};
+
+export const OPTIONS_CONTEXT_ADVANCED_LFTP: IOptionsContext = {
+  header: 'Advanced LFTP',
+  id: 'advanced-lftp',
+  options: [
+    {
+      type: OptionType.Text,
+      label: 'Socket Buffer Size',
+      valuePath: ['lftp', 'net_socket_buffer'],
+      description:
+        'Socket buffer size. Supports suffixes: K, M (e.g. 8M, 16M). ' +
+        'Larger values improve throughput on fast links.\n' +
+        '(net:socket-buffer)',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Min Chunk Size',
+      valuePath: ['lftp', 'pget_min_chunk_size'],
+      description:
+        'Minimum chunk size for parallel file downloads. Supports suffixes: K, M, G (e.g. 100M).\n' +
+        '(pget:min-chunk-size)',
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Parallel Directories',
+      valuePath: ['lftp', 'mirror_parallel_directories'],
+      description:
+        'Download directory contents in parallel rather than sequentially.\n' +
+        '(mirror:parallel-directories)',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Network Timeout (s)',
+      valuePath: ['lftp', 'net_timeout'],
+      description:
+        'Seconds to wait for network operations before timing out.\n' +
+        '(net:timeout)',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Max Retries',
+      valuePath: ['lftp', 'net_max_retries'],
+      description:
+        'Maximum number of retries on network errors. 0 for unlimited.\n' +
+        '(net:max-retries)',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Reconnect Interval Base (s)',
+      valuePath: ['lftp', 'net_reconnect_interval_base'],
+      description:
+        'Base delay in seconds before reconnecting after a failure.\n' +
+        '(net:reconnect-interval-base)',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Reconnect Interval Multiplier',
+      valuePath: ['lftp', 'net_reconnect_interval_multiplier'],
+      description:
+        'Multiplier applied to the reconnect delay after each consecutive failure.\n' +
+        '(net:reconnect-interval-multiplier)',
     },
   ],
 };
