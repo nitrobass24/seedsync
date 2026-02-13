@@ -12,15 +12,21 @@ const StatusComparator: ViewFileComparator = (a: ViewFile, b: ViewFile): number 
       [ViewFileStatus.EXTRACTING]: 0,
       [ViewFileStatus.DOWNLOADING]: 1,
       [ViewFileStatus.QUEUED]: 2,
-      [ViewFileStatus.EXTRACTED]: 3,
-      [ViewFileStatus.DOWNLOADED]: 4,
-      [ViewFileStatus.STOPPED]: 5,
-      [ViewFileStatus.DEFAULT]: 6,
-      [ViewFileStatus.DELETED]: 6, // intermix deleted and default
+      [ViewFileStatus.STOPPED]: 3,
+      [ViewFileStatus.DEFAULT]: 4,
+      [ViewFileStatus.DELETED]: 4, // intermix deleted and default
+      [ViewFileStatus.DOWNLOADED]: 5,
+      [ViewFileStatus.EXTRACTED]: 5, // intermix with downloaded
     };
     if (statusPriorities[a.status] !== statusPriorities[b.status]) {
       return statusPriorities[a.status] - statusPriorities[b.status];
     }
+  }
+  // Within same status group, sort oldest first by remote timestamp
+  const aTime = a.remoteCreatedTimestamp?.getTime() ?? 0;
+  const bTime = b.remoteCreatedTimestamp?.getTime() ?? 0;
+  if (aTime !== bTime) {
+    return aTime - bTime;
   }
   return a.name.localeCompare(b.name);
 };
