@@ -16,6 +16,9 @@ from .job_status_parser import LftpJobStatus, LftpJobStatusParser, LftpJobStatus
 # How many status errors are allowed before error propagates out
 MAX_CONSECUTIVE_STATUS_ERRORS = 2
 
+# How many consecutive pexpect timeouts before we restart the lftp process
+MAX_CONSECUTIVE_TIMEOUTS = 3
+
 
 class LftpError(AppError):
     """
@@ -56,19 +59,32 @@ class Lftp:
         self.__user = user
         self.__password = password
         self.__address = address
+        self.__port = port
         self.__base_remote_dir_path = ""
         self.__base_local_dir_path = ""
         self.logger = logging.getLogger("Lftp")
         self.__expect_pattern = "lftp {}@{}:.*>".format(self.__user, self.__address)
         self.__job_status_parser = LftpJobStatusParser()
-        self.__timeout = 3  # in seconds
+        self.__timeout = 10  # in seconds
         self.__consecutive_status_errors = 0
+        self.__consecutive_timeouts = 0
+        self.__settings_cache = {}
 
         self.__log_command_output = False
         self.__pending_error = None
 
+        self.__process = None
+        self.__spawn_process()
+
+    def set_verbose_logging(self, verbose: bool):
+        self.__log_command_output = verbose
+
+    def __spawn_process(self):
+        """
+        Spawn a new lftp pexpect process and run initial setup
+        """
         args = [
-            "-p", str(port),
+            "-p", str(self.__port),
             "-u", "{},{}".format(self.__user, self.__password if self.__password else ""),
             "sftp://{}".format(self.__address)
         ]
@@ -76,8 +92,19 @@ class Lftp:
         self.__process.expect(self.__expect_pattern)
         self.__setup()
 
-    def set_verbose_logging(self, verbose: bool):
-        self.__log_command_output = verbose
+    def __restart_process(self):
+        """
+        Force-close the existing lftp process and start a fresh one,
+        replaying all cached settings
+        """
+        self.logger.warning("Restarting lftp process")
+        if self.__process is not None and self.__process.isalive():
+            self.__process.close(force=True)
+        self.__spawn_process()
+        # Replay cached settings
+        for setting, value in self.__settings_cache.items():
+            self.__run_command("set {} {}".format(setting, value))
+        self.__consecutive_timeouts = 0
 
     def __setup(self):
         """
@@ -92,14 +119,17 @@ class Lftp:
     def with_check_process(method: Callable):
         """
         Decorator that checks for a valid process before executing
-        the decorated method
+        the decorated method. Attempts restart if process is dead.
         :param method:
         :return:
         """
         @wraps(method)
         def wrapper(inst: "Lftp", *args, **kwargs):
             if inst.__process is None or not inst.__process.isalive():
-                raise LftpError("lftp process is not running")
+                try:
+                    inst.__restart_process()
+                except Exception:
+                    raise LftpError("lftp process is not running and restart failed")
             return method(inst, *args, **kwargs)
         return wrapper
 
@@ -130,20 +160,33 @@ class Lftp:
         if self.__log_command_output:
             self.logger.debug("command: {}".format(command.encode('utf8', 'surrogateescape')))
         self.__process.sendline(command)
+        timed_out = False
         try:
             self.__process.expect(self.__expect_pattern, timeout=self.__timeout)
         except pexpect.exceptions.TIMEOUT:
-            self.logger.exception("Lftp timeout exception")
-            pass
-        finally:
-            out = self.__process.before.decode('utf8', 'replace')
-            out = out.strip()  # remove any CRs
+            timed_out = True
 
-            if self.__log_command_output:
-                self.logger.debug("out ({} bytes):\n {}".format(len(out), out))
-                after = self.__process.after.decode('utf8', 'replace').strip() \
-                    if self.__process.after != pexpect.TIMEOUT else ""
-                self.logger.debug("after: {}".format(after))
+        if timed_out:
+            self.__consecutive_timeouts += 1
+            self.logger.warning("Lftp timeout on command (consecutive timeouts: {})".format(
+                self.__consecutive_timeouts))
+            if self.__consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS:
+                self.__restart_process()
+                raise LftpError("lftp process restarted after {} consecutive timeouts".format(
+                    MAX_CONSECUTIVE_TIMEOUTS))
+            # Return empty string to prevent parsing corrupted buffer output
+            return ""
+
+        # Success — reset consecutive timeout counter
+        self.__consecutive_timeouts = 0
+        out = self.__process.before.decode('utf8', 'replace')
+        out = out.strip()  # remove any CRs
+
+        if self.__log_command_output:
+            self.logger.debug("out ({} bytes):\n {}".format(len(out), out))
+            after = self.__process.after.decode('utf8', 'replace').strip() \
+                if self.__process.after != pexpect.TIMEOUT else ""
+            self.logger.debug("after: {}".format(after))
 
         # let's try and detect some errors
         if self.__detect_errors_from_output(out):
@@ -153,19 +196,19 @@ class Lftp:
             try:
                 self.__process.expect(self.__expect_pattern, timeout=self.__timeout)
             except pexpect.exceptions.TIMEOUT:
-                self.logger.exception("Lftp timeout exception")
-                pass
-            finally:
-                out = self.__process.before.decode('utf8', 'replace')
-                out = out.strip()  # remove any CRs
-                if self.__log_command_output:
-                    self.logger.debug("retry out ({} bytes):\n {}".format(len(out), out))
-                    after = self.__process.after.decode('utf8', 'replace').strip() \
-                        if self.__process.after != pexpect.TIMEOUT else ""
-                    self.logger.debug("retry after: {}".format(after))
-                self.logger.error("Lftp detected error: {}".format(error_out))
-                # save pending error
+                self.logger.warning("Lftp timeout while consuming error output")
                 self.__pending_error = error_out
+                return ""
+            out = self.__process.before.decode('utf8', 'replace')
+            out = out.strip()  # remove any CRs
+            if self.__log_command_output:
+                self.logger.debug("retry out ({} bytes):\n {}".format(len(out), out))
+                after = self.__process.after.decode('utf8', 'replace').strip() \
+                    if self.__process.after != pexpect.TIMEOUT else ""
+                self.logger.debug("retry after: {}".format(after))
+            self.logger.error("Lftp detected error: {}".format(error_out))
+            # save pending error
+            self.__pending_error = error_out
         return out
 
     @staticmethod
@@ -188,6 +231,7 @@ class Lftp:
         :param value:
         :return:
         """
+        self.__settings_cache[setting] = value
         self.__run_command("set {} {}".format(setting, value))
 
     def __get(self, setting: str) -> str:
