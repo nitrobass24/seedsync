@@ -252,12 +252,14 @@ class TestModelBuilder(unittest.TestCase):
         self.assertEqual(ModelFile.State.DOWNLOADING, model.get_file("a").state)
 
         # Deleted, then partially Downloaded
+        # Persist takes precedence: file is in downloaded_files and exists locally,
+        # so it stays DOWNLOADED even if local_size < remote_size
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 100, False)])
         self.model_builder.set_local_files([SystemFile("a", 50, False)])
         self.model_builder.set_downloaded_files({"a"})
         model = self.model_builder.build_model()
-        self.assertEqual(ModelFile.State.DEFAULT, model.get_file("a").state)
+        self.assertEqual(ModelFile.State.DOWNLOADED, model.get_file("a").state)
 
         # Downloaded, and Extracting
         self.model_builder.clear()

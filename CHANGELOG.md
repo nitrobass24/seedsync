@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.1] - 2026-02-14
+
+### Fixed
+- **Progress bar glitch during downloads** — Fix race condition where the UI progress bar randomly dropped to 0% mid-download because active file sizes were wiped when the local scanner replaced its file dict (#57)
+- **Download state loss after LFTP completion** — Fix download state being lost after LFTP job completion (#55)
+- **LFTP pexpect timeout recovery** — Fix lftp pexpect timeout recovery to prevent buffer corruption (#54)
+
+---
+
 ## [0.12.0] - 2026-02-13
 
 ### Added

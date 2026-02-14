@@ -201,6 +201,8 @@ class Controller:
         self.__active_extracting_file_names = []
         # Track previous cycle's downloading files to detect completed downloads
         self.__prev_downloading_file_names: Set[str] = set()
+        # Track files pending completion (LFTP finished but not yet reached DOWNLOADED state)
+        self.__pending_completion: Set[str] = set()
 
         # Keep track of active command processes
         self.__active_command_processes = []
@@ -351,6 +353,12 @@ class Controller:
             if just_completed:
                 for name in just_completed:
                     self.logger.info("Download completed (LFTP job finished): {}".format(name))
+                # Add to persist immediately so model_builder can set DOWNLOADED state
+                self.__persist.downloaded_file_names.update(just_completed)
+                # Pass a copy to bypass cache invalidation check (same reference is stored)
+                self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
+                # Track pending completions for active scanner
+                self.__pending_completion.update(just_completed)
                 # Force a local scan so the completed file is picked up
                 self.__local_scan_process.force_scan()
 
@@ -365,10 +373,10 @@ class Controller:
             ]
 
         # Update the active scanner's state
-        # Include just-completed downloads for one extra scan cycle so their final
-        # local file sizes are captured before they leave the active scanner
+        # Include pending completions so files continue to be scanned until they
+        # reach DOWNLOADED/EXTRACTED/DELETED state in the model
         active_files = self.__active_downloading_file_names + self.__active_extracting_file_names
-        active_files += list(just_completed)
+        active_files += list(self.__pending_completion)
         self.__active_scanner.set_active_files(active_files)
 
         # Update model builder state
@@ -442,6 +450,13 @@ class Controller:
                                             diff.new_file.is_extractable
                         if not will_auto_extract:
                             self.__spawn_move_process(diff.new_file.name)
+
+                # Remove from pending completion once the file has reached a terminal state
+                if diff.new_file is not None and \
+                        diff.new_file.state in (ModelFile.State.DOWNLOADED,
+                                                ModelFile.State.EXTRACTED,
+                                                ModelFile.State.DELETED):
+                    self.__pending_completion.discard(diff.new_file.name)
 
             # Prune the extracted files list of any files that were deleted locally
             # This prevents these files from going to EXTRACTED state if they are re-downloaded
