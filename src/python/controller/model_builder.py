@@ -301,7 +301,6 @@ class ModelBuilder:
             # no longer verify local_size >= remote_size, so use the persist.
             if model_file.state == ModelFile.State.DEFAULT and \
                     model_file.local_size is not None and \
-                    model_file.remote_size is None and \
                     model_file.name in self.__downloaded_files:
                 model_file.state = ModelFile.State.DOWNLOADED
 
