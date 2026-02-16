@@ -3,6 +3,7 @@
 import logging
 import pickle
 import re
+import time
 from typing import List
 import os
 from typing import Optional
@@ -22,6 +23,8 @@ class RemoteScanner(IScanner):
     """
     _REQUIRED_ARCH = "x86_64"
     _MIN_GLIBC_VERSION = (2, 31)
+    _SCAN_MAX_RETRIES = 3
+    _SCAN_RETRY_DELAY_SECS = 5
 
     def __init__(self,
                  remote_address: str,
@@ -56,33 +59,7 @@ class RemoteScanner(IScanner):
         if self.__first_run:
             self._install_scanfs()
 
-        try:
-            # Use consistent quoting: double quotes if scan path has tilde (for $HOME expansion),
-            # single quotes otherwise (protects literal characters)
-            if self.__remote_path_to_scan.startswith("~"):
-                out = self.__ssh.shell("{} {}".format(
-                    _escape_remote_path_double(self.__remote_path_to_scan_script),
-                    _escape_remote_path_double(self.__remote_path_to_scan))
-                )
-            else:
-                out = self.__ssh.shell("{} {}".format(
-                    _escape_remote_path_single(self.__remote_path_to_scan_script),
-                    _escape_remote_path_single(self.__remote_path_to_scan))
-                )
-        except SshcpError as e:
-            self.logger.warning("Caught an SshcpError: {}".format(str(e)))
-            recoverable = True
-            # Any scanner errors are fatal
-            if "SystemScannerError" in str(e):
-                recoverable = False
-            # First time errors are fatal
-            # User should be prompted to correct these
-            if self.__first_run:
-                recoverable = False
-            raise ScannerError(
-                Localization.Error.REMOTE_SERVER_SCAN.format(str(e).strip()),
-                recoverable=recoverable
-            )
+        out = self._run_scanfs_with_retry()
 
         try:
             remote_files = pickle.loads(out)
@@ -95,6 +72,70 @@ class RemoteScanner(IScanner):
 
         self.__first_run = False
         return remote_files
+
+    def _run_scanfs_with_retry(self) -> bytes:
+        """
+        Run the scanfs command on the remote with retries for transient errors.
+        """
+        last_error = None
+        for attempt in range(1, self._SCAN_MAX_RETRIES + 1):
+            try:
+                # Use consistent quoting: double quotes if scan path has tilde
+                # (for $HOME expansion), single quotes otherwise
+                if self.__remote_path_to_scan.startswith("~"):
+                    return self.__ssh.shell("{} {}".format(
+                        _escape_remote_path_double(self.__remote_path_to_scan_script),
+                        _escape_remote_path_double(self.__remote_path_to_scan))
+                    )
+                else:
+                    return self.__ssh.shell("{} {}".format(
+                        _escape_remote_path_single(self.__remote_path_to_scan_script),
+                        _escape_remote_path_single(self.__remote_path_to_scan))
+                    )
+            except SshcpError as e:
+                last_error = e
+                error_str = str(e)
+                self.logger.warning(
+                    "Scan attempt {}/{} failed: {}".format(
+                        attempt, self._SCAN_MAX_RETRIES, error_str
+                    )
+                )
+
+                # Non-recoverable errors: don't retry
+                if "SystemScannerError" in error_str:
+                    raise ScannerError(
+                        Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()),
+                        recoverable=False
+                    )
+
+                # Config errors on first run are non-recoverable
+                if self.__first_run and not self._is_transient_error(error_str):
+                    raise ScannerError(
+                        Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()),
+                        recoverable=False
+                    )
+
+                # Retry transient errors
+                if attempt < self._SCAN_MAX_RETRIES:
+                    self.logger.info(
+                        "Retrying in {}s...".format(self._SCAN_RETRY_DELAY_SECS)
+                    )
+                    time.sleep(self._SCAN_RETRY_DELAY_SECS)
+
+        # All retries exhausted
+        self.logger.error(
+            "All {} scan attempts failed".format(self._SCAN_MAX_RETRIES)
+        )
+        raise ScannerError(
+            Localization.Error.REMOTE_SERVER_SCAN.format(str(last_error).strip()),
+            recoverable=True
+        )
+
+    @staticmethod
+    def _is_transient_error(error_str: str) -> bool:
+        """Timeouts and connection drops are transient and worth retrying."""
+        transient_patterns = ["Timed out", "lost connection", "Connection refused"]
+        return any(p in error_str for p in transient_patterns)
 
     def _install_scanfs(self):
         # Detect available shell on first run to provide clear errors
