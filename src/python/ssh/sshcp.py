@@ -248,6 +248,9 @@ class Sshcp:
             "-o", "StrictHostKeyChecking=no",  # ignore host key changes
             "-o", "UserKnownHostsFile=/dev/null",  # ignore known hosts file
             "-o", "LogLevel=error",  # suppress warnings
+            "-o", "ConnectTimeout=30",  # cap connection establishment to 30s
+            "-o", "ServerAliveInterval=15",  # send keepalive every 15s
+            "-o", "ServerAliveCountMax=3",  # drop after 3 missed keepalives
         ]
 
         if self.__password is None:
@@ -318,10 +321,19 @@ class Sshcp:
                 raise SshcpError(error_msg)
 
         except pexpect.exceptions.TIMEOUT:
-            self.logger.exception("Timed out")
-            self.logger.error("Command output before:\n{}".format(sp.before))
-            raise SshcpError("Timed out")
-        sp.close()
+            elapsed = time.time() - start_time
+            self.logger.error(
+                "Timed out after {:.0f}s (limit: {}s). Command: {}".format(
+                    elapsed, self.__TIMEOUT_SECS, command
+                )
+            )
+            self.logger.error("Command output before timeout: {}".format(
+                sp.before if sp.before else b'(none)'
+            ))
+            raise SshcpError("Timed out after {:.0f}s".format(elapsed))
+        finally:
+            sp.close()
+
         end_time = time.time()
 
         self.logger.debug("Return code: {}".format(sp.exitstatus))
