@@ -134,7 +134,7 @@ class RemoteScanner(IScanner):
     @staticmethod
     def _is_transient_error(error_str: str) -> bool:
         """Timeouts and connection drops are transient and worth retrying."""
-        transient_patterns = ["Timed out", "lost connection", "Connection refused"]
+        transient_patterns = ["Timed out", "lost connection", "Connection refused", "Connection timed out"]
         return any(p in error_str for p in transient_patterns)
 
     def _install_scanfs(self):
@@ -144,9 +144,10 @@ class RemoteScanner(IScanner):
             self.__ssh.detect_shell()
         except SshcpError as e:
             self.logger.exception("Shell detection failed")
+            recoverable = self._is_transient_error(str(e))
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
-                recoverable=False
+                recoverable=recoverable
             )
 
         self._log_remote_diagnostics()
@@ -164,9 +165,10 @@ class RemoteScanner(IScanner):
                 return
         except SshcpError as e:
             self.logger.exception("Caught scp exception")
+            recoverable = self._is_transient_error(str(e))
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
-                recoverable=False
+                recoverable=recoverable
             )
 
         # Go ahead and install
@@ -186,9 +188,10 @@ class RemoteScanner(IScanner):
                             remote_path=self.__remote_path_to_scan_script)
         except SshcpError as e:
             self.logger.exception("Caught scp exception")
+            recoverable = self._is_transient_error(str(e))
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
-                recoverable=False
+                recoverable=recoverable
             )
 
     def _log_remote_diagnostics(self):
