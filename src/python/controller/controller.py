@@ -608,7 +608,10 @@ class Controller:
         Propagate any exceptions from child processes/threads to this thread
         :return:
         """
-        self.__lftp.raise_pending_error()
+        try:
+            self.__lftp.raise_pending_error()
+        except LftpError as e:
+            self.logger.warning("Caught lftp error: {}".format(str(e)))
         self.__active_scan_process.propagate_exception()
         self.__local_scan_process.propagate_exception()
         self.__remote_scan_process.propagate_exception()
