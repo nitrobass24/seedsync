@@ -425,3 +425,43 @@ class TestRemoteScanner(unittest.TestCase):
             scanner.scan()
         self.assertFalse(ctx.exception.recoverable)
         self.mock_sleep.assert_not_called()
+
+    def test_raises_recoverable_error_on_transient_shell_detection_failure(self):
+        """Transient SSH errors during shell detection are recoverable"""
+        scanner = self._make_scanner()
+
+        self.mock_ssh.detect_shell.side_effect = SshcpError(
+            "ssh: connect to host example.com port 22: Connection timed out"
+        )
+
+        with self.assertRaises(ScannerError) as ctx:
+            scanner.scan()
+        self.assertIn("Connection timed out", str(ctx.exception))
+        self.assertTrue(ctx.exception.recoverable)
+
+    def test_raises_recoverable_error_on_transient_md5sum_failure(self):
+        """Transient SSH errors during md5sum check are recoverable"""
+        scanner = self._make_scanner()
+
+        self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
+            b'',                                    # diagnostics
+            SshcpError("Timed out after 30s"),      # md5sum - transient
+        ])
+
+        with self.assertRaises(ScannerError) as ctx:
+            scanner.scan()
+        self.assertTrue(ctx.exception.recoverable)
+
+    def test_raises_recoverable_error_on_transient_copy_failure(self):
+        """Transient SSH errors during scanfs copy are recoverable"""
+        scanner = self._make_scanner()
+
+        self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
+            b'',    # diagnostics
+            b'',    # md5sum - doesn't match, triggers install
+        ])
+        self.mock_ssh.copy.side_effect = SshcpError("lost connection")
+
+        with self.assertRaises(ScannerError) as ctx:
+            scanner.scan()
+        self.assertTrue(ctx.exception.recoverable)
