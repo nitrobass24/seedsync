@@ -159,12 +159,12 @@ class RemoteScanner(IScanner):
         try:
             out = self.__ssh.shell("md5sum '{}' | awk '{{print $1}}' || echo".format(
                 self.__remote_path_to_scan_script))
-            out = out.decode()
+            out = out.decode().strip()
             if out == local_md5sum:
                 self.logger.info("Skipping remote scanfs installation: already installed")
                 return
         except SshcpError as e:
-            self.logger.exception("Caught scp exception")
+            self.logger.exception("Caught SSH exception during md5sum check")
             recoverable = self._is_transient_error(str(e))
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
@@ -217,8 +217,8 @@ class RemoteScanner(IScanner):
 
             self._check_glibc_version(glibc_line)
 
-        except SshcpError:
-            self.logger.warning("Failed to collect remote server diagnostics")
+        except SshcpError as e:
+            self.logger.warning("Failed to collect remote server diagnostics: {}".format(str(e)))
 
     def _check_glibc_version(self, glibc_line: str):
         """Parse glibc version string and warn if too old."""
