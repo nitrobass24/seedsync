@@ -510,7 +510,7 @@ class Controller:
                 try:
                     self.__lftp.queue(file.name, file.is_dir)
                 except LftpError as e:
-                    _notify_failure(command, "Lftp error: ".format(str(e)))
+                    _notify_failure(command, "Lftp error: {}".format(str(e)))
                     continue
 
             elif command.action == Controller.Command.Action.STOP:
@@ -520,7 +520,7 @@ class Controller:
                 try:
                     self.__lftp.kill(file.name)
                 except LftpError as e:
-                    _notify_failure(command, "Lftp error: ".format(str(e)))
+                    _notify_failure(command, "Lftp error: {}".format(str(e)))
                     continue
 
             elif command.action == Controller.Command.Action.EXTRACT:
@@ -611,7 +611,12 @@ class Controller:
         try:
             self.__lftp.raise_pending_error()
         except LftpError as e:
-            self.logger.warning("Caught lftp error: {}".format(str(e)))
+            error_str = str(e)
+            # Permanent errors (bad credentials, access denied) must propagate
+            permanent_patterns = ["Login failed", "Access failed"]
+            if any(p in error_str for p in permanent_patterns):
+                raise AppError(error_str)
+            self.logger.warning("Caught lftp error: {}".format(error_str))
         self.__active_scan_process.propagate_exception()
         self.__local_scan_process.propagate_exception()
         self.__remote_scan_process.propagate_exception()
