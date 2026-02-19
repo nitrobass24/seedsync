@@ -366,15 +366,19 @@ class Sshcp:
         if not command:
             raise ValueError("Command cannot be empty")
 
-        # escape the command
-        if "'" in command and '"' in command:
-            # I don't know how to handle this yet...
-            raise ValueError("Command cannot contain both single and double quotes")
+        # escape the command for SSH transport
+        if "'" in command:
+            # Single quotes in command: wrap in single quotes and escape each
+            # inner single quote using the shell '"'"' trick (end single-quote,
+            # add a double-quoted literal single-quote, start new single-quote).
+            # This handles commands with both single and double quotes, e.g.
+            # filenames like "Don't" inside double-quoted $HOME paths.
+            command = "'" + command.replace("'", "'\"'\"'") + "'"
         elif '"' in command:
             # double quote in command, cover with single quotes
             command = "'{}'".format(command)
         else:
-            # no double quote in command, cover with double quotes
+            # no quotes in command, cover with double quotes
             command = '"{}"'.format(command)
 
         flags = [

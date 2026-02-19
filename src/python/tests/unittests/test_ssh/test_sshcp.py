@@ -149,10 +149,11 @@ class TestSshcp(unittest.TestCase):
         out_str = out.decode().strip()
         self.assertEqual(_dir, out_str)
 
-        # single and double quotes - error out
-        _dir = os.path.join(self.remote_dir, "a b")
-        with self.assertRaises(ValueError):
-            sshcp.shell('mkdir "{}" && cd \'{}\' && pwd'.format(_dir, _dir))
+        # single and double quotes - should work
+        _dir = os.path.join(self.remote_dir, "a c")
+        out = sshcp.shell('mkdir "{}" && cd \'{}\' && pwd'.format(_dir, _dir))
+        out_str = out.decode().strip()
+        self.assertEqual(_dir, out_str)
 
     @timeout_decorator.timeout(5)
     def test_shell_error_bad_password(self):
