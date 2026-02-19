@@ -31,6 +31,7 @@ class ModelBuilder:
         self.__extract_statuses = dict()
         self.__extracted_files = set()
         self.__cached_model = None
+        self.__smoothed_etas = dict()
 
     def set_base_logger(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild("ModelBuilder")
@@ -92,6 +93,7 @@ class ModelBuilder:
         self.__extract_statuses.clear()
         self.__extracted_files.clear()
         self.__cached_model = None
+        self.__smoothed_etas.clear()
 
     def has_changes(self) -> bool:
         """
@@ -264,11 +266,30 @@ class ModelBuilder:
             if model_file.state == ModelFile.State.DOWNLOADING and \
                     model_file.eta is None and \
                     model_file.downloading_speed is not None and \
-                    model_file.downloading_speed > 0 and \
-                    model_file.transferred_size is not None:
-                # First-order estimate
-                remaining_size = max(model_file.remote_size - model_file.transferred_size, 0)
-                model_file.eta = int(math.ceil(remaining_size / model_file.downloading_speed))
+                    model_file.downloading_speed > 0:
+                raw_eta = None
+                # For directories, prefer LFTP's real-time transfer sizes over
+                # stale filesystem sizes
+                if model_file.is_dir and status and \
+                        status.total_transfer_state.size_local is not None and \
+                        status.total_transfer_state.size_remote is not None and \
+                        status.total_transfer_state.size_remote > 0:
+                    remaining = max(status.total_transfer_state.size_remote -
+                                    status.total_transfer_state.size_local, 0)
+                    raw_eta = remaining / model_file.downloading_speed
+                elif model_file.transferred_size is not None:
+                    remaining = max(model_file.remote_size - model_file.transferred_size, 0)
+                    raw_eta = remaining / model_file.downloading_speed
+
+                if raw_eta is not None:
+                    # Apply EMA smoothing (alpha=0.3) to prevent wild swings
+                    alpha = 0.3
+                    if name in self.__smoothed_etas:
+                        smoothed = self.__smoothed_etas[name] + alpha * (raw_eta - self.__smoothed_etas[name])
+                    else:
+                        smoothed = raw_eta
+                    self.__smoothed_etas[name] = smoothed
+                    model_file.eta = int(math.ceil(smoothed))
 
             # now we can determine if root is Downloaded
             # root is Downloaded if all child remote files are Downloaded
@@ -346,6 +367,11 @@ class ModelBuilder:
                     model_file.state = ModelFile.State.EXTRACTED
 
             model.add_file(model_file)
+
+        # Clean up smoothed ETAs for files no longer in model
+        stale = [k for k in self.__smoothed_etas if k not in model.get_file_names()]
+        for k in stale:
+            del self.__smoothed_etas[k]
 
         self.__cached_model = model
         return model
