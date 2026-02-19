@@ -536,6 +536,90 @@ class TestModelBuilder(unittest.TestCase):
         model = self.model_builder.build_model()
         self.assertEqual(0, model.get_file("a").eta)
 
+    def test_build_estimated_eta_uses_lftp_transfer_state_for_dirs(self):
+        """Directory ETA uses LFTP's real-time sizes, not stale filesystem sizes"""
+        # Remote filesystem says 3000 bytes downloaded (stale)
+        # LFTP transfer state says 7000 bytes downloaded (fresh)
+        # Total size is 10000, speed is 100
+        # Expected: (10000-7000)/100 = 30, NOT (10000-3000)/100 = 70
+        r_a = SystemFile("a", 10000, True)
+        r_aa = SystemFile("aa", 10000, False)
+        r_a.add_child(r_aa)
+        l_a = SystemFile("a", 3000, True)
+        l_aa = SystemFile("aa", 3000, False)
+        l_a.add_child(l_aa)
+        s = LftpJobStatus(0, LftpJobStatus.Type.MIRROR, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(7000, 10000, 70, 100, None)
+        self.model_builder.set_remote_files([r_a])
+        self.model_builder.set_local_files([l_a])
+        self.model_builder.set_lftp_statuses([s])
+        model = self.model_builder.build_model()
+        self.assertEqual(30, model.get_file("a").eta)
+
+    def test_build_estimated_eta_files_unaffected(self):
+        """Single file (pget) ETA still uses filesystem sizes"""
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        # Even if transfer state has size_local/size_remote, files should use filesystem sizes
+        s.total_transfer_state = LftpJobStatus.TransferState(9000, 10000, 90, 100, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_remote_files([SystemFile("a", 2000, False)])
+        self.model_builder.set_local_files([SystemFile("a", 1000, False)])
+        model = self.model_builder.build_model()
+        # Uses filesystem: (2000-1000)/100 = 10
+        self.assertEqual(10, model.get_file("a").eta)
+
+    def test_build_eta_smoothing(self):
+        """EMA dampens speed fluctuations across multiple builds"""
+        # First build: raw ETA = (2000-1000)/100 = 10.0, smoothed = 10.0
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(None, None, None, 100, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_remote_files([SystemFile("a", 2000, False)])
+        self.model_builder.set_local_files([SystemFile("a", 1000, False)])
+        model = self.model_builder.build_model()
+        self.assertEqual(10, model.get_file("a").eta)
+
+        # Second build (no clear): speed drops, local size advances slightly
+        # raw ETA = (2000-1001)/50 = 19.98, smoothed = 10.0 + 0.3*(19.98 - 10.0) = 12.994
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(None, None, None, 50, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_local_files([SystemFile("a", 1001, False)])
+        model = self.model_builder.build_model()
+        self.assertEqual(13, model.get_file("a").eta)  # ceil(12.994) = 13
+
+        # Third build: speed stays low, local advances again
+        # raw ETA = (2000-1002)/50 = 19.96, smoothed = 12.994 + 0.3*(19.96 - 12.994) = 15.084
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(None, None, None, 50, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_local_files([SystemFile("a", 1002, False)])
+        model = self.model_builder.build_model()
+        self.assertEqual(16, model.get_file("a").eta)  # ceil(15.084) = 16
+
+    def test_build_eta_smoothing_reset_on_clear(self):
+        """clear() resets smoothed ETA state"""
+        # First build: raw = 10.0, smoothed = 10.0
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(None, None, None, 100, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_remote_files([SystemFile("a", 2000, False)])
+        self.model_builder.set_local_files([SystemFile("a", 1000, False)])
+        model = self.model_builder.build_model()
+        self.assertEqual(10, model.get_file("a").eta)
+
+        # Clear resets smoothed state
+        self.model_builder.clear()
+
+        # After clear: raw = 20.0, smoothed = 20.0 (first value, unsmoothed)
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(None, None, None, 50, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_remote_files([SystemFile("a", 2000, False)])
+        self.model_builder.set_local_files([SystemFile("a", 1000, False)])
+        model = self.model_builder.build_model()
+        self.assertEqual(20, model.get_file("a").eta)
+
     def test_build_children_names(self):
         model = self.__build_test_model_children_tree_1()
         self.assertEqual({"a", "b", "c", "d"}, model.get_file_names())
