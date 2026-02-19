@@ -4,8 +4,10 @@
 def escape_remote_path_single(path: str) -> str:
     """
     Escape a remote path using single quotes (no variable expansion).
+    Single quotes within the path are escaped using the shell '\\'' trick.
     """
-    return "'{}'".format(path)
+    escaped = path.replace("'", "'\\''")
+    return "'{}'".format(escaped)
 
 
 def escape_remote_path_double(path: str) -> str:

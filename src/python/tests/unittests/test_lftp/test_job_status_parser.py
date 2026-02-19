@@ -119,6 +119,47 @@ class TestLftpJobStatusParser(unittest.TestCase):
         self.assertEqual(1, len(statuses))
         self.assertEqual("a", statuses[0].name)
 
+    def test_jobs_v_echo_interleaved_mid_filename(self):
+        """Test that 'jobs -v' echo interleaved mid-filename doesn't crash the parser.
+        This reproduces a real crash where pexpect echoed the command in the middle
+        of lftp output, splitting a chunk data line across two lines."""
+        # The 'jobs -v' echo is embedded mid-filename: 'End.200' + 'jobs -v\n' + '7.mkv'
+        output = (
+            "jobs -v\n"
+            "[2] pget -c ~/downloads/completed/SomeFile.mkv -o /data/lftpsync//  -- 2.42 MiB/s\n"
+            "    sftp://user:pass@host:22/home/user\n"
+            "    `~/downloads/completed/SomeFile.mkv' at 982384640 (5%) 907.0K/s eta:4h22m [Receiving data]\n"
+            "[4] pget -c ~/downloads/completed/Pirates.Of.The.Caribbean.At.Worlds.End.2007.mkv -o /data/lftpsync// \n"
+            "    sftp://user:pass@host:22/home/user\n"
+            "    `~/downloads/completed/Pirates.Of.The.Caribbean.At.Worlds.End.2007.mkv', got 1081344 of 40825332014 (0%) \n"
+            "  \\chunk 0-816506654\n"
+            "    `~/downloads/completed/Pirates.Of.The.Caribbean.At.Worlds.End.2007.mkv' at 360448 (0%) [Receiving data]\n"
+            "  \\chunk 11431092974-12247599613\n"
+            "    `~/downloads/completed/Pirates.Of.The.Caribbean.At.Worlds.End.200jobs -v\n"
+            "7.mkv' at 11431092974 (0%) [Connecting...]\n"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(2, len(statuses))
+        self.assertEqual("SomeFile.mkv", statuses[0].name)
+        self.assertEqual("Pirates.Of.The.Caribbean.At.Worlds.End.2007.mkv", statuses[1].name)
+
+    def test_jobs_v_echo_on_own_line_in_chunk(self):
+        """Test that 'jobs -v' echo appearing as its own line within chunk data is handled."""
+        output = (
+            "jobs -v\n"
+            "[2] pget -c ~/downloads/completed/SomeFile.mkv -o /data/lftpsync// \n"
+            "    sftp://user:pass@host:22/home/user\n"
+            "    `~/downloads/completed/SomeFile.mkv', got 1000 of 2000 (50%) \n"
+            "  \\chunk 0-999\n"
+            "    `~/downloads/completed/jobs -v\n"
+            "SomeFile.mkv' at 500 (25%) [Receiving data]\n"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("SomeFile.mkv", statuses[0].name)
+
     def test_queued_items(self):
         """Queued items, no jobs running"""
         output = """
