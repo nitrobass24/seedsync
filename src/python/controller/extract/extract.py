@@ -15,10 +15,65 @@ class ExtractError(AppError):
     pass
 
 
+# Magic byte signatures for archive formats
+_ARCHIVE_SIGNATURES = [
+    (b'\x52\x61\x72\x21\x1A\x07\x01\x00', 'RAR5'),   # RAR5 (8 bytes, check before RAR4)
+    (b'\x52\x61\x72\x21\x1A\x07\x00', 'RAR4'),        # RAR4 (7 bytes)
+    (b'\x50\x4B\x03\x04', 'ZIP'),                      # ZIP (4 bytes)
+    (b'\x37\x7A\xBC\xAF\x27\x1C', '7Z'),              # 7Z (6 bytes)
+    (b'\x42\x5A\x68', 'BZIP2'),                        # BZIP2 (3 bytes)
+    (b'\x1F\x8B', 'GZIP'),                             # GZIP (2 bytes)
+]
+
+
 class Extract:
     """
     Utility to extract archive files
     """
+    @staticmethod
+    def verify_archive(archive_path: str):
+        """
+        Lightweight verification that an archive file is complete and readable.
+        Checks magic bytes and tail readability to catch truncated files
+        (e.g. incomplete flushes on Docker volume mounts).
+        Raises ExtractError on failure. Silently returns for unrecognized formats.
+        """
+        if not os.path.isfile(archive_path):
+            raise ExtractError("Archive verification failed: file not found: {}".format(archive_path))
+
+        file_size = os.path.getsize(archive_path)
+        if file_size == 0:
+            raise ExtractError("Archive verification failed: empty file: {}".format(archive_path))
+
+        try:
+            with open(archive_path, 'rb') as f:
+                # Check magic bytes
+                header = f.read(8)
+                recognized = False
+                for signature, name in _ARCHIVE_SIGNATURES:
+                    if header[:len(signature)] == signature:
+                        recognized = True
+                        break
+
+                if not recognized:
+                    # Unrecognized format — skip verification
+                    return
+
+                # Tail readability check: seek to 1KB before EOF and read
+                tail_offset = max(0, file_size - 1024)
+                f.seek(tail_offset)
+                tail_data = f.read()
+                if len(tail_data) == 0:
+                    raise ExtractError(
+                        "Archive verification failed: truncated or corrupt file: {}".format(archive_path)
+                    )
+        except ExtractError:
+            raise
+        except OSError as e:
+            raise ExtractError(
+                "Archive verification failed: unable to read file: {}: {}".format(archive_path, e)
+            )
+
     @staticmethod
     def is_archive(archive_path: str) -> bool:
         if not os.path.isfile(archive_path):

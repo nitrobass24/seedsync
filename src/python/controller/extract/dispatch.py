@@ -177,6 +177,8 @@ class ExtractDispatch:
                             completed = False
                             break
 
+                        self.logger.debug("Verifying {}".format(archive_path))
+                        Extract.verify_archive(archive_path)
                         self.logger.debug("Extracting {}".format(archive_path))
                         Extract.extract_archive(
                             archive_path=archive_path,
