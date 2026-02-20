@@ -1554,3 +1554,19 @@ class TestLftpJobStatusParser(unittest.TestCase):
         self.assertEqual(len(golden_jobs), len(statuses))
         statuses_jobs = [j for j in statuses if j.state == LftpJobStatus.State.RUNNING]
         self.assertEqual(golden_jobs, statuses_jobs)
+
+    def test_long_path_single_line(self):
+        # Verify the parser handles very long paths when they're on a single line
+        # (as they should be with a wide pexpect terminal).
+        # This is a regression test for a crash caused by terminal line wrapping
+        # when pexpect used the default 80-column width.
+        output = (
+            "[1] mirror -c /remote/path/Terminator.2.Judgment.Day.1991.2160p.UHD.BluRay.x265-SURCODE"
+            " /local/path/ -- 500M/1G (50%) 10M/s"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("Terminator.2.Judgment.Day.1991.2160p.UHD.BluRay.x265-SURCODE", statuses[0].name)
+        self.assertEqual(LftpJobStatus.Type.MIRROR, statuses[0].type)
+        self.assertEqual(LftpJobStatus.State.RUNNING, statuses[0].state)
