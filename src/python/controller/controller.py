@@ -218,6 +218,8 @@ class Controller:
 
         # Track extraction retry counts (in-memory, resets on restart)
         self.__extract_retry_counts: Dict[str, int] = {}
+        # Track files pending re-download after extraction failure
+        self.__pending_redownload: Set[str] = set()
 
         # Track whether we've received initial scans (for persist cleanup)
         self.__remote_scan_received = False
@@ -479,12 +481,31 @@ class Controller:
                         if not will_auto_extract:
                             self.__spawn_move_process(diff.new_file.name)
 
-                # Remove from pending completion once the file has reached a terminal state
+                # Remove from pending completion
                 if diff.new_file is not None and \
-                        diff.new_file.state in (ModelFile.State.DOWNLOADED,
-                                                ModelFile.State.EXTRACTED,
-                                                ModelFile.State.DELETED):
-                    self.__pending_completion.discard(diff.new_file.name)
+                        diff.new_file.name in self.__pending_completion:
+                    use_staging = self.__context.config.controller.use_staging and \
+                                  self.__context.config.controller.staging_path
+                    if use_staging:
+                        # With staging, only remove after file has been moved to final location
+                        if diff.new_file.name in self.__moved_file_names:
+                            self.__pending_completion.discard(diff.new_file.name)
+                        elif diff.new_file.state == ModelFile.State.DELETED:
+                            self.__pending_completion.discard(diff.new_file.name)
+                    else:
+                        # Without staging, remove at terminal states
+                        if diff.new_file.state in (ModelFile.State.DOWNLOADED,
+                                                    ModelFile.State.EXTRACTED,
+                                                    ModelFile.State.DELETED):
+                            self.__pending_completion.discard(diff.new_file.name)
+
+                # Re-download retry: queue download when file returns to DEFAULT
+                if diff.new_file is not None and \
+                        diff.new_file.state == ModelFile.State.DEFAULT and \
+                        diff.new_file.name in self.__pending_redownload:
+                    self.__pending_redownload.discard(diff.new_file.name)
+                    command = Controller.Command(Controller.Command.Action.QUEUE, diff.new_file.name)
+                    self.queue_command(command)
 
             # Prune the extracted files list of any files that were deleted locally
             # This prevents these files from going to EXTRACTED state if they are re-downloaded
@@ -539,7 +560,8 @@ class Controller:
                 self.__persist.extracted_file_names.discard(result.name)
                 self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
                 self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
-                # Delete local file so it goes to DEFAULT → auto-queue re-downloads
+                # Delete local file so it goes to DEFAULT, then re-download queue triggers
+                self.__pending_redownload.add(result.name)
                 self.__spawn_system_delete_local(result.name)
             else:
                 self.logger.error(
