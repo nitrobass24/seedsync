@@ -508,11 +508,13 @@ class Controller:
             # Persist cleanup: remove entries for files absent from all sources
             # When both remote and local copies are gone, clear persist so the file vanishes.
             # If re-uploaded to seedbox later, it's treated as brand new.
+            # Exclude files with in-flight moves (staging → local) since the local scanner
+            # hasn't picked them up at the final path yet.
             if self.__remote_scan_received and self.__local_scan_received:
                 absent_names = set()
                 model_file_names = self.__model.get_file_names()
                 for name in self.__persist.downloaded_file_names:
-                    if name not in model_file_names:
+                    if name not in model_file_names and name not in self.__moved_file_names:
                         absent_names.add(name)
                 if absent_names:
                     self.logger.info("Persist cleanup (both absent): {}".format(absent_names))
