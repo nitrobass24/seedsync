@@ -1378,3 +1378,155 @@ class TestAutoQueue(unittest.TestCase):
         self.model_listener.file_updated(file_one_new, file_one_newer)
         auto_queue.process()
         self.controller.queue_command.assert_not_called()
+
+    def test_non_extractable_downloaded_triggers_delete_remote(self):
+        """Non-extractable DOWNLOADED file should trigger delete-remote"""
+        self.context.config.autoqueue.enabled = False
+        self.context.config.autoqueue.patterns_only = False
+        self.context.config.autoqueue.auto_extract = True
+        self.context.config.autoqueue.auto_delete_remote = True
+
+        persist = AutoQueuePersist()
+        # noinspection PyTypeChecker
+        auto_queue = AutoQueue(self.context, persist, self.controller)
+
+        file_one = ModelFile("File.One", False)
+        file_one.state = ModelFile.State.DOWNLOADED
+        file_one.remote_size = 100
+        file_one.local_size = 100
+        file_one.is_extractable = False
+        self.model_listener.file_added(file_one)
+        auto_queue.process()
+        self.assertEqual(1, self.controller.queue_command.call_count)
+        command = self.controller.queue_command.call_args[0][0]
+        self.assertEqual(Controller.Command.Action.DELETE_REMOTE, command.action)
+        self.assertEqual("File.One", command.filename)
+
+    def test_extractable_downloaded_blocked_when_auto_extract_on(self):
+        """Extractable DOWNLOADED file should NOT trigger delete-remote when auto_extract is ON"""
+        self.context.config.autoqueue.enabled = False
+        self.context.config.autoqueue.patterns_only = False
+        self.context.config.autoqueue.auto_extract = True
+        self.context.config.autoqueue.auto_delete_remote = True
+
+        persist = AutoQueuePersist()
+        # noinspection PyTypeChecker
+        auto_queue = AutoQueue(self.context, persist, self.controller)
+
+        file_one = ModelFile("File.One", False)
+        file_one.state = ModelFile.State.DOWNLOADED
+        file_one.remote_size = 100
+        file_one.local_size = 100
+        file_one.is_extractable = True
+        self.model_listener.file_added(file_one)
+        auto_queue.process()
+        # Only EXTRACT should fire, not DELETE_REMOTE
+        commands = [call[0][0] for call in self.controller.queue_command.call_args_list]
+        for cmd in commands:
+            self.assertNotEqual(Controller.Command.Action.DELETE_REMOTE, cmd.action)
+        # Verify EXTRACT was sent
+        self.assertEqual(1, len(commands))
+        self.assertEqual(Controller.Command.Action.EXTRACT, commands[0].action)
+
+    def test_extractable_extracted_triggers_delete_remote(self):
+        """Extractable EXTRACTED file should trigger delete-remote"""
+        self.context.config.autoqueue.enabled = False
+        self.context.config.autoqueue.patterns_only = False
+        self.context.config.autoqueue.auto_extract = True
+        self.context.config.autoqueue.auto_delete_remote = True
+
+        persist = AutoQueuePersist()
+        # noinspection PyTypeChecker
+        auto_queue = AutoQueue(self.context, persist, self.controller)
+
+        # File transitions DOWNLOADED → EXTRACTED
+        file_old = ModelFile("File.One", False)
+        file_old.state = ModelFile.State.DOWNLOADED
+        file_old.remote_size = 100
+        file_old.local_size = 100
+        file_old.is_extractable = True
+        file_new = ModelFile("File.One", False)
+        file_new.state = ModelFile.State.EXTRACTED
+        file_new.remote_size = 100
+        file_new.local_size = 100
+        file_new.is_extractable = True
+        self.model_listener.file_updated(file_old, file_new)
+        auto_queue.process()
+        self.assertEqual(1, self.controller.queue_command.call_count)
+        command = self.controller.queue_command.call_args[0][0]
+        self.assertEqual(Controller.Command.Action.DELETE_REMOTE, command.action)
+        self.assertEqual("File.One", command.filename)
+
+    def test_extractable_downloaded_triggers_delete_remote_when_auto_extract_off(self):
+        """Extractable DOWNLOADED file should trigger delete-remote when auto_extract is OFF"""
+        self.context.config.autoqueue.enabled = False
+        self.context.config.autoqueue.patterns_only = False
+        self.context.config.autoqueue.auto_extract = False
+        self.context.config.autoqueue.auto_delete_remote = True
+
+        persist = AutoQueuePersist()
+        # noinspection PyTypeChecker
+        auto_queue = AutoQueue(self.context, persist, self.controller)
+
+        file_one = ModelFile("File.One", False)
+        file_one.state = ModelFile.State.DOWNLOADED
+        file_one.remote_size = 100
+        file_one.local_size = 100
+        file_one.is_extractable = True
+        self.model_listener.file_added(file_one)
+        auto_queue.process()
+        self.assertEqual(1, self.controller.queue_command.call_count)
+        command = self.controller.queue_command.call_args[0][0]
+        self.assertEqual(Controller.Command.Action.DELETE_REMOTE, command.action)
+        self.assertEqual("File.One", command.filename)
+
+    def test_delete_remote_retry_for_deleted_file_with_remote(self):
+        """DELETED file with remote still present should trigger delete-remote retry"""
+        self.context.config.autoqueue.enabled = False
+        self.context.config.autoqueue.patterns_only = False
+        self.context.config.autoqueue.auto_extract = False
+        self.context.config.autoqueue.auto_delete_remote = True
+
+        persist = AutoQueuePersist()
+        # noinspection PyTypeChecker
+        auto_queue = AutoQueue(self.context, persist, self.controller)
+
+        # Set up the model to return a DELETED file with remote_size present
+        file_one = ModelFile("File.One", False)
+        file_one.state = ModelFile.State.DELETED
+        file_one.remote_size = 100
+        file_one.local_size = None
+        self.initial_model = [file_one]
+
+        # First process call: retry fires (initial count = RETRY_INTERVAL)
+        auto_queue.process()
+        self.assertEqual(1, self.controller.queue_command.call_count)
+        command = self.controller.queue_command.call_args[0][0]
+        self.assertEqual(Controller.Command.Action.DELETE_REMOTE, command.action)
+        self.assertEqual("File.One", command.filename)
+        self.controller.queue_command.reset_mock()
+
+        # Subsequent calls within interval should NOT fire
+        auto_queue.process()
+        self.controller.queue_command.assert_not_called()
+
+    def test_delete_remote_no_retry_when_remote_gone(self):
+        """DELETED file with remote gone should NOT trigger delete-remote retry"""
+        self.context.config.autoqueue.enabled = False
+        self.context.config.autoqueue.patterns_only = False
+        self.context.config.autoqueue.auto_extract = False
+        self.context.config.autoqueue.auto_delete_remote = True
+
+        persist = AutoQueuePersist()
+        # noinspection PyTypeChecker
+        auto_queue = AutoQueue(self.context, persist, self.controller)
+
+        # Set up the model to return a DELETED file with no remote
+        file_one = ModelFile("File.One", False)
+        file_one.state = ModelFile.State.DELETED
+        file_one.remote_size = None
+        file_one.local_size = None
+        self.initial_model = [file_one]
+
+        auto_queue.process()
+        self.controller.queue_command.assert_not_called()
