@@ -89,6 +89,10 @@ class Lftp:
             "sftp://{}".format(self.__address)
         ]
         self.__process = pexpect.spawn("/usr/bin/lftp", args)
+        # Set a very wide terminal to prevent LFTP from wrapping long lines
+        # in 'jobs -v' output. The default 80-column pty causes paths to wrap
+        # mid-word, producing fragments the parser can't handle.
+        self.__process.setwinsize(24, 10000)
         self.__process.expect(self.__expect_pattern)
         self.__setup()
 
