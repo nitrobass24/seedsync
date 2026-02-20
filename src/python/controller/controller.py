@@ -2,7 +2,7 @@
 
 import os
 from abc import ABC, abstractmethod
-from typing import List, Callable, Set
+from typing import Dict, List, Callable, Set
 from threading import Lock
 from queue import Queue
 from enum import Enum
@@ -101,6 +101,9 @@ class Controller:
         self.__model_builder.set_base_logger(self.logger)
         self.__model_builder.set_downloaded_files(self.__persist.downloaded_file_names)
         self.__model_builder.set_extracted_files(self.__persist.extracted_file_names)
+        self.__model_builder.set_auto_delete_remote(
+            bool(self.__context.config.autoqueue.auto_delete_remote)
+        )
 
         # Determine effective local path: use staging_path when staging is enabled
         if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
@@ -212,6 +215,13 @@ class Controller:
         # Track files that have been moved from staging to final location
         # to prevent duplicate moves (e.g. when model re-detects DOWNLOADED after move)
         self.__moved_file_names: Set[str] = set()
+
+        # Track extraction retry counts (in-memory, resets on restart)
+        self.__extract_retry_counts: Dict[str, int] = {}
+
+        # Track whether we've received initial scans (for persist cleanup)
+        self.__remote_scan_received = False
+        self.__local_scan_received = False
 
         self.__started = False
 
@@ -343,6 +353,15 @@ class Controller:
         # Grab the latest extracted file names
         latest_extracted_results = self.__extract_process.pop_completed()
 
+        # Grab the latest failed extractions
+        latest_failed_extractions = self.__extract_process.pop_failed()
+
+        # Track scan availability for persist cleanup
+        if latest_remote_scan is not None:
+            self.__remote_scan_received = True
+        if latest_local_scan is not None:
+            self.__local_scan_received = True
+
         # Update list of active file names
         if lftp_statuses is not None:
             current_downloading = set(
@@ -378,6 +397,11 @@ class Controller:
         active_files = self.__active_downloading_file_names + self.__active_extracting_file_names
         active_files += list(self.__pending_completion)
         self.__active_scanner.set_active_files(active_files)
+
+        # Push auto_delete_remote config to model builder (picks up runtime changes)
+        self.__model_builder.set_auto_delete_remote(
+            bool(self.__context.config.autoqueue.auto_delete_remote)
+        )
 
         # Update model builder state
         if latest_remote_scan is not None:
@@ -418,11 +442,15 @@ class Controller:
                 elif diff.change == ModelDiff.Change.UPDATED:
                     self.__model.update_file(diff.new_file)
 
-                # Clear move tracking when a file is re-queued for download
+                # Clear move tracking and persist when a file is re-queued for download
                 # so that a fresh download to staging will trigger a new move
                 if diff.new_file is not None and \
                         diff.new_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
                     self.__moved_file_names.discard(diff.new_file.name)
+                    self.__persist.downloaded_file_names.discard(diff.new_file.name)
+                    self.__persist.extracted_file_names.discard(diff.new_file.name)
+                    self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
+                    self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
 
                 # Detect if a file was just Downloaded
                 #   an Added file in Downloaded state
@@ -477,8 +505,44 @@ class Controller:
                 self.__persist.extracted_file_names.difference_update(remove_extracted_file_names)
                 self.__model_builder.set_extracted_files(self.__persist.extracted_file_names)
 
+            # Persist cleanup: remove entries for files absent from all sources
+            # When both remote and local copies are gone, clear persist so the file vanishes.
+            # If re-uploaded to seedbox later, it's treated as brand new.
+            if self.__remote_scan_received and self.__local_scan_received:
+                absent_names = set()
+                model_file_names = self.__model.get_file_names()
+                for name in self.__persist.downloaded_file_names:
+                    if name not in model_file_names:
+                        absent_names.add(name)
+                if absent_names:
+                    self.logger.info("Persist cleanup (both absent): {}".format(absent_names))
+                    self.__persist.downloaded_file_names.difference_update(absent_names)
+                    self.__persist.extracted_file_names.difference_update(absent_names)
+                    self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
+                    self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
+
             # Release the model
             self.__model_lock.release()
+
+        # Process extraction failures — retry by re-downloading
+        for result in latest_failed_extractions:
+            count = self.__extract_retry_counts.get(result.name, 0) + 1
+            self.__extract_retry_counts[result.name] = count
+            if count < 3:
+                self.logger.warning(
+                    "Extraction failed for '{}' (attempt {}/3), scheduling re-download".format(
+                        result.name, count))
+                # Clean persist for fresh start
+                self.__persist.downloaded_file_names.discard(result.name)
+                self.__persist.extracted_file_names.discard(result.name)
+                self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
+                self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
+                # Delete local file so it goes to DEFAULT → auto-queue re-downloads
+                self.__spawn_system_delete_local(result.name)
+            else:
+                self.logger.error(
+                    "Extraction failed for '{}' after {} attempts, giving up".format(
+                        result.name, count))
 
         # Update the controller status
         if latest_remote_scan is not None:
@@ -645,6 +709,25 @@ class Controller:
         self.__active_move_processes.append(process)
         process.start()
         self.logger.info("Spawned move process for {} (staging -> local)".format(file_name))
+
+    def __spawn_system_delete_local(self, file_name: str):
+        """System-initiated local delete for extraction retry cleanup."""
+        process = DeleteLocalProcess(
+            local_path=self.__effective_local_path,
+            file_name=file_name
+        )
+        process.set_multiprocessing_logger(self.__mp_logger)
+        def post_callback():
+            self.__local_scan_process.force_scan()
+            if self.__effective_local_path != self.__context.config.lftp.local_path:
+                # Staging enabled — also force active scan
+                self.__active_scan_process.force_scan()
+        command_wrapper = Controller.CommandProcessWrapper(
+            process=process,
+            post_callback=post_callback
+        )
+        self.__active_command_processes.append(command_wrapper)
+        command_wrapper.process.start()
 
     def __cleanup_commands(self):
         """

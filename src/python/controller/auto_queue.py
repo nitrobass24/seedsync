@@ -2,7 +2,7 @@
 
 import json
 from abc import ABC, abstractmethod
-from typing import Set, List, Callable, Tuple
+from typing import Dict, Set, List, Callable, Tuple
 import fnmatch
 
 from common import overrides, Constants, Context, Persist, PersistError, Serializable
@@ -161,6 +161,7 @@ class AutoQueue:
         self.__patterns_only = context.config.autoqueue.patterns_only
         self.__auto_extract_enabled = context.config.autoqueue.auto_extract
         self.__auto_delete_remote_enabled = context.config.autoqueue.auto_delete_remote
+        self.__delete_remote_retry_cycles: Dict[str, int] = {}
 
         # Register listeners if ANY auto feature is active (auto-queue, auto-extract,
         # or auto-delete-remote). Previously, all features were gated behind __enabled,
@@ -251,16 +252,18 @@ class AutoQueue:
 
             # Candidate modified files that just became DOWNLOADED or EXTRACTED
             for old_file, new_file in self.__model_listener.modified_files:
-                if old_file.state != ModelFile.State.DOWNLOADED and \
-                        old_file.state != ModelFile.State.EXTRACTED and \
+                if old_file.state != new_file.state and \
                         new_file.state in (ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED):
                     delete_remote_candidate_files.append(new_file)
 
             files_to_delete_remote = self.__filter_candidates(
                 candidates=delete_remote_candidate_files,
                 accept=lambda f:
-                    f.state in (ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED) and
-                    f.remote_size is not None
+                    f.remote_size is not None and (
+                        f.state == ModelFile.State.EXTRACTED or
+                        (f.state == ModelFile.State.DOWNLOADED and
+                         (not self.__auto_extract_enabled or not f.is_extractable))
+                    )
             )
 
         ###
@@ -293,6 +296,23 @@ class AutoQueue:
             )
             command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, filename)
             self.__controller.queue_command(command)
+
+        # Retry delete-remote for DELETED files where remote still exists
+        RETRY_INTERVAL = 20  # cycles between retries
+        if self.__auto_delete_remote_enabled:
+            already_sent = {name for name, _ in files_to_delete_remote}
+            model_files = self.__controller.get_model_files()
+            new_retry_cycles = {}
+            for file in model_files:
+                if file.state == ModelFile.State.DELETED and file.remote_size is not None:
+                    count = self.__delete_remote_retry_cycles.get(file.name, RETRY_INTERVAL)
+                    if file.name not in already_sent and count >= RETRY_INTERVAL:
+                        command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, file.name)
+                        self.__controller.queue_command(command)
+                        new_retry_cycles[file.name] = 0
+                    else:
+                        new_retry_cycles[file.name] = count + 1
+            self.__delete_remote_retry_cycles = new_retry_cycles
 
         # Clear the processed files
         self.__model_listener.new_files.clear()

@@ -25,13 +25,23 @@ class ExtractCompletedResult:
         self.is_dir = is_dir
 
 
+class ExtractFailedResult:
+    def __init__(self, timestamp: datetime, name: str, is_dir: bool):
+        self.timestamp = timestamp
+        self.name = name
+        self.is_dir = is_dir
+
+
 class ExtractProcess(AppProcess):
     __DEFAULT_SLEEP_INTERVAL_IN_SECS = 0.5
 
     class __ExtractListener(ExtractListener):
-        def __init__(self, logger: logging.Logger, completed_queue: multiprocessing.Queue):
+        def __init__(self, logger: logging.Logger,
+                     completed_queue: multiprocessing.Queue,
+                     failed_queue: multiprocessing.Queue):
             self.logger = logger
             self.completed_queue = completed_queue
+            self.failed_queue = failed_queue
 
         def extract_completed(self, name: str, is_dir: bool):
             self.logger.info("Extraction completed for {}".format(name))
@@ -42,6 +52,10 @@ class ExtractProcess(AppProcess):
 
         def extract_failed(self, name: str, is_dir: bool):
             self.logger.error("Extraction failed for {}".format(name))
+            failed_result = ExtractFailedResult(timestamp=datetime.datetime.now(),
+                                                name=name,
+                                                is_dir=is_dir)
+            self.failed_queue.put(failed_result)
 
     def __init__(self, out_dir_path: str, local_path: str):
         super().__init__(name=self.__class__.__name__)
@@ -50,6 +64,7 @@ class ExtractProcess(AppProcess):
         self.__command_queue = multiprocessing.Queue()
         self.__status_result_queue = multiprocessing.Queue()
         self.__completed_result_queue = multiprocessing.Queue()
+        self.__failed_result_queue = multiprocessing.Queue()
         self.__dispatch = None
 
     @overrides(AppProcess)
@@ -61,7 +76,8 @@ class ExtractProcess(AppProcess):
         # Add extract listener
         listener = ExtractProcess.__ExtractListener(
             logger=self.logger,
-            completed_queue=self.__completed_result_queue
+            completed_queue=self.__completed_result_queue,
+            failed_queue=self.__failed_result_queue
         )
         self.__dispatch.add_listener(listener)
 
@@ -131,3 +147,18 @@ class ExtractProcess(AppProcess):
         except queue.Empty:
             pass
         return completed
+
+    def pop_failed(self) -> List[ExtractFailedResult]:
+        """
+        Process-safe method to retrieve list of newly failed extractions
+        Returns an empty list if no new failures since the last call.
+        :return:
+        """
+        failed = []
+        try:
+            while True:
+                result = self.__failed_result_queue.get(block=False)
+                failed.append(result)
+        except queue.Empty:
+            pass
+        return failed
