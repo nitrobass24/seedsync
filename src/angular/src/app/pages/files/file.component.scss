@@ -368,6 +368,9 @@
         img#extracting {
             filter: brightness(0) saturate(100%) invert(52%) sepia(88%) saturate(1200%) hue-rotate(203deg) brightness(102%) contrast(101%);
         }
+        img#extract-failed {
+            filter: brightness(0) saturate(100%) invert(30%) sepia(95%) saturate(6000%) hue-rotate(355deg) brightness(95%) contrast(110%);
+        }
     }
 
     // ── Dim 0% progress rows ──

@@ -32,6 +32,7 @@ export enum ViewFileStatus {
   DOWNLOADED   = 'downloaded',
   STOPPED      = 'stopped',
   DELETED      = 'deleted',
-  EXTRACTING   = 'extracting',
-  EXTRACTED    = 'extracted',
+  EXTRACTING      = 'extracting',
+  EXTRACTED       = 'extracted',
+  EXTRACT_FAILED  = 'extract_failed',
 }

@@ -30,7 +30,10 @@ class ModelBuilder:
         self.__downloaded_files = set()
         self.__extract_statuses = dict()
         self.__extracted_files = set()
+        self.__extract_failed_files = set()
+        self.__auto_delete_remote = False
         self.__cached_model = None
+        self.__smoothed_etas = dict()
 
     def set_base_logger(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild("ModelBuilder")
@@ -83,6 +86,18 @@ class ModelBuilder:
         if self.__extracted_files != prev_extracted_files:
             self.__cached_model = None
 
+    def set_extract_failed_files(self, extract_failed_files: Set[str]):
+        prev_extract_failed_files = self.__extract_failed_files
+        self.__extract_failed_files = extract_failed_files
+        # Invalidate the cache
+        if self.__extract_failed_files != prev_extract_failed_files:
+            self.__cached_model = None
+
+    def set_auto_delete_remote(self, enabled: bool):
+        if self.__auto_delete_remote != enabled:
+            self.__auto_delete_remote = enabled
+            self.__cached_model = None
+
     def clear(self):
         self.__local_files.clear()
         self.__active_files.clear()
@@ -91,7 +106,10 @@ class ModelBuilder:
         self.__downloaded_files.clear()
         self.__extract_statuses.clear()
         self.__extracted_files.clear()
+        self.__extract_failed_files.clear()
+        self.__auto_delete_remote = False
         self.__cached_model = None
+        self.__smoothed_etas.clear()
 
     def has_changes(self) -> bool:
         """
@@ -264,11 +282,30 @@ class ModelBuilder:
             if model_file.state == ModelFile.State.DOWNLOADING and \
                     model_file.eta is None and \
                     model_file.downloading_speed is not None and \
-                    model_file.downloading_speed > 0 and \
-                    model_file.transferred_size is not None:
-                # First-order estimate
-                remaining_size = max(model_file.remote_size - model_file.transferred_size, 0)
-                model_file.eta = int(math.ceil(remaining_size / model_file.downloading_speed))
+                    model_file.downloading_speed > 0:
+                raw_eta = None
+                # For directories, prefer LFTP's real-time transfer sizes over
+                # stale filesystem sizes
+                if model_file.is_dir and status and \
+                        status.total_transfer_state.size_local is not None and \
+                        status.total_transfer_state.size_remote is not None and \
+                        status.total_transfer_state.size_remote > 0:
+                    remaining = max(status.total_transfer_state.size_remote -
+                                    status.total_transfer_state.size_local, 0)
+                    raw_eta = remaining / model_file.downloading_speed
+                elif model_file.transferred_size is not None:
+                    remaining = max(model_file.remote_size - model_file.transferred_size, 0)
+                    raw_eta = remaining / model_file.downloading_speed
+
+                if raw_eta is not None:
+                    # Apply EMA smoothing (alpha=0.3) to prevent wild swings
+                    alpha = 0.3
+                    if name in self.__smoothed_etas:
+                        smoothed = self.__smoothed_etas[name] + alpha * (raw_eta - self.__smoothed_etas[name])
+                    else:
+                        smoothed = raw_eta
+                    self.__smoothed_etas[name] = smoothed
+                    model_file.eta = int(math.ceil(smoothed))
 
             # now we can determine if root is Downloaded
             # root is Downloaded if all child remote files are Downloaded
@@ -297,20 +334,23 @@ class ModelBuilder:
                     if all_downloaded:
                         model_file.state = ModelFile.State.DOWNLOADED
 
-            # next we check if file was previously downloaded but remote was deleted
-            # (e.g. auto-delete-remote). The file still exists locally but we can
-            # no longer verify local_size >= remote_size, so use the persist.
+            # next we check persist authority for previously downloaded files
             if model_file.state == ModelFile.State.DEFAULT and \
-                    model_file.local_size is not None and \
                     model_file.name in self.__downloaded_files:
-                model_file.state = ModelFile.State.DOWNLOADED
-
-            # next we determine if root was Deleted
-            # root is Deleted if it does not exist locally, but was downloaded in the past
-            if model_file.state == ModelFile.State.DEFAULT and \
-                    model_file.local_size is None and \
-                    model_file.name in self.__downloaded_files:
-                model_file.state = ModelFile.State.DELETED
+                # Partial file overrides persist — stay DEFAULT for re-download
+                if model_file.local_size is not None and \
+                        model_file.remote_size is not None and \
+                        model_file.local_size < model_file.remote_size:
+                    pass  # Stay DEFAULT for re-download
+                # Persist authority — applies when auto_delete_remote OFF,
+                # or when remote is already gone (auto_delete_remote ON, delete succeeded)
+                elif not self.__auto_delete_remote or model_file.remote_size is None:
+                    if model_file.local_size is not None:
+                        model_file.state = ModelFile.State.DOWNLOADED
+                    else:
+                        model_file.state = ModelFile.State.DELETED
+                # else: auto_delete_remote ON + remote exists → persist doesn't apply,
+                #       stay DEFAULT so auto-queue can re-download
 
             # next we check if root is Extracting
             # root is Extracting if it's part of an extract status, in an expected state,
@@ -345,7 +385,16 @@ class ModelBuilder:
             if model_file.name in self.__extracted_files and model_file.state == ModelFile.State.DOWNLOADED:
                     model_file.state = ModelFile.State.EXTRACTED
 
+            # next we check if root has failed extraction
+            if model_file.name in self.__extract_failed_files and model_file.state == ModelFile.State.DOWNLOADED:
+                    model_file.state = ModelFile.State.EXTRACT_FAILED
+
             model.add_file(model_file)
+
+        # Clean up smoothed ETAs for files no longer in model
+        stale = [k for k in self.__smoothed_etas if k not in model.get_file_names()]
+        for k in stale:
+            del self.__smoothed_etas[k]
 
         self.__cached_model = model
         return model

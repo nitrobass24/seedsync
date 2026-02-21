@@ -24,6 +24,7 @@ class ModelFile:
         DELETED = 4
         EXTRACTING = 5
         EXTRACTED = 6
+        EXTRACT_FAILED = 7
 
     def __init__(self, name: str, is_dir: bool):
         self.__name = name  # file or folder name

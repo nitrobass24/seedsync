@@ -25,18 +25,20 @@ export enum ModelFileState {
   DOWNLOADING  = 'downloading',
   DOWNLOADED   = 'downloaded',
   DELETED      = 'deleted',
-  EXTRACTING   = 'extracting',
-  EXTRACTED    = 'extracted',
+  EXTRACTING      = 'extracting',
+  EXTRACTED       = 'extracted',
+  EXTRACT_FAILED  = 'extract_failed',
 }
 
 const STATE_LOOKUP: Record<string, ModelFileState> = {
-  DEFAULT:     ModelFileState.DEFAULT,
-  QUEUED:      ModelFileState.QUEUED,
-  DOWNLOADING: ModelFileState.DOWNLOADING,
-  DOWNLOADED:  ModelFileState.DOWNLOADED,
-  DELETED:     ModelFileState.DELETED,
-  EXTRACTING:  ModelFileState.EXTRACTING,
-  EXTRACTED:   ModelFileState.EXTRACTED,
+  DEFAULT:        ModelFileState.DEFAULT,
+  QUEUED:         ModelFileState.QUEUED,
+  DOWNLOADING:    ModelFileState.DOWNLOADING,
+  DOWNLOADED:     ModelFileState.DOWNLOADED,
+  DELETED:        ModelFileState.DELETED,
+  EXTRACTING:     ModelFileState.EXTRACTING,
+  EXTRACTED:      ModelFileState.EXTRACTED,
+  EXTRACT_FAILED: ModelFileState.EXTRACT_FAILED,
 };
 
 export function modelFileFromJson(json: any): ModelFile {

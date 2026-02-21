@@ -252,14 +252,13 @@ class TestModelBuilder(unittest.TestCase):
         self.assertEqual(ModelFile.State.DOWNLOADING, model.get_file("a").state)
 
         # Deleted, then partially Downloaded
-        # Persist takes precedence: file is in downloaded_files and exists locally,
-        # so it stays DOWNLOADED even if local_size < remote_size
+        # Partial file overrides persist: local < remote means re-download needed
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 100, False)])
         self.model_builder.set_local_files([SystemFile("a", 50, False)])
         self.model_builder.set_downloaded_files({"a"})
         model = self.model_builder.build_model()
-        self.assertEqual(ModelFile.State.DOWNLOADED, model.get_file("a").state)
+        self.assertEqual(ModelFile.State.DEFAULT, model.get_file("a").state)
 
         # Downloaded, and Extracting
         self.model_builder.clear()
@@ -352,6 +351,91 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.set_extracted_files({"a"})
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.DELETED, model.get_file("a").state)
+
+    def test_build_state_persist_with_auto_delete_remote(self):
+        """Test persist authority behavior under different auto_delete_remote settings"""
+
+        # auto_delete_remote=False, remote exists, local absent, persist → DELETED
+        self.model_builder.clear()
+        self.model_builder.set_auto_delete_remote(False)
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_downloaded_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DELETED, model.get_file("a").state)
+
+        # auto_delete_remote=False, remote absent, local exists, persist → DOWNLOADED
+        self.model_builder.clear()
+        self.model_builder.set_auto_delete_remote(False)
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_downloaded_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DOWNLOADED, model.get_file("a").state)
+
+        # auto_delete_remote=False, remote absent, local absent, persist → DELETED
+        self.model_builder.clear()
+        self.model_builder.set_auto_delete_remote(False)
+        self.model_builder.set_downloaded_files({"a"})
+        # Need at least one source for 'a' to appear in model — use lftp status
+        self.model_builder.set_lftp_statuses([
+            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "b", "")
+        ])
+        # 'a' won't appear in model at all if not in any source,
+        # so this tests the case where file is only in persist
+        # Actually, a file only in persist won't be in the model at all.
+        # This is by design — persist-only entries are cleaned by controller.
+        # Instead test: remote absent via local-only + persist
+        self.model_builder.clear()
+        self.model_builder.set_auto_delete_remote(False)
+        self.model_builder.set_downloaded_files({"a"})
+        # File must exist in some source to appear in model
+        # If remote_size=None and local_size=None but file in lftp status:
+        self.model_builder.set_lftp_statuses([
+            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")
+        ])
+        model = self.model_builder.build_model()
+        # LFTP status sets it to QUEUED, which takes priority over persist
+        self.assertEqual(ModelFile.State.QUEUED, model.get_file("a").state)
+
+        # auto_delete_remote=False, remote exists, local partial, persist → DEFAULT (partial override)
+        self.model_builder.clear()
+        self.model_builder.set_auto_delete_remote(False)
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 50, False)])
+        self.model_builder.set_downloaded_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DEFAULT, model.get_file("a").state)
+
+        # auto_delete_remote=True, remote absent, local exists, persist → DOWNLOADED
+        self.model_builder.clear()
+        self.model_builder.set_auto_delete_remote(True)
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_downloaded_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DOWNLOADED, model.get_file("a").state)
+
+        # auto_delete_remote=True, remote absent, local absent, persist → DELETED
+        # (file must appear via some source - use lftp as QUEUED overrides)
+        # In practice this means remote_size is None — test with local-only absent too
+        # The realistic case: remote deleted, local deleted, file only in persist
+        # File won't appear in model → controller cleans persist. Skip this combo.
+
+        # auto_delete_remote=True, remote exists, local absent, persist → DEFAULT (re-downloadable)
+        self.model_builder.clear()
+        self.model_builder.set_auto_delete_remote(True)
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_downloaded_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DEFAULT, model.get_file("a").state)
+
+        # auto_delete_remote=True, remote exists, local exists (full), persist → DOWNLOADED
+        # (size check: local >= remote means already downloaded)
+        self.model_builder.clear()
+        self.model_builder.set_auto_delete_remote(True)
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_downloaded_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DOWNLOADED, model.get_file("a").state)
 
     def test_build_remote_size(self):
         self.model_builder.set_remote_files([SystemFile("a", 42, False)])
@@ -535,6 +619,90 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.set_local_files([SystemFile("a", 3000, False)])
         model = self.model_builder.build_model()
         self.assertEqual(0, model.get_file("a").eta)
+
+    def test_build_estimated_eta_uses_lftp_transfer_state_for_dirs(self):
+        """Directory ETA uses LFTP's real-time sizes, not stale filesystem sizes"""
+        # Remote filesystem says 3000 bytes downloaded (stale)
+        # LFTP transfer state says 7000 bytes downloaded (fresh)
+        # Total size is 10000, speed is 100
+        # Expected: (10000-7000)/100 = 30, NOT (10000-3000)/100 = 70
+        r_a = SystemFile("a", 10000, True)
+        r_aa = SystemFile("aa", 10000, False)
+        r_a.add_child(r_aa)
+        l_a = SystemFile("a", 3000, True)
+        l_aa = SystemFile("aa", 3000, False)
+        l_a.add_child(l_aa)
+        s = LftpJobStatus(0, LftpJobStatus.Type.MIRROR, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(7000, 10000, 70, 100, None)
+        self.model_builder.set_remote_files([r_a])
+        self.model_builder.set_local_files([l_a])
+        self.model_builder.set_lftp_statuses([s])
+        model = self.model_builder.build_model()
+        self.assertEqual(30, model.get_file("a").eta)
+
+    def test_build_estimated_eta_files_unaffected(self):
+        """Single file (pget) ETA still uses filesystem sizes"""
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        # Even if transfer state has size_local/size_remote, files should use filesystem sizes
+        s.total_transfer_state = LftpJobStatus.TransferState(9000, 10000, 90, 100, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_remote_files([SystemFile("a", 2000, False)])
+        self.model_builder.set_local_files([SystemFile("a", 1000, False)])
+        model = self.model_builder.build_model()
+        # Uses filesystem: (2000-1000)/100 = 10
+        self.assertEqual(10, model.get_file("a").eta)
+
+    def test_build_eta_smoothing(self):
+        """EMA dampens speed fluctuations across multiple builds"""
+        # First build: raw ETA = (2000-1000)/100 = 10.0, smoothed = 10.0
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(None, None, None, 100, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_remote_files([SystemFile("a", 2000, False)])
+        self.model_builder.set_local_files([SystemFile("a", 1000, False)])
+        model = self.model_builder.build_model()
+        self.assertEqual(10, model.get_file("a").eta)
+
+        # Second build (no clear): speed drops, local size advances slightly
+        # raw ETA = (2000-1001)/50 = 19.98, smoothed = 10.0 + 0.3*(19.98 - 10.0) = 12.994
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(None, None, None, 50, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_local_files([SystemFile("a", 1001, False)])
+        model = self.model_builder.build_model()
+        self.assertEqual(13, model.get_file("a").eta)  # ceil(12.994) = 13
+
+        # Third build: speed stays low, local advances again
+        # raw ETA = (2000-1002)/50 = 19.96, smoothed = 12.994 + 0.3*(19.96 - 12.994) = 15.084
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(None, None, None, 50, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_local_files([SystemFile("a", 1002, False)])
+        model = self.model_builder.build_model()
+        self.assertEqual(16, model.get_file("a").eta)  # ceil(15.084) = 16
+
+    def test_build_eta_smoothing_reset_on_clear(self):
+        """clear() resets smoothed ETA state"""
+        # First build: raw = 10.0, smoothed = 10.0
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(None, None, None, 100, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_remote_files([SystemFile("a", 2000, False)])
+        self.model_builder.set_local_files([SystemFile("a", 1000, False)])
+        model = self.model_builder.build_model()
+        self.assertEqual(10, model.get_file("a").eta)
+
+        # Clear resets smoothed state
+        self.model_builder.clear()
+
+        # After clear: raw = 20.0, smoothed = 20.0 (first value, unsmoothed)
+        s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        s.total_transfer_state = LftpJobStatus.TransferState(None, None, None, 50, None)
+        self.model_builder.set_lftp_statuses([s])
+        self.model_builder.set_remote_files([SystemFile("a", 2000, False)])
+        self.model_builder.set_local_files([SystemFile("a", 1000, False)])
+        model = self.model_builder.build_model()
+        self.assertEqual(20, model.get_file("a").eta)
 
     def test_build_children_names(self):
         model = self.__build_test_model_children_tree_1()

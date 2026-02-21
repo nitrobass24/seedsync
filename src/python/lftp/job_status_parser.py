@@ -89,13 +89,20 @@ class LftpJobStatusParser:
         statuses = list()
         # Strip ANSI escape codes that may be present in terminal output
         output = self._strip_ansi_codes(output)
+        # Phase 1: Strip junk before the first 'jobs -v' command echo.
+        # The pexpect buffer may contain lftp progress output before the echo.
+        idx = output.find('jobs -v')
+        if idx >= 0:
+            output = output[idx + len('jobs -v'):]
+        # Phase 2: Remove any remaining 'jobs -v' echoes before line splitting.
+        # pexpect echoes the command back, and when lftp is writing status data
+        # simultaneously, the echo can be interleaved mid-line, splitting
+        # filenames across lines. Stripping before splitting reconstructs them.
+        # Order matters: first strip echo+newline pairs, then any remaining echo.
+        output = output.replace('jobs -v\n', '')
+        output = output.replace('jobs -v', '')
         lines = [s.strip() for s in output.splitlines()]
         lines = list(filter(None, lines))  # remove blank lines
-        # remove all lines before the first 'jobs -v'
-        start = next((i+1 for i, l in enumerate(lines) if l == "jobs -v"), 0)
-        lines = lines[start:]
-        # remove any remaining 'jobs -v' lines
-        lines = list(filter(lambda s: s != "jobs -v", lines))
         # remove any remaining log line
         lines = filter(lambda s: not re.match(r"^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}.*\s->\s.*$", s), lines)
         lines = list(lines)

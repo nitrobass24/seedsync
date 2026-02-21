@@ -63,7 +63,7 @@ class MoveProcess(AppOneShotProcess):
         if os.path.isfile(src):
             shutil.copy2(src, dst)
         else:
-            shutil.copytree(src, dst)
+            shutil.copytree(src, dst, dirs_exist_ok=True)
 
         dest_size = self._get_total_size(dst)
 

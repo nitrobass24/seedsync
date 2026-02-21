@@ -51,6 +51,9 @@ class ActiveScanner(IScanner):
             try:
                 result.append(self.__scanner.scan_single(file_name))
             except SystemScannerError as ex:
-                # Ignore errors here, file may have been deleted
-                self.logger.warning(str(ex))
+                error_str = str(ex)
+                if "does not exist" in error_str:
+                    self.logger.debug(error_str)
+                else:
+                    self.logger.warning("Unexpected scan error for '{}': {}".format(file_name, error_str))
         return result

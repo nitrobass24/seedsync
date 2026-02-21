@@ -277,6 +277,9 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
     case ModelFileState.EXTRACTED:
       status = ViewFileStatus.EXTRACTED;
       break;
+    case ModelFileState.EXTRACT_FAILED:
+      status = ViewFileStatus.EXTRACT_FAILED;
+      break;
     default:
       status = ViewFileStatus.DEFAULT;
   }
@@ -291,6 +294,7 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
       ViewFileStatus.STOPPED,
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
+      ViewFileStatus.EXTRACT_FAILED,
     ].includes(status) && localSize > 0;
   const isLocallyDeletable =
     [
@@ -298,6 +302,7 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
       ViewFileStatus.STOPPED,
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
+      ViewFileStatus.EXTRACT_FAILED,
     ].includes(status) && localSize > 0;
   const isRemotelyDeletable =
     [
@@ -305,6 +310,7 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
       ViewFileStatus.STOPPED,
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
+      ViewFileStatus.EXTRACT_FAILED,
       ViewFileStatus.DELETED,
     ].includes(status) && remoteSize > 0;
 

@@ -248,6 +248,9 @@ class Sshcp:
             "-o", "StrictHostKeyChecking=no",  # ignore host key changes
             "-o", "UserKnownHostsFile=/dev/null",  # ignore known hosts file
             "-o", "LogLevel=error",  # suppress warnings
+            "-o", "ConnectTimeout=30",  # cap connection establishment to 30s
+            "-o", "ServerAliveInterval=15",  # send keepalive every 15s
+            "-o", "ServerAliveCountMax=3",  # drop after 3 missed keepalives
         ]
 
         if self.__password is None:
@@ -317,33 +320,48 @@ class Sshcp:
                     error_msg += " - " + sp.before.decode().strip()
                 raise SshcpError(error_msg)
 
+            # Capture output attributes while sp is still open (close can clear them)
+            out_before = sp.before.decode().strip() if sp.before != pexpect.EOF else ""
+            out_after = sp.after.decode().strip() if sp.after != pexpect.EOF else ""
+            out_raw = sp.before.replace(b'\r\n', b'\n').strip()
+
         except pexpect.exceptions.TIMEOUT:
-            self.logger.exception("Timed out")
-            self.logger.error("Command output before:\n{}".format(sp.before))
-            raise SshcpError("Timed out")
-        sp.close()
+            elapsed = time.time() - start_time
+            self.logger.error(
+                "Timed out after {:.0f}s (limit: {}s). Command: {}".format(
+                    elapsed, self.__TIMEOUT_SECS, command
+                )
+            )
+            self.logger.error("Command output before timeout: {}".format(
+                sp.before if sp.before else b'(none)'
+            ))
+            raise SshcpError("Timed out after {:.0f}s".format(elapsed))
+        finally:
+            sp.close()
+
+        # exitstatus is only valid after close() reaps the child process
+        exit_status = sp.exitstatus
+
         end_time = time.time()
 
-        self.logger.debug("Return code: {}".format(sp.exitstatus))
+        self.logger.debug("Return code: {}".format(exit_status))
         self.logger.debug("Command took {:.3f}s".format(end_time-start_time))
-        if sp.exitstatus != 0:
-            before = sp.before.decode().strip() if sp.before != pexpect.EOF else ""
-            after = sp.after.decode().strip() if sp.after != pexpect.EOF else ""
-            self.logger.warning("Command failed: '{} - {}'".format(before, after))
+        if exit_status != 0:
+            self.logger.warning("Command failed: '{} - {}'".format(out_before, out_after))
 
             # Check for shell not found error (common on servers where bash is at /usr/bin/bash)
-            if "No such file or directory" in before:
+            if "No such file or directory" in out_before:
                 for shell in self.SHELL_CANDIDATES:
-                    if shell in before:
+                    if shell in out_before:
                         raise SshcpError(
                             "Remote user's login shell not found: {}. "
                             "Run detect_shell() or fix by running on the remote server: "
                             "sudo chsh -s /bin/sh {}".format(shell, self.__user)
                         )
 
-            raise SshcpError(sp.before.decode().strip())
+            raise SshcpError(out_before)
 
-        return sp.before.replace(b'\r\n', b'\n').strip()
+        return out_raw
 
     def shell(self, command: str) -> bytes:
         """
@@ -354,15 +372,19 @@ class Sshcp:
         if not command:
             raise ValueError("Command cannot be empty")
 
-        # escape the command
-        if "'" in command and '"' in command:
-            # I don't know how to handle this yet...
-            raise ValueError("Command cannot contain both single and double quotes")
+        # escape the command for SSH transport
+        if "'" in command:
+            # Single quotes in command: wrap in single quotes and escape each
+            # inner single quote using the shell '"'"' trick (end single-quote,
+            # add a double-quoted literal single-quote, start new single-quote).
+            # This handles commands with both single and double quotes, e.g.
+            # filenames like "Don't" inside double-quoted $HOME paths.
+            command = "'" + command.replace("'", "'\"'\"'") + "'"
         elif '"' in command:
             # double quote in command, cover with single quotes
             command = "'{}'".format(command)
         else:
-            # no double quote in command, cover with double quotes
+            # no quotes in command, cover with double quotes
             command = '"{}"'.format(command)
 
         flags = [

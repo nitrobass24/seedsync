@@ -18,6 +18,10 @@ class TestEscapeRemotePathSingle(unittest.TestCase):
     def test_handles_empty_path(self):
         self.assertEqual("''", escape_remote_path_single(""))
 
+    def test_handles_single_quote_in_path(self):
+        self.assertEqual("'/some/Don'\\''t Look Now'",
+                         escape_remote_path_single("/some/Don't Look Now"))
+
 
 class TestEscapeRemotePathDouble(unittest.TestCase):
     def test_wraps_path_in_double_quotes(self):
