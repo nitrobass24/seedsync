@@ -718,7 +718,7 @@ class Controller:
             # Permanent errors (bad credentials, access denied) must propagate
             permanent_patterns = ["Login failed", "Access failed"]
             if any(p in error_str for p in permanent_patterns):
-                raise AppError(error_str)
+                raise AppError(error_str) from e
             self.logger.warning("Caught lftp error: {}".format(error_str))
         self.__active_scan_process.propagate_exception()
         self.__local_scan_process.propagate_exception()
