@@ -99,8 +99,8 @@ class Controller:
         # Model builder
         self.__model_builder = ModelBuilder()
         self.__model_builder.set_base_logger(self.logger)
-        self.__model_builder.set_downloaded_files(self.__persist.downloaded_file_names)
-        self.__model_builder.set_extracted_files(self.__persist.extracted_file_names)
+        self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
+        self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
         self.__model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
         self.__model_builder.set_auto_delete_remote(
             bool(self.__context.config.autoqueue.auto_delete_remote)
@@ -424,7 +424,7 @@ class Controller:
                 if self.__context.config.controller.use_staging and \
                         self.__context.config.controller.staging_path:
                     self.__spawn_move_process(result.name)
-            self.__model_builder.set_extracted_files(self.__persist.extracted_file_names)
+            self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
 
         # Build the new model, if needed
         if self.__model_builder.has_changes():
@@ -473,7 +473,7 @@ class Controller:
                     downloaded = True
                 if downloaded:
                     self.__persist.downloaded_file_names.add(diff.new_file.name)
-                    self.__model_builder.set_downloaded_files(self.__persist.downloaded_file_names)
+                    self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
 
                     # Move from staging to final location for non-extractable files
                     # (extractable files are moved after extraction completes)
@@ -528,7 +528,7 @@ class Controller:
             if remove_extracted_file_names:
                 self.logger.info("Removing from extracted list: {}".format(remove_extracted_file_names))
                 self.__persist.extracted_file_names.difference_update(remove_extracted_file_names)
-                self.__model_builder.set_extracted_files(self.__persist.extracted_file_names)
+                self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
 
             # Persist cleanup: remove entries for files absent from all sources
             # When both remote and local copies are gone, clear persist so the file vanishes.
