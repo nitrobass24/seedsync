@@ -450,6 +450,7 @@ class Controller:
                 if diff.new_file is not None and \
                         diff.new_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
                     self.__moved_file_names.discard(diff.new_file.name)
+                    self.__extract_retry_counts.pop(diff.new_file.name, None)
                     self.__persist.downloaded_file_names.discard(diff.new_file.name)
                     self.__persist.extracted_file_names.discard(diff.new_file.name)
                     self.__persist.extract_failed_file_names.discard(diff.new_file.name)
