@@ -320,8 +320,7 @@ class Sshcp:
                     error_msg += " - " + sp.before.decode().strip()
                 raise SshcpError(error_msg)
 
-            # Capture attributes while sp is still open (before finally closes it)
-            exit_status = sp.exitstatus
+            # Capture output attributes while sp is still open (close can clear them)
             out_before = sp.before.decode().strip() if sp.before != pexpect.EOF else ""
             out_after = sp.after.decode().strip() if sp.after != pexpect.EOF else ""
             out_raw = sp.before.replace(b'\r\n', b'\n').strip()
@@ -339,6 +338,9 @@ class Sshcp:
             raise SshcpError("Timed out after {:.0f}s".format(elapsed))
         finally:
             sp.close()
+
+        # exitstatus is only valid after close() reaps the child process
+        exit_status = sp.exitstatus
 
         end_time = time.time()
 
