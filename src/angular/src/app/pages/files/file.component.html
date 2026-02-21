@@ -25,6 +25,9 @@
             @if (file().status === ViewFileStatus.EXTRACTED) {
                 <img src="assets/icons/extracted.svg" id="extracted" />
             }
+            @if (file().status === ViewFileStatus.EXTRACT_FAILED) {
+                <img src="assets/icons/extracting.svg" id="extract-failed" />
+            }
             <!-- don't show text for default status -->
             @if (file().status !== ViewFileStatus.DEFAULT) {
                 <span class="text">{{file().status | capitalize}}</span>

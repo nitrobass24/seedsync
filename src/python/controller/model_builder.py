@@ -30,6 +30,7 @@ class ModelBuilder:
         self.__downloaded_files = set()
         self.__extract_statuses = dict()
         self.__extracted_files = set()
+        self.__extract_failed_files = set()
         self.__auto_delete_remote = False
         self.__cached_model = None
         self.__smoothed_etas = dict()
@@ -85,6 +86,13 @@ class ModelBuilder:
         if self.__extracted_files != prev_extracted_files:
             self.__cached_model = None
 
+    def set_extract_failed_files(self, extract_failed_files: Set[str]):
+        prev_extract_failed_files = self.__extract_failed_files
+        self.__extract_failed_files = extract_failed_files
+        # Invalidate the cache
+        if self.__extract_failed_files != prev_extract_failed_files:
+            self.__cached_model = None
+
     def set_auto_delete_remote(self, enabled: bool):
         if self.__auto_delete_remote != enabled:
             self.__auto_delete_remote = enabled
@@ -98,6 +106,7 @@ class ModelBuilder:
         self.__downloaded_files.clear()
         self.__extract_statuses.clear()
         self.__extracted_files.clear()
+        self.__extract_failed_files.clear()
         self.__auto_delete_remote = False
         self.__cached_model = None
         self.__smoothed_etas.clear()
@@ -375,6 +384,10 @@ class ModelBuilder:
             #       If a Default file is extracted, it will return back to the Default state
             if model_file.name in self.__extracted_files and model_file.state == ModelFile.State.DOWNLOADED:
                     model_file.state = ModelFile.State.EXTRACTED
+
+            # next we check if root has failed extraction
+            if model_file.name in self.__extract_failed_files and model_file.state == ModelFile.State.DOWNLOADED:
+                    model_file.state = ModelFile.State.EXTRACT_FAILED
 
             model.add_file(model_file)
 

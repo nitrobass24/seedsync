@@ -46,7 +46,8 @@ class SerializeModel(Serialize):
         ModelFile.State.DOWNLOADED: "downloaded",
         ModelFile.State.DELETED: "deleted",
         ModelFile.State.EXTRACTING: "extracting",
-        ModelFile.State.EXTRACTED: "extracted"
+        ModelFile.State.EXTRACTED: "extracted",
+        ModelFile.State.EXTRACT_FAILED: "extract_failed"
     }
     __KEY_FILE_REMOTE_SIZE = "remote_size"
     __KEY_FILE_LOCAL_SIZE = "local_size"

@@ -101,6 +101,7 @@ class Controller:
         self.__model_builder.set_base_logger(self.logger)
         self.__model_builder.set_downloaded_files(self.__persist.downloaded_file_names)
         self.__model_builder.set_extracted_files(self.__persist.extracted_file_names)
+        self.__model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
         self.__model_builder.set_auto_delete_remote(
             bool(self.__context.config.autoqueue.auto_delete_remote)
         )
@@ -451,8 +452,10 @@ class Controller:
                     self.__moved_file_names.discard(diff.new_file.name)
                     self.__persist.downloaded_file_names.discard(diff.new_file.name)
                     self.__persist.extracted_file_names.discard(diff.new_file.name)
+                    self.__persist.extract_failed_file_names.discard(diff.new_file.name)
                     self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
                     self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
+                    self.__model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
 
                 # Detect if a file was just Downloaded
                 #   an Added file in Downloaded state
@@ -496,6 +499,7 @@ class Controller:
                         # Without staging, remove at terminal states
                         if diff.new_file.state in (ModelFile.State.DOWNLOADED,
                                                     ModelFile.State.EXTRACTED,
+                                                    ModelFile.State.EXTRACT_FAILED,
                                                     ModelFile.State.DELETED):
                             self.__pending_completion.discard(diff.new_file.name)
 
@@ -541,8 +545,10 @@ class Controller:
                     self.logger.info("Persist cleanup (both absent): {}".format(absent_names))
                     self.__persist.downloaded_file_names.difference_update(absent_names)
                     self.__persist.extracted_file_names.difference_update(absent_names)
+                    self.__persist.extract_failed_file_names.difference_update(absent_names)
                     self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
                     self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
+                    self.__model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
 
             # Release the model
             self.__model_lock.release()
@@ -567,6 +573,8 @@ class Controller:
                 self.logger.error(
                     "Extraction failed for '{}' after {} attempts, giving up".format(
                         result.name, count))
+                self.__persist.extract_failed_file_names.add(result.name)
+                self.__model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
 
         # Update the controller status
         if latest_remote_scan is not None:
@@ -616,7 +624,8 @@ class Controller:
                 if file.state not in (
                         ModelFile.State.DEFAULT,
                         ModelFile.State.DOWNLOADED,
-                        ModelFile.State.EXTRACTED
+                        ModelFile.State.EXTRACTED,
+                        ModelFile.State.EXTRACT_FAILED
                 ):
                     _notify_failure(command, "File '{}' in state {} cannot be extracted".format(
                         command.filename, str(file.state)
@@ -626,13 +635,18 @@ class Controller:
                     _notify_failure(command, "File '{}' does not exist locally".format(command.filename))
                     continue
                 else:
+                    # Clear retry count and failed state for fresh extraction
+                    self.__extract_retry_counts.pop(file.name, None)
+                    self.__persist.extract_failed_file_names.discard(file.name)
+                    self.__model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
                     self.__extract_process.extract(file)
 
             elif command.action == Controller.Command.Action.DELETE_LOCAL:
                 if file.state not in (
                     ModelFile.State.DEFAULT,
                     ModelFile.State.DOWNLOADED,
-                    ModelFile.State.EXTRACTED
+                    ModelFile.State.EXTRACTED,
+                    ModelFile.State.EXTRACT_FAILED
                 ):
                     _notify_failure(command, "Local file '{}' cannot be deleted in state {}".format(
                         command.filename, str(file.state)
@@ -660,6 +674,7 @@ class Controller:
                     ModelFile.State.DEFAULT,
                     ModelFile.State.DOWNLOADED,
                     ModelFile.State.EXTRACTED,
+                    ModelFile.State.EXTRACT_FAILED,
                     ModelFile.State.DELETED
                 ):
                     _notify_failure(command, "Remote file '{}' cannot be deleted in state {}".format(
