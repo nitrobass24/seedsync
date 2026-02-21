@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.12.2] - 2026-02-20
+
+### Fixed
+- **Extraction failure handling** — When extraction fails, SeedSync now retries up to 3 times by re-downloading the file. After 3 failures, the file shows a red extracting icon with "Extract failed" text so the user knows intervention is needed. Extract, Delete Local, and Delete Remote actions are all available from this state. (#70, #71, #72, #73)
+- **Persist cleanup during staging moves** — Fix persist cleanup incorrectly firing for files with in-flight staging moves, which caused state loss
+- **Extraction timing with staging** — Fix extraction starting before the staging move completed
+- **LFTP parser crash on long paths** — Fix crash when terminal line wrapping splits LFTP output mid-line (#69)
+- **Directory download ETAs** — Fix wildly inaccurate ETAs for directory downloads by using LFTP's real-time transfer sizes and EMA smoothing (#68)
+- **scanfs timeout crash** — Fix pexpect resource leak, add retry logic, and enable SSH keepalive (#62)
+- **SSH crash on apostrophes in filenames** — Fix shell crash on filenames like "Don't Look Now" (#66)
+- **LFTP status parser crash** — Fix crash from interleaved 'jobs -v' command echo in LFTP output (#66)
+- **Error handling hardening** — Fix multiple error handling bugs found during code review (#63, #64)
+- **Cross-device move crash** — Fix FileExistsError during staging-to-final moves across filesystems
+
+---
+
 ## [0.12.1] - 2026-02-14
 
 ### Fixed
