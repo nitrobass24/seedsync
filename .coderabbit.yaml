@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+early_access: false
+enable_free_tier: true
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_in_walkthrough: false
+  review_status: true
+  commit_status: true
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  poem: true
+  in_progress_fortune: true
+  suggested_labels: true
+  auto_apply_labels: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+  abort_on_close: true
+
+  path_filters:
+    - "!**/.DS_Store"
+    - "!**/node_modules/**"
+    - "!**/package-lock.json"
+    - "!**/__pycache__/**"
+    - "!**/*.pyc"
+
+  path_instructions:
+    - path: "src/python/**"
+      instructions: |
+        Python 3.12 backend using Bottle framework. Uses multiprocessing for
+        scanner, extract, and delete processes. Follow existing patterns for
+        controller state management (persist → model_builder → model).
+    - path: "src/angular/**"
+      instructions: |
+        Angular 21 frontend with standalone components, signals, and Bootstrap 5.3.
+        Uses Vitest for unit testing. Follow existing patterns for model → view-model
+        mapping (ModelFile → ViewFile via ViewFileService).
+    - path: "src/docker/**"
+      instructions: |
+        Multi-stage Docker build for multi-arch images (amd64, arm64).
+        Published to ghcr.io/nitrobass24/seedsync.
+    - path: "website/**"
+      instructions: |
+        Docusaurus documentation site. Deployed via GitHub Pages.
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    base_branches:
+      - "develop"
+      - "master"
+
+  tools:
+    shellcheck:
+      enabled: true
+    ruff:
+      enabled: true
+    markdownlint:
+      enabled: true
+    github-checks:
+      enabled: true
+      timeout_ms: 90000
+    languagetool:
+      enabled: true
+      level: "default"
+    hadolint:
+      enabled: true
+    yamllint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    eslint:
+      enabled: true
+    actionlint:
+      enabled: true
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  learnings:
+    scope: "auto"
+  issues:
+    scope: "auto"
+  pull_requests:
+    scope: "auto"
