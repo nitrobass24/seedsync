@@ -279,20 +279,20 @@ class Sshcp:
                     'Connection refused',  # i=4, connection refused
                 ])
                 if i > 0:
-                    before = sp.before.decode().strip() if sp.before != pexpect.EOF else ""
-                    after = sp.after.decode().strip() if sp.after != pexpect.EOF else ""
+                    before = sp.before.decode(errors='replace').strip() if sp.before != pexpect.EOF else ""
+                    after = sp.after.decode(errors='replace').strip() if sp.after != pexpect.EOF else ""
                     self.logger.warning("Command failed: '{} - {}'".format(before, after))
                 if i == 1:
                     error_msg = "Unknown error"
-                    if sp.before.decode().strip():
-                        error_msg += " - " + sp.before.decode().strip()
+                    if sp.before.decode(errors='replace').strip():
+                        error_msg += " - " + sp.before.decode(errors='replace').strip()
                     raise SshcpError(error_msg)
                 elif i == 3:
                     raise SshcpError("Bad hostname: {}".format(self.__host))
                 elif i in {2, 4}:
                     error_msg = "Connection refused by server"
-                    if sp.before.decode().strip():
-                        error_msg += " - " + sp.before.decode().strip()
+                    if sp.before.decode(errors='replace').strip():
+                        error_msg += " - " + sp.before.decode(errors='replace').strip()
                     raise SshcpError(error_msg)
                 sp.sendline(self.__password)
 
@@ -307,8 +307,8 @@ class Sshcp:
                 timeout=self.__TIMEOUT_SECS
             )
             if i > 0:
-                before = sp.before.decode().strip() if sp.before != pexpect.EOF else ""
-                after = sp.after.decode().strip() if sp.after != pexpect.EOF else ""
+                before = sp.before.decode(errors='replace').strip() if sp.before != pexpect.EOF else ""
+                after = sp.after.decode(errors='replace').strip() if sp.after != pexpect.EOF else ""
                 self.logger.warning("Command failed: '{} - {}'".format(before, after))
             if i == 1:
                 raise SshcpError("Incorrect password")
@@ -316,13 +316,13 @@ class Sshcp:
                 raise SshcpError("Bad hostname: {}".format(self.__host))
             elif i in {2, 4}:
                 error_msg = "Connection refused by server"
-                if sp.before.decode().strip():
-                    error_msg += " - " + sp.before.decode().strip()
+                if sp.before.decode(errors='replace').strip():
+                    error_msg += " - " + sp.before.decode(errors='replace').strip()
                 raise SshcpError(error_msg)
 
             # Capture output attributes while sp is still open (close can clear them)
-            out_before = sp.before.decode().strip() if sp.before != pexpect.EOF else ""
-            out_after = sp.after.decode().strip() if sp.after != pexpect.EOF else ""
+            out_before = sp.before.decode(errors='replace').strip() if sp.before != pexpect.EOF else ""
+            out_after = sp.after.decode(errors='replace').strip() if sp.after != pexpect.EOF else ""
             out_raw = sp.before.replace(b'\r\n', b'\n').strip()
 
         except pexpect.exceptions.TIMEOUT:
