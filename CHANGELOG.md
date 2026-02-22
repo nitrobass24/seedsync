@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.3] - 2026-02-21
+
+### Fixed
+- **SSH output decoding crash** — Fix `UnicodeDecodeError` crash when remote commands (e.g. scanfs) return output containing non-UTF-8 bytes (#76)
+
+---
+
 ## [0.12.2] - 2026-02-20
 
 ### Fixed
