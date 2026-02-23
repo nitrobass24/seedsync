@@ -297,6 +297,7 @@ class Seedsync:
         config.lftp.remote_path = Seedsync.__CONFIG_DUMMY_VALUE
         config.lftp.local_path = Seedsync.__CONFIG_DUMMY_VALUE
         config.lftp.remote_path_to_scan_script = "/tmp"
+        config.lftp.use_python_scanner = False
         config.lftp.use_ssh_key = False
         config.lftp.num_max_parallel_downloads = 2
         config.lftp.num_max_parallel_files_per_download = 3

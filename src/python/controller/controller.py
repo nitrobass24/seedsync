@@ -164,7 +164,8 @@ class Controller:
             remote_port=self.__context.config.lftp.remote_port,
             remote_path_to_scan=self.__context.config.lftp.remote_path,
             local_path_to_scan_script=self.__context.args.local_path_to_scanfs,
-            remote_path_to_scan_script=self.__context.config.lftp.remote_path_to_scan_script
+            remote_path_to_scan_script=self.__context.config.lftp.remote_path_to_scan_script,
+            use_python_scanner=bool(self.__context.config.lftp.use_python_scanner)
         )
 
         self.__active_scan_process = ScannerProcess(

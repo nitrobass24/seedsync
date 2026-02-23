@@ -26,6 +26,14 @@ class RemoteScanner(IScanner):
     _SCAN_MAX_RETRIES = 3
     _SCAN_RETRY_DELAY_SECS = 5
 
+    # Patterns that indicate the binary failed to *execute* rather than
+    # failing during a scan (e.g. glibc version mismatch, wrong architecture).
+    _BINARY_EXEC_ERROR_PATTERNS = [
+        "GLIBC_",                    # version `GLIBC_2.31' not found
+        "cannot execute binary file",  # ELF architecture mismatch
+        "Exec format error",           # kernel-level format rejection
+    ]
+
     def __init__(self,
                  remote_address: str,
                  remote_username: str,
@@ -33,7 +41,8 @@ class RemoteScanner(IScanner):
                  remote_port: int,
                  remote_path_to_scan: str,
                  local_path_to_scan_script: str,
-                 remote_path_to_scan_script: str):
+                 remote_path_to_scan_script: str,
+                 use_python_scanner: bool = False):
         self.logger = logging.getLogger("RemoteScanner")
         self.__remote_path_to_scan = remote_path_to_scan
         self.__local_path_to_scan_script = local_path_to_scan_script
@@ -43,11 +52,18 @@ class RemoteScanner(IScanner):
                            user=remote_username,
                            password=remote_password)
         self.__first_run = True
+        # True either because the user explicitly enabled it in settings, or
+        # because the binary failed to execute and the automatic fallback kicked in.
+        self.__use_python_fallback = use_python_scanner
 
         # Append scan script name to remote path if not there already
         script_name = os.path.basename(self.__local_path_to_scan_script)
         if os.path.basename(self.__remote_path_to_scan_script) != script_name:
             self.__remote_path_to_scan_script = os.path.join(self.__remote_path_to_scan_script, script_name)
+
+        # Derive companion Python fallback paths from the binary paths
+        self.__local_path_to_scan_script_py = self.__local_path_to_scan_script + ".py"
+        self.__remote_path_to_scan_script_py = self.__remote_path_to_scan_script + ".py"
 
     @overrides(IScanner)
     def set_base_logger(self, base_logger: logging.Logger):
@@ -57,9 +73,51 @@ class RemoteScanner(IScanner):
     @overrides(IScanner)
     def scan(self) -> List[SystemFile]:
         if self.__first_run:
-            self._install_scanfs()
+            if self.__use_python_fallback:
+                # Forced Python mode: skip binary installation, go straight to Python.
+                # Still need shell detection and to upload the Python script.
+                try:
+                    self.__ssh.detect_shell()
+                except SshcpError as e:
+                    self.logger.exception("Shell detection failed")
+                    recoverable = self._is_transient_error(str(e))
+                    raise ScannerError(
+                        Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
+                        recoverable=recoverable
+                    )
+                self._install_scanfs_py()
+            else:
+                self._install_scanfs()
 
-        out = self._run_scanfs_with_retry()
+        if self.__use_python_fallback:
+            out = self._run_scanfs_with_retry(
+                script_path=self.__remote_path_to_scan_script_py,
+                interpreter="python3"
+            )
+        else:
+            try:
+                out = self._run_scanfs_with_retry()
+            except ScannerError as binary_error:
+                if self.__first_run and self._is_binary_execution_error(str(binary_error)):
+                    self.logger.warning(
+                        "scanfs binary failed to execute: {}".format(str(binary_error))
+                    )
+                    self.logger.warning("Checking whether Python 3 is available as a fallback...")
+                    if self._check_python3_available():
+                        self._install_scanfs_py()
+                        self.__use_python_fallback = True
+                        self.logger.info("Using Python fallback scanner for all subsequent scans")
+                        out = self._run_scanfs_with_retry(
+                            script_path=self.__remote_path_to_scan_script_py,
+                            interpreter="python3"
+                        )
+                    else:
+                        self.logger.warning(
+                            "Python 3 not available on remote server; cannot use fallback"
+                        )
+                        raise
+                else:
+                    raise
 
         try:
             remote_files = pickle.loads(out)
@@ -73,25 +131,35 @@ class RemoteScanner(IScanner):
         self.__first_run = False
         return remote_files
 
-    def _run_scanfs_with_retry(self) -> bytes:
+    def _run_scanfs_with_retry(self,
+                               script_path: Optional[str] = None,
+                               interpreter: Optional[str] = None) -> bytes:
         """
-        Run the scanfs command on the remote with retries for transient errors.
+        Run the scanfs command (or a fallback script) on the remote with retries
+        for transient errors.
+
+        :param script_path: Remote path to the script; defaults to the binary path.
+        :param interpreter: Optional interpreter prefix (e.g. ``"python3"``).
         """
+        if script_path is None:
+            script_path = self.__remote_path_to_scan_script
+
         last_error = None
         for attempt in range(1, self._SCAN_MAX_RETRIES + 1):
             try:
                 # Use consistent quoting: double quotes if scan path has tilde
                 # (for $HOME expansion), single quotes otherwise
                 if self.__remote_path_to_scan.startswith("~"):
-                    return self.__ssh.shell("{} {}".format(
-                        _escape_remote_path_double(self.__remote_path_to_scan_script),
+                    cmd = "{} {}".format(
+                        _escape_remote_path_double(script_path),
                         _escape_remote_path_double(self.__remote_path_to_scan))
-                    )
                 else:
-                    return self.__ssh.shell("{} {}".format(
-                        _escape_remote_path_single(self.__remote_path_to_scan_script),
+                    cmd = "{} {}".format(
+                        _escape_remote_path_single(script_path),
                         _escape_remote_path_single(self.__remote_path_to_scan))
-                    )
+                if interpreter:
+                    cmd = "{} {}".format(interpreter, cmd)
+                return self.__ssh.shell(cmd)
             except SshcpError as e:
                 last_error = e
                 error_str = str(e)
@@ -136,6 +204,50 @@ class RemoteScanner(IScanner):
         """Timeouts and connection drops are transient and worth retrying."""
         transient_patterns = ["Timed out", "lost connection", "Connection refused", "Connection timed out"]
         return any(p in error_str for p in transient_patterns)
+
+    @classmethod
+    def _is_binary_execution_error(cls, error_str: str) -> bool:
+        """
+        Return True when the error indicates the binary could not be *executed*
+        (e.g. glibc version mismatch, wrong ELF architecture) rather than the
+        binary running and reporting a valid scan error.
+        """
+        if "SystemScannerError" in error_str:
+            return False
+        return any(p in error_str for p in cls._BINARY_EXEC_ERROR_PATTERNS)
+
+    def _check_python3_available(self) -> bool:
+        """Return True if ``python3`` is callable on the remote server."""
+        try:
+            self.__ssh.shell("python3 --version")
+            return True
+        except SshcpError:
+            return False
+
+    def _install_scanfs_py(self):
+        """Upload the Python fallback scanner script to the remote server."""
+        if not os.path.isfile(self.__local_path_to_scan_script_py):
+            raise ScannerError(
+                Localization.Error.REMOTE_SERVER_SCAN.format(
+                    "Python fallback scanner not found at {}".format(
+                        self.__local_path_to_scan_script_py
+                    )
+                ),
+                recoverable=False
+            )
+        self.logger.info("Installing Python fallback scanner: local:{} -> remote:{}".format(
+            self.__local_path_to_scan_script_py,
+            self.__remote_path_to_scan_script_py
+        ))
+        try:
+            self.__ssh.copy(local_path=self.__local_path_to_scan_script_py,
+                            remote_path=self.__remote_path_to_scan_script_py)
+        except SshcpError as e:
+            recoverable = self._is_transient_error(str(e))
+            raise ScannerError(
+                Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
+                recoverable=recoverable
+            )
 
     def _install_scanfs(self):
         # Detect available shell on first run to provide clear errors
