@@ -143,8 +143,11 @@ def _scan_entry(entry):
         if os.path.isfile(lftp_status_path):
             try:
                 with open(lftp_status_path, "r") as fh:
-                    size = _lftp_status_file_size(fh.read())
+                    parsed_size = _lftp_status_file_size(fh.read())
+                if parsed_size > 0:
+                    size = parsed_size
             except OSError:
+                pass
                 pass
         time_created = None
         try:
