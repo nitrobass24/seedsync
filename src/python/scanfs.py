@@ -120,7 +120,9 @@ def _scan_entry(entry):
     """Build a SystemFile from a single os.scandir DirEntry."""
     name = entry.name.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
 
-    if entry.is_dir(follow_symlinks=False):
+    # Follow symlinks so that behaviour matches the compiled scanfs binary,
+    # which uses stat() (follows symlinks) rather than lstat().
+    if entry.is_dir(follow_symlinks=True):
         children = _scan_path(entry.path)
         size = sum(c.size for c in children)
         st = entry.stat()
@@ -199,4 +201,4 @@ if __name__ == "__main__":
     except Exception as exc:
         sys.exit("SystemScannerError: {}".format(str(exc)))
 
-    sys.stdout.buffer.write(pickle.dumps(root_files))
+    sys.stdout.buffer.write(pickle.dumps(root_files, protocol=2))
