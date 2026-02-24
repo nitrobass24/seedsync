@@ -125,8 +125,9 @@ def _scan_entry(entry, _visited):
     if entry.is_dir(follow_symlinks=True):
         realpath = os.path.realpath(entry.path)
         if realpath in _visited:
-            # Symlink cycle detected; return an empty directory to avoid
-            # unbounded recursion without losing the entry itself.
+            # realpath is an ancestor in the current recursion stack — a cycle
+            # via a symlink.  Return an empty directory to stop recursion while
+            # preserving the entry in the tree.
             st = entry.stat()
             time_created = None
             try:
@@ -136,8 +137,15 @@ def _scan_entry(entry, _visited):
             time_modified = datetime.fromtimestamp(st.st_mtime)
             return SystemFile(name, 0, is_dir=True,
                               time_created=time_created, time_modified=time_modified)
+        # Push onto the recursion stack before descending, pop on the way back
+        # up (try/finally so the pop happens even if _scan_path raises).
+        # Using a stack rather than a permanent "seen" set means the same real
+        # directory reached via a different symlink will be scanned independently.
         _visited.add(realpath)
-        children = _scan_path(entry.path, _visited)
+        try:
+            children = _scan_path(entry.path, _visited)
+        finally:
+            _visited.discard(realpath)
         size = sum(c.size for c in children)
         st = entry.stat()
         time_created = None
@@ -175,7 +183,13 @@ def _scan_entry(entry, _visited):
 
 
 def _scan_path(path, _visited=None):
-    """Recursively scan *path* and return a sorted list of SystemFile objects."""
+    """Recursively scan *path* and return a sorted list of SystemFile objects.
+
+    *_visited* is the current ancestor-realpath stack maintained by
+    _scan_entry to detect symlink cycles.  Callers should not pass this
+    argument; it is initialised on the first call and mutated (add/discard)
+    as the recursion descends and ascends.
+    """
     if _visited is None:
         _visited = {os.path.realpath(path)}
     results = []
