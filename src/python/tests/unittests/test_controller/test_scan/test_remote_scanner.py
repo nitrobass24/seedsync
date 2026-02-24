@@ -483,9 +483,10 @@ class TestRemoteScanner(unittest.TestCase):
         )
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
             b'',                                    # diagnostics
-            b'',                                    # md5sum
+            b'',                                    # md5sum binary
             SshcpError(glibc_error),                # binary fails with glibc error
             b'Python 3.9.0',                        # python3 --version
+            b'',                                    # md5sum .py - no match, upload
             pickle.dumps([]),                       # Python fallback scan succeeds
         ])
 
@@ -498,9 +499,10 @@ class TestRemoteScanner(unittest.TestCase):
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
             b'',                                            # diagnostics
-            b'',                                            # md5sum
+            b'',                                            # md5sum binary
             SshcpError("cannot execute binary file: Exec format error"),
             b'Python 3.7.3',                               # python3 --version
+            b'',                                            # md5sum .py - no match, upload
             pickle.dumps([]),                               # fallback scan
         ])
 
@@ -513,9 +515,10 @@ class TestRemoteScanner(unittest.TestCase):
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
             b'',                                    # diagnostics
-            b'',                                    # md5sum
+            b'',                                    # md5sum binary
             SshcpError("GLIBC_2.31' not found"),    # binary fails
             b'Python 3.9.0',                        # python3 --version
+            b'',                                    # md5sum .py - no match, upload
             pickle.dumps([]),                       # fallback scan
         ])
 
@@ -533,15 +536,40 @@ class TestRemoteScanner(unittest.TestCase):
             py_call[1]["remote_path"]
         )
 
+    def test_skips_py_install_on_md5sum_match(self):
+        """scanfs.py is not re-uploaded when its MD5 already matches the remote copy"""
+        scanner = self._make_scanner()
+
+        # md5sum of the empty temp .py fixture file
+        import hashlib
+        with open(TestRemoteScanner.temp_scan_script + ".py", "rb") as f:
+            expected_md5 = hashlib.md5(f.read()).hexdigest()
+
+        self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
+            b'',                                    # diagnostics
+            b'',                                    # md5sum binary - no match, install binary
+            SshcpError("GLIBC_2.31' not found"),    # binary fails
+            b'Python 3.9.0',                        # python3 --version
+            expected_md5.encode(),                  # md5sum .py - MATCHES, skip upload
+            pickle.dumps([]),                       # fallback scan
+        ])
+
+        scanner.scan()
+        # Binary copy happened, but .py copy must NOT have been called
+        self.assertEqual(1, self.mock_ssh.copy.call_count)
+        binary_call = self.mock_ssh.copy.call_args
+        self.assertNotIn(".py", binary_call[1]["local_path"])
+
     def test_python_fallback_invokes_python3_interpreter(self):
         """Python fallback runs 'python3 <script> <path>' rather than just '<script>'"""
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
             b'',                                    # diagnostics
-            b'',                                    # md5sum
+            b'',                                    # md5sum binary
             SshcpError("GLIBC_2.31' not found"),    # binary fails
             b'Python 3.9.0',                        # python3 --version
+            b'',                                    # md5sum .py - no match, upload
             pickle.dumps([]),                       # fallback scan
         ])
 
@@ -556,9 +584,10 @@ class TestRemoteScanner(unittest.TestCase):
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
             b'',                                    # diagnostics (first scan)
-            b'',                                    # md5sum (first scan)
+            b'',                                    # md5sum binary (first scan)
             SshcpError("GLIBC_2.31' not found"),    # binary fails
             b'Python 3.9.0',                        # python3 --version
+            b'',                                    # md5sum .py - no match, upload
             pickle.dumps([]),                       # fallback scan 1
             pickle.dumps([]),                       # fallback scan 2
         ])
@@ -661,7 +690,8 @@ class TestRemoteScanner(unittest.TestCase):
         )
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            pickle.dumps([]),   # Python fallback scan
+            b'',               # md5sum .py - no match, upload
+            pickle.dumps([]),  # Python fallback scan
         ])
 
         files = scanner.scan()
@@ -673,8 +703,8 @@ class TestRemoteScanner(unittest.TestCase):
         self.assertIn(".py", copy_call[1]["local_path"])
         self.assertIn(".py", copy_call[1]["remote_path"])
 
-        # The shell call should use python3
-        self.assertEqual(1, self.mock_ssh.shell.call_count)
+        # 2 shell calls: md5sum .py check, then the actual python3 scan
+        self.assertEqual(2, self.mock_ssh.shell.call_count)
         self.assertIn("python3", self.mock_ssh.shell.call_args[0][0])
 
     def test_use_python_scanner_config_second_scan(self):
@@ -691,13 +721,17 @@ class TestRemoteScanner(unittest.TestCase):
         )
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            pickle.dumps([]),   # scan 1
-            pickle.dumps([]),   # scan 2
+            b'',               # md5sum .py - no match, upload (first scan only)
+            pickle.dumps([]),  # scan 1
+            pickle.dumps([]),  # scan 2
         ])
 
         scanner.scan()
         scanner.scan()
 
-        # Both shell calls should use python3 (no diagnostics or md5sum calls)
-        for call in self.mock_ssh.shell.call_args_list:
-            self.assertIn("python3", call[0][0])
+        # Only the actual scan calls use python3; the md5sum check does not
+        python3_scan_calls = [
+            c for c in self.mock_ssh.shell.call_args_list
+            if "python3" in c[0][0] and "--version" not in c[0][0]
+        ]
+        self.assertEqual(2, len(python3_scan_calls))

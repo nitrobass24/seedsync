@@ -197,6 +197,11 @@ class SystemScanner:
         Returns the real file size as indicated by an lftp status content
         :param status:
         :return:
+
+        NOTE: This logic is intentionally duplicated in
+        src/python/scanfs.py::_lftp_status_file_size so that the standalone
+        fallback scanner remains self-contained.  Keep both copies in sync if
+        the lftp pget status-file format ever changes.
         """
         size_pattern_m = re.compile(r"^size=(\d+)$")
         pos_pattern_m = re.compile(r"^\d+\.pos=(\d+)$")

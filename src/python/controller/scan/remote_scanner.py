@@ -89,35 +89,7 @@ class RemoteScanner(IScanner):
             else:
                 self._install_scanfs()
 
-        if self.__use_python_fallback:
-            out = self._run_scanfs_with_retry(
-                script_path=self.__remote_path_to_scan_script_py,
-                interpreter="python3"
-            )
-        else:
-            try:
-                out = self._run_scanfs_with_retry()
-            except ScannerError as binary_error:
-                if self.__first_run and self._is_binary_execution_error(str(binary_error)):
-                    self.logger.warning(
-                        "scanfs binary failed to execute: {}".format(str(binary_error))
-                    )
-                    self.logger.warning("Checking whether Python 3 is available as a fallback...")
-                    if self._check_python3_available():
-                        self._install_scanfs_py()
-                        self.__use_python_fallback = True
-                        self.logger.info("Using Python fallback scanner for all subsequent scans")
-                        out = self._run_scanfs_with_retry(
-                            script_path=self.__remote_path_to_scan_script_py,
-                            interpreter="python3"
-                        )
-                    else:
-                        self.logger.warning(
-                            "Python 3 not available on remote server; cannot use fallback"
-                        )
-                        raise
-                else:
-                    raise
+        out = self._run_scan_with_fallback()
 
         try:
             remote_files = pickle.loads(out)
@@ -130,6 +102,44 @@ class RemoteScanner(IScanner):
 
         self.__first_run = False
         return remote_files
+
+    def _run_scan_with_fallback(self) -> bytes:
+        """
+        Execute the scan script on the remote server, trying the compiled
+        binary first and transparently falling back to the Python interpreter
+        if the binary cannot be executed (glibc version mismatch, wrong
+        architecture).  Sets ``__use_python_fallback`` on a successful
+        automatic fallback so that all subsequent calls skip the binary.
+
+        Returns the raw bytes written to stdout by the scanner.
+        """
+        if self.__use_python_fallback:
+            return self._run_scanfs_with_retry(
+                script_path=self.__remote_path_to_scan_script_py,
+                interpreter="python3"
+            )
+
+        try:
+            return self._run_scanfs_with_retry()
+        except ScannerError as binary_error:
+            if self.__first_run and self._is_binary_execution_error(str(binary_error)):
+                self.logger.warning(
+                    "scanfs binary failed to execute: {}".format(str(binary_error))
+                )
+                self.logger.warning("Checking whether Python 3 is available as a fallback...")
+                if self._check_python3_available():
+                    self._install_scanfs_py()
+                    self.__use_python_fallback = True
+                    self.logger.info("Using Python fallback scanner for all subsequent scans")
+                    return self._run_scanfs_with_retry(
+                        script_path=self.__remote_path_to_scan_script_py,
+                        interpreter="python3"
+                    )
+                else:
+                    self.logger.warning(
+                        "Python 3 not available on remote server; cannot use fallback"
+                    )
+            raise
 
     def _run_scanfs_with_retry(self,
                                script_path: Optional[str] = None,
@@ -235,6 +245,25 @@ class RemoteScanner(IScanner):
                 ),
                 recoverable=False
             )
+
+        # Check md5sum on remote to skip re-upload if already installed,
+        # consistent with the binary installer's behaviour.
+        with open(self.__local_path_to_scan_script_py, "rb") as f:
+            local_md5sum = hashlib.md5(f.read()).hexdigest()
+        self.logger.debug("Local scanfs.py md5sum = {}".format(local_md5sum))
+        try:
+            out = self.__ssh.shell("md5sum '{}' | awk '{{print $1}}' || echo".format(
+                self.__remote_path_to_scan_script_py))
+            if out.decode().strip() == local_md5sum:
+                self.logger.info("Skipping remote scanfs.py installation: already installed")
+                return
+        except SshcpError as e:
+            recoverable = self._is_transient_error(str(e))
+            raise ScannerError(
+                Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
+                recoverable=recoverable
+            )
+
         self.logger.info("Installing Python fallback scanner: local:{} -> remote:{}".format(
             self.__local_path_to_scan_script_py,
             self.__remote_path_to_scan_script_py

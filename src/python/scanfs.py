@@ -34,6 +34,14 @@ class SystemFile:
     Setting ``__module__`` makes pickle encode the class reference as
     ``system.file.SystemFile``; the local unpickler then imports that module,
     finds the real class, and reconstructs objects transparently.
+
+    IMPORTANT: The instance attributes defined in __init__ (self.__name,
+    self.__size, self.__is_dir, self.__timestamp_created,
+    self.__timestamp_modified, self.__children) MUST stay identical to those
+    in system/file.py::SystemFile.  Any drift will cause silent data loss or
+    an opaque UnpicklingError when the local process deserializes output from
+    this script.  Update test_scanfs.py::TestScanfsPickleRoundTrip whenever
+    either class changes.
     """
 
     def __init__(self, name, size, is_dir=False, time_created=None, time_modified=None):
@@ -84,6 +92,11 @@ sys.modules.setdefault("system", _fake_system)
 sys.modules.setdefault("system.file", _fake_system_file)
 
 
+# NOTE: This function is intentionally duplicated from
+# system/scanner.py::SystemScanner._lftp_status_file_size.
+# scanfs.py must be self-contained (zero external imports) because it is
+# uploaded to and executed on the remote server.  Keep the two copies in
+# sync if the lftp pget status-file format ever changes.
 def _lftp_status_file_size(status):
     """Return the actual file size encoded in an lftp pget status file."""
     size_pattern = re.compile(r"^size=(\d+)$")
@@ -128,7 +141,7 @@ def _scan_entry(entry, _visited):
             # realpath is an ancestor in the current recursion stack — a cycle
             # via a symlink.  Return an empty directory to stop recursion while
             # preserving the entry in the tree.
-            st = entry.stat()
+            st = entry.stat(follow_symlinks=True)
             time_created = None
             try:
                 time_created = datetime.fromtimestamp(st.st_birthtime)
@@ -147,7 +160,7 @@ def _scan_entry(entry, _visited):
         finally:
             _visited.discard(realpath)
         size = sum(c.size for c in children)
-        st = entry.stat()
+        st = entry.stat(follow_symlinks=True)
         time_created = None
         try:
             time_created = datetime.fromtimestamp(st.st_birthtime)
@@ -160,7 +173,7 @@ def _scan_entry(entry, _visited):
             f.add_child(child)
         return f
     else:
-        st = entry.stat()
+        st = entry.stat(follow_symlinks=True)
         size = st.st_size
         # If a partial lftp download status file exists, use it for the real size
         lftp_status_path = entry.path + _LFTP_STATUS_SUFFIX
