@@ -38,7 +38,7 @@ class SystemFile:
 
     def __init__(self, name, size, is_dir=False, time_created=None, time_modified=None):
         if size < 0:
-            raise ValueError("File size must be greater than zero")
+            raise ValueError("File size must be non-negative")
         self.__name = name
         self.__size = size
         self.__is_dir = is_dir
@@ -149,7 +149,6 @@ def _scan_entry(entry):
                 if parsed_size > 0:
                     size = parsed_size
             except OSError:
-                pass
                 pass
         time_created = None
         try:
