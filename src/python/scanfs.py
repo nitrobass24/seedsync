@@ -116,14 +116,28 @@ def _lftp_status_file_size(status):
     return total_size - empty_size
 
 
-def _scan_entry(entry):
+def _scan_entry(entry, _visited):
     """Build a SystemFile from a single os.scandir DirEntry."""
     name = entry.name.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
 
     # Follow symlinks so that behaviour matches the compiled scanfs binary,
     # which uses stat() (follows symlinks) rather than lstat().
     if entry.is_dir(follow_symlinks=True):
-        children = _scan_path(entry.path)
+        realpath = os.path.realpath(entry.path)
+        if realpath in _visited:
+            # Symlink cycle detected; return an empty directory to avoid
+            # unbounded recursion without losing the entry itself.
+            st = entry.stat()
+            time_created = None
+            try:
+                time_created = datetime.fromtimestamp(st.st_birthtime)
+            except AttributeError:
+                pass
+            time_modified = datetime.fromtimestamp(st.st_mtime)
+            return SystemFile(name, 0, is_dir=True,
+                              time_created=time_created, time_modified=time_modified)
+        _visited.add(realpath)
+        children = _scan_path(entry.path, _visited)
         size = sum(c.size for c in children)
         st = entry.stat()
         time_created = None
@@ -160,8 +174,10 @@ def _scan_entry(entry):
                           time_created=time_created, time_modified=time_modified)
 
 
-def _scan_path(path):
+def _scan_path(path, _visited=None):
     """Recursively scan *path* and return a sorted list of SystemFile objects."""
+    if _visited is None:
+        _visited = {os.path.realpath(path)}
     results = []
     try:
         entries = list(os.scandir(path))
@@ -173,7 +189,7 @@ def _scan_path(path):
         if entry.name.endswith(_LFTP_STATUS_SUFFIX):
             continue
         try:
-            f = _scan_entry(entry)
+            f = _scan_entry(entry, _visited)
         except (FileNotFoundError, OSError):
             continue
         results.append(f)
