@@ -671,7 +671,7 @@ class Controller:
                         file_name=file.name
                     )
                     process.set_multiprocessing_logger(self.__mp_logger)
-                    def post_callback():
+                    def post_callback(delete_path=delete_path):
                         self.__local_scan_process.force_scan()
                         if delete_path != self.__context.config.lftp.local_path:
                             self.__active_scan_process.force_scan()
