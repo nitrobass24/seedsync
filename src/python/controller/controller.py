@@ -799,8 +799,13 @@ class Controller:
             else:
                 # Do the post callback
                 command_process.post_callback()
-                # Propagate the exception
-                command_process.process.propagate_exception()
+                # Propagate the exception (log but don't crash the controller)
+                try:
+                    command_process.process.propagate_exception()
+                except Exception:
+                    self.logger.warning("Command process failed: %s",
+                                        command_process.process.name,
+                                        exc_info=True)
         self.__active_command_processes = still_active_processes
 
         # Cleanup completed move processes

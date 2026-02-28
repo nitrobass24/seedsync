@@ -6,7 +6,7 @@ from typing import Optional
 
 from common import AppOneShotProcess
 from common import escape_remote_path_single, escape_remote_path_double
-from ssh import Sshcp, SshcpError
+from ssh import Sshcp
 
 
 class DeleteLocalProcess(AppOneShotProcess):
@@ -46,13 +46,11 @@ class DeleteRemoteProcess(AppOneShotProcess):
     def run_once(self):
         self.__ssh.set_base_logger(self.logger)
         file_path = os.path.join(self.__remote_path, self.__file_name)
-        self.logger.debug("Deleting remote file {}".format(self.__file_name))
-        try:
-            if file_path.startswith("~"):
-                escaped_path = escape_remote_path_double(file_path)
-            else:
-                escaped_path = escape_remote_path_single(file_path)
-            out = self.__ssh.shell("rm -rf {}".format(escaped_path))
-            self.logger.debug("Remote delete output: {}".format(out.decode()))
-        except SshcpError:
-            self.logger.exception("Exception while deleting remote file")
+        self.logger.info("Deleting remote file: {}".format(self.__file_name))
+        if file_path.startswith("~"):
+            escaped_path = escape_remote_path_double(file_path)
+        else:
+            escaped_path = escape_remote_path_single(file_path)
+        out = self.__ssh.shell("rm -rf {}".format(escaped_path))
+        self.logger.debug("Remote delete output: {}".format(out.decode()))
+        self.logger.info("Successfully deleted remote file: {}".format(self.__file_name))

@@ -64,8 +64,16 @@ export class FileComponent implements OnChanges {
     if (fileChange) {
       const oldFile: ViewFile | undefined = fileChange.previousValue;
       const newFile: ViewFile | undefined = fileChange.currentValue;
-      if (oldFile != null && newFile != null && oldFile.status !== newFile.status) {
-        this.activeAction = null;
+      if (oldFile != null && newFile != null) {
+        if (oldFile.status !== newFile.status) {
+          this.activeAction = null;
+        } else if (this.activeAction === FileAction.DELETE_REMOTE &&
+                   oldFile.isRemotelyDeletable && !newFile.isRemotelyDeletable) {
+          this.activeAction = null;
+        } else if (this.activeAction === FileAction.DELETE_LOCAL &&
+                   oldFile.isLocallyDeletable && !newFile.isLocallyDeletable) {
+          this.activeAction = null;
+        }
 
         if (newFile.isSelected && this.fileElement &&
             !FileComponent.isElementInViewport(this.fileElement.nativeElement)) {
