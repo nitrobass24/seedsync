@@ -10,6 +10,7 @@
 - **Extract retry loop not stopping** — Fix retry counter being reset on every re-download cycle, preventing files from reaching EXTRACT_FAILED state after 3 attempts
 - **Delete Local fails for staged files** — Check staging path before local_path in DELETE_LOCAL so files still in staging can be deleted
 - **Late-binding closure in DELETE_LOCAL** — Bind `delete_path` as default argument so each callback captures the correct path when multiple deletes are batched
+- **Manual extract silently failing** — Extract dispatch errors (e.g. "no archives found") were silently swallowed, leaving the file in DOWNLOADED state with no UI feedback. Now reported as failures so the file reaches EXTRACT_FAILED state
 
 ---
 
