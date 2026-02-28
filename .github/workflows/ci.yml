@@ -112,6 +112,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/angular/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src/angular
+        run: npm ci
+
+      - name: Build Angular frontend
+        run: npx ng build --configuration=production --output-path /tmp/angular-output/build
+        working-directory: src/angular
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -134,6 +149,8 @@ jobs:
           platforms: linux/arm64
           push: true
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true
+          build-contexts: |
+            angular-builder=/tmp/angular-output
           cache-from: type=gha,scope=arm64
           cache-to: type=gha,scope=arm64,mode=max
           provenance: false
