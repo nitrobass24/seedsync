@@ -185,10 +185,7 @@ class LftpJobStatusParser:
                     eta=LftpJobStatusParser.__TIME_UNITS_REGEX)
         chunk_got_m = re.compile(chunk_got_pattern)
 
-        chunk_header_pattern = (r"\\chunk\s"
-                                r"(?P<start>\d+)"
-                                r"-"
-                                r"(?P<end>\d+)")
+        chunk_header_pattern = r"\\chunk\s+\d+"
         chunk_header_m = re.compile(chunk_header_pattern)
 
         chmod_header_pattern = (r"chmod\s"
@@ -456,10 +453,9 @@ class LftpJobStatusParser:
             # Search for but ignore "\chunk" line
             result = chunk_header_m.search(line)
             if result:
-                # Also need to ignore the next line
-                if not lines:
-                    raise ValueError("Missing data line for chunk '{}'".format(line))
-                lines.pop(0)
+                # Also need to ignore the next line (chunk data)
+                if lines and lines[0].startswith("`"):
+                    lines.pop(0)
                 # Continue the outer loop
                 continue
 
