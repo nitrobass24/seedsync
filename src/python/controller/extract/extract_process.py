@@ -98,6 +98,14 @@ class ExtractProcess(AppProcess):
                     self.__dispatch.extract(file)
                 except ExtractDispatchError as e:
                     self.logger.warning(str(e))
+                    # Report dispatch errors as failures so the controller
+                    # can transition the file to EXTRACT_FAILED state
+                    failed_result = ExtractFailedResult(
+                        timestamp=datetime.datetime.now(),
+                        name=file.name,
+                        is_dir=file.is_dir
+                    )
+                    self.__failed_result_queue.put(failed_result)
         except queue.Empty:
             pass
 
