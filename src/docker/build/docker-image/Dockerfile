@@ -61,7 +61,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     p7zip \
     p7zip-full \
-    unrar \
+    unrar=1:6.2.6-1+deb12u1 \
     gosu \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean

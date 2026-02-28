@@ -3,6 +3,7 @@
 ## [0.12.4] - 2026-02-28
 
 ### Fixed
+
 - **RAR5 extraction failure** — Replace `unrar-free` (RAR1-3 only) with RARLAB's full `unrar` (v6.21) which supports all RAR formats including RAR5. Modern archives use RAR5, causing silent extraction failures and a download-extract-fail-delete loop (#84)
 - **Incomplete directory stuck in DOWNLOADED** — Fix persist authority overriding children BFS check when extra local files inflate `local_size >= remote_size`, preventing re-download of missing remote children (#83)
 - **LFTP chunk parser crash** — Fix crash on rangeless `\chunk` lines (e.g. `\chunk 5077`) emitted by LFTP during parallel downloads
