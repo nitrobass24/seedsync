@@ -31,12 +31,14 @@ clean:
 	docker compose -f docker-compose.dev.yml down -v --rmi local
 	rm -rf build/
 
-# Run Python tests (in container)
+# Run Python tests (in container with runtime dependencies)
 test:
 	docker run --rm -v $(PWD)/src/python:/app/python -w /app/python \
 		-e PYTHONPATH=/app/python \
 		python:3.12-slim-bookworm \
-		sh -c "pip install -q -r requirements.txt pytest parameterized testfixtures webtest && pytest tests/unittests -v --tb=short"
+		sh -c "apt-get update -qq && apt-get install -y -qq --no-install-recommends lftp openssh-client >/dev/null 2>&1 && \
+		pip install -q -r requirements.txt pytest parameterized testfixtures webtest && \
+		pytest tests/unittests -v --tb=short"
 
 # Show image size
 size:

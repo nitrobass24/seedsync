@@ -59,15 +59,11 @@ RUN sed -i 's/Components: main/Components: main non-free/' /etc/apt/sources.list
 RUN apt-get update && apt-get install -y --no-install-recommends \
     lftp \
     openssh-client \
-    p7zip \
-    p7zip-full \
+    7zip \
     unrar=1:6.2.6-1+deb12u1 \
-    gosu \
     && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
-
-# Set up RAR codec symlink
-RUN ln -sf /usr/lib/p7zip/Codecs/Rar.so /usr/lib/p7zip/Codecs/Rar29.so 2>/dev/null || true
+    && apt-get clean \
+    && ln -sf /usr/bin/7zz /usr/bin/7z
 
 # Set locale
 ENV LC_ALL=C.UTF-8 \
@@ -81,6 +77,7 @@ RUN mkdir -p /app/python /app/html /config /downloads
 # Install Python dependencies directly with pip (no Poetry overhead)
 COPY src/python/requirements.txt /app/python/
 RUN pip install --no-cache-dir -r /app/python/requirements.txt \
+    && pip uninstall -y pip setuptools \
     && rm -rf /root/.cache/pip
 
 # Copy application source

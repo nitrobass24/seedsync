@@ -2,8 +2,7 @@
 
 import unittest
 import json
-from datetime import datetime
-from pytz import timezone
+from datetime import datetime, timezone
 
 from .test_serialize import parse_stream
 from web.serialize import SerializeModel
@@ -224,7 +223,7 @@ class TestSerializeModel(unittest.TestCase):
         serialize = SerializeModel()
         a = ModelFile("a", True)
         b = ModelFile("b", False)
-        b.local_created_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone('UTC'))
+        b.local_created_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone.utc)
         files = [a, b]
         out = parse_stream(serialize.model(files))
         data = json.loads(out["data"])
@@ -236,7 +235,7 @@ class TestSerializeModel(unittest.TestCase):
         serialize = SerializeModel()
         a = ModelFile("a", True)
         b = ModelFile("b", False)
-        b.local_modified_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone('UTC'))
+        b.local_modified_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone.utc)
         files = [a, b]
         out = parse_stream(serialize.model(files))
         data = json.loads(out["data"])
@@ -248,7 +247,7 @@ class TestSerializeModel(unittest.TestCase):
         serialize = SerializeModel()
         a = ModelFile("a", True)
         b = ModelFile("b", False)
-        b.remote_created_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone('UTC'))
+        b.remote_created_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone.utc)
         files = [a, b]
         out = parse_stream(serialize.model(files))
         data = json.loads(out["data"])
@@ -260,7 +259,7 @@ class TestSerializeModel(unittest.TestCase):
         serialize = SerializeModel()
         a = ModelFile("a", True)
         b = ModelFile("b", False)
-        b.remote_modified_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone('UTC'))
+        b.remote_modified_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone.utc)
         files = [a, b]
         out = parse_stream(serialize.model(files))
         data = json.loads(out["data"])
