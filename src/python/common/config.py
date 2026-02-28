@@ -4,13 +4,22 @@ import configparser
 from typing import Dict
 from io import StringIO
 import collections
-from distutils.util import strtobool
 from abc import ABC
 from typing import Type, TypeVar, Callable, Any
 
 from .error import AppError
 from .persist import Persist, PersistError
 from .types import overrides
+
+
+def _strtobool(val: str) -> bool:
+    val = val.strip().lower()
+    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+        return True
+    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
+        return False
+    else:
+        raise ValueError("invalid truth value %r" % (val,))
 
 
 class ConfigError(AppError):
@@ -54,7 +63,7 @@ class Converters:
                 cls.__name__, name
             ))
         try:
-            val = bool(strtobool(value))
+            val = bool(_strtobool(value))
         except ValueError:
             raise ConfigError("Bad config: {}.{} ({}) must be a boolean value".format(
                 cls.__name__, name, value
