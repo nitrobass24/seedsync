@@ -437,6 +437,65 @@ class TestModelBuilder(unittest.TestCase):
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.DOWNLOADED, model.get_file("a").state)
 
+    def test_build_state_dir_persist_new_remote_children(self):
+        """Issue #83: Directory in persist.downloaded_files gets new children on remote.
+        Should return to DEFAULT so auto-queue can re-download."""
+        # Phase 1: directory fully downloaded (2 children match)
+        r_a = SystemFile("a", 200, True)
+        r_a.add_child(SystemFile("part1.rar", 100, False))
+        r_a.add_child(SystemFile("part2.rar", 100, False))
+
+        l_a = SystemFile("a", 200, True)
+        l_a.add_child(SystemFile("part1.rar", 100, False))
+        l_a.add_child(SystemFile("part2.rar", 100, False))
+
+        self.model_builder.set_remote_files([r_a])
+        self.model_builder.set_local_files([l_a])
+        self.model_builder.set_downloaded_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DOWNLOADED, model.get_file("a").state)
+
+        # Phase 2: new parts appear on remote (part3, part4)
+        self.model_builder.clear()
+        r_a2 = SystemFile("a", 400, True)
+        r_a2.add_child(SystemFile("part1.rar", 100, False))
+        r_a2.add_child(SystemFile("part2.rar", 100, False))
+        r_a2.add_child(SystemFile("part3.rar", 100, False))
+        r_a2.add_child(SystemFile("part4.rar", 100, False))
+
+        self.model_builder.set_remote_files([r_a2])
+        self.model_builder.set_local_files([l_a])  # local unchanged
+        self.model_builder.set_downloaded_files({"a"})
+        model = self.model_builder.build_model()
+        # Must be DEFAULT so auto-queue can re-download the missing parts
+        self.assertEqual(ModelFile.State.DEFAULT, model.get_file("a").state)
+        # remote_size should reflect new total
+        self.assertEqual(400, model.get_file("a").remote_size)
+        # local_size should be unchanged
+        self.assertEqual(200, model.get_file("a").local_size)
+
+    def test_build_state_dir_persist_extra_local_files(self):
+        """Directory in persist with extra local files inflating local_size.
+        Even when local_size >= remote_size, missing remote children should keep DEFAULT."""
+        # Remote: 3 parts (300 total)
+        r_a = SystemFile("a", 300, True)
+        r_a.add_child(SystemFile("part1.rar", 100, False))
+        r_a.add_child(SystemFile("part2.rar", 100, False))
+        r_a.add_child(SystemFile("part3.rar", 100, False))
+
+        # Local: only 2 parts downloaded + extracted content (500 total, > remote_size)
+        l_a = SystemFile("a", 500, True)
+        l_a.add_child(SystemFile("part1.rar", 100, False))
+        l_a.add_child(SystemFile("part2.rar", 100, False))
+        l_a.add_child(SystemFile("extracted_movie.mkv", 300, False))  # extra local file
+
+        self.model_builder.set_remote_files([r_a])
+        self.model_builder.set_local_files([l_a])
+        self.model_builder.set_downloaded_files({"a"})
+        model = self.model_builder.build_model()
+        # Must be DEFAULT: part3.rar is on remote but not local
+        self.assertEqual(ModelFile.State.DEFAULT, model.get_file("a").state)
+
     def test_build_remote_size(self):
         self.model_builder.set_remote_files([SystemFile("a", 42, False)])
         model = self.model_builder.build_model()
