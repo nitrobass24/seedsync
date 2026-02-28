@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.12.5] - 2026-02-28
+
+### Fixed
+- **Delete Remote directory hang** — Fixed infinite spinner when deleting a remote directory (#92)
+- **SSH password exposed in debug logs** — Mask `remote_password` in debug config dump output (#97)
+
+### Added
+- **UMASK environment variable** — Control downloaded file permissions via `UMASK` env var (e.g. `002` for 775/664)
+- **Angular unit tests in CI** — 132 Vitest unit tests now run on every CI build (#93)
+
+### Changed
+- **Parallel multi-arch Docker builds** — amd64 and arm64 images now build in parallel and merge into a single multi-arch manifest, reducing total release build time (#93)
+- **Angular packages** — Bumped from 21.1.x to 21.1.6+
+
+### Security
+- **Dependabot alerts** — Dismissed 4 dev-only alerts; remaining 5 are unfixable Docusaurus transitive deps (#96)
+
+---
+
 ## [0.12.4] - 2026-02-28
 
 ### Fixed
