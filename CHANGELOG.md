@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.12.4] - 2026-02-28
+
+### Fixed
+
+- **RAR5 extraction failure** — Replace `unrar-free` (RAR1-3 only) with RARLAB's full `unrar` (v6.21) which supports all RAR formats including RAR5. Modern archives use RAR5, causing silent extraction failures and a download-extract-fail-delete loop (#84)
+- **Incomplete directory stuck in DOWNLOADED** — Fix persist authority overriding children BFS check when extra local files inflate `local_size >= remote_size`, preventing re-download of missing remote children (#83)
+- **LFTP chunk parser crash** — Fix crash on rangeless `\chunk` lines (e.g. `\chunk 5077`) emitted by LFTP during parallel downloads
+- **Zombie app after controller crash** — Fix main loop swallowing controller exceptions, causing the app to run indefinitely without functioning instead of cleanly exiting for Docker restart
+- **Extract retry loop not stopping** — Fix retry counter being reset on every re-download cycle, preventing files from reaching EXTRACT_FAILED state after 3 attempts
+- **Delete Local fails for staged files** — Check staging path before local_path in DELETE_LOCAL so files still in staging can be deleted
+- **Late-binding closure in DELETE_LOCAL** — Bind `delete_path` as default argument so each callback captures the correct path when multiple deletes are batched
+- **Manual extract silently failing** — Extract dispatch errors (e.g. "no archives found") were silently swallowed, leaving the file in DOWNLOADED state with no UI feedback. Now reported as failures so the file reaches EXTRACT_FAILED state
+- **Extract fails after staging move** — When staging is enabled and files are moved to the final local path before extraction runs, ExtractDispatch only checked the staging path. Now falls back to local_path so archives are found in either location
+
+---
+
 ## [0.12.3] - 2026-02-21
 
 ### Fixed

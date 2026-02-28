@@ -692,6 +692,38 @@ class TestAutoQueue(unittest.TestCase):
         self.assertEqual(Controller.Command.Action.QUEUE, command.action)
         self.assertEqual("File.One", command.filename)
 
+    def test_downloaded_dir_requeued_when_remote_grows(self):
+        """Issue #83: A directory that was downloaded then gets new remote children
+        should be re-queued when remote_size changes."""
+        self.context.config.autoqueue.patterns_only = False
+
+        persist = AutoQueuePersist()
+        # noinspection PyTypeChecker
+        auto_queue = AutoQueue(self.context, persist, self.controller)
+
+        # Initial: directory downloaded (state DOWNLOADED)
+        file_one = ModelFile("Archive.Dir", True)
+        file_one.remote_size = 200
+        file_one.local_size = 200
+        file_one.state = ModelFile.State.DOWNLOADED
+        self.model_listener.file_added(file_one)
+        auto_queue.process()
+        # DOWNLOADED files should NOT be queued
+        self.controller.queue_command.assert_not_called()
+
+        # New remote parts appear: remote_size grows, state goes back to DEFAULT
+        file_one_updated = ModelFile("Archive.Dir", True)
+        file_one_updated.remote_size = 400
+        file_one_updated.local_size = 200
+        file_one_updated.state = ModelFile.State.DEFAULT
+        self.model_listener.file_updated(file_one, file_one_updated)
+        auto_queue.process()
+        # Should be re-queued since remote_size changed and state is DEFAULT
+        self.controller.queue_command.assert_called_once_with(unittest.mock.ANY)
+        command = self.controller.queue_command.call_args[0][0]
+        self.assertEqual(Controller.Command.Action.QUEUE, command.action)
+        self.assertEqual("Archive.Dir", command.filename)
+
     def test_new_matching_pattern_queues_existing_files(self):
         persist = AutoQueuePersist()
 

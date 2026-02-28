@@ -188,9 +188,15 @@ class Controller:
             out_dir_path = self.__context.config.lftp.local_path
         else:
             out_dir_path = self.__context.config.controller.extract_path
+        # When staging is enabled, archives may be in staging or already moved
+        # to local_path. Pass local_path as fallback so extraction can find them.
+        local_path_fallback = None
+        if self.__effective_local_path != self.__context.config.lftp.local_path:
+            local_path_fallback = self.__context.config.lftp.local_path
         self.__extract_process = ExtractProcess(
             out_dir_path=out_dir_path,
-            local_path=self.__effective_local_path
+            local_path=self.__effective_local_path,
+            local_path_fallback=local_path_fallback
         )
 
         # Setup multiprocess logging
@@ -450,7 +456,6 @@ class Controller:
                 if diff.new_file is not None and \
                         diff.new_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
                     self.__moved_file_names.discard(diff.new_file.name)
-                    self.__extract_retry_counts.pop(diff.new_file.name, None)
                     self.__persist.downloaded_file_names.discard(diff.new_file.name)
                     self.__persist.extracted_file_names.discard(diff.new_file.name)
                     self.__persist.extract_failed_file_names.discard(diff.new_file.name)
@@ -657,12 +662,25 @@ class Controller:
                     _notify_failure(command, "File '{}' does not exist locally".format(command.filename))
                     continue
                 else:
+                    # When staging is enabled, the file may be in the staging path
+                    # (not yet moved) or the final local_path (already moved).
+                    # Check staging first since that's where in-progress files live.
+                    delete_path = self.__context.config.lftp.local_path
+                    if self.__context.config.controller.use_staging and \
+                            self.__context.config.controller.staging_path:
+                        staging_file = os.path.join(
+                            self.__context.config.controller.staging_path, file.name)
+                        if os.path.exists(staging_file):
+                            delete_path = self.__context.config.controller.staging_path
                     process = DeleteLocalProcess(
-                        local_path=self.__context.config.lftp.local_path,
+                        local_path=delete_path,
                         file_name=file.name
                     )
                     process.set_multiprocessing_logger(self.__mp_logger)
-                    post_callback = self.__local_scan_process.force_scan
+                    def post_callback(delete_path=delete_path):
+                        self.__local_scan_process.force_scan()
+                        if delete_path != self.__context.config.lftp.local_path:
+                            self.__active_scan_process.force_scan()
                     command_wrapper = Controller.CommandProcessWrapper(
                         process=process,
                         post_callback=post_callback

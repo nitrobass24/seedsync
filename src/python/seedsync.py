@@ -159,18 +159,10 @@ class Seedsync:
                     prev_persist_timestamp = now
                     self.persist()
 
-                # Propagate exceptions
+                # Propagate exceptions from child threads
+                # Any exception here exits the main loop for clean shutdown
                 webapp_job.propagate_exception()
-                # Catch controller exceptions and keep running, but notify the web server of the error
-                try:
-                    controller_job.propagate_exception()
-                except AppError as exc:
-                    if not self.context.args.exit:
-                        self.context.status.server.up = False
-                        self.context.status.server.error_msg = str(exc)
-                        Seedsync.logger.exception("Caught exception")
-                    else:
-                        raise
+                controller_job.propagate_exception()
 
                 # Check if a restart is requested
                 if web_app_builder.server_handler.is_restart_requested():

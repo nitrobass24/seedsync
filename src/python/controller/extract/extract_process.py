@@ -57,10 +57,12 @@ class ExtractProcess(AppProcess):
                                                 is_dir=is_dir)
             self.failed_queue.put(failed_result)
 
-    def __init__(self, out_dir_path: str, local_path: str):
+    def __init__(self, out_dir_path: str, local_path: str,
+                 local_path_fallback: str = None):
         super().__init__(name=self.__class__.__name__)
         self.__out_dir_path = out_dir_path
         self.__local_path = local_path
+        self.__local_path_fallback = local_path_fallback
         self.__command_queue = multiprocessing.Queue()
         self.__status_result_queue = multiprocessing.Queue()
         self.__completed_result_queue = multiprocessing.Queue()
@@ -71,7 +73,8 @@ class ExtractProcess(AppProcess):
     def run_init(self):
         # Create dispatch inside the process
         self.__dispatch = ExtractDispatch(out_dir_path=self.__out_dir_path,
-                                          local_path=self.__local_path)
+                                          local_path=self.__local_path,
+                                          local_path_fallback=self.__local_path_fallback)
 
         # Add extract listener
         listener = ExtractProcess.__ExtractListener(
@@ -98,6 +101,14 @@ class ExtractProcess(AppProcess):
                     self.__dispatch.extract(file)
                 except ExtractDispatchError as e:
                     self.logger.warning(str(e))
+                    # Report dispatch errors as failures so the controller
+                    # can transition the file to EXTRACT_FAILED state
+                    failed_result = ExtractFailedResult(
+                        timestamp=datetime.datetime.now(),
+                        name=file.name,
+                        is_dir=file.is_dir
+                    )
+                    self.__failed_result_queue.put(failed_result)
         except queue.Empty:
             pass
 
