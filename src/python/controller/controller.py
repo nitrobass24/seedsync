@@ -188,9 +188,15 @@ class Controller:
             out_dir_path = self.__context.config.lftp.local_path
         else:
             out_dir_path = self.__context.config.controller.extract_path
+        # When staging is enabled, archives may be in staging or already moved
+        # to local_path. Pass local_path as fallback so extraction can find them.
+        local_path_fallback = None
+        if self.__effective_local_path != self.__context.config.lftp.local_path:
+            local_path_fallback = self.__context.config.lftp.local_path
         self.__extract_process = ExtractProcess(
             out_dir_path=out_dir_path,
-            local_path=self.__effective_local_path
+            local_path=self.__effective_local_path,
+            local_path_fallback=local_path_fallback
         )
 
         # Setup multiprocess logging
