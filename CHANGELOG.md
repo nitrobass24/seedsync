@@ -15,7 +15,8 @@
 ### Changed
 
 - **Parallel multi-arch Docker builds** — amd64 and arm64 images now build in parallel and merge into a single multi-arch manifest, reducing total release build time (#93)
-- **Angular packages** — Bumped from 21.1.x to 21.1.6+
+- **Skip Angular build on arm64** — Build Angular natively and inject into arm64 Docker build via `build-contexts`, cutting arm64 CI from ~4min to ~1min
+- **Angular packages** — Bumped from 21.1.x to 21.2.0
 
 ### Security
 
