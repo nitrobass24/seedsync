@@ -73,5 +73,11 @@ export HOME="$USER_HOME"
 
 echo "Running as: $USERNAME:$GROUPNAME (UID=$USER_ID, GID=$GROUP_ID)"
 
+# Apply umask if set (controls default file/directory permissions)
+if [ -n "$UMASK" ]; then
+    umask "$UMASK"
+    echo "Setting umask: $UMASK"
+fi
+
 # Execute the command as the resolved user
 exec gosu "$USERNAME" "$@"
