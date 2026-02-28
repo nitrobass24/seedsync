@@ -31,6 +31,7 @@ services:
     environment:
       - PUID=1000 # Your user ID (run `id` to find)
       - PGID=1000 # Your group ID
+      # - UMASK=002 # Optional: file permission mask (002 for 775/664)
     volumes:
       - ./config:/config
       - /path/to/downloads:/downloads
@@ -57,6 +58,10 @@ docker run -d \
   -v /path/to/downloads:/downloads \
   ghcr.io/nitrobass24/seedsync:latest
 ```
+
+:::tip
+To control file permissions for downloaded files, add `-e UMASK=002` (for 775/664) or `-e UMASK=000` (for 777/666). See [Configuration](./configuration.md#environment-variables) for details.
+:::
 
 ## SSH key authentication (recommended)
 

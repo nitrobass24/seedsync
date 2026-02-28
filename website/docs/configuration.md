@@ -67,6 +67,7 @@ Then set **Staging Path** to `/staging` in Settings.
 | --- | --- | --- |
 | `PUID` | 1000 | User ID for file ownership |
 | `PGID` | 1000 | Group ID for file ownership |
+| `UMASK` | *(unset)* | File permission mask (e.g. `002` for 775/664, `000` for 777/666) |
 
 ## Volumes
 
