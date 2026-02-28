@@ -52,13 +52,16 @@ LABEL maintainer="nitrobass24" \
       description="SeedSync - Seedbox file synchronization tool" \
       version="0.9.0"
 
+# Enable non-free repo for full unrar (unrar-free only supports RAR1-3)
+RUN sed -i 's/Components: main/Components: main non-free/' /etc/apt/sources.list.d/debian.sources
+
 # Install only essential runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     lftp \
     openssh-client \
     p7zip \
     p7zip-full \
-    unrar-free \
+    unrar \
     gosu \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
