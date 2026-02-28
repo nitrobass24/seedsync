@@ -11,6 +11,7 @@
 - **Delete Local fails for staged files** — Check staging path before local_path in DELETE_LOCAL so files still in staging can be deleted
 - **Late-binding closure in DELETE_LOCAL** — Bind `delete_path` as default argument so each callback captures the correct path when multiple deletes are batched
 - **Manual extract silently failing** — Extract dispatch errors (e.g. "no archives found") were silently swallowed, leaving the file in DOWNLOADED state with no UI feedback. Now reported as failures so the file reaches EXTRACT_FAILED state
+- **Extract fails after staging move** — When staging is enabled and files are moved to the final local path before extraction runs, ExtractDispatch only checked the staging path. Now falls back to local_path so archives are found in either location
 
 ---
 
