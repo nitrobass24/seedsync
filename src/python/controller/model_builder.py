@@ -310,6 +310,7 @@ class ModelBuilder:
             # now we can determine if root is Downloaded
             # root is Downloaded if all child remote files are Downloaded
             # again we use BFS to traverse
+            incomplete_children = False
             if model_file.state == ModelFile.State.DEFAULT:
                 if not model_file.is_dir and \
                         model_file.local_size is not None and \
@@ -333,12 +334,19 @@ class ModelBuilder:
                         frontier += _child_file.get_children()
                     if all_downloaded:
                         model_file.state = ModelFile.State.DOWNLOADED
+                    else:
+                        incomplete_children = True
 
             # next we check persist authority for previously downloaded files
             if model_file.state == ModelFile.State.DEFAULT and \
                     model_file.name in self.__downloaded_files:
+                # Directory with incomplete children always stays DEFAULT
+                # (the children BFS check is authoritative; root-level size
+                # comparisons can be fooled by extra local files like extracted content)
+                if incomplete_children:
+                    pass  # Stay DEFAULT for re-download
                 # Partial file overrides persist — stay DEFAULT for re-download
-                if model_file.local_size is not None and \
+                elif model_file.local_size is not None and \
                         model_file.remote_size is not None and \
                         model_file.local_size < model_file.remote_size:
                     pass  # Stay DEFAULT for re-download
