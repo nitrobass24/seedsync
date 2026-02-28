@@ -191,6 +191,20 @@ class TestLftpJobStatusParser(unittest.TestCase):
         self.assertEqual(1, len(statuses))
         self.assertEqual("SomeFile.mkv", statuses[0].name)
 
+    def test_chunk_without_data_line_rangeless(self):
+        """Test that a rangeless \\chunk line at end of output (no data line) doesn't crash."""
+        output = (
+            "jobs -v\n"
+            "[2] pget -c ~/downloads/completed/SomeFile.mkv -o /data/lftpsync// \n"
+            "    sftp://user:pass@host:22/home/user\n"
+            "    `~/downloads/completed/SomeFile.mkv', got 1000 of 2000 (50%) \n"
+            "  \\chunk 5077\n"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("SomeFile.mkv", statuses[0].name)
+
     def test_queued_items(self):
         """Queued items, no jobs running"""
         output = """
