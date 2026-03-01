@@ -1,7 +1,7 @@
 # SeedSync Makefile - Docker Only
 # Simplified build system for containerized deployment
 
-.PHONY: build run stop logs clean test test-image
+.PHONY: all build build-fresh run stop logs clean test test-image size shell help
 
 # Default target
 all: build
@@ -37,7 +37,7 @@ test-image:
 
 # Run Python tests (in container with runtime dependencies)
 test:
-	@docker image inspect seedsync-test >/dev/null 2>&1 || $(MAKE) test-image
+	$(MAKE) test-image
 	docker run --rm -v $(PWD)/src/python:/app/python seedsync-test \
 		pytest tests/unittests -v --tb=short
 
