@@ -20,7 +20,7 @@ class MultiprocessingLogger:
     Source: https://gist.github.com/vsajip/820132
     """
 
-    __LISTENER_SLEEP_INTERVAL_IN_SECS = 0.1
+    __LISTENER_SLEEP_INTERVAL_IN_SECS = 0.5
 
     def __init__(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild("MPLogger")
