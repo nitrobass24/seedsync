@@ -1,7 +1,7 @@
 # SeedSync Makefile - Docker Only
 # Simplified build system for containerized deployment
 
-.PHONY: build run stop logs clean test
+.PHONY: all build build-fresh run stop logs clean test test-image size shell help
 
 # Default target
 all: build
@@ -31,12 +31,15 @@ clean:
 	docker compose -f docker-compose.dev.yml down -v --rmi local
 	rm -rf build/
 
-# Run Python tests (in container)
+# Build cached test image (first run only)
+test-image:
+	docker build -t seedsync-test -f src/docker/build/test-image/Dockerfile .
+
+# Run Python tests (in container with runtime dependencies)
 test:
-	docker run --rm -v $(PWD)/src/python:/app/python -w /app/python \
-		-e PYTHONPATH=/app/python \
-		python:3.12-slim-bookworm \
-		sh -c "pip install -q -r requirements.txt pytest parameterized testfixtures webtest && pytest tests/unittests -v --tb=short"
+	$(MAKE) test-image
+	docker run --rm -v $(PWD)/src/python:/app/python seedsync-test \
+		pytest tests/unittests -v --tb=short
 
 # Show image size
 size:
@@ -60,5 +63,6 @@ help:
 	@echo "  logs        - View container logs"
 	@echo "  clean       - Remove containers and images"
 	@echo "  test        - Run Python unit tests"
+	@echo "  test-image  - Build cached test image"
 	@echo "  size        - Show image size"
 	@echo "  shell       - Open shell in running container"

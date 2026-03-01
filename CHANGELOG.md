@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.6] - 2026-02-28
+
+### Added
+
+- **Unraid installation docs** — Added Unraid Community Applications install instructions to README and Docusaurus docs site (#79)
+
+### Changed
+
+- **Docker build optimization** — Added `.dockerignore`, reduced build context, shared build artifacts between CI jobs
+- **CI improvements** — Test caching, always-rebuild test image, non-root test user
+- **Poll interval tuning** — Reduced unnecessary polling in logger and web app
+
+---
+
 ## [0.12.5] - 2026-02-28
 
 ### Fixed

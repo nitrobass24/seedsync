@@ -80,4 +80,4 @@ if [ -n "$UMASK" ]; then
 fi
 
 # Execute the command as the resolved user
-exec gosu "$USERNAME" "$@"
+exec setpriv --reuid="$USERNAME" --regid="$GROUPNAME" --init-groups -- "$@"

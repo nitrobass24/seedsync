@@ -93,7 +93,7 @@ class TestMultiprocessingLogger(unittest.TestCase):
                                           args=(mp_logger,))
             p_1.start()
             mp_logger.start()
-            time.sleep(0.2)
+            time.sleep(1)
             p_1.join()
             mp_logger.stop()
 
@@ -112,7 +112,7 @@ class TestMultiprocessingLogger(unittest.TestCase):
                                           args=(mp_logger,))
             p_1.start()
             mp_logger.start()
-            time.sleep(0.2)
+            time.sleep(1)
             p_1.join()
             mp_logger.stop()
 
@@ -130,7 +130,7 @@ class TestMultiprocessingLogger(unittest.TestCase):
                                           args=(mp_logger,))
             p_1.start()
             mp_logger.start()
-            time.sleep(0.2)
+            time.sleep(1)
             p_1.join()
             mp_logger.stop()
 
@@ -147,7 +147,7 @@ class TestMultiprocessingLogger(unittest.TestCase):
                                           args=(mp_logger,))
             p_1.start()
             mp_logger.start()
-            time.sleep(0.2)
+            time.sleep(1)
             p_1.join()
             mp_logger.stop()
 

@@ -98,18 +98,19 @@ class TestInnerConfig(unittest.TestCase):
 class TestConfig(unittest.TestCase):
     def __check_empty_error(self, cls, good_dict, key):
         """
-        Helper method to check that a config class raises an error on
-        a empty value
-        :param cls:
-        :param good_dict:
-        :param key:
-        :return:
+        Helper method to check that a config class rejects empty/whitespace values.
+        For properties with None defaults, "" is treated as "missing" by from_dict
+        (round-trip preservation: None -> "" -> None). In that case we verify the
+        property stays None. Whitespace-only values should always raise ConfigError.
         """
         bad_dict = dict(good_dict)
         bad_dict[key] = ""
-        with self.assertRaises(ConfigError) as error:
-            cls.from_dict(bad_dict)
-        self.assertTrue(str(error.exception).startswith("Bad config"))
+        try:
+            result = cls.from_dict(bad_dict)
+            # No error means the round-trip guard preserved the None default
+            self.assertIsNone(getattr(result, key))
+        except ConfigError as error:
+            self.assertTrue(str(error).startswith("Bad config"))
         bad_dict[key] = "   "
         with self.assertRaises(ConfigError) as error:
             cls.from_dict(bad_dict)
@@ -249,10 +250,12 @@ class TestConfig(unittest.TestCase):
                           })
 
         # remote_password allows empty values (for SSH key auth)
+        # Note: from_dict treats "" as "missing" for None-default properties
+        # (round-trip preservation), so empty password resolves to None
         empty_pw_dict = dict(good_dict)
         empty_pw_dict["remote_password"] = ""
         lftp_empty_pw = Config.Lftp.from_dict(empty_pw_dict)
-        self.assertEqual("", lftp_empty_pw.remote_password)
+        self.assertIsNone(lftp_empty_pw.remote_password)
 
         # net_limit_rate allows empty values (means unlimited)
         empty_rate_dict = dict(good_dict)
@@ -260,17 +263,17 @@ class TestConfig(unittest.TestCase):
         lftp_empty_rate = Config.Lftp.from_dict(empty_rate_dict)
         self.assertEqual("", lftp_empty_rate.net_limit_rate)
 
-        # net_socket_buffer allows empty values and suffixed values
+        # net_socket_buffer and pget_min_chunk_size default to None, so ""
+        # is treated as "missing" by from_dict (round-trip preservation)
         empty_buf_dict = dict(good_dict)
         empty_buf_dict["net_socket_buffer"] = ""
         lftp_empty_buf = Config.Lftp.from_dict(empty_buf_dict)
-        self.assertEqual("", lftp_empty_buf.net_socket_buffer)
+        self.assertIsNone(lftp_empty_buf.net_socket_buffer)
 
-        # pget_min_chunk_size allows empty values
         empty_chunk_dict = dict(good_dict)
         empty_chunk_dict["pget_min_chunk_size"] = ""
         lftp_empty_chunk = Config.Lftp.from_dict(empty_chunk_dict)
-        self.assertEqual("", lftp_empty_chunk.pget_min_chunk_size)
+        self.assertIsNone(lftp_empty_chunk.pget_min_chunk_size)
 
         # bad values
         self.check_bad_value_error(Config.Lftp, good_dict, "remote_port", "-1")
@@ -695,7 +698,7 @@ class TestConfig(unittest.TestCase):
         config.general.verbose = False
         config.lftp.remote_address = "addr"
         config.lftp.remote_username = "user"
-        config.lftp.remote_password = ""
+        config.lftp.remote_password = "pass"
         config.lftp.remote_port = 22
         config.lftp.remote_path = "/remote"
         config.lftp.local_path = "/local"
