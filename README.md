@@ -90,6 +90,22 @@ docker run -d \
 > **SSH Key Auth**: To use key-based authentication, mount your private key:
 > `-v ~/.ssh/id_rsa:/home/seedsync/.ssh/id_rsa:ro`
 
+### Unraid
+
+SeedSync is available as a Community Application on Unraid.
+
+1. In the Unraid web UI, go to **Docker → Template Repositories** and add:
+   ```
+   https://github.com/nitrobass24/unraid-templates
+   ```
+2. Go to the **Apps** tab, search for **SeedSync**, and click **Install**.
+3. Review the default paths and click **Apply**:
+   - **Config**: `/mnt/user/appdata/seedsync`
+   - **Downloads**: `/mnt/user/downloads/seedsync`
+4. Access the web UI at `http://<your-unraid-ip>:8800`
+
+> **Note**: PUID/PGID default to `99`/`100` (Unraid's `nobody`/`users`), which is correct for most Unraid setups.
+
 ## Configuration
 
 On first run, access the web UI and configure:
