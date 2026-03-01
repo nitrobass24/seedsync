@@ -4,6 +4,12 @@ from typing import List
 from datetime import datetime
 
 
+# IMPORTANT: The private attribute names below (self.__name, self.__size, etc.) are
+# mirrored verbatim by the standalone SystemFile class in src/python/scanfs.py.
+# Pickle compatibility between the remote fallback scanner and the local SeedSync
+# process depends on both __dict__ representations being identical.
+# If you add, rename, or remove any instance attribute here you MUST make the same
+# change in scanfs.py::SystemFile, and update test_scanfs.py::TestScanfsPickleRoundTrip.
 class SystemFile:
     """
     Represents a system file or directory

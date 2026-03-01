@@ -86,6 +86,8 @@ COPY src/python/ /app/python/
 # Copy built artifacts from previous stages
 COPY --from=angular-builder /build/browser /app/html
 COPY --from=scanfs-builder /build/dist/scanfs /app/scanfs
+# Python fallback scanner: uploaded to the remote server when the binary cannot run
+COPY src/python/scanfs.py /app/scanfs.py
 
 # Copy and set up entrypoint
 COPY src/docker/build/docker-image/entrypoint.sh /usr/local/bin/

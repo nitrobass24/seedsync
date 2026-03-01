@@ -65,6 +65,15 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
       valuePath: ['lftp', 'remote_path_to_scan_script'],
       description: 'Where to install scanner script on remote server',
     },
+    {
+      type: OptionType.Checkbox,
+      label: 'Use Python scanner',
+      valuePath: ['lftp', 'use_python_scanner'],
+      description:
+        'Skip the compiled scanfs binary and always use the Python fallback scanner. ' +
+        'Enable this on servers with an older glibc (e.g. Debian 9) where the binary ' +
+        'cannot run.',
+    },
   ],
 };
 

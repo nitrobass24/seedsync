@@ -15,6 +15,7 @@ export interface Lftp {
   remote_path: string | null;
   local_path: string | null;
   remote_path_to_scan_script: string | null;
+  use_python_scanner: boolean | null;
   use_ssh_key: boolean | null;
   num_max_parallel_downloads: number | null;
   num_max_parallel_files_per_download: number | null;
@@ -73,6 +74,7 @@ export const DEFAULT_LFTP: Lftp = {
   remote_path: null,
   local_path: null,
   remote_path_to_scan_script: null,
+  use_python_scanner: null,
   use_ssh_key: null,
   num_max_parallel_downloads: null,
   num_max_parallel_files_per_download: null,
