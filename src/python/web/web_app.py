@@ -57,7 +57,7 @@ class WebApp(bottle.Bottle):
     """
     Web app implementation
     """
-    _STREAM_POLL_INTERVAL_IN_MS = 100
+    _STREAM_POLL_INTERVAL_IN_MS = 250
 
     def __init__(self, context: Context, controller: Controller):
         super().__init__()
