@@ -409,7 +409,7 @@ if __name__ == "__main__":
         try:
             os.umask(int(_umask_str, 8))
         except ValueError:
-            print("WARNING: Invalid UMASK value {!r}, ignoring".format(_umask_str), file=sys.stderr)
+            print(f"WARNING: Invalid UMASK value {_umask_str!r}, ignoring", file=sys.stderr)
 
     while True:
         try:
