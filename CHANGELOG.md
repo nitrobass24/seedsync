@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.8] - 2026-03-02
+
+### Fixed
+
+- **Staging path crash on Unraid** — Container failed to start with `PermissionError: /staging` when staging was enabled but `/staging` was not a writable volume mount. The `/staging` directory is now created and chowned at container startup, declared as a Docker VOLUME, and exposed in the Unraid template as an optional advanced path (#109)
+- **Entrypoint permission errors hidden** — `chown` failures for `/downloads` and `/staging` were silently swallowed. Errors now surface on stderr. A writability check (run as the app user) verifies `/downloads` on every startup and `/staging` when it is externally mounted, exiting with a clear error message instead of crashing deep in the application
+
+---
+
 ## [0.12.7] - 2026-03-02
 
 ### Fixed
