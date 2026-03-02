@@ -72,7 +72,7 @@ ENV LC_ALL=C.UTF-8 \
     PYTHONUNBUFFERED=1
 
 # Create directory structure
-RUN mkdir -p /app/python /app/html /config /downloads
+RUN mkdir -p /app/python /app/html /config /downloads /staging
 
 # Install Python dependencies directly with pip (no Poetry overhead)
 COPY src/python/requirements.txt /app/python/
@@ -97,7 +97,7 @@ ENV PUID=1000 \
     UMASK=""
 
 EXPOSE 8800
-VOLUME ["/config", "/downloads"]
+VOLUME ["/config", "/downloads", "/staging"]
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["python", "/app/python/seedsync.py", "-c", "/config", "--html", "/app/html", "--scanfs", "/app/scanfs"]

@@ -51,7 +51,7 @@ fi
 chown "$USER_ID:$GROUP_ID" "$USER_HOME"
 
 # Create required directories if they don't exist
-mkdir -p /config /downloads
+mkdir -p /config /downloads /staging
 
 # Set ownership of config directory (required for app to write settings)
 # Only change ownership if directory is empty or owned by root
@@ -59,9 +59,10 @@ if [ -z "$(ls -A /config 2>/dev/null)" ] || [ "$(stat -c '%u' /config)" = "0" ];
     chown -R "$USER_ID:$GROUP_ID" /config
 fi
 
-# For downloads, just ensure the user can write to it
-# Don't recursively chown as it could be a large directory
+# For downloads and staging, just ensure the user can write to them
+# Don't recursively chown as they could be large directories
 chown "$USER_ID:$GROUP_ID" /downloads 2>/dev/null || true
+chown "$USER_ID:$GROUP_ID" /staging 2>/dev/null || true
 
 # Create SSH directory for the user (needed for SSH key management)
 mkdir -p "$USER_HOME/.ssh"
