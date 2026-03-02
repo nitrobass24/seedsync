@@ -407,7 +407,8 @@ if __name__ == "__main__":
     _umask_str = os.environ.get('UMASK', '').strip()
     if _umask_str:
         try:
-            os.umask(int(_umask_str, 8))
+            _prev_umask = os.umask(int(_umask_str, 8))
+            print(f"Applied umask {_umask_str} (previous: {_prev_umask:04o})", file=sys.stderr)
         except ValueError:
             print(f"WARNING: Invalid UMASK value {_umask_str!r}, ignoring", file=sys.stderr)
 

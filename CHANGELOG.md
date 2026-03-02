@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.9] - 2026-03-02
+
+### Changed
+
+- **UMASK diagnostic logging** — Log the applied umask and previous value at startup to help diagnose permission issues (#109)
+
+---
+
 ## [0.12.8] - 2026-03-02
 
 ### Fixed
