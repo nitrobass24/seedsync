@@ -33,6 +33,18 @@ Some servers require a matching locale. Add these environment variables to the c
 
 SeedSync automatically detects the available shell on the remote server, checking `/bin/bash`, `/usr/bin/bash`, and `/bin/sh` in order. If none of these are available or your provider restricts shell access, check with your provider for the correct shell path.
 
+## SeedSync fails with "scp: dest open '/tmp/scanfs': Permission denied"
+
+Some seedbox providers restrict writes to `/tmp` on the remote server. SeedSync copies its scanner utility there by default.
+
+To fix this, open the Settings page, find **Server Script Path**, and change it from `/tmp` to a directory you own on the remote server — for example:
+
+- `~` (your home directory)
+- `~/.local`
+- `/home/yourusername`
+
+Save and restart. SeedSync will copy the scanner to the new path on its next startup.
+
 ## Where are settings stored?
 
 Inside the container at `/config/settings.cfg`.
