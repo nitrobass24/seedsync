@@ -399,6 +399,18 @@ if __name__ == "__main__":
     if sys.hexversion < 0x03050000:
         sys.exit("Python 3.5 or newer is required to run this program.")
 
+    # Apply UMASK env var before spawning any child processes (e.g. lftp via pexpect).
+    # The shell umask set in entrypoint.sh is not reliably inherited through the
+    # setpriv exec chain in all container environments, so we set it explicitly here.
+    # Note: regular files are created with base mode 0666, so umask 000 → 0666 (rw-rw-rw-).
+    # Directories use base mode 0777, so umask 000 → 0777 (rwxrwxrwx).
+    _umask_str = os.environ.get('UMASK', '').strip()
+    if _umask_str:
+        try:
+            os.umask(int(_umask_str, 8))
+        except ValueError:
+            print("WARNING: Invalid UMASK value {!r}, ignoring".format(_umask_str), file=sys.stderr)
+
     while True:
         try:
             seedsync = Seedsync()
