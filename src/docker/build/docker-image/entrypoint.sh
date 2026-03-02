@@ -61,8 +61,19 @@ fi
 
 # For downloads and staging, just ensure the user can write to them
 # Don't recursively chown as they could be large directories
-chown "$USER_ID:$GROUP_ID" /downloads 2>/dev/null || true
-chown "$USER_ID:$GROUP_ID" /staging 2>/dev/null || true
+chown "$USER_ID:$GROUP_ID" /downloads || true
+chown "$USER_ID:$GROUP_ID" /staging || true
+
+# Verify writability as the target user — fail fast with a clear message
+# rather than crashing deep in the application on the first write attempt
+for _dir in /downloads /staging; do
+    _testfile="$_dir/.seedsync_write_test"
+    if ! setpriv --reuid="$USERNAME" --regid="$GROUPNAME" --init-groups -- \
+         sh -c "touch '$_testfile' && rm '$_testfile'" 2>/dev/null; then
+        echo "ERROR: $_dir is not writable by UID=$USER_ID GID=$GROUP_ID. Check volume permissions." >&2
+        exit 1
+    fi
+done
 
 # Create SSH directory for the user (needed for SSH key management)
 mkdir -p "$USER_HOME/.ssh"
