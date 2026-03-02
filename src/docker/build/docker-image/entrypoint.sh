@@ -65,8 +65,15 @@ chown "$USER_ID:$GROUP_ID" /downloads || true
 chown "$USER_ID:$GROUP_ID" /staging || true
 
 # Verify writability as the target user — fail fast with a clear message
-# rather than crashing deep in the application on the first write attempt
-for _dir in /downloads /staging; do
+# rather than crashing deep in the application on the first write attempt.
+# /downloads is always required. /staging is only checked when externally
+# mounted (i.e. the user has explicitly mapped it), since staging is optional.
+_check_dirs="/downloads"
+if mountpoint -q /staging 2>/dev/null; then
+    _check_dirs="$_check_dirs /staging"
+fi
+
+for _dir in $_check_dirs; do
     _testfile="$_dir/.seedsync_write_test"
     if ! setpriv --reuid="$USERNAME" --regid="$GROUPNAME" --init-groups -- \
          sh -c "touch '$_testfile' && rm '$_testfile'" 2>/dev/null; then
