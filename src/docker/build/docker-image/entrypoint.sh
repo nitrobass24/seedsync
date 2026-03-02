@@ -51,7 +51,7 @@ fi
 chown "$USER_ID:$GROUP_ID" "$USER_HOME"
 
 # Create required directories if they don't exist
-mkdir -p /config /downloads
+mkdir -p /config /downloads /staging
 
 # Set ownership of config directory (required for app to write settings)
 # Only change ownership if directory is empty or owned by root
@@ -59,9 +59,28 @@ if [ -z "$(ls -A /config 2>/dev/null)" ] || [ "$(stat -c '%u' /config)" = "0" ];
     chown -R "$USER_ID:$GROUP_ID" /config
 fi
 
-# For downloads, just ensure the user can write to it
-# Don't recursively chown as it could be a large directory
-chown "$USER_ID:$GROUP_ID" /downloads 2>/dev/null || true
+# For downloads and staging, just ensure the user can write to them
+# Don't recursively chown as they could be large directories
+chown "$USER_ID:$GROUP_ID" /downloads || true
+chown "$USER_ID:$GROUP_ID" /staging || true
+
+# Verify writability as the target user — fail fast with a clear message
+# rather than crashing deep in the application on the first write attempt.
+# /downloads is always required. /staging is only checked when externally
+# mounted (i.e. the user has explicitly mapped it), since staging is optional.
+_check_dirs="/downloads"
+if mountpoint -q /staging 2>/dev/null; then
+    _check_dirs="$_check_dirs /staging"
+fi
+
+for _dir in $_check_dirs; do
+    _testfile="$_dir/.seedsync_write_test"
+    if ! setpriv --reuid="$USERNAME" --regid="$GROUPNAME" --init-groups -- \
+         sh -c "touch '$_testfile' && rm '$_testfile'" 2>/dev/null; then
+        echo "ERROR: $_dir is not writable by UID=$USER_ID GID=$GROUP_ID. Check volume permissions." >&2
+        exit 1
+    fi
+done
 
 # Create SSH directory for the user (needed for SSH key management)
 mkdir -p "$USER_HOME/.ssh"
