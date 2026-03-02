@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.7] - 2026-03-02
+
+### Fixed
+
+- **UMASK not applied to downloaded files** — Shell umask was not reliably inherited by lftp through the setpriv exec chain. Now applied directly via `os.umask()` in Python at startup, ensuring correct file permissions for all downloaded files (#109)
+
+---
+
 ## [0.12.6] - 2026-02-28
 
 ### Added
