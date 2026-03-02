@@ -45,6 +45,19 @@ To fix this, open the Settings page, find **Server Script Path**, and change it 
 
 Save and restart. SeedSync will copy the scanner to the new path on its next startup.
 
+## SeedSync fails with "Server Script Path is a directory on the remote server"
+
+This happens when **Server Script Path** overlaps with your sync directory. For example, if your remote sync path is `/home/user/downloads` and the script path is also set to `/home/user/downloads`, SeedSync tries to install `scanfs` there — but if a folder named `scanfs` already exists (from a previous sync), it can't be overwritten.
+
+To fix:
+
+1. Change **Server Script Path** to a location outside your sync tree, such as `~` or `~/.local`.
+2. Remove the conflicting directory from the remote server:
+   ```bash
+   rm -rf /path/to/your/sync/scanfs
+   ```
+3. Save and restart the container.
+
 ## Where are settings stored?
 
 Inside the container at `/config/settings.cfg`.

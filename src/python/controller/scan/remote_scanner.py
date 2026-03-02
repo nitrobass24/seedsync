@@ -102,6 +102,17 @@ class RemoteScanner(IScanner):
                 )
 
                 # Non-recoverable errors: don't retry
+                if "Is a directory" in error_str:
+                    raise ScannerError(
+                        "Server Script Path '{}' is a directory on the remote server. "
+                        "Change the 'Server Script Path' setting to a writable location "
+                        "outside your sync tree (e.g. '~' or '~/.local') and remove the "
+                        "conflicting directory from the remote server.".format(
+                            self.__remote_path_to_scan_script
+                        ),
+                        recoverable=False
+                    )
+
                 if "SystemScannerError" in error_str:
                     raise ScannerError(
                         Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()),
@@ -170,6 +181,29 @@ class RemoteScanner(IScanner):
                 Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
                 recoverable=recoverable
             )
+
+        # Guard: if the target path is already a directory on the remote, the
+        # copy would succeed (scp deposits the file inside the dir) but
+        # execution would then fail with "Is a directory". Catch this early.
+        try:
+            result = self.__ssh.shell(
+                "[ -d '{}' ] && echo IS_DIRECTORY || echo OK".format(
+                    self.__remote_path_to_scan_script
+                )
+            ).decode().strip()
+            if result == "IS_DIRECTORY":
+                raise ScannerError(
+                    "Server Script Path '{}' is a directory on the remote server. "
+                    "This usually means it overlaps with your sync directory. "
+                    "Change the 'Server Script Path' setting to a writable location "
+                    "outside your sync tree (e.g. '~' or '~/.local') and remove the "
+                    "conflicting directory from the remote server.".format(
+                        self.__remote_path_to_scan_script
+                    ),
+                    recoverable=False
+                )
+        except SshcpError as e:
+            self.logger.warning("Could not check remote path type: {}".format(str(e)))
 
         # Go ahead and install
         self.logger.info("Installing local:{} to remote:{}".format(
