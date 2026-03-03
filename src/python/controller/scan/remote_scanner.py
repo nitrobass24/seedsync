@@ -162,15 +162,15 @@ class RemoteScanner(IScanner):
             )
 
         # Resolve tilde in the script path to an absolute path.
-        # SCP expands ~ natively, but SSH single-quotes the path during
-        # execution and md5sum checks, which prevents tilde expansion.
-        # Running `echo ~/scanfs` via SSH expands ~ before quoting occurs.
+        # SCP expands ~ natively, but the path is shell-quoted for md5sum
+        # and execution commands where ~ does not expand inside quotes.
+        # Resolve by fetching the remote home dir via `echo ~` (no user
+        # input in the command) and substituting in Python.
         if self.__remote_path_to_scan_script.startswith("~"):
             try:
-                expanded = self.__ssh.shell(
-                    "echo {}".format(self.__remote_path_to_scan_script)
-                ).decode().strip()
-                if expanded and not expanded.startswith("~"):
+                home = self.__ssh.shell("echo ~").decode().strip()
+                if home and not home.startswith("~"):
+                    expanded = home + self.__remote_path_to_scan_script[1:]
                     self.logger.debug("Resolved script path '{}' -> '{}'".format(
                         self.__remote_path_to_scan_script, expanded
                     ))
@@ -185,8 +185,8 @@ class RemoteScanner(IScanner):
             local_md5sum = hashlib.md5(f.read()).hexdigest()
         self.logger.debug("Local scanfs md5sum = {}".format(local_md5sum))
         try:
-            out = self.__ssh.shell("md5sum '{}' | awk '{{print $1}}' || echo".format(
-                self.__remote_path_to_scan_script))
+            out = self.__ssh.shell("md5sum {} | awk '{{print $1}}' || echo".format(
+                _escape_remote_path_single(self.__remote_path_to_scan_script)))
             out = out.decode().strip()
             if out == local_md5sum:
                 self.logger.info("Skipping remote scanfs installation: already installed")
@@ -204,8 +204,8 @@ class RemoteScanner(IScanner):
         # execution would then fail with "Is a directory". Catch this early.
         try:
             result = self.__ssh.shell(
-                "[ -d '{}' ] && echo IS_DIRECTORY || echo OK".format(
-                    self.__remote_path_to_scan_script
+                "[ -d {} ] && echo IS_DIRECTORY || echo OK".format(
+                    _escape_remote_path_single(self.__remote_path_to_scan_script)
                 )
             ).decode().strip()
             if result == "IS_DIRECTORY":
@@ -256,12 +256,13 @@ class RemoteScanner(IScanner):
         """
         script_name = os.path.basename(self.__local_path_to_scan_script)
 
-        # Resolve ~ to an absolute path so quoting works for all operations
+        # Resolve ~ to an absolute path so quoting works for all operations.
+        # Use `echo ~` with no arguments — no user input reaches the shell.
         fallback_path = "~/" + script_name
         try:
-            expanded = self.__ssh.shell("echo {}".format(fallback_path)).decode().strip()
-            if expanded and not expanded.startswith("~"):
-                fallback_path = expanded
+            home = self.__ssh.shell("echo ~").decode().strip()
+            if home and not home.startswith("~"):
+                fallback_path = home + "/" + script_name
         except SshcpError:
             pass
 
