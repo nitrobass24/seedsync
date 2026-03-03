@@ -33,6 +33,31 @@ Some servers require a matching locale. Add these environment variables to the c
 
 SeedSync automatically detects the available shell on the remote server, checking `/bin/bash`, `/usr/bin/bash`, and `/bin/sh` in order. If none of these are available or your provider restricts shell access, check with your provider for the correct shell path.
 
+## SeedSync fails with "scp: dest open '/tmp/scanfs': Permission denied"
+
+Some seedbox providers restrict writes to `/tmp` on the remote server. SeedSync copies its scanner utility there by default.
+
+To fix this, open the Settings page, find **Server Script Path**, and change it from `/tmp` to a directory you own on the remote server — for example:
+
+- `~` (your home directory)
+- `~/.local`
+- `/home/yourusername`
+
+Save and restart. SeedSync will copy the scanner to the new path on its next startup.
+
+## SeedSync fails with "Server Script Path is a directory on the remote server"
+
+This happens when **Server Script Path** overlaps with your sync directory. For example, if your remote sync path is `/home/user/downloads` and the script path is also set to `/home/user/downloads`, SeedSync tries to install `scanfs` there — but if a folder named `scanfs` already exists (from a previous sync), it can't be overwritten.
+
+To fix:
+
+1. Change **Server Script Path** to a location outside your sync tree, such as `~` or `~/.local`.
+2. Remove the conflicting directory from the remote server:
+   ```bash
+   rm -rf /path/to/your/sync/scanfs
+   ```
+3. Save and restart the container.
+
 ## Where are settings stored?
 
 Inside the container at `/config/settings.cfg`.
