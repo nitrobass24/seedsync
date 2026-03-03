@@ -161,6 +161,23 @@ class RemoteScanner(IScanner):
                 recoverable=recoverable
             )
 
+        # Resolve tilde in the script path to an absolute path.
+        # SCP expands ~ natively, but SSH single-quotes the path during
+        # execution and md5sum checks, which prevents tilde expansion.
+        # Running `echo ~/scanfs` via SSH expands ~ before quoting occurs.
+        if self.__remote_path_to_scan_script.startswith("~"):
+            try:
+                expanded = self.__ssh.shell(
+                    "echo {}".format(self.__remote_path_to_scan_script)
+                ).decode().strip()
+                if expanded and not expanded.startswith("~"):
+                    self.logger.debug("Resolved script path '{}' -> '{}'".format(
+                        self.__remote_path_to_scan_script, expanded
+                    ))
+                    self.__remote_path_to_scan_script = expanded
+            except SshcpError as e:
+                self.logger.warning("Could not resolve tilde in script path: {}".format(str(e)))
+
         self._log_remote_diagnostics()
 
         # Check md5sum on remote to see if we can skip installation
