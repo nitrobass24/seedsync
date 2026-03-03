@@ -276,6 +276,25 @@ class RemoteScanner(IScanner):
             "Update 'Server Script Path' in Settings to '~' to avoid this fallback on restart."
         )
 
+        # Guard: if the fallback path is already a directory, SCP would deposit
+        # the binary inside it and execution would fail with "Is a directory".
+        try:
+            result = self.__ssh.shell(
+                "[ -d {} ] && echo IS_DIRECTORY || echo OK".format(
+                    _escape_remote_path_single(fallback_path)
+                )
+            ).decode().strip()
+            if result == "IS_DIRECTORY":
+                raise ScannerError(
+                    "Fallback script path '{}' is already a directory on the remote server. "
+                    "Remove it and update 'Server Script Path' in Settings to a writable "
+                    "location (e.g. '~' or '~/.local'). "
+                    "Original error: {}".format(fallback_path, original_error.strip()),
+                    recoverable=False
+                )
+        except SshcpError as e:
+            self.logger.warning("Could not check fallback path type: {}".format(str(e)))
+
         try:
             self.__ssh.copy(local_path=self.__local_path_to_scan_script,
                             remote_path=fallback_path)
@@ -284,8 +303,10 @@ class RemoteScanner(IScanner):
         except SshcpError as fallback_e:
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(
-                    "Could not install scanner to '{}' or fallback '{}': {}".format(
-                        self.__remote_path_to_scan_script, fallback_path, str(fallback_e).strip()
+                    "Could not install scanner to '{}' ({}), "
+                    "fallback to '{}' also failed: {}".format(
+                        self.__remote_path_to_scan_script, original_error.strip(),
+                        fallback_path, str(fallback_e).strip()
                     )
                 ),
                 recoverable=False
