@@ -238,11 +238,56 @@ class RemoteScanner(IScanner):
             self.__ssh.copy(local_path=self.__local_path_to_scan_script,
                             remote_path=self.__remote_path_to_scan_script)
         except SshcpError as e:
-            self.logger.exception("Caught scp exception")
-            recoverable = self._is_transient_error(str(e))
+            if "Permission denied" in str(e):
+                self._install_scanfs_with_home_fallback(str(e))
+            else:
+                self.logger.exception("Caught scp exception")
+                recoverable = self._is_transient_error(str(e))
+                raise ScannerError(
+                    Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
+                    recoverable=recoverable
+                )
+
+    def _install_scanfs_with_home_fallback(self, original_error: str):
+        """
+        Called when SCP to the configured script path is denied.
+        Falls back to the user's home directory and retries.
+        Warns the user to update their Server Script Path setting.
+        """
+        script_name = os.path.basename(self.__local_path_to_scan_script)
+
+        # Resolve ~ to an absolute path so quoting works for all operations
+        fallback_path = "~/" + script_name
+        try:
+            expanded = self.__ssh.shell("echo {}".format(fallback_path)).decode().strip()
+            if expanded and not expanded.startswith("~"):
+                fallback_path = expanded
+        except SshcpError:
+            pass
+
+        self.logger.warning(
+            "Script path '{}' is not writable (Permission denied). "
+            "Retrying with home directory: '{}'".format(
+                self.__remote_path_to_scan_script, fallback_path
+            )
+        )
+        self.logger.warning(
+            "Update 'Server Script Path' in Settings to '~' to avoid this fallback on restart."
+        )
+
+        try:
+            self.__ssh.copy(local_path=self.__local_path_to_scan_script,
+                            remote_path=fallback_path)
+            self.__remote_path_to_scan_script = fallback_path
+            self.logger.info("Scanner installed to fallback path: {}".format(fallback_path))
+        except SshcpError as fallback_e:
             raise ScannerError(
-                Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
-                recoverable=recoverable
+                Localization.Error.REMOTE_SERVER_INSTALL.format(
+                    "Could not install scanner to '{}' or fallback '{}': {}".format(
+                        self.__remote_path_to_scan_script, fallback_path, str(fallback_e).strip()
+                    )
+                ),
+                recoverable=False
             )
 
     def _log_remote_diagnostics(self):
