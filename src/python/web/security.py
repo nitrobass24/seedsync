@@ -40,18 +40,26 @@ _CSRF_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 _CSRF_LOCALHOST = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
-def _origin_host_port(header_value):
-    """Extract host:port from an Origin or Referer header value.
-    Returns 'host:port' if port is present, otherwise 'host'."""
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _origin_tuple(header_value):
+    """Parse an Origin or Referer value into a canonical (scheme, host, port) tuple.
+
+    Port is normalised to the scheme default (80/443) when not explicitly present,
+    so ``http://example.com`` and ``http://example.com:80`` compare equal.
+    Returns None on missing/invalid input.
+    """
     if not header_value:
         return None
     try:
         parsed = urlparse(header_value)
+        scheme = (parsed.scheme or "").lower()
         host = parsed.hostname
-        if not host:
+        if not host or not scheme:
             return None
-        port = parsed.port
-        return "{}:{}".format(host, port) if port else host
+        port = parsed.port or _DEFAULT_PORTS.get(scheme)
+        return (scheme, host, port)
     except Exception:
         return None
 
@@ -75,17 +83,18 @@ def install_csrf_protection(app: bottle.Bottle):
         origin = bottle.request.get_header("Origin")
         referer = bottle.request.get_header("Referer")
 
-        origin_hp = _origin_host_port(origin) if origin else _origin_host_port(referer)
+        origin_t = _origin_tuple(origin) if origin else _origin_tuple(referer)
 
-        if origin_hp is None:
+        if origin_t is None:
             raise bottle.HTTPError(403, "CSRF validation failed: missing Origin/Referer")
 
-        # Normalize Host header through the same parser so default ports,
-        # IPv6 brackets, etc. are handled identically to Origin/Referer.
+        # Build canonical tuple for the request itself using scheme from
+        # the Origin header (or wsgi url_scheme) and the Host header.
+        request_scheme = origin_t[0]  # trust the origin's scheme
         raw_host = bottle.request.get_header("Host", "")
-        request_host = _origin_host_port("http://{}".format(raw_host)) if raw_host else None
+        request_t = _origin_tuple("{}://{}".format(request_scheme, raw_host)) if raw_host else None
 
-        if not request_host or origin_hp != request_host:
+        if not request_t or origin_t != request_t:
             raise bottle.HTTPError(403, "CSRF validation failed: origin mismatch")
 
 
@@ -213,7 +222,7 @@ def install_api_key_auth(app: bottle.Bottle, get_api_key):
 # Convenience installer
 # ---------------------------------------------------------------------------
 
-def install_security_middleware(app: bottle.Bottle, get_api_key=None,
+def install_security_middleware(app: bottle.Bottle, *, get_api_key=None,
                                trust_x_forwarded_for: bool = False):
     """Install all security middleware on the given Bottle app.
 

@@ -173,6 +173,8 @@ class TestPersistBackup(unittest.TestCase):
             with open(os.path.join(backup_dir, backup_name), "w") as f:
                 f.write("backup {}".format(i))
 
+        before_set = set(os.listdir(backup_dir))
+
         # Write the original file
         with open(file_path, "w") as f:
             f.write("current content")
@@ -182,8 +184,12 @@ class TestPersistBackup(unittest.TestCase):
         persist.my_content = "updated"
         persist.to_file(file_path)
 
-        backups = sorted(os.listdir(backup_dir))
-        self.assertEqual(_MAX_BACKUPS, len(backups))
+        after_set = set(os.listdir(backup_dir))
+        new_file = (after_set - before_set).pop()
+
+        # The kept files should be the most recent _MAX_BACKUPS by filename order
+        expected_kept = sorted(list(before_set) + [new_file])[-_MAX_BACKUPS:]
+        self.assertEqual(sorted(after_set), expected_kept)
 
     def test_multiple_saves_accumulate_backups(self):
         """Multiple saves should create multiple backup files"""

@@ -1,12 +1,15 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import glob
+import logging
 import os
 import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Type, TypeVar
+
+_logger = logging.getLogger(__name__)
 
 from .error import AppError
 from .localization import Localization
@@ -63,8 +66,8 @@ class Persist(Serializable):
         if os.path.isfile(file_path):
             try:
                 self._backup_file(file_path, dir_name)
-            except OSError:
-                pass
+            except OSError as e:
+                _logger.error("Failed to back up %s in %s: %s", file_path, dir_name, e)
 
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix='.tmp_persist_')
         try:
