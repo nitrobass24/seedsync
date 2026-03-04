@@ -72,6 +72,7 @@ class Seedsync:
         ctx_args.html_path = args.html
         ctx_args.debug = is_debug
         ctx_args.exit = args.exit
+        ctx_args.logdir = args.logdir
 
         # Logger setup
         # We separate the main log from the web-access log

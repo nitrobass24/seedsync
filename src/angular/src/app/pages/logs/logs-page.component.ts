@@ -10,15 +10,16 @@ import {
   inject,
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 
-import { LogService } from '../../services/logs/log.service';
+import { LogService, LogHistoryEntry } from '../../services/logs/log.service';
 import { LogRecord, LogLevel } from '../../models/log-record';
 import { DomService } from '../../services/utils/dom.service';
 
 @Component({
   selector: 'app-logs-page',
   standalone: true,
-  imports: [DatePipe],
+  imports: [DatePipe, FormsModule],
   templateUrl: './logs-page.component.html',
   styleUrls: ['./logs-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,6 +35,10 @@ export class LogsPageComponent implements OnInit, AfterViewChecked {
   readonly headerHeight$ = this.domService.headerHeight$;
 
   records: LogRecord[] = [];
+  historyRecords: LogHistoryEntry[] = [];
+  searchQuery = '';
+  levelFilter = '';
+  historyLoaded = false;
 
   showScrollToTopButton = false;
   showScrollToBottomButton = false;
@@ -60,6 +65,8 @@ export class LogsPageComponent implements OnInit, AfterViewChecked {
         this.refreshScrollButtonVisibility();
       },
     });
+
+    this.loadHistory();
   }
 
   ngAfterViewChecked(): void {
@@ -81,6 +88,32 @@ export class LogsPageComponent implements OnInit, AfterViewChecked {
   @HostListener('window:scroll')
   checkScroll(): void {
     this.refreshScrollButtonVisibility();
+  }
+
+  loadHistory(): void {
+    this.logService.fetchHistory({
+      search: this.searchQuery || undefined,
+      level: this.levelFilter || undefined,
+      limit: 500
+    }).subscribe({
+      next: (entries) => {
+        this.historyRecords = entries;
+        this.historyLoaded = true;
+        this.changeDetector.detectChanges();
+      },
+      error: () => {
+        this.historyLoaded = true;
+        this.changeDetector.detectChanges();
+      }
+    });
+  }
+
+  onSearchChange(): void {
+    this.loadHistory();
+  }
+
+  onLevelChange(): void {
+    this.loadHistory();
   }
 
   private refreshScrollButtonVisibility(): void {

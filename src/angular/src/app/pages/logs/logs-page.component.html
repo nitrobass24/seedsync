@@ -1,4 +1,45 @@
 <div id="logs">
+  <div class="log-filters">
+    <input
+      type="text"
+      class="form-control form-control-sm"
+      placeholder="Search logs..."
+      [(ngModel)]="searchQuery"
+      (input)="onSearchChange()" />
+    <select
+      class="form-select form-select-sm"
+      [(ngModel)]="levelFilter"
+      (change)="onLevelChange()">
+      <option value="">All Levels</option>
+      <option value="DEBUG">DEBUG</option>
+      <option value="INFO">INFO</option>
+      <option value="WARNING">WARNING</option>
+      <option value="ERROR">ERROR</option>
+      <option value="CRITICAL">CRITICAL</option>
+    </select>
+  </div>
+
+  @if (historyLoaded && historyRecords.length > 0) {
+    <div class="history-section">
+      <div class="history-header">Log History</div>
+      @for (entry of historyRecords; track $index) {
+        <p
+          class="record"
+          [class.debug]="entry.level === 'DEBUG'"
+          [class.info]="entry.level === 'INFO'"
+          [class.warning]="entry.level === 'WARNING'"
+          [class.error]="entry.level === 'ERROR'"
+          [class.critical]="entry.level === 'CRITICAL'">
+          {{ entry.timestamp }} -
+          {{ entry.level }} -
+          {{ entry.logger }} -
+          {{ entry.message }}
+        </p>
+      }
+    </div>
+    <hr class="log-divider" />
+  }
+
   <button
     id="btn-scroll-top"
     type="button"

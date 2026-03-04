@@ -1,6 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from common import Context
+from common import Context, Constants
 from controller import Controller, AutoQueuePersist
 from .web_app import WebApp
 from .handler.stream_model import ModelStreamHandler
@@ -11,6 +11,7 @@ from .handler.config import ConfigHandler
 from .handler.auto_queue import AutoQueueHandler
 from .handler.stream_log import LogStreamHandler
 from .handler.status import StatusHandler
+from .handler.logs import LogsHandler
 from .security import install_security_middleware
 
 
@@ -30,6 +31,10 @@ class WebAppBuilder:
         self.config_handler = ConfigHandler(context.config)
         self.auto_queue_handler = AutoQueueHandler(auto_queue_persist)
         self.status_handler = StatusHandler(context.status)
+        self.logs_handler = LogsHandler(
+            logdir=context.args.logdir,
+            service_name=Constants.SERVICE_NAME
+        )
 
     def build(self) -> WebApp:
         web_app = WebApp(context=self.__context,
@@ -55,6 +60,7 @@ class WebAppBuilder:
         self.config_handler.add_routes(web_app)
         self.auto_queue_handler.add_routes(web_app)
         self.status_handler.add_routes(web_app)
+        self.logs_handler.add_routes(web_app)
 
         web_app.add_default_routes()
 
