@@ -4,8 +4,6 @@ import unittest
 import tempfile
 import shutil
 import os
-import time
-
 from unittest.mock import patch
 
 from common import overrides, Persist, AppError, Localization
@@ -153,7 +151,7 @@ class TestPersistBackup(unittest.TestCase):
             f.write("content")
 
         with patch("common.persist.datetime") as mock_dt:
-            mock_dt.now.return_value.strftime.return_value = "2026-03-03T12-30-00"
+            mock_dt.now.return_value.strftime.return_value = "2026-03-03T12-30-00-123456"
             persist = DummyPersist()
             persist.my_content = "new"
             persist.to_file(file_path)
@@ -161,7 +159,7 @@ class TestPersistBackup(unittest.TestCase):
         backup_dir = os.path.join(self.temp_dir, _BACKUP_DIR_NAME)
         backups = os.listdir(backup_dir)
         self.assertEqual(1, len(backups))
-        self.assertEqual("settings-2026-03-03T12-30-00.cfg", backups[0])
+        self.assertEqual("settings-2026-03-03T12-30-00-123456.cfg", backups[0])
 
     def test_prune_keeps_only_max_backups(self):
         """Only the most recent _MAX_BACKUPS backups should be kept"""
@@ -200,11 +198,10 @@ class TestPersistBackup(unittest.TestCase):
 
         # Second write (backs up version 1)
         counter = [0]
-        original_strftime = None
 
         def unique_timestamp(*args, **kwargs):
             counter[0] += 1
-            return "2026-03-03T12-00-{:02d}".format(counter[0])
+            return "2026-03-03T12-00-{:02d}-000000".format(counter[0])
 
         with patch("common.persist.datetime") as mock_dt:
             mock_dt.now.return_value.strftime.side_effect = unique_timestamp

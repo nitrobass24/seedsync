@@ -80,10 +80,12 @@ def install_csrf_protection(app: bottle.Bottle):
         if origin_hp is None:
             raise bottle.HTTPError(403, "CSRF validation failed: missing Origin/Referer")
 
-        # Compare origin host:port against the Host header (exact match including port)
-        request_host = bottle.request.get_header("Host", "")
+        # Normalize Host header through the same parser so default ports,
+        # IPv6 brackets, etc. are handled identically to Origin/Referer.
+        raw_host = bottle.request.get_header("Host", "")
+        request_host = _origin_host_port("http://{}".format(raw_host)) if raw_host else None
 
-        if origin_hp != request_host:
+        if not request_host or origin_hp != request_host:
             raise bottle.HTTPError(403, "CSRF validation failed: origin mismatch")
 
 

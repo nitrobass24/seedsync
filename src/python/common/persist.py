@@ -59,9 +59,12 @@ class Persist(Serializable):
     def to_file(self, file_path: str):
         dir_name = os.path.dirname(file_path) or '.'
 
-        # Backup existing file before overwriting
+        # Backup existing file before overwriting (best-effort; never abort the save)
         if os.path.isfile(file_path):
-            self._backup_file(file_path, dir_name)
+            try:
+                self._backup_file(file_path, dir_name)
+            except OSError:
+                pass
 
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix='.tmp_persist_')
         try:
