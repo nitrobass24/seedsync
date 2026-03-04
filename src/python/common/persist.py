@@ -92,7 +92,8 @@ class Persist(Serializable):
         shutil.copy2(file_path, backup_path)
 
         # Prune old backups, keeping only the most recent _MAX_BACKUPS
-        pattern = os.path.join(backup_dir, "{}-*{}".format(glob.escape(name), glob.escape(ext)))
+        pattern = os.path.join(backup_dir, "{}-????-??-??T??-??-??-??????{}".format(
+            glob.escape(name), glob.escape(ext)))
         backups = sorted(glob.glob(pattern))
         for old_backup in backups[:-_MAX_BACKUPS]:
             try:

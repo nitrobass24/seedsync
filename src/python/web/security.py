@@ -21,7 +21,6 @@ def install_security_headers(app: bottle.Bottle):
     def _add_security_headers():
         bottle.response.headers["X-Content-Type-Options"] = "nosniff"
         bottle.response.headers["X-Frame-Options"] = "DENY"
-        bottle.response.headers["X-XSS-Protection"] = "1; mode=block"
         bottle.response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         bottle.response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
@@ -136,7 +135,7 @@ class _RateLimiter:
 _SSE_STREAM_PATH = "/server/stream"
 
 
-def install_rate_limiting(app: bottle.Bottle, trust_x_forwarded_for: bool = False):
+def install_rate_limiting(app: bottle.Bottle, *, trust_x_forwarded_for: bool = False):
     """
     Per-IP sliding window rate limiter.  Returns 429 with Retry-After when
     the limit is exceeded.  The SSE stream endpoint is exempt.

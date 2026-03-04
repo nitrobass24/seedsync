@@ -2,6 +2,7 @@
 
 import os
 from threading import Event
+from typing import Union
 from urllib.parse import unquote
 
 from bottle import HTTPResponse
@@ -32,7 +33,7 @@ def _validate_filename(file_name: str) -> bool:
     return True
 
 
-def _decode_and_validate(file_name: str):
+def _decode_and_validate(file_name: str) -> Union[str, HTTPResponse]:
     """
     Decode a double-encoded filename and validate it.
     Returns the decoded filename, or an HTTPResponse(400) on failure.

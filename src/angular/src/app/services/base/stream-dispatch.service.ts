@@ -92,6 +92,12 @@ export class StreamDispatchService {
     };
 
     eventSource.onerror = (err) => {
+      // Guard: ignore if this EventSource is no longer the active one
+      // (e.g., setApiKey already replaced it with a new connection)
+      if (this.eventSource !== eventSource) {
+        return;
+      }
+
       this.logger.error('Error in stream: %O', err);
       this.closeAndCancelRetry();
 

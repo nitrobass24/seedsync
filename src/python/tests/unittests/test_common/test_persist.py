@@ -171,7 +171,7 @@ class TestPersistBackup(unittest.TestCase):
 
         # Create _MAX_BACKUPS + 5 pre-existing backups with sequential timestamps
         for i in range(_MAX_BACKUPS + 5):
-            backup_name = "settings-2026-01-{:02d}T00-00-00.cfg".format(i + 1)
+            backup_name = "settings-2026-01-{:02d}T00-00-00-000000.cfg".format(i + 1)
             with open(os.path.join(backup_dir, backup_name), "w") as f:
                 f.write("backup {}".format(i))
 
