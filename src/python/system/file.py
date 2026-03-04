@@ -51,3 +51,24 @@ class SystemFile:
         if not self.__is_dir:
             raise TypeError("Cannot add children to a file")
         self.__children.append(file)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.__name,
+            "size": self.__size,
+            "is_dir": self.__is_dir,
+            "time_created": self.__timestamp_created.isoformat() if self.__timestamp_created else None,
+            "time_modified": self.__timestamp_modified.isoformat() if self.__timestamp_modified else None,
+            "children": [child.to_dict() for child in self.__children]
+        }
+
+    @staticmethod
+    def from_dict(d: dict) -> "SystemFile":
+        from datetime import datetime
+        tc = datetime.fromisoformat(d["time_created"]) if d.get("time_created") else None
+        tm = datetime.fromisoformat(d["time_modified"]) if d.get("time_modified") else None
+        sf = SystemFile(name=d["name"], size=d["size"], is_dir=d.get("is_dir", False),
+                        time_created=tc, time_modified=tm)
+        for child_dict in d.get("children", []):
+            sf.add_child(SystemFile.from_dict(child_dict))
+        return sf

@@ -1,6 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import pickle
+import json
 import sys
 import argparse
 
@@ -40,5 +40,5 @@ if __name__ == "__main__":
         for root_file in root_files:
             print_file(root_file, 0)
     else:
-        bytes_out = pickle.dumps(root_files)
-        sys.stdout.buffer.write(bytes_out)
+        json_out = json.dumps([f.to_dict() for f in root_files])
+        sys.stdout.write(json_out)

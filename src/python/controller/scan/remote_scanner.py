@@ -1,7 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
-import pickle
+import json
 import re
 import time
 from typing import List
@@ -62,11 +62,12 @@ class RemoteScanner(IScanner):
         out = self._run_scanfs_with_retry()
 
         try:
-            remote_files = pickle.loads(out)
-        except pickle.UnpicklingError as err:
-            self.logger.error("Unpickling error: {}\n{}".format(str(err), out))
+            data = json.loads(out)
+            remote_files = [SystemFile.from_dict(d) for d in data]
+        except (json.JSONDecodeError, KeyError, TypeError) as err:
+            self.logger.error("JSON parse error: {}\n{}".format(str(err), out[:500]))
             raise ScannerError(
-                Localization.Error.REMOTE_SERVER_SCAN.format("Invalid pickled data"),
+                Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"),
                 recoverable=False
             )
 
