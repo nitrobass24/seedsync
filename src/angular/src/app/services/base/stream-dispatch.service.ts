@@ -43,9 +43,18 @@ export class StreamDispatchService {
   }
 
   private apiKey: string | null = null;
+  private eventSource: EventSource | null = null;
 
   setApiKey(key: string | null): void {
+    if (key === this.apiKey) {
+      return;
+    }
     this.apiKey = key;
+    // Reconnect with the new key if we have an active connection
+    if (this.eventSource) {
+      this.eventSource.close();
+      this.connectStream();
+    }
   }
 
   private connectStream(): void {
@@ -53,6 +62,7 @@ export class StreamDispatchService {
       ? `${this.STREAM_URL}?api_key=${encodeURIComponent(this.apiKey)}`
       : this.STREAM_URL;
     const eventSource = new EventSource(url);
+    this.eventSource = eventSource;
 
     for (const eventName of Array.from(this.eventNameToHandler.keys())) {
       eventSource.addEventListener(eventName, (event: MessageEvent) => {

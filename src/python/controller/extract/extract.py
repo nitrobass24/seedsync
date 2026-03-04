@@ -1,6 +1,8 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import os
+import tarfile
+import zipfile
 
 import patoolib
 import patoolib.util
@@ -110,6 +112,42 @@ class Extract:
             return False
 
     @staticmethod
+    def _check_member_path(member_name: str, real_out_dir: str):
+        """Raise ExtractError if a member path would escape the output directory."""
+        resolved = os.path.realpath(os.path.join(real_out_dir, member_name))
+        if not resolved.startswith(real_out_dir + os.sep) and resolved != real_out_dir:
+            raise ExtractError(
+                "Zip-slip detected: member '{}' escapes target directory '{}'".format(
+                    member_name, real_out_dir
+                )
+            )
+
+    @staticmethod
+    def _pre_validate_members(archive_path: str, out_dir_path: str):
+        """
+        Pre-validate archive members for zip and tar formats before extraction.
+        Returns True if pre-validation was performed, False if format is unsupported
+        for pre-validation (fallback to post-extraction check).
+        """
+        real_out_dir = os.path.realpath(out_dir_path)
+
+        if zipfile.is_zipfile(archive_path):
+            with zipfile.ZipFile(archive_path, 'r') as zf:
+                for info in zf.infolist():
+                    Extract._check_member_path(info.filename, real_out_dir)
+            return True
+
+        try:
+            with tarfile.open(archive_path) as tf:
+                for member in tf.getmembers():
+                    Extract._check_member_path(member.name, real_out_dir)
+            return True
+        except tarfile.TarError:
+            pass
+
+        return False
+
+    @staticmethod
     def extract_archive(archive_path: str, out_dir_path: str):
         if not Extract.is_archive(archive_path):
             raise ExtractError("Path is not a valid archive: {}".format(archive_path))
@@ -117,20 +155,25 @@ class Extract:
             # Try to create the outdir path
             if not os.path.exists(out_dir_path):
                 os.makedirs(out_dir_path)
+
+            # Pre-validate member paths for zip/tar before extraction
+            pre_validated = Extract._pre_validate_members(archive_path, out_dir_path)
+
             patoolib.extract_archive(archive_path, outdir=out_dir_path, interactive=False)
         except FileNotFoundError as e:
             raise ExtractError(str(e))
         except patoolib.util.PatoolError as e:
             raise ExtractError(str(e))
 
-        # Zip-slip protection: verify all extracted files are within out_dir_path
-        real_out_dir = os.path.realpath(out_dir_path)
-        for dirpath, dirnames, filenames in os.walk(real_out_dir):
-            for name in filenames + dirnames:
-                full_path = os.path.realpath(os.path.join(dirpath, name))
-                if not full_path.startswith(real_out_dir + os.sep) and full_path != real_out_dir:
-                    raise ExtractError(
-                        "Zip-slip detected: extracted path '{}' escapes target directory '{}'".format(
-                            full_path, real_out_dir
+        # Post-extraction check as fallback for formats that can't be pre-validated (rar, 7z)
+        if not pre_validated:
+            real_out_dir = os.path.realpath(out_dir_path)
+            for dirpath, dirnames, filenames in os.walk(real_out_dir):
+                for name in filenames + dirnames:
+                    full_path = os.path.realpath(os.path.join(dirpath, name))
+                    if not full_path.startswith(real_out_dir + os.sep) and full_path != real_out_dir:
+                        raise ExtractError(
+                            "Zip-slip detected: extracted path '{}' escapes target directory '{}'".format(
+                                full_path, real_out_dir
+                            )
                         )
-                    )

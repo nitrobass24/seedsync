@@ -59,6 +59,10 @@ export class ConfigService {
           if (config) {
             const newConfig = { ...config, [section]: { ...(config as any)[section], [option]: value } };
             this.configSubject.next(newConfig);
+            // Propagate API key changes to the SSE stream immediately
+            if (section === 'web' && option === 'api_key') {
+              this.updateStreamApiKey(newConfig);
+            }
           }
         }
       },

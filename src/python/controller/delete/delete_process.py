@@ -17,10 +17,14 @@ class DeleteLocalProcess(AppOneShotProcess):
 
     def run_once(self):
         file_path = os.path.join(self.__local_path, self.__file_name)
-        # Path containment check: ensure resolved path stays within local_path
+        # Path containment check: ensure resolved path is strictly inside local_path
         real_base = os.path.realpath(self.__local_path)
         real_target = os.path.realpath(file_path)
-        if not real_target.startswith(real_base + os.sep) and real_target != real_base:
+        try:
+            common = os.path.commonpath([real_base, real_target])
+        except ValueError:
+            common = None
+        if common != real_base or real_target == real_base:
             self.logger.error("Path traversal blocked: {} escapes {}".format(
                 real_target, real_base))
             return
@@ -54,7 +58,8 @@ class DeleteRemoteProcess(AppOneShotProcess):
         self.__ssh.set_base_logger(self.logger)
         # Reject path traversal in filename (defense-in-depth)
         normalized = os.path.normpath(self.__file_name)
-        if normalized.startswith("..") or os.path.isabs(normalized):
+        if (not normalized or normalized == os.curdir or normalized == os.pardir
+                or normalized.startswith(".." + os.sep) or os.path.isabs(normalized)):
             self.logger.error("Path traversal blocked in remote delete: {}".format(self.__file_name))
             return
         file_path = os.path.join(self.__remote_path, self.__file_name)

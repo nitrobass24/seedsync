@@ -85,7 +85,7 @@ class Persist(Serializable):
 
         base_name = os.path.basename(file_path)
         name, ext = os.path.splitext(base_name)
-        timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+        timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S-%f")
         backup_name = "{}-{}{}".format(name, timestamp, ext)
         backup_path = os.path.join(backup_dir, backup_name)
 

@@ -14,9 +14,12 @@ from ..web_app import IHandler, WebApp
 def _validate_filename(file_name: str) -> bool:
     """
     Validate that a filename is safe to use as a command argument.
-    Rejects path traversal attempts and absolute paths.
+    Rejects path traversal attempts, absolute paths, and null bytes.
     """
     if not file_name:
+        return False
+    # Reject embedded null bytes (path truncation attack)
+    if "\x00" in file_name:
         return False
     # Reject absolute paths
     if os.path.isabs(file_name):

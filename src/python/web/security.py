@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import secrets
 import time
 import threading
 from collections import defaultdict
@@ -61,14 +62,9 @@ def install_csrf_protection(app: bottle.Bottle):
         if bottle.request.method in _CSRF_SAFE_METHODS:
             return
 
-        # Exempt requests arriving on a loopback address
-        remote_host = bottle.request.get_header("Host", "")
-        try:
-            host_name = remote_host.split(":")[0]
-        except Exception:
-            host_name = ""
-
-        if host_name in _CSRF_LOCALHOST:
+        # Exempt genuine loopback connections (server-observed client IP, not client-controlled headers)
+        remote_addr = bottle.request.environ.get("REMOTE_ADDR", "")
+        if remote_addr in _CSRF_LOCALHOST:
             return
 
         # Check Origin first, then Referer
@@ -79,6 +75,13 @@ def install_csrf_protection(app: bottle.Bottle):
 
         if origin_host is None:
             raise bottle.HTTPError(403, "CSRF validation failed: missing Origin/Referer")
+
+        # Compare origin against the Host header (server's own address)
+        request_host = bottle.request.get_header("Host", "")
+        try:
+            host_name = request_host.split(":")[0]
+        except Exception:
+            host_name = ""
 
         if origin_host != host_name and origin_host not in _CSRF_LOCALHOST:
             raise bottle.HTTPError(403, "CSRF validation failed: origin mismatch")
@@ -104,10 +107,17 @@ class _RateLimiter:
         with self._lock:
             timestamps = self._hits[ip]
             # Prune expired entries
-            self._hits[ip] = [t for t in timestamps if t > cutoff]
-            if len(self._hits[ip]) >= self._max:
+            valid = [t for t in timestamps if t > cutoff]
+            if not valid:
+                # Remove empty key to prevent unbounded memory growth
+                del self._hits[ip]
+                self._hits[ip] = [now]
+                return True
+            if len(valid) >= self._max:
+                self._hits[ip] = valid
                 return False
-            self._hits[ip].append(now)
+            valid.append(now)
+            self._hits[ip] = valid
             return True
 
     def retry_after(self, ip: str) -> int:
@@ -125,10 +135,12 @@ class _RateLimiter:
 _SSE_STREAM_PATH = "/server/stream"
 
 
-def install_rate_limiting(app: bottle.Bottle):
+def install_rate_limiting(app: bottle.Bottle, trust_x_forwarded_for: bool = False):
     """
     Per-IP sliding window rate limiter.  Returns 429 with Retry-After when
     the limit is exceeded.  The SSE stream endpoint is exempt.
+
+    :param trust_x_forwarded_for: Only set True when deployed behind a trusted reverse proxy.
     """
     limiter = _RateLimiter()
 
@@ -137,11 +149,13 @@ def install_rate_limiting(app: bottle.Bottle):
         if bottle.request.path == _SSE_STREAM_PATH:
             return
 
-        # Respect X-Forwarded-For if present
-        forwarded = bottle.request.get_header("X-Forwarded-For")
-        if forwarded:
-            ip = forwarded.split(",")[0].strip()
-        else:
+        # Only trust X-Forwarded-For when explicitly enabled (behind trusted reverse proxy)
+        ip = None
+        if trust_x_forwarded_for:
+            forwarded = bottle.request.get_header("X-Forwarded-For")
+            if forwarded:
+                ip = forwarded.split(",")[0].strip()
+        if not ip:
             ip = bottle.request.environ.get("REMOTE_ADDR", "127.0.0.1")
 
         if not limiter.is_allowed(ip):
@@ -189,7 +203,7 @@ def install_api_key_auth(app: bottle.Bottle, get_api_key):
 
         if not provided:
             raise bottle.HTTPError(401, "API key required")
-        if provided != configured_key:
+        if not secrets.compare_digest(provided, configured_key):
             raise bottle.HTTPError(401, "Invalid API key")
 
 
