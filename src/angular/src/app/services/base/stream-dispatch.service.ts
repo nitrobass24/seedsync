@@ -44,16 +44,28 @@ export class StreamDispatchService {
 
   private apiKey: string | null = null;
   private eventSource: EventSource | null = null;
+  private retryTimeout: ReturnType<typeof setTimeout> | null = null;
 
   setApiKey(key: string | null): void {
     if (key === this.apiKey) {
       return;
     }
     this.apiKey = key;
-    // Reconnect with the new key if we have an active connection
+    // Reconnect with the new key if we have an active connection or pending retry
+    if (this.eventSource || this.retryTimeout) {
+      this.closeAndCancelRetry();
+      this.connectStream();
+    }
+  }
+
+  private closeAndCancelRetry(): void {
+    if (this.retryTimeout) {
+      clearTimeout(this.retryTimeout);
+      this.retryTimeout = null;
+    }
     if (this.eventSource) {
       this.eventSource.close();
-      this.connectStream();
+      this.eventSource = null;
     }
   }
 
@@ -81,13 +93,16 @@ export class StreamDispatchService {
 
     eventSource.onerror = (err) => {
       this.logger.error('Error in stream: %O', err);
-      eventSource.close();
+      this.closeAndCancelRetry();
 
       for (const handler of this.handlers) {
         this.zone.run(() => handler.onDisconnected());
       }
 
-      setTimeout(() => this.connectStream(), this.RETRY_INTERVAL_MS);
+      this.retryTimeout = setTimeout(() => {
+        this.retryTimeout = null;
+        this.connectStream();
+      }, this.RETRY_INTERVAL_MS);
     };
   }
 }

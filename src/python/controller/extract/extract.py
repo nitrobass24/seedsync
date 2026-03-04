@@ -126,6 +126,7 @@ class Extract:
     def _pre_validate_members(archive_path: str, out_dir_path: str):
         """
         Pre-validate archive members for zip and tar formats before extraction.
+        Rejects symlinks, hardlinks, and path traversal.
         Returns True if pre-validation was performed, False if format is unsupported
         for pre-validation (fallback to post-extraction check).
         """
@@ -134,12 +135,21 @@ class Extract:
         if zipfile.is_zipfile(archive_path):
             with zipfile.ZipFile(archive_path, 'r') as zf:
                 for info in zf.infolist():
+                    # Reject symlinks (Unix mode S_IFLNK = 0xA000 in upper 16 bits of external_attr)
+                    if (info.external_attr >> 16) & 0xF000 == 0xA000:
+                        raise ExtractError(
+                            "Symlink rejected in archive: '{}'".format(info.filename)
+                        )
                     Extract._check_member_path(info.filename, real_out_dir)
             return True
 
         try:
             with tarfile.open(archive_path) as tf:
                 for member in tf.getmembers():
+                    if member.issym() or member.islnk():
+                        raise ExtractError(
+                            "Symlink/hardlink rejected in archive: '{}'".format(member.name)
+                        )
                     Extract._check_member_path(member.name, real_out_dir)
             return True
         except tarfile.TarError:

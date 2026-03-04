@@ -32,6 +32,17 @@ def _validate_filename(file_name: str) -> bool:
     return True
 
 
+def _decode_and_validate(file_name: str):
+    """
+    Decode a double-encoded filename and validate it.
+    Returns the decoded filename, or an HTTPResponse(400) on failure.
+    """
+    file_name = unquote(file_name)
+    if not _validate_filename(file_name):
+        return HTTPResponse(body="Invalid file name", status=400)
+    return file_name
+
+
 class WebResponseActionCallback(Controller.Command.ICallback):
     """
     Controller action callback used by model streams to wait for action
@@ -78,10 +89,9 @@ class ControllerHandler(IHandler):
         :param file_name:
         :return:
         """
-        # value is double encoded
-        file_name = unquote(file_name)
-        if not _validate_filename(file_name):
-            return HTTPResponse(body="Invalid file name", status=400)
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
 
         command = Controller.Command(Controller.Command.Action.QUEUE, file_name)
         callback = WebResponseActionCallback()
@@ -99,10 +109,9 @@ class ControllerHandler(IHandler):
         :param file_name:
         :return:
         """
-        # value is double encoded
-        file_name = unquote(file_name)
-        if not _validate_filename(file_name):
-            return HTTPResponse(body="Invalid file name", status=400)
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
 
         command = Controller.Command(Controller.Command.Action.STOP, file_name)
         callback = WebResponseActionCallback()
@@ -120,10 +129,9 @@ class ControllerHandler(IHandler):
         :param file_name:
         :return:
         """
-        # value is double encoded
-        file_name = unquote(file_name)
-        if not _validate_filename(file_name):
-            return HTTPResponse(body="Invalid file name", status=400)
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
 
         command = Controller.Command(Controller.Command.Action.EXTRACT, file_name)
         callback = WebResponseActionCallback()
@@ -141,10 +149,9 @@ class ControllerHandler(IHandler):
         :param file_name:
         :return:
         """
-        # value is double encoded
-        file_name = unquote(file_name)
-        if not _validate_filename(file_name):
-            return HTTPResponse(body="Invalid file name", status=400)
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
 
         command = Controller.Command(Controller.Command.Action.DELETE_LOCAL, file_name)
         callback = WebResponseActionCallback()
@@ -162,10 +169,9 @@ class ControllerHandler(IHandler):
         :param file_name:
         :return:
         """
-        # value is double encoded
-        file_name = unquote(file_name)
-        if not _validate_filename(file_name):
-            return HTTPResponse(body="Invalid file name", status=400)
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
 
         command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, file_name)
         callback = WebResponseActionCallback()

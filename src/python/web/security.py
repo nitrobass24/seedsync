@@ -41,13 +41,18 @@ _CSRF_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 _CSRF_LOCALHOST = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
-def _origin_host(header_value):
-    """Extract the hostname from an Origin or Referer header value."""
+def _origin_host_port(header_value):
+    """Extract host:port from an Origin or Referer header value.
+    Returns 'host:port' if port is present, otherwise 'host'."""
     if not header_value:
         return None
     try:
         parsed = urlparse(header_value)
-        return parsed.hostname
+        host = parsed.hostname
+        if not host:
+            return None
+        port = parsed.port
+        return "{}:{}".format(host, port) if port else host
     except Exception:
         return None
 
@@ -71,19 +76,15 @@ def install_csrf_protection(app: bottle.Bottle):
         origin = bottle.request.get_header("Origin")
         referer = bottle.request.get_header("Referer")
 
-        origin_host = _origin_host(origin) if origin else _origin_host(referer)
+        origin_hp = _origin_host_port(origin) if origin else _origin_host_port(referer)
 
-        if origin_host is None:
+        if origin_hp is None:
             raise bottle.HTTPError(403, "CSRF validation failed: missing Origin/Referer")
 
-        # Compare origin against the Host header (server's own address)
+        # Compare origin host:port against the Host header (exact match including port)
         request_host = bottle.request.get_header("Host", "")
-        try:
-            host_name = request_host.split(":")[0]
-        except Exception:
-            host_name = ""
 
-        if origin_host != host_name and origin_host not in _CSRF_LOCALHOST:
+        if origin_hp != request_host:
             raise bottle.HTTPError(403, "CSRF validation failed: origin mismatch")
 
 
@@ -211,10 +212,14 @@ def install_api_key_auth(app: bottle.Bottle, get_api_key):
 # Convenience installer
 # ---------------------------------------------------------------------------
 
-def install_security_middleware(app: bottle.Bottle, get_api_key=None):
-    """Install all security middleware on the given Bottle app."""
+def install_security_middleware(app: bottle.Bottle, get_api_key=None,
+                               trust_x_forwarded_for: bool = False):
+    """Install all security middleware on the given Bottle app.
+
+    :param trust_x_forwarded_for: Pass True only when behind a trusted reverse proxy.
+    """
     install_security_headers(app)
     install_csrf_protection(app)
-    install_rate_limiting(app)
+    install_rate_limiting(app, trust_x_forwarded_for=trust_x_forwarded_for)
     if get_api_key is not None:
         install_api_key_auth(app, get_api_key)
