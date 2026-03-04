@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject, Observable, of } from 'rxjs';
+import { BehaviorSubject, Observable, of, forkJoin } from 'rxjs';
 
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
@@ -28,8 +28,13 @@ export class ViewFileService {
   private filterCriteria: ViewFileFilterCriteria | null = null;
   private sortComparator: ViewFileComparator | null = null;
 
+  private checkedSet = new Set<string>();
+  private readonly checkedSubject = new BehaviorSubject<Set<string>>(new Set());
+  private lastCheckedName: string | null = null;
+
   readonly files$: Observable<ViewFile[]> = this.filesSubject.asObservable();
   readonly filteredFiles$: Observable<ViewFile[]> = this.filteredFilesSubject.asObservable();
+  readonly checked$ = this.checkedSubject.asObservable();
 
   constructor() {
     this.modelFileService.files$.subscribe({
@@ -98,6 +103,87 @@ export class ViewFileService {
   deleteRemote(file: ViewFile): Observable<WebReaction> {
     this.logger.debug('Remotely delete view file: ' + file.name);
     return this.createAction(file, (f) => this.modelFileService.deleteRemote(f));
+  }
+
+  toggleCheck(file: ViewFile): void {
+    if (this.checkedSet.has(file.name)) {
+      this.checkedSet.delete(file.name);
+    } else {
+      this.checkedSet.add(file.name);
+    }
+    this.lastCheckedName = file.name;
+    this.updateCheckedState();
+  }
+
+  shiftCheck(file: ViewFile): void {
+    if (this.lastCheckedName == null) {
+      this.toggleCheck(file);
+      return;
+    }
+    const filtered = this.filteredFilesSubject.getValue();
+    const lastIdx = filtered.findIndex(f => f.name === this.lastCheckedName);
+    const currIdx = filtered.findIndex(f => f.name === file.name);
+    if (lastIdx < 0 || currIdx < 0) {
+      this.toggleCheck(file);
+      return;
+    }
+    const start = Math.min(lastIdx, currIdx);
+    const end = Math.max(lastIdx, currIdx);
+    for (let i = start; i <= end; i++) {
+      this.checkedSet.add(filtered[i].name);
+    }
+    this.lastCheckedName = file.name;
+    this.updateCheckedState();
+  }
+
+  checkAll(): void {
+    const filtered = this.filteredFilesSubject.getValue();
+    for (const f of filtered) {
+      this.checkedSet.add(f.name);
+    }
+    this.updateCheckedState();
+  }
+
+  uncheckAll(): void {
+    this.checkedSet.clear();
+    this.lastCheckedName = null;
+    this.updateCheckedState();
+  }
+
+  private updateCheckedState(): void {
+    this.files = this.files.map(f => ({
+      ...f,
+      isChecked: this.checkedSet.has(f.name)
+    }));
+    this.checkedSubject.next(new Set(this.checkedSet));
+    this.pushViewFiles();
+  }
+
+  bulkQueue(): Observable<WebReaction[]> {
+    return this.bulkAction(f => f.isQueueable, f => this.queue(f));
+  }
+
+  bulkStop(): Observable<WebReaction[]> {
+    return this.bulkAction(f => f.isStoppable, f => this.stop(f));
+  }
+
+  bulkDeleteLocal(): Observable<WebReaction[]> {
+    return this.bulkAction(f => f.isLocallyDeletable, f => this.deleteLocal(f));
+  }
+
+  bulkDeleteRemote(): Observable<WebReaction[]> {
+    return this.bulkAction(f => f.isRemotelyDeletable, f => this.deleteRemote(f));
+  }
+
+  private bulkAction(
+    filter: (f: ViewFile) => boolean,
+    action: (f: ViewFile) => Observable<WebReaction>
+  ): Observable<WebReaction[]> {
+    const checked = this.files.filter(f => this.checkedSet.has(f.name) && filter(f));
+    if (checked.length === 0) {
+      return of([]);
+    }
+    return forkJoin(checked.map(f => action(f)));
   }
 
   setFilterCriteria(criteria: ViewFileFilterCriteria | null): void {
@@ -174,6 +260,7 @@ export class ViewFileService {
     // Do the removes (no re-sort required)
     for (const name of removedNames) {
       updateIndices = true;
+      this.checkedSet.delete(name);
       const index = newViewFiles.findIndex((v) => v.name === name);
       newViewFiles.splice(index, 1);
       this.indices.delete(name);
@@ -326,6 +413,7 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
     fullPath: modelFile.full_path,
     isArchive: modelFile.is_extractable,
     isSelected,
+    isChecked: false,
     isQueueable,
     isStoppable,
     isExtractable,

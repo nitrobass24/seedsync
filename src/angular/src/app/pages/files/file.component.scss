@@ -25,6 +25,8 @@
 }
 
 /* width */
+.content .checkbox {width: 30px; min-width: 30px; display: flex; align-items: center; justify-content: center;}
+.content .checkbox input[type="checkbox"] {width: 16px; height: 16px; cursor: pointer; pointer-events: none;}
 .content .status   {width: 100px; min-width: 100px;}
 .content .name     {flex-grow: 1; flex-basis: calc(100% - 100px);}
 .content .speed    {width: 100px; min-width: 100px;}
@@ -247,6 +249,7 @@
 
     /* width */
     /* NOTE: make sure this is in-sync with "#file-list #header" */
+    .content .checkbox  {width: 30px; min-width: 30px;}
     .content .status    {width: 100px; min-width: 100px;}
     .content .name      {flex-grow: 1;}
     .content .speed     {width: 100px; min-width: 100px;}
@@ -261,6 +264,7 @@
     }
 
     /* Re-order columns */
+    .content .checkbox {order: 0;}
     .content .status {order: 2;}
     .content .name {order: 1;}
     .content .speed {order: 3;}

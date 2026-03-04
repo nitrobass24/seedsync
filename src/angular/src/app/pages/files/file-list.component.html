@@ -1,17 +1,31 @@
 <div id="file-list">
     <div id="header">
+        <div class="checkbox">
+            <input type="checkbox" (change)="$any($event.target).checked ? onCheckAll() : onUncheckAll()" />
+        </div>
         <div class="name">Filename</div>
         <div class="status">Status</div>
         <div class="speed">Speed</div>
         <div class="eta">ETA</div>
         <div class="size">Size</div>
     </div>
+    @if ((checked$ | async)?.size) {
+        <app-bulk-action-bar
+            [count]="(checked$ | async)!.size"
+            (queueEvent)="onBulkQueue()"
+            (stopEvent)="onBulkStop()"
+            (deleteLocalEvent)="onBulkDeleteLocal()"
+            (deleteRemoteEvent)="onBulkDeleteRemote()"
+            (clearEvent)="onUncheckAll()">
+        </app-bulk-action-bar>
+    }
     @for (file of files | async; track identify($index, file)) {
         <div>
             <app-file
                 [file]="file"
                 [options]="options"
                 (click)="onSelect(file)"
+                (checkEvent)="onCheck($event)"
                 (queueEvent)="onQueue($event)"
                 (stopEvent)="onStop($event)"
                 (extractEvent)="onExtract($event)"

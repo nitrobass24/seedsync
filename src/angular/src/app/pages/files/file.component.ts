@@ -46,6 +46,7 @@ export class FileComponent implements OnChanges {
   file = input.required<ViewFile>();
   options = input.required<Observable<ViewFileOptions>>();
 
+  checkEvent = output<{file: ViewFile, shiftKey: boolean}>();
   queueEvent = output<ViewFile>();
   stopEvent = output<ViewFile>();
   extractEvent = output<ViewFile>();
@@ -81,6 +82,11 @@ export class FileComponent implements OnChanges {
         }
       }
     }
+  }
+
+  onCheck(event: MouseEvent, file: ViewFile): void {
+    event.stopPropagation();
+    this.checkEvent.emit({file, shiftKey: event.shiftKey});
   }
 
   isQueueable(): boolean {
