@@ -18,6 +18,7 @@ function makeViewFile(overrides: Partial<ViewFile> = {}): ViewFile {
     fullPath: '/remote/test.txt',
     isArchive: false,
     isSelected: false,
+    isChecked: false,
     isQueueable: false,
     isStoppable: false,
     isExtractable: false,
