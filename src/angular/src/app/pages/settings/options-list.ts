@@ -306,6 +306,43 @@ export const OPTIONS_CONTEXT_LOGGING: IOptionsContext = {
     ],
 };
 
+export const OPTIONS_CONTEXT_NOTIFICATIONS: IOptionsContext = {
+    header: 'Notifications',
+    id: 'notifications',
+    options: [
+        {
+            type: OptionType.Text,
+            label: 'Webhook URL',
+            valuePath: ['notifications', 'webhook_url'],
+            description: 'HTTP(S) URL to POST notifications to. Leave empty to disable.',
+        },
+        {
+            type: OptionType.Checkbox,
+            label: 'Notify on download complete',
+            valuePath: ['notifications', 'notify_on_download_complete'],
+            description: null,
+        },
+        {
+            type: OptionType.Checkbox,
+            label: 'Notify on extraction complete',
+            valuePath: ['notifications', 'notify_on_extraction_complete'],
+            description: null,
+        },
+        {
+            type: OptionType.Checkbox,
+            label: 'Notify on extraction failed',
+            valuePath: ['notifications', 'notify_on_extraction_failed'],
+            description: null,
+        },
+        {
+            type: OptionType.Checkbox,
+            label: 'Notify on delete complete',
+            valuePath: ['notifications', 'notify_on_delete_complete'],
+            description: null,
+        },
+    ],
+};
+
 export const OPTIONS_CONTEXT_EXTRACT: IOptionsContext = {
   header: 'Archive Extraction',
   id: 'extraction',

@@ -17,6 +17,7 @@ from common import ServiceExit, Context, Constants, Config, Args, AppError
 from common import ServiceRestart
 from common import Localization, Status, ConfigError, Persist, PersistError
 from common.json_formatter import JsonFormatter
+from controller.notifier import WebhookNotifier
 from controller import Controller, ControllerJob, ControllerPersist, AutoQueue, AutoQueuePersist
 from web import WebAppJob, WebAppBuilder
 
@@ -116,6 +117,10 @@ class Seedsync:
 
         # Create controller
         controller = Controller(self.context, self.controller_persist)
+
+        # Create webhook notifier
+        webhook_notifier = WebhookNotifier(self.context.config, self.context.logger)
+        controller.add_model_listener(webhook_notifier)
 
         # Create auto queue
         auto_queue = AutoQueue(self.context, self.auto_queue_persist, controller)
@@ -321,6 +326,12 @@ class Seedsync:
 
         config.logging.log_format = "standard"
 
+        config.notifications.webhook_url = ""
+        config.notifications.notify_on_download_complete = True
+        config.notifications.notify_on_extraction_complete = True
+        config.notifications.notify_on_extraction_failed = True
+        config.notifications.notify_on_delete_complete = True
+
         config.lftp.net_limit_rate = ""
         config.lftp.net_socket_buffer = "8M"
         config.lftp.pget_min_chunk_size = "100M"
@@ -341,7 +352,7 @@ class Seedsync:
         """
         defaults = Seedsync._create_default_config()
         changed = False
-        for section_attr in ['general', 'lftp', 'controller', 'web', 'autoqueue', 'logging']:
+        for section_attr in ['general', 'lftp', 'controller', 'web', 'autoqueue', 'logging', 'notifications']:
             section = getattr(config, section_attr)
             default_section = getattr(defaults, section_attr)
             for key in section.as_dict():
