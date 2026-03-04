@@ -49,6 +49,10 @@
       </div>
 
       <ng-container
+        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_LOGGING">
+      </ng-container>
+
+      <ng-container
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_OTHER">
       </ng-container>
     </div>

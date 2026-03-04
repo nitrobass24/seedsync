@@ -341,12 +341,20 @@ class Config(Persist):
             self.auto_extract = None
             self.auto_delete_remote = None
 
+    class Logging(IC):
+        log_format = PROP("log_format", Checkers.string_allow_empty, Converters.null)
+
+        def __init__(self):
+            super().__init__()
+            self.log_format = "standard"
+
     def __init__(self):
         self.general = Config.General()
         self.lftp = Config.Lftp()
         self.controller = Config.Controller()
         self.web = Config.Web()
         self.autoqueue = Config.AutoQueue()
+        self.logging = Config.Logging()
 
     @staticmethod
     def _check_section(dct: OuterConfigType, name: str) -> InnerConfigType:
@@ -405,6 +413,7 @@ class Config(Persist):
         config.controller = Config.Controller.from_dict(config_dict.pop("Controller", {}))
         config.web = Config.Web.from_dict(config_dict.pop("Web", {}))
         config.autoqueue = Config.AutoQueue.from_dict(config_dict.pop("AutoQueue", {}))
+        config.logging = Config.Logging.from_dict(config_dict.pop("Logging", {}))
 
         Config._check_empty_outer_dict(config_dict)
         return config
@@ -418,6 +427,7 @@ class Config(Persist):
         config_dict["Controller"] = self.controller.as_dict()
         config_dict["Web"] = self.web.as_dict()
         config_dict["AutoQueue"] = self.autoqueue.as_dict()
+        config_dict["Logging"] = self.logging.as_dict()
         return config_dict
 
     def has_section(self, name: str) -> bool:

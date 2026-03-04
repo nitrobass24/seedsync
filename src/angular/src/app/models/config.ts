@@ -54,12 +54,17 @@ export interface AutoQueue {
   auto_delete_remote: boolean | null;
 }
 
+export interface Logging {
+  log_format: string | null;
+}
+
 export interface Config {
   general: General;
   lftp: Lftp;
   controller: Controller;
   web: Web;
   autoqueue: AutoQueue;
+  logging: Logging;
 }
 
 export const DEFAULT_GENERAL: General = {
@@ -113,10 +118,15 @@ export const DEFAULT_AUTOQUEUE: AutoQueue = {
   auto_delete_remote: null,
 };
 
+export const DEFAULT_LOGGING: Logging = {
+  log_format: null,
+};
+
 export const DEFAULT_CONFIG: Config = {
   general: { ...DEFAULT_GENERAL },
   lftp: { ...DEFAULT_LFTP },
   controller: { ...DEFAULT_CONTROLLER },
   web: { ...DEFAULT_WEB },
   autoqueue: { ...DEFAULT_AUTOQUEUE },
+  logging: { ...DEFAULT_LOGGING },
 };

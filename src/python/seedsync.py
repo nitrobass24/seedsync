@@ -16,6 +16,7 @@ import platform
 from common import ServiceExit, Context, Constants, Config, Args, AppError
 from common import ServiceRestart
 from common import Localization, Status, ConfigError, Persist, PersistError
+from common.json_formatter import JsonFormatter
 from controller import Controller, ControllerJob, ControllerPersist, AutoQueue, AutoQueuePersist
 from web import WebAppJob, WebAppBuilder
 
@@ -73,13 +74,16 @@ class Seedsync:
 
         # Logger setup
         # We separate the main log from the web-access log
+        log_format = config.logging.log_format or "standard"
         logger = self._create_logger(name=Constants.SERVICE_NAME,
                                      debug=is_debug,
-                                     logdir=args.logdir)
+                                     logdir=args.logdir,
+                                     log_format=log_format)
         Seedsync.logger = logger
         web_access_logger = self._create_logger(name=Constants.WEB_ACCESS_LOG_NAME,
                                                 debug=is_debug,
-                                                logdir=args.logdir)
+                                                logdir=args.logdir,
+                                                log_format=log_format)
         logger.info("Debug mode is {}.".format("enabled" if is_debug else "disabled"))
 
         # Create status
@@ -245,7 +249,7 @@ class Seedsync:
         return parser.parse_args(args)
 
     @staticmethod
-    def _create_logger(name: str, debug: bool, logdir: Optional[str]) -> logging.Logger:
+    def _create_logger(name: str, debug: bool, logdir: Optional[str], log_format: str = "standard") -> logging.Logger:
         logger = logging.getLogger(name)
 
         # Remove any existing handlers (needed when restarting)
@@ -264,9 +268,12 @@ class Seedsync:
                       )
         else:
             handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(name)s (%(processName)s/%(threadName)s) - %(message)s"
-        )
+        if log_format == "json":
+            formatter = JsonFormatter()
+        else:
+            formatter = logging.Formatter(
+                "%(asctime)s - %(levelname)s - %(name)s (%(processName)s/%(threadName)s) - %(message)s"
+            )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         return logger
@@ -312,6 +319,8 @@ class Seedsync:
         config.autoqueue.auto_extract = True
         config.autoqueue.auto_delete_remote = False
 
+        config.logging.log_format = "standard"
+
         config.lftp.net_limit_rate = ""
         config.lftp.net_socket_buffer = "8M"
         config.lftp.pget_min_chunk_size = "100M"
@@ -332,7 +341,7 @@ class Seedsync:
         """
         defaults = Seedsync._create_default_config()
         changed = False
-        for section_attr in ['general', 'lftp', 'controller', 'web', 'autoqueue']:
+        for section_attr in ['general', 'lftp', 'controller', 'web', 'autoqueue', 'logging']:
             section = getattr(config, section_attr)
             default_section = getattr(defaults, section_attr)
             for key in section.as_dict():

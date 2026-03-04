@@ -293,6 +293,19 @@ export const OPTIONS_CONTEXT_ADVANCED_LFTP: IOptionsContext = {
   ],
 };
 
+export const OPTIONS_CONTEXT_LOGGING: IOptionsContext = {
+    header: 'Logging',
+    id: 'logging',
+    options: [
+        {
+            type: OptionType.Text,
+            label: 'Log Format',
+            valuePath: ['logging', 'log_format'],
+            description: 'Log output format: "standard" or "json"',
+        },
+    ],
+};
+
 export const OPTIONS_CONTEXT_EXTRACT: IOptionsContext = {
   header: 'Archive Extraction',
   id: 'extraction',
