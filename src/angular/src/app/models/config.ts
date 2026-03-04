@@ -44,6 +44,7 @@ export interface Controller {
 
 export interface Web {
   port: number | null;
+  api_key: string | null;
 }
 
 export interface AutoQueue {
@@ -102,6 +103,7 @@ export const DEFAULT_CONTROLLER: Controller = {
 
 export const DEFAULT_WEB: Web = {
   port: null,
+  api_key: null,
 };
 
 export const DEFAULT_AUTOQUEUE: AutoQueue = {

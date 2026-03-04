@@ -1,6 +1,8 @@
 import { ApplicationConfig, APP_INITIALIZER, inject, provideBrowserGlobalErrorListeners } from '@angular/core';
 import { provideRouter, RouteReuseStrategy } from '@angular/router';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
+
+import { apiKeyInterceptor } from './services/utils/api-key.interceptor';
 
 import { ROUTES } from './routes';
 import { CachedReuseStrategy } from './common/cached-reuse-strategy';
@@ -36,7 +38,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(ROUTES),
-    provideHttpClient(),
+    provideHttpClient(withInterceptors([apiKeyInterceptor])),
     { provide: RouteReuseStrategy, useClass: CachedReuseStrategy },
     {
       provide: APP_INITIALIZER,
