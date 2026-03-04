@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import os
 from threading import Event
 from urllib.parse import unquote
 
@@ -8,6 +9,24 @@ from bottle import HTTPResponse
 from common import overrides
 from controller import Controller
 from ..web_app import IHandler, WebApp
+
+
+def _validate_filename(file_name: str) -> bool:
+    """
+    Validate that a filename is safe to use as a command argument.
+    Rejects path traversal attempts and absolute paths.
+    """
+    if not file_name:
+        return False
+    # Reject absolute paths
+    if os.path.isabs(file_name):
+        return False
+    # Reject path traversal components
+    parts = file_name.replace("\\", "/").split("/")
+    for part in parts:
+        if part == "..":
+            return False
+    return True
 
 
 class WebResponseActionCallback(Controller.Command.ICallback):
@@ -58,6 +77,8 @@ class ControllerHandler(IHandler):
         """
         # value is double encoded
         file_name = unquote(file_name)
+        if not _validate_filename(file_name):
+            return HTTPResponse(body="Invalid file name", status=400)
 
         command = Controller.Command(Controller.Command.Action.QUEUE, file_name)
         callback = WebResponseActionCallback()
@@ -77,6 +98,8 @@ class ControllerHandler(IHandler):
         """
         # value is double encoded
         file_name = unquote(file_name)
+        if not _validate_filename(file_name):
+            return HTTPResponse(body="Invalid file name", status=400)
 
         command = Controller.Command(Controller.Command.Action.STOP, file_name)
         callback = WebResponseActionCallback()
@@ -96,6 +119,8 @@ class ControllerHandler(IHandler):
         """
         # value is double encoded
         file_name = unquote(file_name)
+        if not _validate_filename(file_name):
+            return HTTPResponse(body="Invalid file name", status=400)
 
         command = Controller.Command(Controller.Command.Action.EXTRACT, file_name)
         callback = WebResponseActionCallback()
@@ -115,6 +140,8 @@ class ControllerHandler(IHandler):
         """
         # value is double encoded
         file_name = unquote(file_name)
+        if not _validate_filename(file_name):
+            return HTTPResponse(body="Invalid file name", status=400)
 
         command = Controller.Command(Controller.Command.Action.DELETE_LOCAL, file_name)
         callback = WebResponseActionCallback()
@@ -134,6 +161,8 @@ class ControllerHandler(IHandler):
         """
         # value is double encoded
         file_name = unquote(file_name)
+        if not _validate_filename(file_name):
+            return HTTPResponse(body="Invalid file name", status=400)
 
         command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, file_name)
         callback = WebResponseActionCallback()

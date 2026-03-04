@@ -42,8 +42,17 @@ export class StreamDispatchService {
     this.connectStream();
   }
 
+  private apiKey: string | null = null;
+
+  setApiKey(key: string | null): void {
+    this.apiKey = key;
+  }
+
   private connectStream(): void {
-    const eventSource = new EventSource(this.STREAM_URL);
+    const url = this.apiKey
+      ? `${this.STREAM_URL}?api_key=${encodeURIComponent(this.apiKey)}`
+      : this.STREAM_URL;
+    const eventSource = new EventSource(url);
 
     for (const eventName of Array.from(this.eventNameToHandler.keys())) {
       eventSource.addEventListener(eventName, (event: MessageEvent) => {

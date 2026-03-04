@@ -1,9 +1,10 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, Injector, inject } from '@angular/core';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 
 import { ConnectedService } from '../utils/connected.service';
 import { LoggerService } from '../utils/logger.service';
 import { RestService, WebReaction } from '../utils/rest.service';
+import { StreamDispatchService } from '../base/stream-dispatch.service';
 import { Config } from '../../models/config';
 
 @Injectable({ providedIn: 'root' })
@@ -15,10 +16,15 @@ export class ConfigService {
   private readonly connectedService = inject(ConnectedService);
   private readonly restService = inject(RestService);
   private readonly logger = inject(LoggerService);
+  private readonly injector = inject(Injector);
 
   private readonly configSubject = new BehaviorSubject<Config | null>(null);
 
   readonly config$: Observable<Config | null> = this.configSubject.asObservable();
+
+  get configSnapshot(): Config | null {
+    return this.configSubject.getValue();
+  }
 
   constructor() {
     this.connectedService.connected$.subscribe((connected) => {
@@ -67,10 +73,19 @@ export class ConfigService {
         if (reaction.success) {
           const configJson: Config = JSON.parse(reaction.data!);
           this.configSubject.next(configJson);
+          this.updateStreamApiKey(configJson);
         } else {
           this.configSubject.next(null);
         }
       },
     });
+  }
+
+  private updateStreamApiKey(config: Config): void {
+    const apiKey = config.web?.api_key || null;
+    // Use injector.get() to break circular dependency:
+    // StreamDispatchService -> ConnectedService -> ConfigService
+    const streamDispatch = this.injector.get(StreamDispatchService);
+    streamDispatch.setApiKey(apiKey);
   }
 }

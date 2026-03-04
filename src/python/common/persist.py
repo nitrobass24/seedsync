@@ -1,12 +1,18 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import glob
 import os
+import shutil
 import tempfile
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Type, TypeVar
 
 from .error import AppError
 from .localization import Localization
+
+_BACKUP_DIR_NAME = "backups"
+_MAX_BACKUPS = 10
 
 
 # Source: https://stackoverflow.com/a/39205612/8571324
@@ -52,6 +58,11 @@ class Persist(Serializable):
 
     def to_file(self, file_path: str):
         dir_name = os.path.dirname(file_path) or '.'
+
+        # Backup existing file before overwriting
+        if os.path.isfile(file_path):
+            self._backup_file(file_path, dir_name)
+
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix='.tmp_persist_')
         try:
             with os.fdopen(fd, 'w') as f:
@@ -65,6 +76,29 @@ class Persist(Serializable):
             except OSError:
                 pass
             raise
+
+    @staticmethod
+    def _backup_file(file_path: str, dir_name: str):
+        """Copy the current file to backups/ with an ISO timestamp, then prune old backups."""
+        backup_dir = os.path.join(dir_name, _BACKUP_DIR_NAME)
+        os.makedirs(backup_dir, exist_ok=True)
+
+        base_name = os.path.basename(file_path)
+        name, ext = os.path.splitext(base_name)
+        timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+        backup_name = "{}-{}{}".format(name, timestamp, ext)
+        backup_path = os.path.join(backup_dir, backup_name)
+
+        shutil.copy2(file_path, backup_path)
+
+        # Prune old backups, keeping only the most recent _MAX_BACKUPS
+        pattern = os.path.join(backup_dir, "{}-*{}".format(name, ext))
+        backups = sorted(glob.glob(pattern))
+        for old_backup in backups[:-_MAX_BACKUPS]:
+            try:
+                os.remove(old_backup)
+            except OSError:
+                pass
 
     @classmethod
     @abstractmethod
