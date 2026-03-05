@@ -12,6 +12,7 @@ from .handler.auto_queue import AutoQueueHandler
 from .handler.stream_log import LogStreamHandler
 from .handler.status import StatusHandler
 from .handler.logs import LogsHandler
+from .handler.path_pairs import PathPairsHandler
 from .security import install_security_middleware
 
 
@@ -35,6 +36,7 @@ class WebAppBuilder:
             logdir=context.args.logdir,
             service_name=Constants.SERVICE_NAME
         )
+        self.path_pairs_handler = PathPairsHandler(context.path_pairs_config)
 
     def build(self) -> WebApp:
         web_app = WebApp(context=self.__context,
@@ -61,6 +63,7 @@ class WebAppBuilder:
         self.auto_queue_handler.add_routes(web_app)
         self.status_handler.add_routes(web_app)
         self.logs_handler.add_routes(web_app)
+        self.path_pairs_handler.add_routes(web_app)
 
         web_app.add_default_routes()
 

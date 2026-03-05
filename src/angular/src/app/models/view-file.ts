@@ -3,6 +3,7 @@
  */
 export interface ViewFile {
   name: string;
+  pairId: string | null;
   isDir: boolean;
   localSize: number;
   remoteSize: number;

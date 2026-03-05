@@ -37,6 +37,7 @@ class SerializeModel(Serialize):
 
     # Model file keys
     __KEY_FILE_NAME = "name"
+    __KEY_FILE_PAIR_ID = "pair_id"
     __KEY_FILE_IS_DIR = "is_dir"
     __KEY_FILE_STATE = "state"
     __VALUES_FILE_STATE = {
@@ -65,6 +66,7 @@ class SerializeModel(Serialize):
     def __model_file_to_json_dict(model_file: ModelFile) -> dict:
         json_dict = dict()
         json_dict[SerializeModel.__KEY_FILE_NAME] = model_file.name
+        json_dict[SerializeModel.__KEY_FILE_PAIR_ID] = model_file.pair_id
         json_dict[SerializeModel.__KEY_FILE_IS_DIR] = model_file.is_dir
         json_dict[SerializeModel.__KEY_FILE_STATE] = SerializeModel.__VALUES_FILE_STATE[model_file.state]
         json_dict[SerializeModel.__KEY_FILE_REMOTE_SIZE] = model_file.remote_size

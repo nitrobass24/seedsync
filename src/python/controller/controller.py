@@ -57,9 +57,10 @@ class Controller:
                 """Called on action failure"""
                 pass
 
-        def __init__(self, action: Action, filename: str):
+        def __init__(self, action: Action, filename: str, pair_id: str = None):
             self.action = action
             self.filename = filename
+            self.pair_id = pair_id
             self.callbacks = []
 
         def add_callback(self, callback: ICallback):

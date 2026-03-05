@@ -16,6 +16,7 @@ import platform
 from common import ServiceExit, Context, Constants, Config, Args, AppError
 from common import ServiceRestart
 from common import Localization, Status, ConfigError, Persist, PersistError
+from common import PathPairsConfig
 from common.json_formatter import JsonFormatter
 from controller.notifier import WebhookNotifier
 from controller import Controller, ControllerJob, ControllerPersist, AutoQueue, AutoQueuePersist
@@ -31,6 +32,7 @@ class Seedsync:
     It is run in the main thread (no daemonization)
     """
     __FILE_CONFIG = "settings.cfg"
+    __FILE_PATH_PAIRS = "path_pairs.json"
     __FILE_AUTO_QUEUE_PERSIST = "autoqueue.persist"
     __FILE_CONTROLLER_PERSIST = "controller.persist"
     __CONFIG_DUMMY_VALUE = "<replace me>"
@@ -91,12 +93,17 @@ class Seedsync:
         # Create status
         status = Status()
 
+        # Load or migrate path pairs config
+        self.path_pairs_path = os.path.join(args.config_dir, Seedsync.__FILE_PATH_PAIRS)
+        path_pairs_config = self._load_path_pairs_config(self.path_pairs_path, config)
+
         # Create context
         self.context = Context(logger=logger,
                                web_access_logger=web_access_logger,
                                config=config,
                                args=ctx_args,
-                               status=status)
+                               status=status,
+                               path_pairs_config=path_pairs_config)
 
         # Register the signal handlers
         signal.signal(signal.SIGTERM, self.signal)
@@ -214,6 +221,7 @@ class Seedsync:
         self.controller_persist.to_file(self.controller_persist_path)
         self.auto_queue_persist.to_file(self.auto_queue_persist_path)
         self.context.config.to_file(self.config_path)
+        self.context.path_pairs_config.to_file(self.path_pairs_path)
 
     def signal(self, signum: int, _):
         # noinspection PyUnresolvedReferences
@@ -363,6 +371,25 @@ class Seedsync:
                         setattr(section, key, default_value)
                         changed = True
         return changed
+
+    @staticmethod
+    def _load_path_pairs_config(file_path: str, config: Config) -> PathPairsConfig:
+        if os.path.isfile(file_path):
+            try:
+                return PathPairsConfig.from_file(file_path)
+            except PersistError:
+                if Seedsync.logger:
+                    Seedsync.logger.exception("Failed to load path_pairs.json")
+                Seedsync.__backup_file(file_path)
+        # Migrate from legacy single remote_path/local_path
+        dummy = "<replace me>"
+        remote_path = config.lftp.remote_path if config.lftp.remote_path != dummy else ""
+        local_path = config.lftp.local_path if config.lftp.local_path != dummy else ""
+        if remote_path or local_path:
+            ppc = PathPairsConfig.migrate_from_legacy(remote_path, local_path)
+            ppc.to_file(file_path)
+            return ppc
+        return PathPairsConfig()
 
     @staticmethod
     def _detect_incomplete_config(config: Config) -> bool:

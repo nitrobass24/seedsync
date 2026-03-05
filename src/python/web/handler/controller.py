@@ -5,7 +5,7 @@ from threading import Event
 from typing import Union
 from urllib.parse import unquote
 
-from bottle import HTTPResponse
+from bottle import HTTPResponse, request
 
 from common import overrides
 from controller import Controller
@@ -94,7 +94,8 @@ class ControllerHandler(IHandler):
         if isinstance(file_name, HTTPResponse):
             return file_name
 
-        command = Controller.Command(Controller.Command.Action.QUEUE, file_name)
+        pair_id = request.params.get("pair_id")
+        command = Controller.Command(Controller.Command.Action.QUEUE, file_name, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)
         self.__controller.queue_command(command)
@@ -105,16 +106,12 @@ class ControllerHandler(IHandler):
             return HTTPResponse(body=callback.error, status=400)
 
     def __handle_action_stop(self, file_name: str):
-        """
-        Request a STOP action
-        :param file_name:
-        :return:
-        """
         file_name = _decode_and_validate(file_name)
         if isinstance(file_name, HTTPResponse):
             return file_name
 
-        command = Controller.Command(Controller.Command.Action.STOP, file_name)
+        pair_id = request.params.get("pair_id")
+        command = Controller.Command(Controller.Command.Action.STOP, file_name, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)
         self.__controller.queue_command(command)
@@ -125,16 +122,12 @@ class ControllerHandler(IHandler):
             return HTTPResponse(body=callback.error, status=400)
 
     def __handle_action_extract(self, file_name: str):
-        """
-        Request a EXTRACT action
-        :param file_name:
-        :return:
-        """
         file_name = _decode_and_validate(file_name)
         if isinstance(file_name, HTTPResponse):
             return file_name
 
-        command = Controller.Command(Controller.Command.Action.EXTRACT, file_name)
+        pair_id = request.params.get("pair_id")
+        command = Controller.Command(Controller.Command.Action.EXTRACT, file_name, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)
         self.__controller.queue_command(command)
@@ -145,16 +138,12 @@ class ControllerHandler(IHandler):
             return HTTPResponse(body=callback.error, status=400)
 
     def __handle_action_delete_local(self, file_name: str):
-        """
-        Request a DELETE LOCAL action
-        :param file_name:
-        :return:
-        """
         file_name = _decode_and_validate(file_name)
         if isinstance(file_name, HTTPResponse):
             return file_name
 
-        command = Controller.Command(Controller.Command.Action.DELETE_LOCAL, file_name)
+        pair_id = request.params.get("pair_id")
+        command = Controller.Command(Controller.Command.Action.DELETE_LOCAL, file_name, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)
         self.__controller.queue_command(command)
@@ -165,16 +154,12 @@ class ControllerHandler(IHandler):
             return HTTPResponse(body=callback.error, status=400)
 
     def __handle_action_delete_remote(self, file_name: str):
-        """
-        Request a DELETE REMOTE action
-        :param file_name:
-        :return:
-        """
         file_name = _decode_and_validate(file_name)
         if isinstance(file_name, HTTPResponse):
             return file_name
 
-        command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, file_name)
+        pair_id = request.params.get("pair_id")
+        command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, file_name, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)
         self.__controller.queue_command(command)
