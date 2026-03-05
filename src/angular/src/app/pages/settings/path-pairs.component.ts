@@ -34,7 +34,9 @@ export class PathPairsComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.clearConfirmTimer();
-    this.subscriptions.forEach((s) => s.unsubscribe());
+    this.subscriptions.forEach((s) => {
+      s.unsubscribe();
+    });
   }
 
   // --- Add ---
@@ -106,15 +108,15 @@ export class PathPairsComponent implements OnDestroy {
 
   // --- Toggle fields ---
 
-  onToggleEnabled(pair: PathPair): void {
+  onToggleEnabled(pair: PathPair, enabled: boolean): void {
     this.subscriptions.push(
-      this.pathPairsService.update({ ...pair, enabled: !pair.enabled }).subscribe(),
+      this.pathPairsService.update({ ...pair, enabled }).subscribe(),
     );
   }
 
-  onToggleAutoQueue(pair: PathPair): void {
+  onToggleAutoQueue(pair: PathPair, autoQueue: boolean): void {
     this.subscriptions.push(
-      this.pathPairsService.update({ ...pair, auto_queue: !pair.auto_queue }).subscribe(),
+      this.pathPairsService.update({ ...pair, auto_queue: autoQueue }).subscribe(),
     );
   }
 

@@ -92,13 +92,13 @@
               <label class="toggle-label">
                 <input type="checkbox" class="form-check-input"
                        [checked]="pair.enabled"
-                       (change)="onToggleEnabled(pair)" />
+                       (change)="onToggleEnabled(pair, $any($event.target).checked)" />
                 Enabled
               </label>
               <label class="toggle-label">
                 <input type="checkbox" class="form-check-input"
                        [checked]="pair.auto_queue"
-                       (change)="onToggleAutoQueue(pair)" />
+                       (change)="onToggleAutoQueue(pair, $any($event.target).checked)" />
                 Auto Queue
               </label>
             </div>

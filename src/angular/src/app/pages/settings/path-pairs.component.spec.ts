@@ -90,12 +90,12 @@ class PathPairsLogic {
     }
   }
 
-  onToggleEnabled(pair: PathPair): void {
-    this.service.update({ ...pair, enabled: !pair.enabled }).subscribe();
+  onToggleEnabled(pair: PathPair, enabled: boolean): void {
+    this.service.update({ ...pair, enabled }).subscribe();
   }
 
-  onToggleAutoQueue(pair: PathPair): void {
-    this.service.update({ ...pair, auto_queue: !pair.auto_queue }).subscribe();
+  onToggleAutoQueue(pair: PathPair, autoQueue: boolean): void {
+    this.service.update({ ...pair, auto_queue: autoQueue }).subscribe();
   }
 
   destroy(): void {
@@ -269,7 +269,7 @@ describe('PathPairsComponent logic', () => {
 
   it('should toggle enabled via update', () => {
     const pair = makePair({ enabled: true });
-    component.onToggleEnabled(pair);
+    component.onToggleEnabled(pair, false);
     expect(mockService.update).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false }),
     );
@@ -277,7 +277,7 @@ describe('PathPairsComponent logic', () => {
 
   it('should toggle auto_queue via update', () => {
     const pair = makePair({ auto_queue: false });
-    component.onToggleAutoQueue(pair);
+    component.onToggleAutoQueue(pair, true);
     expect(mockService.update).toHaveBeenCalledWith(
       expect.objectContaining({ auto_queue: true }),
     );
