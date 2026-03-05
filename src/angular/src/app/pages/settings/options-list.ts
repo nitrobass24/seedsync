@@ -164,6 +164,12 @@ export const OPTIONS_CONTEXT_OTHER: IOptionsContext = {
       description: null,
     },
     {
+      type: OptionType.Password,
+      label: 'API Key',
+      valuePath: ['web', 'api_key'],
+      description: 'Require this key for API access. Leave empty to disable.',
+    },
+    {
       type: OptionType.Checkbox,
       label: 'Enable Debug',
       valuePath: ['general', 'debug'],

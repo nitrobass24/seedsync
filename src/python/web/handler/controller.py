@@ -1,6 +1,8 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import os
 from threading import Event
+from typing import Union
 from urllib.parse import unquote
 
 from bottle import HTTPResponse
@@ -8,6 +10,38 @@ from bottle import HTTPResponse
 from common import overrides
 from controller import Controller
 from ..web_app import IHandler, WebApp
+
+
+def _validate_filename(file_name: str) -> bool:
+    """
+    Validate that a filename is safe to use as a command argument.
+    Rejects path traversal attempts, absolute paths, and null bytes.
+    """
+    if not file_name:
+        return False
+    # Reject embedded null bytes (path truncation attack)
+    if "\x00" in file_name:
+        return False
+    # Reject absolute paths
+    if os.path.isabs(file_name):
+        return False
+    # Reject path traversal components
+    parts = file_name.replace("\\", "/").split("/")
+    for part in parts:
+        if part == "..":
+            return False
+    return True
+
+
+def _decode_and_validate(file_name: str) -> Union[str, HTTPResponse]:
+    """
+    Decode a double-encoded filename and validate it.
+    Returns the decoded filename, or an HTTPResponse(400) on failure.
+    """
+    file_name = unquote(file_name)
+    if not _validate_filename(file_name):
+        return HTTPResponse(body="Invalid file name", status=400)
+    return file_name
 
 
 class WebResponseActionCallback(Controller.Command.ICallback):
@@ -56,8 +90,9 @@ class ControllerHandler(IHandler):
         :param file_name:
         :return:
         """
-        # value is double encoded
-        file_name = unquote(file_name)
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
 
         command = Controller.Command(Controller.Command.Action.QUEUE, file_name)
         callback = WebResponseActionCallback()
@@ -75,8 +110,9 @@ class ControllerHandler(IHandler):
         :param file_name:
         :return:
         """
-        # value is double encoded
-        file_name = unquote(file_name)
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
 
         command = Controller.Command(Controller.Command.Action.STOP, file_name)
         callback = WebResponseActionCallback()
@@ -94,8 +130,9 @@ class ControllerHandler(IHandler):
         :param file_name:
         :return:
         """
-        # value is double encoded
-        file_name = unquote(file_name)
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
 
         command = Controller.Command(Controller.Command.Action.EXTRACT, file_name)
         callback = WebResponseActionCallback()
@@ -113,8 +150,9 @@ class ControllerHandler(IHandler):
         :param file_name:
         :return:
         """
-        # value is double encoded
-        file_name = unquote(file_name)
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
 
         command = Controller.Command(Controller.Command.Action.DELETE_LOCAL, file_name)
         callback = WebResponseActionCallback()
@@ -132,8 +170,9 @@ class ControllerHandler(IHandler):
         :param file_name:
         :return:
         """
-        # value is double encoded
-        file_name = unquote(file_name)
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
 
         command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, file_name)
         callback = WebResponseActionCallback()

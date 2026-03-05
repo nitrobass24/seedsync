@@ -321,10 +321,12 @@ class Config(Persist):
 
     class Web(InnerConfig):
         port = PROP("port", Checkers.int_positive, Converters.int)
+        api_key = PROP("api_key", Checkers.string_allow_empty, Converters.null)
 
         def __init__(self):
             super().__init__()
             self.port = None
+            self.api_key = ""
 
     class AutoQueue(InnerConfig):
         enabled = PROP("enabled", Checkers.null, Converters.bool)

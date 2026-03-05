@@ -198,6 +198,21 @@ If you see an error about `/bin/bash` not found, SeedSync will attempt to auto-d
 sudo ln -s /usr/bin/bash /bin/bash
 ```
 
+### SCP Permission Denied (scanner can't copy to /tmp)
+
+If you see `scp: dest open '/tmp/scanfs': Permission denied` in the logs, your remote server doesn't allow writes to `/tmp`. SeedSync copies its scanner utility there by default.
+
+Fix: open the web UI **Settings**, find **Server Script Path**, and change it to a directory you own on the remote server — for example `~` or `~/.local`. Save and restart the container.
+
+### Server Script Path Is a Directory
+
+If you see `Server Script Path '...' is a directory on the remote server`, the configured path overlaps with your sync directory and a folder named `scanfs` already exists there.
+
+Fix:
+1. Change **Server Script Path** to a location outside your sync tree (`~` or `~/.local`)
+2. Remove the conflicting directory from the remote server: `rm -rf /your/sync/path/scanfs`
+3. Restart the container
+
 ## Report an Issue
 
 Please report issues on the [issues page](https://github.com/nitrobass24/seedsync/issues).

@@ -102,6 +102,17 @@ class RemoteScanner(IScanner):
                 )
 
                 # Non-recoverable errors: don't retry
+                if "Is a directory" in error_str:
+                    raise ScannerError(
+                        "Server Script Path '{}' is a directory on the remote server. "
+                        "Change the 'Server Script Path' setting to a writable location "
+                        "outside your sync tree (e.g. '~' or '~/.local') and remove the "
+                        "conflicting directory from the remote server.".format(
+                            self.__remote_path_to_scan_script
+                        ),
+                        recoverable=False
+                    )
+
                 if "SystemScannerError" in error_str:
                     raise ScannerError(
                         Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()),
@@ -150,6 +161,23 @@ class RemoteScanner(IScanner):
                 recoverable=recoverable
             )
 
+        # Resolve tilde in the script path to an absolute path.
+        # SCP expands ~ natively, but the path is shell-quoted for md5sum
+        # and execution commands where ~ does not expand inside quotes.
+        # Resolve by fetching the remote home dir via `echo ~` (no user
+        # input in the command) and substituting in Python.
+        if self.__remote_path_to_scan_script.startswith("~"):
+            try:
+                home = self.__ssh.shell("echo ~").decode().strip()
+                if home and not home.startswith("~"):
+                    expanded = home + self.__remote_path_to_scan_script[1:]
+                    self.logger.debug("Resolved script path '{}' -> '{}'".format(
+                        self.__remote_path_to_scan_script, expanded
+                    ))
+                    self.__remote_path_to_scan_script = expanded
+            except SshcpError as e:
+                self.logger.warning("Could not resolve tilde in script path: {}".format(str(e)))
+
         self._log_remote_diagnostics()
 
         # Check md5sum on remote to see if we can skip installation
@@ -157,8 +185,8 @@ class RemoteScanner(IScanner):
             local_md5sum = hashlib.md5(f.read()).hexdigest()
         self.logger.debug("Local scanfs md5sum = {}".format(local_md5sum))
         try:
-            out = self.__ssh.shell("md5sum '{}' | awk '{{print $1}}' || echo".format(
-                self.__remote_path_to_scan_script))
+            out = self.__ssh.shell("md5sum {} | awk '{{print $1}}' || echo".format(
+                _escape_remote_path_single(self.__remote_path_to_scan_script)))
             out = out.decode().strip()
             if out == local_md5sum:
                 self.logger.info("Skipping remote scanfs installation: already installed")
@@ -170,6 +198,29 @@ class RemoteScanner(IScanner):
                 Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
                 recoverable=recoverable
             )
+
+        # Guard: if the target path is already a directory on the remote, the
+        # copy would succeed (scp deposits the file inside the dir) but
+        # execution would then fail with "Is a directory". Catch this early.
+        try:
+            result = self.__ssh.shell(
+                "[ -d {} ] && echo IS_DIRECTORY || echo OK".format(
+                    _escape_remote_path_single(self.__remote_path_to_scan_script)
+                )
+            ).decode().strip()
+            if result == "IS_DIRECTORY":
+                raise ScannerError(
+                    "Server Script Path '{}' is a directory on the remote server. "
+                    "This usually means it overlaps with your sync directory. "
+                    "Change the 'Server Script Path' setting to a writable location "
+                    "outside your sync tree (e.g. '~' or '~/.local') and remove the "
+                    "conflicting directory from the remote server.".format(
+                        self.__remote_path_to_scan_script
+                    ),
+                    recoverable=False
+                )
+        except SshcpError as e:
+            self.logger.warning("Could not check remote path type: {}".format(str(e)))
 
         # Go ahead and install
         self.logger.info("Installing local:{} to remote:{}".format(
@@ -187,11 +238,78 @@ class RemoteScanner(IScanner):
             self.__ssh.copy(local_path=self.__local_path_to_scan_script,
                             remote_path=self.__remote_path_to_scan_script)
         except SshcpError as e:
-            self.logger.exception("Caught scp exception")
-            recoverable = self._is_transient_error(str(e))
+            if "Permission denied" in str(e):
+                self._install_scanfs_with_home_fallback(str(e))
+            else:
+                self.logger.exception("Caught scp exception")
+                recoverable = self._is_transient_error(str(e))
+                raise ScannerError(
+                    Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
+                    recoverable=recoverable
+                )
+
+    def _install_scanfs_with_home_fallback(self, original_error: str):
+        """
+        Called when SCP to the configured script path is denied.
+        Falls back to the user's home directory and retries.
+        Warns the user to update their Server Script Path setting.
+        """
+        script_name = os.path.basename(self.__local_path_to_scan_script)
+
+        # Resolve ~ to an absolute path so quoting works for all operations.
+        # Use `echo ~` with no arguments — no user input reaches the shell.
+        fallback_path = "~/" + script_name
+        try:
+            home = self.__ssh.shell("echo ~").decode().strip()
+            if home and not home.startswith("~"):
+                fallback_path = home + "/" + script_name
+        except SshcpError:
+            pass
+
+        self.logger.warning(
+            "Script path '{}' is not writable (Permission denied). "
+            "Retrying with home directory: '{}'".format(
+                self.__remote_path_to_scan_script, fallback_path
+            )
+        )
+        self.logger.warning(
+            "Update 'Server Script Path' in Settings to '~' to avoid this fallback on restart."
+        )
+
+        # Guard: if the fallback path is already a directory, SCP would deposit
+        # the binary inside it and execution would fail with "Is a directory".
+        try:
+            result = self.__ssh.shell(
+                "[ -d {} ] && echo IS_DIRECTORY || echo OK".format(
+                    _escape_remote_path_single(fallback_path)
+                )
+            ).decode().strip()
+            if result == "IS_DIRECTORY":
+                raise ScannerError(
+                    "Fallback script path '{}' is already a directory on the remote server. "
+                    "Remove it and update 'Server Script Path' in Settings to a writable "
+                    "location (e.g. '~' or '~/.local'). "
+                    "Original error: {}".format(fallback_path, original_error.strip()),
+                    recoverable=False
+                )
+        except SshcpError as e:
+            self.logger.warning("Could not check fallback path type: {}".format(str(e)))
+
+        try:
+            self.__ssh.copy(local_path=self.__local_path_to_scan_script,
+                            remote_path=fallback_path)
+            self.__remote_path_to_scan_script = fallback_path
+            self.logger.info("Scanner installed to fallback path: {}".format(fallback_path))
+        except SshcpError as fallback_e:
             raise ScannerError(
-                Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()),
-                recoverable=recoverable
+                Localization.Error.REMOTE_SERVER_INSTALL.format(
+                    "Could not install scanner to '{}' ({}), "
+                    "fallback to '{}' also failed: {}".format(
+                        self.__remote_path_to_scan_script, original_error.strip(),
+                        fallback_path, str(fallback_e).strip()
+                    )
+                ),
+                recoverable=False
             )
 
     def _log_remote_diagnostics(self):

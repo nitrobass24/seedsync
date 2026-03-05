@@ -1,9 +1,10 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, Injector, inject } from '@angular/core';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 
 import { ConnectedService } from '../utils/connected.service';
 import { LoggerService } from '../utils/logger.service';
 import { RestService, WebReaction } from '../utils/rest.service';
+import { StreamDispatchService } from '../base/stream-dispatch.service';
 import { Config } from '../../models/config';
 
 @Injectable({ providedIn: 'root' })
@@ -15,10 +16,15 @@ export class ConfigService {
   private readonly connectedService = inject(ConnectedService);
   private readonly restService = inject(RestService);
   private readonly logger = inject(LoggerService);
+  private readonly injector = inject(Injector);
 
   private readonly configSubject = new BehaviorSubject<Config | null>(null);
 
   readonly config$: Observable<Config | null> = this.configSubject.asObservable();
+
+  get configSnapshot(): Config | null {
+    return this.configSubject.getValue();
+  }
 
   constructor() {
     this.connectedService.connected$.subscribe((connected) => {
@@ -26,6 +32,7 @@ export class ConfigService {
         this.getConfig();
       } else {
         this.configSubject.next(null);
+        this.syncStreamApiKey(null);
       }
     });
   }
@@ -53,6 +60,10 @@ export class ConfigService {
           if (config) {
             const newConfig = { ...config, [section]: { ...(config as any)[section], [option]: value } };
             this.configSubject.next(newConfig);
+            // Propagate API key changes to the SSE stream immediately
+            if (section === 'web' && option === 'api_key') {
+              this.syncStreamApiKey(newConfig);
+            }
           }
         }
       },
@@ -65,12 +76,29 @@ export class ConfigService {
     this.restService.sendRequest(this.CONFIG_GET_URL).subscribe({
       next: (reaction) => {
         if (reaction.success) {
-          const configJson: Config = JSON.parse(reaction.data!);
-          this.configSubject.next(configJson);
+          try {
+            const configJson: Config = JSON.parse(reaction.data!);
+            this.configSubject.next(configJson);
+            this.syncStreamApiKey(configJson);
+          } catch (e) {
+            this.logger.error('Failed to parse config: %O', e);
+            this.configSubject.next(null);
+            this.syncStreamApiKey(null);
+          }
         } else {
+          this.logger.error('Failed to get config: %s', reaction.errorMessage);
           this.configSubject.next(null);
+          this.syncStreamApiKey(null);
         }
       },
     });
+  }
+
+  private syncStreamApiKey(config: Config | null): void {
+    const apiKey = config?.web?.api_key || null;
+    // Use injector.get() to break circular dependency:
+    // StreamDispatchService -> ConnectedService -> ConfigService
+    const streamDispatch = this.injector.get(StreamDispatchService);
+    streamDispatch.setApiKey(apiKey);
   }
 }

@@ -11,6 +11,7 @@ from .handler.config import ConfigHandler
 from .handler.auto_queue import AutoQueueHandler
 from .handler.stream_log import LogStreamHandler
 from .handler.status import StatusHandler
+from .security import install_security_middleware
 
 
 class WebAppBuilder:
@@ -33,6 +34,12 @@ class WebAppBuilder:
     def build(self) -> WebApp:
         web_app = WebApp(context=self.__context,
                          controller=self.__controller)
+
+        # Install security middleware (headers, CSRF, rate limiting, API key auth)
+        install_security_middleware(
+            web_app,
+            get_api_key=lambda: self.__context.config.web.api_key
+        )
 
         StatusStreamHandler.register(web_app=web_app,
                                      status=self.__context.status)
