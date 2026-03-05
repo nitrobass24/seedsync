@@ -98,8 +98,8 @@ class PathPairsHandler(IHandler):
         )
 
     def __handle_delete(self, pair_id: str):
-        existing = self.__config.get_pair(pair_id)
-        if existing is None:
+        try:
+            self.__config.remove_pair(pair_id)
+        except ValueError:
             return HTTPResponse(body="Path pair not found", status=404)
-        self.__config.remove_pair(pair_id)
         return HTTPResponse(body="Deleted")

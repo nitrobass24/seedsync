@@ -41,13 +41,31 @@ class PathPair:
 
     @staticmethod
     def from_dict(d: dict) -> "PathPair":
+        pair_id = d["id"]
+        name = d.get("name", "")
+        remote_path = d["remote_path"]
+        local_path = d["local_path"]
+        enabled = d.get("enabled", True)
+        auto_queue = d.get("auto_queue", True)
+        if not isinstance(pair_id, str):
+            raise TypeError("id must be a string, got {}".format(type(pair_id).__name__))
+        if not isinstance(name, str):
+            raise TypeError("name must be a string, got {}".format(type(name).__name__))
+        if not isinstance(remote_path, str):
+            raise TypeError("remote_path must be a string, got {}".format(type(remote_path).__name__))
+        if not isinstance(local_path, str):
+            raise TypeError("local_path must be a string, got {}".format(type(local_path).__name__))
+        if not isinstance(enabled, bool):
+            raise TypeError("enabled must be a boolean, got {}".format(type(enabled).__name__))
+        if not isinstance(auto_queue, bool):
+            raise TypeError("auto_queue must be a boolean, got {}".format(type(auto_queue).__name__))
         return PathPair(
-            pair_id=d["id"],
-            name=d.get("name", ""),
-            remote_path=d["remote_path"],
-            local_path=d["local_path"],
-            enabled=d.get("enabled", True),
-            auto_queue=d.get("auto_queue", True),
+            pair_id=pair_id,
+            name=name,
+            remote_path=remote_path,
+            local_path=local_path,
+            enabled=enabled,
+            auto_queue=auto_queue,
         )
 
     def __eq__(self, other):
@@ -105,7 +123,10 @@ class PathPairsConfig(Persist):
 
     def remove_pair(self, pair_id: str):
         with self._lock:
-            self._pairs = [p for p in self._pairs if p.id != pair_id]
+            new_pairs = [p for p in self._pairs if p.id != pair_id]
+            if len(new_pairs) == len(self._pairs):
+                raise ValueError("PathPair with id '{}' not found".format(pair_id))
+            self._pairs = new_pairs
 
     @classmethod
     def from_str(cls, content: str) -> "PathPairsConfig":
