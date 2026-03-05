@@ -170,8 +170,9 @@ class Controller:
         # Setup multiprocess logging (shared)
         self.__mp_logger = MultiprocessingLogger(self.logger)
 
-        # Build pair contexts
+        # Build pair contexts, then seed each builder with filtered persist state
         self.__pair_contexts: List[_PairContext] = self._build_pair_contexts()
+        self._sync_persist_to_all_builders()
 
         # Setup extract process (global -- extraction is local-only)
         # Use the first pair's effective_local_path for extract (backward compat)
@@ -197,11 +198,12 @@ class Controller:
 
         # Keep track of active move processes (staging -> final, shared)
         self.__active_move_processes = []
-        self.__moved_file_names: Set[str] = set()
+        # Use composite keys (pair_id:name) to avoid collisions across pairs
+        self.__moved_file_keys: Set[str] = set()
 
-        # Track extraction retry counts (in-memory, resets on restart)
+        # Track extraction retry counts by composite key (in-memory, resets on restart)
         self.__extract_retry_counts: Dict[str, int] = {}
-        self.__pending_redownload: Set[str] = set()
+        self.__pending_redownload_keys: Set[str] = set()
 
         self.__started = False
 
@@ -300,9 +302,11 @@ class Controller:
         # Model builder
         model_builder = ModelBuilder(pair_id=pair_id)
         model_builder.set_base_logger(pair_logger)
-        model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
-        model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
-        model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
+        # Persist state is filtered per-pair by _sync_persist_to_all_builders()
+        # called after all pair contexts are built. Initialize with empty sets.
+        model_builder.set_downloaded_files(set())
+        model_builder.set_extracted_files(set())
+        model_builder.set_extract_failed_files(set())
         model_builder.set_auto_delete_remote(
             bool(self.__context.config.autoqueue.auto_delete_remote)
         )
@@ -513,7 +517,7 @@ class Controller:
                 if diff.new_file is not None and \
                         diff.new_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
                     pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
-                    self.__moved_file_names.discard(diff.new_file.name)
+                    self.__moved_file_keys.discard(pkey)
                     self.__persist.downloaded_file_names.discard(pkey)
                     self.__persist.extracted_file_names.discard(pkey)
                     self.__persist.extract_failed_file_names.discard(pkey)
@@ -544,7 +548,8 @@ class Controller:
                     use_staging = self.__context.config.controller.use_staging and \
                                   self.__context.config.controller.staging_path
                     if use_staging:
-                        if diff.new_file.name in self.__moved_file_names:
+                        move_key = _persist_key(diff.new_file.pair_id, diff.new_file.name)
+                        if move_key in self.__moved_file_keys:
                             pc.pending_completion.discard(diff.new_file.name)
                         elif diff.new_file.state == ModelFile.State.DELETED:
                             pc.pending_completion.discard(diff.new_file.name)
@@ -557,8 +562,9 @@ class Controller:
 
                 if diff.new_file is not None and \
                         diff.new_file.state == ModelFile.State.DEFAULT and \
-                        diff.new_file.name in self.__pending_redownload:
-                    self.__pending_redownload.discard(diff.new_file.name)
+                        _persist_key(diff.new_file.pair_id, diff.new_file.name) in self.__pending_redownload_keys:
+                    self.__pending_redownload_keys.discard(
+                        _persist_key(diff.new_file.pair_id, diff.new_file.name))
                     command = Controller.Command(Controller.Command.Action.QUEUE,
                                                 diff.new_file.name,
                                                 pair_id=diff.new_file.pair_id)
@@ -594,7 +600,7 @@ class Controller:
                     model_keys.add(_persist_key(f.pair_id, f.name))
                 absent_keys = set()
                 for pkey in self.__persist.downloaded_file_names:
-                    if pkey not in model_keys and pkey not in self.__moved_file_names:
+                    if pkey not in model_keys and pkey not in self.__moved_file_keys:
                         absent_keys.add(pkey)
                 if absent_keys:
                     self.logger.info("Persist cleanup (both absent): {}".format(absent_keys))
@@ -607,27 +613,26 @@ class Controller:
 
         # Process extraction failures -- retry by re-downloading
         for result in latest_failed_extractions:
-            count = self.__extract_retry_counts.get(result.name, 0) + 1
-            self.__extract_retry_counts[result.name] = count
             # Find which pair owns this file
             result_pc = self._find_pair_for_file_name(result.name)
             result_pair_id = result_pc.pair_id if result_pc else None
+            retry_key = _persist_key(result_pair_id, result.name)
+            count = self.__extract_retry_counts.get(retry_key, 0) + 1
+            self.__extract_retry_counts[retry_key] = count
             if count < 3:
                 self.logger.warning(
                     "Extraction failed for '{}' (attempt {}/3), scheduling re-download".format(
                         result.name, count))
-                pkey = _persist_key(result_pair_id, result.name)
-                self.__persist.downloaded_file_names.discard(pkey)
-                self.__persist.extracted_file_names.discard(pkey)
+                self.__persist.downloaded_file_names.discard(retry_key)
+                self.__persist.extracted_file_names.discard(retry_key)
                 self._sync_persist_to_all_builders()
-                self.__pending_redownload.add(result.name)
+                self.__pending_redownload_keys.add(retry_key)
                 self.__spawn_system_delete_local(result.name, result_pc)
             else:
                 self.logger.error(
                     "Extraction failed for '{}' after {} attempts, giving up".format(
                         result.name, count))
-                pkey = _persist_key(result_pair_id, result.name)
-                self.__persist.extract_failed_file_names.add(pkey)
+                self.__persist.extract_failed_file_names.add(retry_key)
                 self._sync_persist_to_all_builders()
 
         # Update the controller status (use most recent across all pairs)
@@ -804,8 +809,8 @@ class Controller:
                     _notify_failure(command, "File '{}' does not exist locally".format(command.filename))
                     continue
                 else:
-                    self.__extract_retry_counts.pop(file.name, None)
                     pkey = _persist_key(pc.pair_id, file.name)
+                    self.__extract_retry_counts.pop(pkey, None)
                     self.__persist.extract_failed_file_names.discard(pkey)
                     self._sync_persist_to_all_builders()
                     self.__extract_process.extract(file)
@@ -908,12 +913,14 @@ class Controller:
         """
         Spawn a MoveProcess to move a file from staging to the final local_path
         """
-        if file_name in self.__moved_file_names:
+        pair_id = pc.pair_id if pc else None
+        move_key = _persist_key(pair_id, file_name)
+        if move_key in self.__moved_file_keys:
             self.logger.debug("Skipping move for {} - already moved".format(file_name))
             return
 
         dest_path = pc.local_path if pc else self.__pair_contexts[0].local_path
-        self.__moved_file_names.add(file_name)
+        self.__moved_file_keys.add(move_key)
         process = MoveProcess(
             source_path=self.__context.config.controller.staging_path,
             dest_path=dest_path,
