@@ -1,5 +1,4 @@
 # SeedSync Docker Image - Optimized Build
-# Target size: <200MB (down from 439MB)
 
 # Force AMD64 for scanfs - it runs on remote seedbox servers, not locally
 ARG SCANFS_PLATFORM=linux/amd64
@@ -44,28 +43,61 @@ RUN pyinstaller /src/scan_fs.py \
     && strip /build/dist/scanfs 2>/dev/null || true
 
 # ==============================================================================
-# Stage 3: Final Runtime Image (Optimized)
+# Stage 3: Prepare Python runtime (install deps, strip unused stdlib)
 # ==============================================================================
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.12-slim-bookworm AS python-deps
+
+COPY src/python/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+    && pip uninstall -y pip setuptools \
+    && rm -rf /root/.cache/pip /tmp/requirements.txt \
+    && rm -rf \
+        /usr/local/lib/python3.12/ensurepip \
+        /usr/local/lib/python3.12/idlelib \
+        /usr/local/lib/python3.12/turtle.py \
+        /usr/local/lib/python3.12/turtledemo \
+        /usr/local/lib/python3.12/tkinter \
+        /usr/local/lib/python3.12/test \
+        /usr/local/lib/python3.12/unittest \
+        /usr/local/lib/python3.12/pydoc.py \
+        /usr/local/lib/python3.12/pydoc_data \
+        /usr/local/lib/python3.12/doctest.py \
+        /usr/local/lib/python3.12/lib2to3 \
+        /usr/local/lib/python3.12/distutils \
+        /usr/local/lib/python3.12/lib-dynload/_test*.so \
+        /usr/local/lib/python3.12/lib-dynload/_codecs_jp*.so \
+        /usr/local/lib/python3.12/lib-dynload/_codecs_kr*.so \
+        /usr/local/lib/python3.12/lib-dynload/_codecs_hk*.so \
+        /usr/local/lib/python3.12/lib-dynload/_codecs_cn*.so \
+        /usr/local/lib/python3.12/lib-dynload/_codecs_tw*.so \
+        /usr/local/lib/python3.12/lib-dynload/_codecs_iso*.so
+
+# ==============================================================================
+# Stage 4: Final Runtime Image
+# ==============================================================================
+FROM debian:bookworm-slim AS runtime
 
 LABEL maintainer="nitrobass24" \
-      description="SeedSync - Seedbox file synchronization tool" \
-      version="0.9.0"
+      description="SeedSync - Seedbox file synchronization tool"
 
-# Enable non-free repo for full unrar (unrar-free only supports RAR1-3)
-RUN sed -i 's/Components: main/Components: main non-free/' /etc/apt/sources.list.d/debian.sources
+# Copy stripped Python runtime from python-deps stage
+COPY --from=python-deps /usr/local/ /usr/local/
 
-# Install only essential runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    lftp \
-    openssh-client \
-    7zip \
-    unrar=1:6.2.6-1+deb12u1 \
+# Setup non-free repo, install runtime deps, and configure in a single layer.
+# lftp, openssh-client, 7zip, ca-certificates are intentionally unpinned
+# to receive security updates on each image rebuild.
+RUN ldconfig \
+    && sed -i 's/Components: main/Components: main non-free/' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        lftp \
+        openssh-client \
+        7zip \
+        unrar=1:6.2.6-1+deb12u1 \
+        ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && ln -sf /usr/bin/7zz /usr/bin/7z
 
-# Set locale
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -73,12 +105,6 @@ ENV LC_ALL=C.UTF-8 \
 
 # Create directory structure
 RUN mkdir -p /app/python /app/html /config /downloads /staging
-
-# Install Python dependencies directly with pip (no Poetry overhead)
-COPY src/python/requirements.txt /app/python/
-RUN pip install --no-cache-dir -r /app/python/requirements.txt \
-    && pip uninstall -y pip setuptools \
-    && rm -rf /root/.cache/pip
 
 # Copy application source
 COPY src/python/ /app/python/

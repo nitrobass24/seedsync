@@ -115,7 +115,11 @@ class Extract:
     def _check_member_path(member_name: str, real_out_dir: str):
         """Raise ExtractError if a member path would escape the output directory."""
         resolved = os.path.realpath(os.path.join(real_out_dir, member_name))
-        if not resolved.startswith(real_out_dir + os.sep) and resolved != real_out_dir:
+        try:
+            common = os.path.commonpath([real_out_dir, resolved])
+        except ValueError:
+            common = None
+        if common != real_out_dir:
             raise ExtractError(
                 "Zip-slip detected: member '{}' escapes target directory '{}'".format(
                     member_name, real_out_dir
@@ -181,7 +185,11 @@ class Extract:
             for dirpath, dirnames, filenames in os.walk(real_out_dir):
                 for name in filenames + dirnames:
                     full_path = os.path.realpath(os.path.join(dirpath, name))
-                    if not full_path.startswith(real_out_dir + os.sep) and full_path != real_out_dir:
+                    try:
+                        common = os.path.commonpath([real_out_dir, full_path])
+                    except ValueError:
+                        common = None
+                    if common != real_out_dir:
                         raise ExtractError(
                             "Zip-slip detected: extracted path '{}' escapes target directory '{}'".format(
                                 full_path, real_out_dir

@@ -74,10 +74,17 @@ def install_csrf_protection(app: bottle.Bottle):
         if bottle.request.method in _CSRF_SAFE_METHODS:
             return
 
-        # Exempt genuine loopback connections (server-observed client IP, not client-controlled headers)
+        # Exempt genuine loopback connections — only when no proxy headers are
+        # present, so that traffic forwarded *through* localhost by a reverse
+        # proxy still undergoes CSRF validation.
         remote_addr = bottle.request.environ.get("REMOTE_ADDR", "")
         if remote_addr in _CSRF_LOCALHOST:
-            return
+            has_proxy_header = (
+                bottle.request.get_header("X-Forwarded-For")
+                or bottle.request.get_header("Forwarded")
+            )
+            if not has_proxy_header:
+                return
 
         # Check Origin first, then Referer
         origin = bottle.request.get_header("Origin")
@@ -105,19 +112,32 @@ def install_csrf_protection(app: bottle.Bottle):
 class _RateLimiter:
     """Per-IP sliding-window rate limiter (in-memory)."""
 
-    def __init__(self, max_requests: int = 120, window_seconds: int = 60):
+    def __init__(self, max_requests: int = 120, window_seconds: int = 60,
+                 sweep_interval: int = 300):
         self._max = max_requests
         self._window = window_seconds
         self._hits = defaultdict(list)   # ip -> [timestamps]
         self._lock = threading.Lock()
+        self._sweep_interval = sweep_interval
+        self._last_sweep = time.monotonic()
 
     def is_allowed(self, ip: str) -> bool:
         now = time.monotonic()
         cutoff = now - self._window
 
         with self._lock:
+            # Periodic sweep: evict stale IPs that haven't sent requests
+            if now - self._last_sweep > self._sweep_interval:
+                for stale_ip in list(self._hits.keys()):
+                    stale_valid = [t for t in self._hits[stale_ip] if t > cutoff]
+                    if not stale_valid:
+                        del self._hits[stale_ip]
+                    else:
+                        self._hits[stale_ip] = stale_valid
+                self._last_sweep = now
+
             timestamps = self._hits[ip]
-            # Prune expired entries
+            # Prune expired entries for the current IP
             valid = [t for t in timestamps if t > cutoff]
             if not valid:
                 # Remove empty key to prevent unbounded memory growth
