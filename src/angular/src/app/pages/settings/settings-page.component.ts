@@ -11,6 +11,7 @@ import { Localization } from '../../models/localization';
 import { Config } from '../../models/config';
 import { ClickStopPropagationDirective } from '../../common/click-stop-propagation.directive';
 import { OptionComponent } from './option.component';
+import { PathPairsComponent } from './path-pairs.component';
 import {
   IOptionsContext,
   OPTIONS_CONTEXT_SERVER,
@@ -28,7 +29,7 @@ import {
 @Component({
   selector: 'app-settings-page',
   standalone: true,
-  imports: [AsyncPipe, NgTemplateOutlet, OptionComponent, ClickStopPropagationDirective],
+  imports: [AsyncPipe, NgTemplateOutlet, OptionComponent, PathPairsComponent, ClickStopPropagationDirective],
   templateUrl: './settings-page.component.html',
   styleUrls: ['./settings-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
