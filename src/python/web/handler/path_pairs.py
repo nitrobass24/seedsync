@@ -31,6 +31,8 @@ class PathPairsHandler(IHandler):
             data = json.loads(request.body.read().decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             return HTTPResponse(body="Invalid JSON", status=400)
+        if not isinstance(data, dict):
+            return HTTPResponse(body="Expected JSON object", status=400)
 
         pair = PathPair(
             name=data.get("name", ""),
@@ -55,6 +57,8 @@ class PathPairsHandler(IHandler):
             data = json.loads(request.body.read().decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             return HTTPResponse(body="Invalid JSON", status=400)
+        if not isinstance(data, dict):
+            return HTTPResponse(body="Expected JSON object", status=400)
 
         updated = PathPair(
             pair_id=pair_id,

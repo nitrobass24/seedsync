@@ -3,7 +3,8 @@
 import logging
 import time
 from threading import Thread
-from wsgiref.simple_server import make_server, WSGIRequestHandler
+from wsgiref.simple_server import make_server, WSGIRequestHandler, WSGIServer
+from socketserver import ThreadingMixIn
 
 import bottle
 
@@ -47,6 +48,11 @@ class WebAppJob(Job):
         self.__app.stop()
         self.__server.stop()
         self.__server_thread.join()
+
+
+class _ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
+    """Multi-threaded WSGI server so SSE connections don't block other requests."""
+    daemon_threads = True
 
 
 class _QuietHandler(WSGIRequestHandler):
@@ -99,9 +105,11 @@ class MyWSGIRefServer(bottle.ServerAdapter):
         handler = _RequestLoggingMiddleware(handler, logger=self.logger,
                                             level=logging.DEBUG)
         self.server = make_server(self.host, self.port, handler,
+                                  server_class=_ThreadingWSGIServer,
                                   handler_class=_QuietHandler)
         self.server.serve_forever()
 
     def stop(self):
         self.logger.debug("Stopping web server")
+        self.server.shutdown()
         self.server.server_close()

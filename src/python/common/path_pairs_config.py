@@ -106,10 +106,17 @@ class PathPairsConfig(Persist):
         except json.JSONDecodeError as e:
             raise PersistError("Error parsing PathPairsConfig: {}".format(str(e)))
 
+        if not isinstance(data, dict):
+            raise PersistError("Expected JSON object in PathPairsConfig")
         config = PathPairsConfig()
         pairs_list = data.get("path_pairs", [])
+        if not isinstance(pairs_list, list):
+            raise PersistError("Expected 'path_pairs' to be a list")
         for pair_dict in pairs_list:
-            config._pairs.append(PathPair.from_dict(pair_dict))
+            try:
+                config.add_pair(PathPair.from_dict(pair_dict))
+            except (KeyError, TypeError, ValueError) as e:
+                _logger.warning("Skipping malformed path pair: %s", e)
         return config
 
     def to_str(self) -> str:

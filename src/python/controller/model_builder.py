@@ -235,7 +235,7 @@ class ModelBuilder:
                     if (_remote_child and _is_dir != _remote_child.is_dir) or \
                        (_local_child and _is_dir != _local_child.is_dir):
                         raise ModelError("Mismatch in is_dir between child sources")
-                    _child_model_file = ModelFile(_child_name, _is_dir)
+                    _child_model_file = ModelFile(_child_name, _is_dir, pair_id=self.__pair_id)
 
                     # add it to the parent right away so we can access the full path
                     _model_file.add_child(_child_model_file)

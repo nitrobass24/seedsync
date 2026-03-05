@@ -382,7 +382,7 @@ class Seedsync:
                     Seedsync.logger.exception("Failed to load path_pairs.json")
                 Seedsync.__backup_file(file_path)
         # Migrate from legacy single remote_path/local_path
-        dummy = "<replace me>"
+        dummy = Seedsync.__CONFIG_DUMMY_VALUE
         remote_path = config.lftp.remote_path if config.lftp.remote_path != dummy else ""
         local_path = config.lftp.local_path if config.lftp.local_path != dummy else ""
         if remote_path or local_path:
