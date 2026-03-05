@@ -250,15 +250,9 @@ class Seedsync:
                             default=default_html_path,
                             help="Path to directory containing html resources")
 
-        # Scanfs path is only required if not running a frozen package
-        # For a frozen package, set default to root/scanfs
-        # noinspection PyUnresolvedReferences
-        # noinspection PyProtectedMember
-        default_scanfs_path = os.path.join(sys._MEIPASS, "scanfs") if is_frozen else None
         parser.add_argument("--scanfs",
-                            required=not is_frozen,
-                            default=default_scanfs_path,
-                            help="Path to scanfs executable")
+                            required=True,
+                            help="Path to scan_fs.py script")
 
         return parser.parse_args(args)
 
