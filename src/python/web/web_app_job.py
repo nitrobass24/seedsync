@@ -1,11 +1,12 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
+import time
 from threading import Thread
+from wsgiref.simple_server import make_server, WSGIRequestHandler, WSGIServer
+from socketserver import ThreadingMixIn
 
 import bottle
-from paste import httpserver
-from paste.translogger import TransLogger
 
 from .web_app import WebApp
 from common import overrides, Job, Context
@@ -49,15 +50,41 @@ class WebAppJob(Job):
         self.__server_thread.join()
 
 
-class MyWSGIHandler(httpserver.WSGIHandler):
-    """
-    This class is overridden to fix a bug in Paste http server
-    """
-    # noinspection SpellCheckingInspection
-    def wsgi_write_chunk(self, chunk):
-        if type(chunk) is str:
-            chunk = str.encode(chunk)
-        super().wsgi_write_chunk(chunk)
+class _ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
+    """Multi-threaded WSGI server so SSE connections don't block other requests."""
+    daemon_threads = True
+
+
+class _QuietHandler(WSGIRequestHandler):
+    """Suppress default stderr request logging."""
+    def log_request(self, *args, **kwargs):
+        pass
+
+
+class _RequestLoggingMiddleware:
+    """WSGI middleware that logs request method, path, status, and duration."""
+    def __init__(self, app, logger, level=logging.DEBUG):
+        self.app = app
+        self.logger = logger
+        self.level = level
+
+    def __call__(self, environ, start_response):
+        method = environ.get("REQUEST_METHOD", "")
+        path = environ.get("PATH_INFO", "")
+        start = time.monotonic()
+        status_code = None
+
+        def _start_response(status, headers, *args):
+            nonlocal status_code
+            status_code = status.split(" ", 1)[0]
+            return start_response(status, headers, *args)
+
+        try:
+            return self.app(environ, _start_response)
+        finally:
+            duration_ms = (time.monotonic() - start) * 1000
+            self.logger.log(self.level, "%s %s %s %.1fms",
+                            method, path, status_code or "-", duration_ms)
 
 
 class MyWSGIRefServer(bottle.ServerAdapter):
@@ -75,14 +102,17 @@ class MyWSGIRefServer(bottle.ServerAdapter):
     @overrides(bottle.ServerAdapter)
     def run(self, handler):
         self.logger.debug("Starting web server")
-        handler = TransLogger(handler, logger=self.logger,
-                               logging_level=logging.DEBUG,
-                               setup_console_handler=(not self.quiet))
-        self.server = httpserver.serve(handler, host=self.host, port=str(self.port), start_loop=False,
-                                       handler=MyWSGIHandler,
-                                       **self.options)
+        handler = _RequestLoggingMiddleware(handler, logger=self.logger,
+                                            level=logging.DEBUG)
+        self.server = make_server(self.host, self.port, handler,
+                                  server_class=_ThreadingWSGIServer,
+                                  handler_class=_QuietHandler)
         self.server.serve_forever()
 
     def stop(self):
+        if self.server is None:
+            self.logger.warning("Web server was never initialized; skipping shutdown")
+            return
         self.logger.debug("Stopping web server")
+        self.server.shutdown()
         self.server.server_close()

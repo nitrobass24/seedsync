@@ -8,6 +8,7 @@ import { of } from 'rxjs';
 function makeViewFile(overrides: Partial<ViewFile> = {}): ViewFile {
   return {
     name: 'test.txt',
+    pairId: null,
     isDir: false,
     localSize: 100,
     remoteSize: 200,

@@ -7,6 +7,14 @@ import { RestService, WebReaction } from '../utils/rest.service';
 import { ModelFile, ModelFileState } from '../../models/model-file';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
 
+function viewFileKey(vf: ViewFile): string {
+  return vf.pairId ? `${vf.pairId}:${vf.name}` : vf.name;
+}
+
+function modelFileKey(mf: ModelFile): string {
+  return mf.pair_id ? `${mf.pair_id}:${mf.name}` : mf.name;
+}
+
 export interface ViewFileFilterCriteria {
   meetsCriteria(viewFile: ViewFile): boolean;
 }
@@ -30,7 +38,7 @@ export class ViewFileService {
 
   private checkedSet = new Set<string>();
   private readonly checkedSubject = new BehaviorSubject<Set<string>>(new Set());
-  private lastCheckedName: string | null = null;
+  private lastCheckedKey: string | null = null;
 
   readonly files$: Observable<ViewFile[]> = this.filesSubject.asObservable();
   readonly filteredFiles$: Observable<ViewFile[]> = this.filteredFilesSubject.asObservable();
@@ -50,19 +58,20 @@ export class ViewFileService {
   setSelected(file: ViewFile): void {
     let viewFiles = [...this.files];
     const unSelectIndex = viewFiles.findIndex((v) => v.isSelected);
+    const key = viewFileKey(file);
 
     if (unSelectIndex >= 0) {
-      if (viewFiles[unSelectIndex].name === file.name) {
+      if (viewFileKey(viewFiles[unSelectIndex]) === key) {
         return;
       }
       viewFiles[unSelectIndex] = { ...viewFiles[unSelectIndex], isSelected: false };
     }
 
-    if (this.indices.has(file.name)) {
-      const index = this.indices.get(file.name)!;
+    if (this.indices.has(key)) {
+      const index = this.indices.get(key)!;
       viewFiles[index] = { ...viewFiles[index], isSelected: true };
     } else {
-      this.logger.error("Can't find file to select: " + file.name);
+      this.logger.error("Can't find file to select: " + key);
     }
 
     this.files = viewFiles;
@@ -106,23 +115,24 @@ export class ViewFileService {
   }
 
   toggleCheck(file: ViewFile): void {
-    if (this.checkedSet.has(file.name)) {
-      this.checkedSet.delete(file.name);
+    const key = viewFileKey(file);
+    if (this.checkedSet.has(key)) {
+      this.checkedSet.delete(key);
     } else {
-      this.checkedSet.add(file.name);
+      this.checkedSet.add(key);
     }
-    this.lastCheckedName = file.name;
+    this.lastCheckedKey = key;
     this.updateCheckedState();
   }
 
   shiftCheck(file: ViewFile): void {
-    if (this.lastCheckedName == null) {
+    if (this.lastCheckedKey == null) {
       this.toggleCheck(file);
       return;
     }
     const filtered = this.filteredFilesSubject.getValue();
-    const lastIdx = filtered.findIndex(f => f.name === this.lastCheckedName);
-    const currIdx = filtered.findIndex(f => f.name === file.name);
+    const lastIdx = filtered.findIndex(f => viewFileKey(f) === this.lastCheckedKey);
+    const currIdx = filtered.findIndex(f => viewFileKey(f) === viewFileKey(file));
     if (lastIdx < 0 || currIdx < 0) {
       this.toggleCheck(file);
       return;
@@ -130,30 +140,30 @@ export class ViewFileService {
     const start = Math.min(lastIdx, currIdx);
     const end = Math.max(lastIdx, currIdx);
     for (let i = start; i <= end; i++) {
-      this.checkedSet.add(filtered[i].name);
+      this.checkedSet.add(viewFileKey(filtered[i]));
     }
-    this.lastCheckedName = file.name;
+    this.lastCheckedKey = viewFileKey(file);
     this.updateCheckedState();
   }
 
   checkAll(): void {
     const filtered = this.filteredFilesSubject.getValue();
     for (const f of filtered) {
-      this.checkedSet.add(f.name);
+      this.checkedSet.add(viewFileKey(f));
     }
     this.updateCheckedState();
   }
 
   uncheckAll(): void {
     this.checkedSet.clear();
-    this.lastCheckedName = null;
+    this.lastCheckedKey = null;
     this.updateCheckedState();
   }
 
   private updateCheckedState(): void {
     this.files = this.files.map(f => ({
       ...f,
-      isChecked: this.checkedSet.has(f.name)
+      isChecked: this.checkedSet.has(viewFileKey(f))
     }));
     this.checkedSubject.next(new Set(this.checkedSet));
     this.pushViewFiles();
@@ -179,7 +189,7 @@ export class ViewFileService {
     filter: (f: ViewFile) => boolean,
     action: (f: ViewFile) => Observable<WebReaction>
   ): Observable<WebReaction[]> {
-    const checked = this.files.filter(f => this.checkedSet.has(f.name) && filter(f));
+    const checked = this.files.filter(f => this.checkedSet.has(viewFileKey(f)) && filter(f));
     if (checked.length === 0) {
       return of([]);
     }
@@ -201,7 +211,7 @@ export class ViewFileService {
     }
     this.files = newViewFiles;
     this.indices.clear();
-    newViewFiles.forEach((value, index) => this.indices.set(value.name, index));
+    newViewFiles.forEach((value, index) => this.indices.set(viewFileKey(value), index));
 
     this.pushViewFiles();
   }
@@ -211,26 +221,26 @@ export class ViewFileService {
 
     let newViewFiles = [...this.files];
 
-    const addedNames: string[] = [];
-    const removedNames: string[] = [];
-    const updatedNames: string[] = [];
+    const addedKeys: string[] = [];
+    const removedKeys: string[] = [];
+    const updatedKeys: string[] = [];
 
     // Loop through old model to find deletions
-    for (const name of this.prevModelFiles.keys()) {
-      if (!modelFiles.has(name)) {
-        removedNames.push(name);
+    for (const key of this.prevModelFiles.keys()) {
+      if (!modelFiles.has(key)) {
+        removedKeys.push(key);
       }
     }
 
     // Loop through new model to find additions and updates
-    for (const name of modelFiles.keys()) {
-      if (!this.prevModelFiles.has(name)) {
-        addedNames.push(name);
+    for (const key of modelFiles.keys()) {
+      if (!this.prevModelFiles.has(key)) {
+        addedKeys.push(key);
       } else {
-        const oldFile = this.prevModelFiles.get(name)!;
-        const newFile = modelFiles.get(name)!;
+        const oldFile = this.prevModelFiles.get(key)!;
+        const newFile = modelFiles.get(key)!;
         if (!modelFilesEqual(oldFile, newFile)) {
-          updatedNames.push(name);
+          updatedKeys.push(key);
         }
       }
     }
@@ -239,10 +249,10 @@ export class ViewFileService {
     let updateIndices = false;
 
     // Do the updates first before indices change (re-sort may be required)
-    for (const name of updatedNames) {
-      const index = this.indices.get(name)!;
+    for (const key of updatedKeys) {
+      const index = this.indices.get(key)!;
       const oldViewFile = newViewFiles[index];
-      const newViewFile = createViewFile(modelFiles.get(name)!, oldViewFile.isSelected);
+      const newViewFile = createViewFile(modelFiles.get(key)!, oldViewFile.isSelected);
       newViewFiles[index] = newViewFile;
       if (this.sortComparator != null && this.sortComparator(oldViewFile, newViewFile) !== 0) {
         reSort = true;
@@ -250,20 +260,20 @@ export class ViewFileService {
     }
 
     // Do the adds (requires re-sort)
-    for (const name of addedNames) {
+    for (const key of addedKeys) {
       reSort = true;
-      const viewFile = createViewFile(modelFiles.get(name)!);
+      const viewFile = createViewFile(modelFiles.get(key)!);
       newViewFiles.push(viewFile);
-      this.indices.set(name, newViewFiles.length - 1);
+      this.indices.set(viewFileKey(viewFile), newViewFiles.length - 1);
     }
 
     // Do the removes (no re-sort required)
-    for (const name of removedNames) {
+    for (const key of removedKeys) {
       updateIndices = true;
-      this.checkedSet.delete(name);
-      const index = newViewFiles.findIndex((v) => v.name === name);
+      this.checkedSet.delete(key);
+      const index = newViewFiles.findIndex((v) => viewFileKey(v) === key);
       newViewFiles.splice(index, 1);
-      this.indices.delete(name);
+      this.indices.delete(key);
     }
 
     if (reSort && this.sortComparator != null) {
@@ -273,7 +283,7 @@ export class ViewFileService {
     }
     if (updateIndices) {
       this.indices.clear();
-      newViewFiles.forEach((value, index) => this.indices.set(value.name, index));
+      newViewFiles.forEach((value, index) => this.indices.set(viewFileKey(value), index));
     }
 
     this.files = newViewFiles;
@@ -287,12 +297,13 @@ export class ViewFileService {
     action: (file: ModelFile) => Observable<WebReaction>,
   ): Observable<WebReaction> {
     return new Observable((observer) => {
-      if (!this.prevModelFiles.has(file.name)) {
-        this.logger.error('File to queue not found: ' + file.name);
+      const key = viewFileKey(file);
+      if (!this.prevModelFiles.has(key)) {
+        this.logger.error('File to queue not found: ' + key);
         observer.next({ success: false, data: null, errorMessage: `File '${file.name}' not found` });
         observer.complete();
       } else {
-        const modelFile = this.prevModelFiles.get(file.name)!;
+        const modelFile = this.prevModelFiles.get(key)!;
         action(modelFile).subscribe((reaction) => {
           this.logger.debug('Received model reaction: %O', reaction);
           observer.next(reaction);
@@ -316,6 +327,7 @@ export class ViewFileService {
 function modelFilesEqual(a: ModelFile, b: ModelFile): boolean {
   return (
     a.name === b.name &&
+    a.pair_id === b.pair_id &&
     a.is_dir === b.is_dir &&
     a.local_size === b.local_size &&
     a.remote_size === b.remote_size &&
@@ -403,6 +415,7 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
 
   return {
     name: modelFile.name,
+    pairId: modelFile.pair_id,
     isDir: modelFile.is_dir,
     localSize,
     remoteSize,

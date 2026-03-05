@@ -24,3 +24,5 @@ export type { ViewFileOptions } from './view-file-options';
 export { SortMethod } from './view-file-options';
 
 export { Localization } from './localization';
+
+export type { PathPair } from './path-pair';

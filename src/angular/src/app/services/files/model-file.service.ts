@@ -6,6 +6,10 @@ import { LoggerService } from '../utils/logger.service';
 import { RestService, WebReaction } from '../utils/rest.service';
 import { ModelFile, modelFileFromJson } from '../../models/model-file';
 
+function fileKey(file: ModelFile): string {
+  return file.pair_id ? `${file.pair_id}:${file.name}` : file.name;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ModelFileService implements StreamEventHandler {
   private readonly EVENT_INIT = 'model-init';
@@ -31,32 +35,36 @@ export class ModelFileService implements StreamEventHandler {
 
   queue(file: ModelFile): Observable<WebReaction> {
     this.logger.debug('Queue model file: ' + file.name);
-    const fileNameEncoded = encodeURIComponent(encodeURIComponent(file.name));
-    return this.restService.sendRequest('/server/command/queue/' + fileNameEncoded);
+    return this.restService.sendRequest(this.commandUrl('queue', file));
   }
 
   stop(file: ModelFile): Observable<WebReaction> {
     this.logger.debug('Stop model file: ' + file.name);
-    const fileNameEncoded = encodeURIComponent(encodeURIComponent(file.name));
-    return this.restService.sendRequest('/server/command/stop/' + fileNameEncoded);
+    return this.restService.sendRequest(this.commandUrl('stop', file));
   }
 
   extract(file: ModelFile): Observable<WebReaction> {
     this.logger.debug('Extract model file: ' + file.name);
-    const fileNameEncoded = encodeURIComponent(encodeURIComponent(file.name));
-    return this.restService.sendRequest('/server/command/extract/' + fileNameEncoded);
+    return this.restService.sendRequest(this.commandUrl('extract', file));
   }
 
   deleteLocal(file: ModelFile): Observable<WebReaction> {
     this.logger.debug('Delete locally model file: ' + file.name);
-    const fileNameEncoded = encodeURIComponent(encodeURIComponent(file.name));
-    return this.restService.sendRequest('/server/command/delete_local/' + fileNameEncoded);
+    return this.restService.sendRequest(this.commandUrl('delete_local', file));
   }
 
   deleteRemote(file: ModelFile): Observable<WebReaction> {
     this.logger.debug('Delete remotely model file: ' + file.name);
+    return this.restService.sendRequest(this.commandUrl('delete_remote', file));
+  }
+
+  private commandUrl(action: string, file: ModelFile): string {
     const fileNameEncoded = encodeURIComponent(encodeURIComponent(file.name));
-    return this.restService.sendRequest('/server/command/delete_remote/' + fileNameEncoded);
+    let url = `/server/command/${action}/${fileNameEncoded}`;
+    if (file.pair_id) {
+      url += `?pair_id=${encodeURIComponent(file.pair_id)}`;
+    }
+    return url;
   }
 
   onEvent(eventName: string, data: string): void {
@@ -87,7 +95,7 @@ export class ModelFileService implements StreamEventHandler {
       const newMap = new Map<string, ModelFile>();
       for (const file of parsed) {
         const modelFile = modelFileFromJson(file);
-        newMap.set(modelFile.name, modelFile);
+        newMap.set(fileKey(modelFile), modelFile);
       }
       t1 = performance.now();
       this.logger.debug('ModelFile map creation took', (t1 - t0).toFixed(0), 'ms');
@@ -96,35 +104,38 @@ export class ModelFileService implements StreamEventHandler {
     } else if (name === this.EVENT_ADDED) {
       const parsed: { new_file: any } = JSON.parse(data);
       const file = modelFileFromJson(parsed.new_file);
-      if (currentFiles.has(file.name)) {
-        this.logger.error('ModelFile named ' + file.name + ' already exists');
+      const key = fileKey(file);
+      if (currentFiles.has(key)) {
+        this.logger.error('ModelFile named ' + key + ' already exists');
       } else {
         const updated = new Map(currentFiles);
-        updated.set(file.name, file);
+        updated.set(key, file);
         this.filesSubject.next(updated);
         this.logger.debug('Added file: %O', file);
       }
     } else if (name === this.EVENT_REMOVED) {
       const parsed: { old_file: any } = JSON.parse(data);
       const file = modelFileFromJson(parsed.old_file);
-      if (currentFiles.has(file.name)) {
+      const key = fileKey(file);
+      if (currentFiles.has(key)) {
         const updated = new Map(currentFiles);
-        updated.delete(file.name);
+        updated.delete(key);
         this.filesSubject.next(updated);
         this.logger.debug('Removed file: %O', file);
       } else {
-        this.logger.error('Failed to find ModelFile named ' + file.name);
+        this.logger.error('Failed to find ModelFile named ' + key);
       }
     } else if (name === this.EVENT_UPDATED) {
       const parsed: { new_file: any } = JSON.parse(data);
       const file = modelFileFromJson(parsed.new_file);
-      if (currentFiles.has(file.name)) {
+      const key = fileKey(file);
+      if (currentFiles.has(key)) {
         const updated = new Map(currentFiles);
-        updated.set(file.name, file);
+        updated.set(key, file);
         this.filesSubject.next(updated);
         this.logger.debug('Updated file: %O', file);
       } else {
-        this.logger.error('Failed to find ModelFile named ' + file.name);
+        this.logger.error('Failed to find ModelFile named ' + key);
       }
     } else {
       this.logger.error('Unrecognized event:', name);

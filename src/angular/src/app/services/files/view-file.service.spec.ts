@@ -11,6 +11,7 @@ function makeModelFile(
   overrides: Partial<ModelFile> & { name: string },
 ): ModelFile {
   return {
+    pair_id: null,
     is_dir: false,
     local_size: 0,
     remote_size: 0,

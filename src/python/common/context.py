@@ -7,6 +7,7 @@ import collections
 # my libs
 from .config import Config
 from .status import Status
+from .path_pairs_config import PathPairsConfig
 
 
 class Args:
@@ -41,7 +42,8 @@ class Context:
                  web_access_logger: logging.Logger,
                  config: Config,
                  args: Args,
-                 status: Status):
+                 status: Status,
+                 path_pairs_config: PathPairsConfig = None):
         """
         Primary constructor to construct the top-level context
         """
@@ -51,6 +53,7 @@ class Context:
         self.config = config
         self.args = args
         self.status = status
+        self.path_pairs_config = path_pairs_config or PathPairsConfig()
 
     def create_child_context(self, context_name: str) -> "Context":
         child_context = copy.copy(self)
