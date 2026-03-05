@@ -4,9 +4,9 @@ import { inject } from '@angular/core';
 import { ConfigService } from '../settings/config.service';
 
 export const apiKeyInterceptor: HttpInterceptorFn = (req, next) => {
-  // Only attach the API key to internal backend requests
+  // Only attach the API key to internal backend /server/* requests
   const url = req.url;
-  if (!url.startsWith('/server/') && !url.startsWith('/server')) {
+  if (url !== '/server' && !url.startsWith('/server/')) {
     return next(req);
   }
 

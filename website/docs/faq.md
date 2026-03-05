@@ -55,8 +55,10 @@ To fix:
 2. Remove the conflicting directory from the remote server:
 
    ```bash
-   rm -rf /path/to/your/sync/scanfs
+   rm -rf /home/user/downloads/scanfs
    ```
+
+   Replace `/home/user/downloads` with your actual remote sync path.
 
 3. Save and restart the container.
 
