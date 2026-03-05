@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import os
+import fnmatch
 from abc import ABC, abstractmethod
 from typing import Dict, List, Callable, Set
 from threading import Lock
@@ -18,6 +19,16 @@ from lftp import Lftp, LftpError, LftpJobStatus
 from .controller_persist import ControllerPersist
 from .delete import DeleteLocalProcess, DeleteRemoteProcess
 from .move import MoveProcess
+
+
+def filter_excluded_files(files: List, exclude_patterns_str: str) -> List:
+    if not exclude_patterns_str or not exclude_patterns_str.strip():
+        return files
+    patterns = [p.strip() for p in exclude_patterns_str.split(",") if p.strip()]
+    if not patterns:
+        return files
+    return [f for f in files
+            if not any(fnmatch.fnmatch(f.name.lower(), p.lower()) for p in patterns)]
 
 
 class ControllerError(AppError):
@@ -415,7 +426,8 @@ class Controller:
 
         # Update model builder state
         if latest_remote_scan is not None:
-            self.__model_builder.set_remote_files(latest_remote_scan.files)
+            remote_files = self._apply_exclude_patterns(latest_remote_scan.files)
+            self.__model_builder.set_remote_files(remote_files)
         if latest_local_scan is not None:
             self.__model_builder.set_local_files(latest_local_scan.files)
         if latest_active_scan is not None:
@@ -819,3 +831,7 @@ class Controller:
                 # Force a local scan so the moved file is detected in its final location
                 self.__local_scan_process.force_scan()
         self.__active_move_processes = still_active_moves
+
+    def _apply_exclude_patterns(self, files: List) -> List:
+        raw = self.__context.config.general.exclude_patterns
+        return filter_excluded_files(files, raw)

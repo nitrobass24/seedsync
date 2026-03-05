@@ -1,6 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from .controller import Controller
+from .controller import Controller, filter_excluded_files
 from .controller_job import ControllerJob
 from .controller_persist import ControllerPersist
 from .model_builder import ModelBuilder

@@ -534,6 +534,7 @@ class TestConfig(unittest.TestCase):
         [General]
         debug = True
         verbose = False
+        exclude_patterns =
 
         [Lftp]
         remote_address = server.remote.com
@@ -570,12 +571,23 @@ class TestConfig(unittest.TestCase):
 
         [Web]
         port = 13
+        api_key =
 
         [AutoQueue]
         enabled = True
         patterns_only = True
         auto_extract = False
         auto_delete_remote = True
+
+        [Logging]
+        log_format = standard
+
+        [Notifications]
+        webhook_url =
+        notify_on_download_complete = True
+        notify_on_extraction_complete = True
+        notify_on_extraction_failed = True
+        notify_on_delete_complete = True
         """
 
         golden_lines = [s.strip() for s in golden_str.splitlines()]

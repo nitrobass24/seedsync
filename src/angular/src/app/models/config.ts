@@ -5,6 +5,7 @@
 
 export interface General {
   debug: boolean | null;
+  exclude_patterns: string | null;
 }
 
 export interface Lftp {
@@ -78,6 +79,7 @@ export interface Config {
 
 export const DEFAULT_GENERAL: General = {
   debug: null,
+  exclude_patterns: null,
 };
 
 export const DEFAULT_LFTP: Lftp = {
