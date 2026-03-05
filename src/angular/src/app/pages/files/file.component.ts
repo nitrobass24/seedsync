@@ -64,14 +64,20 @@ export class FileComponent implements OnChanges, OnDestroy {
       const oldFile: ViewFile | undefined = fileChange.previousValue;
       const newFile: ViewFile | undefined = fileChange.currentValue;
       if (oldFile != null && newFile != null) {
-        if (oldFile.status !== newFile.status) {
+        if (oldFile.name !== newFile.name) {
           this.activeAction = null;
+          this.resetConfirmState();
+        } else if (oldFile.status !== newFile.status) {
+          this.activeAction = null;
+          this.resetConfirmState();
         } else if (this.activeAction === FileAction.DELETE_REMOTE &&
                    oldFile.isRemotelyDeletable && !newFile.isRemotelyDeletable) {
           this.activeAction = null;
+          this.resetConfirmState();
         } else if (this.activeAction === FileAction.DELETE_LOCAL &&
                    oldFile.isLocallyDeletable && !newFile.isLocallyDeletable) {
           this.activeAction = null;
+          this.resetConfirmState();
         }
 
         if (newFile.isSelected && this.fileElement &&
@@ -155,6 +161,11 @@ export class FileComponent implements OnChanges, OnDestroy {
       this.confirmingDelete = null;
       this.confirmResetTimer = null;
     }, 3000);
+  }
+
+  private resetConfirmState(): void {
+    this.clearConfirmTimer();
+    this.confirmingDelete = null;
   }
 
   private clearConfirmTimer(): void {

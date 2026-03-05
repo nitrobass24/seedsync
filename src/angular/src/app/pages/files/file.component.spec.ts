@@ -197,6 +197,40 @@ describe('FileComponent inline delete confirmation', () => {
     expect(component.confirmingDelete).toBe('local');
   });
 
+  it('should reset confirmingDelete when bound file changes', () => {
+    component.onDeleteLocal(makeViewFile());
+    expect(component.confirmingDelete).toBe('local');
+
+    const oldFile = makeViewFile({ status: ViewFileStatus.DOWNLOADED });
+    const newFile = makeViewFile({ status: ViewFileStatus.QUEUED });
+
+    component.ngOnChanges({
+      file: new SimpleChange(oldFile, newFile, false),
+    });
+
+    expect(component.confirmingDelete).toBeNull();
+    expect(component.activeAction).toBeNull();
+
+    // Timer should not fire after reset
+    vi.advanceTimersByTime(5000);
+    expect(component.confirmingDelete).toBeNull();
+  });
+
+  it('should reset confirmingDelete when file name changes', () => {
+    component.onDeleteRemote(makeViewFile());
+    expect(component.confirmingDelete).toBe('remote');
+
+    const oldFile = makeViewFile({ name: 'file-a.txt' });
+    const newFile = makeViewFile({ name: 'file-b.txt' });
+
+    component.ngOnChanges({
+      file: new SimpleChange(oldFile, newFile, false),
+    });
+
+    expect(component.confirmingDelete).toBeNull();
+    expect(component.activeAction).toBeNull();
+  });
+
   it('ngOnDestroy clears the confirm timer', () => {
     component.onDeleteLocal(makeViewFile());
     expect(component.confirmingDelete).toBe('local');
