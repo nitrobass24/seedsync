@@ -5,13 +5,13 @@
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_SERVER">
       </ng-container>
 
-      <ng-container
-        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_AUTOQUEUE">
-      </ng-container>
-
       <div class="card">
         <app-path-pairs></app-path-pairs>
       </div>
+
+      <ng-container
+        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_AUTOQUEUE">
+      </ng-container>
 
       <ng-container
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_STAGING">
