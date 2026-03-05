@@ -82,18 +82,18 @@ LABEL maintainer="nitrobass24" \
 
 # Copy stripped Python runtime from python-deps stage
 COPY --from=python-deps /usr/local/ /usr/local/
-RUN ldconfig
 
-# Enable non-free repo for full unrar (unrar-free only supports RAR1-3)
-RUN sed -i 's/Components: main/Components: main non-free/' /etc/apt/sources.list.d/debian.sources
-
-# Install runtime dependencies in a single layer
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    lftp \
-    openssh-client \
-    7zip \
-    unrar=1:6.2.6-1+deb12u1 \
-    ca-certificates \
+# Setup non-free repo, install runtime deps, and configure in a single layer.
+# lftp, openssh-client, 7zip, ca-certificates are intentionally unpinned
+# to receive security updates on each image rebuild.
+RUN ldconfig \
+    && sed -i 's/Components: main/Components: main non-free/' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        lftp \
+        openssh-client \
+        7zip \
+        unrar=1:6.2.6-1+deb12u1 \
+        ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && ln -sf /usr/bin/7zz /usr/bin/7z
