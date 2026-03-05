@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.12.10] - 2026-03-04
+
+### Added
+
+- **API key authentication** — Optional API key protects all `/server/*` endpoints. Set via Settings > Web > API Key. SSE stream accepts key as query parameter; config GET is exempt for frontend bootstrapping (#130)
+- **Security response headers** — Content-Security-Policy, X-Content-Type-Options, X-Frame-Options, Referrer-Policy on all responses (#130)
+- **CSRF protection** — Origin/Referer validation on state-changing requests with loopback exemption (#130)
+- **Rate limiting** — Per-IP sliding window (120 requests/60s) on all endpoints except SSE stream (#130)
+- **Config file backup** — Automatic backup before each config save, keeps last 10 with ISO timestamps (#130)
+- **Scanner home directory fallback** — Automatically retries scanner installation to `~/` when `/tmp` is restricted on the remote server (#114)
+- **Server Script Path documentation** — README troubleshooting, configuration docs, and FAQ entries for common scanner installation issues (#114, #115)
+
+### Fixed
+
+- **CSP blocks inline scripts** — Moved inline theme detection to external `theme-init.js` and disabled Beasties critical CSS inlining to comply with `script-src 'self'` (#134)
+- **Settings page not loading** — Eagerly initialize ConfigService and AutoQueueService in APP_INITIALIZER to ensure config loads on first connection (#136)
+- **SSE API key state mismatch** — Clear SSE stream API key at all config-reset paths (disconnect, parse failure, fetch failure) to prevent stale auth (#136)
+- **SFTP permission preservation overrides umask** — Disabled lftp `sftp:set-permissions` so local umask applies to downloaded files (#115)
+- **Scanner path traversal in delete endpoints** — Validate filenames and check path containment before local/remote delete operations (#130)
+- **Zip-slip archive extraction** — Pre-validate zip/tar members for symlinks and path traversal; post-extraction check for rar/7z formats (#130)
+- **Remote scanner shell-quoting** — Properly escape remote paths in md5sum and execution commands (#114)
+
+### Security
+
+- Path traversal protection on all controller command endpoints (queue, stop, extract, delete) (#130)
+- Constant-time API key comparison with `secrets.compare_digest` (#130)
+- Null byte rejection in filename validation (#130)
+
+---
+
 ## [0.12.9] - 2026-03-02
 
 ### Changed
