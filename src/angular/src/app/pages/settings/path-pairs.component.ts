@@ -55,7 +55,11 @@ export class PathPairsComponent implements OnDestroy {
   onSaveAdd(): void {
     if (!this.addForm.name.trim()) return;
     this.subscriptions.push(
-      this.pathPairsService.create(this.addForm).subscribe(() => {
+      this.pathPairsService.create(this.addForm).subscribe((created) => {
+        if (!created) {
+          this.cdr.markForCheck();
+          return;
+        }
         this.adding = false;
         this.addForm = this.emptyForm();
         this.cdr.markForCheck();
@@ -86,7 +90,11 @@ export class PathPairsComponent implements OnDestroy {
   onSaveEdit(): void {
     if (!this.editingId || !this.editForm.name.trim()) return;
     this.subscriptions.push(
-      this.pathPairsService.update({ id: this.editingId, ...this.editForm }).subscribe(() => {
+      this.pathPairsService.update({ id: this.editingId, ...this.editForm }).subscribe((updated) => {
+        if (!updated) {
+          this.cdr.markForCheck();
+          return;
+        }
         this.editingId = null;
         this.editForm = this.emptyForm();
         this.cdr.markForCheck();

@@ -48,7 +48,8 @@ class PathPairsLogic {
 
   onSaveAdd(): void {
     if (!this.addForm.name.trim()) return;
-    this.service.create(this.addForm).subscribe(() => {
+    this.service.create(this.addForm).subscribe((created: any) => {
+      if (!created) return;
       this.adding = false;
       this.addForm = this.emptyForm();
     });
@@ -74,7 +75,8 @@ class PathPairsLogic {
 
   onSaveEdit(): void {
     if (!this.editingId || !this.editForm.name.trim()) return;
-    this.service.update({ id: this.editingId, ...this.editForm }).subscribe(() => {
+    this.service.update({ id: this.editingId, ...this.editForm }).subscribe((updated: any) => {
+      if (!updated) return;
       this.editingId = null;
       this.editForm = this.emptyForm();
     });
@@ -281,6 +283,24 @@ describe('PathPairsComponent logic', () => {
     expect(mockService.update).toHaveBeenCalledWith(
       expect.objectContaining({ auto_queue: true }),
     );
+  });
+
+  it('should not clear add form when service returns null', () => {
+    mockService.create = vi.fn().mockReturnValue(of(null));
+    component.onStartAdd();
+    component.addForm = { name: 'Test', remote_path: '/r', local_path: '/l', enabled: true, auto_queue: false };
+    component.onSaveAdd();
+    expect(component.adding).toBe(true);
+    expect(component.addForm.name).toBe('Test');
+  });
+
+  it('should not clear edit form when service returns null', () => {
+    mockService.update = vi.fn().mockReturnValue(of(null));
+    component.onStartEdit(makePair());
+    component.editForm.name = 'Updated';
+    component.onSaveEdit();
+    expect(component.editingId).toBe('1');
+    expect(component.editForm.name).toBe('Updated');
   });
 
   it('should reset confirm state when starting edit', () => {
