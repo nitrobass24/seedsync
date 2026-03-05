@@ -5,15 +5,25 @@ updates:
     schedule:
       interval: "weekly"
     target-branch: "develop"
+    open-pull-requests-limit: 10
 
   - package-ecosystem: "npm"
     directory: "/website"
     schedule:
       interval: "weekly"
     target-branch: "develop"
+    open-pull-requests-limit: 5
 
   - package-ecosystem: "pip"
     directory: "/src/python"
     schedule:
       interval: "weekly"
     target-branch: "develop"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    target-branch: "develop"
+    open-pull-requests-limit: 5
