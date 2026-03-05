@@ -14,6 +14,8 @@ import { LogService } from './services/logs/log.service';
 import { ViewFileFilterService } from './services/files/view-file-filter.service';
 import { ViewFileSortService } from './services/files/view-file-sort.service';
 import { ThemeService } from './services/utils/theme.service';
+import { ConfigService } from './services/settings/config.service';
+import { AutoQueueService } from './services/autoqueue/autoqueue.service';
 
 function initializeStreaming(): () => void {
   // Eagerly inject all SSE handler services so they register with StreamDispatchService.
@@ -22,6 +24,10 @@ function initializeStreaming(): () => void {
   inject(ServerStatusService);
   inject(ModelFileService);
   inject(LogService);
+
+  // Eagerly inject services that subscribe to connected$ so they load data immediately
+  inject(ConfigService);
+  inject(AutoQueueService);
 
   // Eagerly inject filter/sort services so they subscribe to options changes
   inject(ViewFileFilterService);

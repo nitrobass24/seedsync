@@ -32,6 +32,7 @@ export class ConfigService {
         this.getConfig();
       } else {
         this.configSubject.next(null);
+        this.syncStreamApiKey(null);
       }
     });
   }
@@ -61,7 +62,7 @@ export class ConfigService {
             this.configSubject.next(newConfig);
             // Propagate API key changes to the SSE stream immediately
             if (section === 'web' && option === 'api_key') {
-              this.updateStreamApiKey(newConfig);
+              this.syncStreamApiKey(newConfig);
             }
           }
         }
@@ -75,18 +76,26 @@ export class ConfigService {
     this.restService.sendRequest(this.CONFIG_GET_URL).subscribe({
       next: (reaction) => {
         if (reaction.success) {
-          const configJson: Config = JSON.parse(reaction.data!);
-          this.configSubject.next(configJson);
-          this.updateStreamApiKey(configJson);
+          try {
+            const configJson: Config = JSON.parse(reaction.data!);
+            this.configSubject.next(configJson);
+            this.syncStreamApiKey(configJson);
+          } catch (e) {
+            this.logger.error('Failed to parse config: %O', e);
+            this.configSubject.next(null);
+            this.syncStreamApiKey(null);
+          }
         } else {
+          this.logger.error('Failed to get config: %s', reaction.errorMessage);
           this.configSubject.next(null);
+          this.syncStreamApiKey(null);
         }
       },
     });
   }
 
-  private updateStreamApiKey(config: Config): void {
-    const apiKey = config.web?.api_key || null;
+  private syncStreamApiKey(config: Config | null): void {
+    const apiKey = config?.web?.api_key || null;
     // Use injector.get() to break circular dependency:
     // StreamDispatchService -> ConnectedService -> ConfigService
     const streamDispatch = this.injector.get(StreamDispatchService);
