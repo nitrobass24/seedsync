@@ -38,6 +38,19 @@ class ControllerError(AppError):
     pass
 
 
+def _persist_key(pair_id, name: str) -> str:
+    """Build a namespaced persist key: 'pair_id:name' or plain 'name' for default pair."""
+    return "{}:{}".format(pair_id, name) if pair_id else name
+
+
+def _strip_persist_key(key: str, pair_id) -> str:
+    """Strip pair_id prefix from a persist key to get the bare file name."""
+    prefix = "{}:".format(pair_id) if pair_id else ""
+    if prefix and key.startswith(prefix):
+        return key[len(prefix):]
+    return key
+
+
 class _PairContext:
     """
     Holds all per-pair state: LFTP instance, scanners, scanner processes,
@@ -451,6 +464,16 @@ class Controller:
                 return pc
         return None
 
+    def _find_pair_for_file_name(self, name: str) -> Optional[_PairContext]:
+        """Find the pair context that contains a file by name (checks model builders)."""
+        for pc in self.__pair_contexts:
+            try:
+                self.__model.get_file(name, pair_id=pc.pair_id)
+                return pc
+            except ModelError:
+                pass
+        return self.__pair_contexts[0] if self.__pair_contexts else None
+
     def __update_model(self):
         # Grab the latest extract results (shared)
         latest_extract_statuses = self.__extract_process.pop_latest_statuses()
@@ -489,10 +512,11 @@ class Controller:
 
                 if diff.new_file is not None and \
                         diff.new_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
+                    pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
                     self.__moved_file_names.discard(diff.new_file.name)
-                    self.__persist.downloaded_file_names.discard(diff.new_file.name)
-                    self.__persist.extracted_file_names.discard(diff.new_file.name)
-                    self.__persist.extract_failed_file_names.discard(diff.new_file.name)
+                    self.__persist.downloaded_file_names.discard(pkey)
+                    self.__persist.extracted_file_names.discard(pkey)
+                    self.__persist.extract_failed_file_names.discard(pkey)
                     self._sync_persist_to_all_builders()
 
                 downloaded = False
@@ -504,7 +528,8 @@ class Controller:
                         diff.old_file.state != ModelFile.State.DOWNLOADED:
                     downloaded = True
                 if downloaded:
-                    self.__persist.downloaded_file_names.add(diff.new_file.name)
+                    pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
+                    self.__persist.downloaded_file_names.add(pkey)
                     self._sync_persist_to_all_builders()
 
                     if self.__context.config.controller.use_staging and \
@@ -540,34 +565,42 @@ class Controller:
                     self.queue_command(command)
 
             # Prune the extracted files list of any files that were deleted locally
-            remove_extracted_file_names = set()
-            existing_file_names = self.__model.get_file_names()
-            for extracted_file_name in self.__persist.extracted_file_names:
-                if extracted_file_name in existing_file_names:
-                    file = self.__model.get_file(extracted_file_name)
-                    if file.state == ModelFile.State.DELETED:
-                        remove_extracted_file_names.add(extracted_file_name)
-            if remove_extracted_file_names:
-                self.logger.info("Removing from extracted list: {}".format(remove_extracted_file_names))
-                self.__persist.extracted_file_names.difference_update(remove_extracted_file_names)
+            remove_extracted_keys = set()
+            for pkey in self.__persist.extracted_file_names:
+                # Find the file in the model by checking each pair
+                for _pc in self.__pair_contexts:
+                    bare_name = _strip_persist_key(pkey, _pc.pair_id)
+                    if bare_name != pkey or _pc.pair_id is None:
+                        try:
+                            file = self.__model.get_file(bare_name, pair_id=_pc.pair_id)
+                            if file.state == ModelFile.State.DELETED:
+                                remove_extracted_keys.add(pkey)
+                        except ModelError:
+                            pass
+            if remove_extracted_keys:
+                self.logger.info("Removing from extracted list: {}".format(remove_extracted_keys))
+                self.__persist.extracted_file_names.difference_update(remove_extracted_keys)
                 self._sync_persist_to_all_builders()
 
             # Persist cleanup: remove entries for files absent from all sources
             all_scans_received = all(
-                pc.remote_scan_received and pc.local_scan_received
-                for pc in self.__pair_contexts
+                _pc.remote_scan_received and _pc.local_scan_received
+                for _pc in self.__pair_contexts
             )
             if all_scans_received:
-                absent_names = set()
-                model_file_names = self.__model.get_file_names()
-                for name in self.__persist.downloaded_file_names:
-                    if name not in model_file_names and name not in self.__moved_file_names:
-                        absent_names.add(name)
-                if absent_names:
-                    self.logger.info("Persist cleanup (both absent): {}".format(absent_names))
-                    self.__persist.downloaded_file_names.difference_update(absent_names)
-                    self.__persist.extracted_file_names.difference_update(absent_names)
-                    self.__persist.extract_failed_file_names.difference_update(absent_names)
+                # Build a set of all composite keys present in the model
+                model_keys = set()
+                for f in self.__model.get_all_files():
+                    model_keys.add(_persist_key(f.pair_id, f.name))
+                absent_keys = set()
+                for pkey in self.__persist.downloaded_file_names:
+                    if pkey not in model_keys and pkey not in self.__moved_file_names:
+                        absent_keys.add(pkey)
+                if absent_keys:
+                    self.logger.info("Persist cleanup (both absent): {}".format(absent_keys))
+                    self.__persist.downloaded_file_names.difference_update(absent_keys)
+                    self.__persist.extracted_file_names.difference_update(absent_keys)
+                    self.__persist.extract_failed_file_names.difference_update(absent_keys)
                     self._sync_persist_to_all_builders()
 
             self.__model_lock.release()
@@ -576,30 +609,39 @@ class Controller:
         for result in latest_failed_extractions:
             count = self.__extract_retry_counts.get(result.name, 0) + 1
             self.__extract_retry_counts[result.name] = count
+            # Find which pair owns this file
+            result_pc = self._find_pair_for_file_name(result.name)
+            result_pair_id = result_pc.pair_id if result_pc else None
             if count < 3:
                 self.logger.warning(
                     "Extraction failed for '{}' (attempt {}/3), scheduling re-download".format(
                         result.name, count))
-                self.__persist.downloaded_file_names.discard(result.name)
-                self.__persist.extracted_file_names.discard(result.name)
+                pkey = _persist_key(result_pair_id, result.name)
+                self.__persist.downloaded_file_names.discard(pkey)
+                self.__persist.extracted_file_names.discard(pkey)
                 self._sync_persist_to_all_builders()
                 self.__pending_redownload.add(result.name)
-                self.__spawn_system_delete_local(result.name)
+                self.__spawn_system_delete_local(result.name, result_pc)
             else:
                 self.logger.error(
                     "Extraction failed for '{}' after {} attempts, giving up".format(
                         result.name, count))
-                self.__persist.extract_failed_file_names.add(result.name)
+                pkey = _persist_key(result_pair_id, result.name)
+                self.__persist.extract_failed_file_names.add(pkey)
                 self._sync_persist_to_all_builders()
 
-        # Update the controller status
+        # Update the controller status (use most recent across all pairs)
         for pc in self.__pair_contexts:
             if pc._latest_remote_scan is not None:
-                self.__context.status.controller.latest_remote_scan_time = pc._latest_remote_scan.timestamp
-                self.__context.status.controller.latest_remote_scan_failed = pc._latest_remote_scan.failed
-                self.__context.status.controller.latest_remote_scan_error = pc._latest_remote_scan.error_message
+                current = self.__context.status.controller.latest_remote_scan_time
+                if current is None or pc._latest_remote_scan.timestamp > current:
+                    self.__context.status.controller.latest_remote_scan_time = pc._latest_remote_scan.timestamp
+                    self.__context.status.controller.latest_remote_scan_failed = pc._latest_remote_scan.failed
+                    self.__context.status.controller.latest_remote_scan_error = pc._latest_remote_scan.error_message
             if pc._latest_local_scan is not None:
-                self.__context.status.controller.latest_local_scan_time = pc._latest_local_scan.timestamp
+                current = self.__context.status.controller.latest_local_scan_time
+                if current is None or pc._latest_local_scan.timestamp > current:
+                    self.__context.status.controller.latest_local_scan_time = pc._latest_local_scan.timestamp
 
     def _update_pair_model_state(self, pc: _PairContext,
                                  latest_extract_statuses, latest_extracted_results):
@@ -632,7 +674,9 @@ class Controller:
             if just_completed:
                 for name in just_completed:
                     self.logger.info("Download completed (LFTP job finished): {}".format(name))
-                self.__persist.downloaded_file_names.update(just_completed)
+                self.__persist.downloaded_file_names.update(
+                    _persist_key(pc.pair_id, n) for n in just_completed
+                )
                 self._sync_persist_to_all_builders()
                 pc.pending_completion.update(just_completed)
                 pc.local_scan_process.force_scan()
@@ -641,8 +685,11 @@ class Controller:
             pc.prev_downloading_file_names = current_downloading
 
         if latest_extract_statuses is not None:
+            # Only include extract statuses for files that belong to this pair
             pc.active_extracting_file_names = [
-                s.name for s in latest_extract_statuses.statuses if s.state == ExtractStatus.State.EXTRACTING
+                s.name for s in latest_extract_statuses.statuses
+                if s.state == ExtractStatus.State.EXTRACTING
+                and _persist_key(pc.pair_id, s.name) in self.__persist.downloaded_file_names
             ]
 
         active_files = pc.active_downloading_file_names + pc.active_extracting_file_names
@@ -666,18 +713,37 @@ class Controller:
             pc.model_builder.set_extract_statuses(latest_extract_statuses.statuses)
         if latest_extracted_results:
             for result in latest_extracted_results:
-                self.__persist.extracted_file_names.add(result.name)
+                # Find the pair that owns this file for correct persist key
+                owner_pc = self._find_pair_for_file_name(result.name) or pc
+                pkey = _persist_key(owner_pc.pair_id, result.name)
+                self.__persist.extracted_file_names.add(pkey)
                 if self.__context.config.controller.use_staging and \
                         self.__context.config.controller.staging_path:
-                    self.__spawn_move_process(result.name, pc)
+                    self.__spawn_move_process(result.name, owner_pc)
             self._sync_persist_to_all_builders()
 
     def _sync_persist_to_all_builders(self):
-        """Push current persist state to all pair model builders."""
-        downloaded = set(self.__persist.downloaded_file_names)
-        extracted = set(self.__persist.extracted_file_names)
-        extract_failed = set(self.__persist.extract_failed_file_names)
+        """Push current persist state to all pair model builders, filtered by pair_id."""
         for pc in self.__pair_contexts:
+            prefix = "{}:".format(pc.pair_id) if pc.pair_id else ""
+            downloaded = set()
+            extracted = set()
+            extract_failed = set()
+            for key in self.__persist.downloaded_file_names:
+                if prefix and key.startswith(prefix):
+                    downloaded.add(key[len(prefix):])
+                elif not prefix and ":" not in key:
+                    downloaded.add(key)
+            for key in self.__persist.extracted_file_names:
+                if prefix and key.startswith(prefix):
+                    extracted.add(key[len(prefix):])
+                elif not prefix and ":" not in key:
+                    extracted.add(key)
+            for key in self.__persist.extract_failed_file_names:
+                if prefix and key.startswith(prefix):
+                    extract_failed.add(key[len(prefix):])
+                elif not prefix and ":" not in key:
+                    extract_failed.add(key)
             pc.model_builder.set_downloaded_files(downloaded)
             pc.model_builder.set_extracted_files(extracted)
             pc.model_builder.set_extract_failed_files(extract_failed)
@@ -739,7 +805,8 @@ class Controller:
                     continue
                 else:
                     self.__extract_retry_counts.pop(file.name, None)
-                    self.__persist.extract_failed_file_names.discard(file.name)
+                    pkey = _persist_key(pc.pair_id, file.name)
+                    self.__persist.extract_failed_file_names.discard(pkey)
                     self._sync_persist_to_all_builders()
                     self.__extract_process.extract(file)
 
@@ -857,9 +924,10 @@ class Controller:
         process.start()
         self.logger.info("Spawned move process for {} (staging -> local)".format(file_name))
 
-    def __spawn_system_delete_local(self, file_name: str):
+    def __spawn_system_delete_local(self, file_name: str, pc: Optional[_PairContext] = None):
         """System-initiated local delete for extraction retry cleanup."""
-        effective_local_path = self.__pair_contexts[0].effective_local_path
+        target_pc = pc or self.__pair_contexts[0]
+        effective_local_path = target_pc.effective_local_path
         process = DeleteLocalProcess(
             local_path=effective_local_path,
             file_name=file_name
