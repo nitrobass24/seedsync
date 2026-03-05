@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import uuid
+import threading
 from typing import List, Optional
 
 from .persist import Persist, PersistError
@@ -68,36 +69,43 @@ class PathPairsConfig(Persist):
     """
 
     def __init__(self):
+        self._lock = threading.RLock()
         self._pairs: List[PathPair] = []
 
     @property
     def pairs(self) -> List[PathPair]:
-        return list(self._pairs)
+        with self._lock:
+            return list(self._pairs)
 
     @pairs.setter
     def pairs(self, value: List[PathPair]):
-        self._pairs = list(value)
+        with self._lock:
+            self._pairs = list(value)
 
     def get_pair(self, pair_id: str) -> Optional[PathPair]:
-        for p in self._pairs:
-            if p.id == pair_id:
-                return p
-        return None
+        with self._lock:
+            for p in self._pairs:
+                if p.id == pair_id:
+                    return p
+            return None
 
     def add_pair(self, pair: PathPair):
-        if self.get_pair(pair.id) is not None:
-            raise ValueError("PathPair with id '{}' already exists".format(pair.id))
-        self._pairs.append(pair)
+        with self._lock:
+            if any(p.id == pair.id for p in self._pairs):
+                raise ValueError("PathPair with id '{}' already exists".format(pair.id))
+            self._pairs.append(pair)
 
     def update_pair(self, pair: PathPair):
-        for i, p in enumerate(self._pairs):
-            if p.id == pair.id:
-                self._pairs[i] = pair
-                return
-        raise ValueError("PathPair with id '{}' not found".format(pair.id))
+        with self._lock:
+            for i, p in enumerate(self._pairs):
+                if p.id == pair.id:
+                    self._pairs[i] = pair
+                    return
+            raise ValueError("PathPair with id '{}' not found".format(pair.id))
 
     def remove_pair(self, pair_id: str):
-        self._pairs = [p for p in self._pairs if p.id != pair_id]
+        with self._lock:
+            self._pairs = [p for p in self._pairs if p.id != pair_id]
 
     @classmethod
     def from_str(cls, content: str) -> "PathPairsConfig":
@@ -116,14 +124,15 @@ class PathPairsConfig(Persist):
             try:
                 config.add_pair(PathPair.from_dict(pair_dict))
             except (KeyError, TypeError, ValueError) as e:
-                _logger.warning("Skipping malformed path pair: %s", e)
+                raise PersistError("Malformed path pair entry: {}".format(e)) from e
         return config
 
     def to_str(self) -> str:
-        data = {
-            "version": _CURRENT_VERSION,
-            "path_pairs": [p.to_dict() for p in self._pairs],
-        }
+        with self._lock:
+            data = {
+                "version": _CURRENT_VERSION,
+                "path_pairs": [p.to_dict() for p in self._pairs],
+            }
         return json.dumps(data, indent=2)
 
     @staticmethod

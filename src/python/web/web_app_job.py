@@ -110,6 +110,9 @@ class MyWSGIRefServer(bottle.ServerAdapter):
         self.server.serve_forever()
 
     def stop(self):
+        if self.server is None:
+            self.logger.warning("Web server was never initialized; skipping shutdown")
+            return
         self.logger.debug("Stopping web server")
         self.server.shutdown()
         self.server.server_close()

@@ -34,12 +34,22 @@ class PathPairsHandler(IHandler):
         if not isinstance(data, dict):
             return HTTPResponse(body="Expected JSON object", status=400)
 
+        name = data.get("name", "")
+        remote_path = data.get("remote_path", "")
+        local_path = data.get("local_path", "")
+        enabled = data.get("enabled", True)
+        auto_queue = data.get("auto_queue", True)
+        if not isinstance(name, str) or not isinstance(remote_path, str) or not isinstance(local_path, str):
+            return HTTPResponse(body="name, remote_path, and local_path must be strings", status=400)
+        if not isinstance(enabled, bool) or not isinstance(auto_queue, bool):
+            return HTTPResponse(body="enabled and auto_queue must be booleans", status=400)
+
         pair = PathPair(
-            name=data.get("name", ""),
-            remote_path=data.get("remote_path", ""),
-            local_path=data.get("local_path", ""),
-            enabled=data.get("enabled", True),
-            auto_queue=data.get("auto_queue", True),
+            name=name,
+            remote_path=remote_path,
+            local_path=local_path,
+            enabled=enabled,
+            auto_queue=auto_queue,
         )
         self.__config.add_pair(pair)
         return HTTPResponse(
@@ -60,15 +70,28 @@ class PathPairsHandler(IHandler):
         if not isinstance(data, dict):
             return HTTPResponse(body="Expected JSON object", status=400)
 
+        name = data.get("name", existing.name)
+        remote_path = data.get("remote_path", existing.remote_path)
+        local_path = data.get("local_path", existing.local_path)
+        enabled = data.get("enabled", existing.enabled)
+        auto_queue = data.get("auto_queue", existing.auto_queue)
+        if not isinstance(name, str) or not isinstance(remote_path, str) or not isinstance(local_path, str):
+            return HTTPResponse(body="name, remote_path, and local_path must be strings", status=400)
+        if not isinstance(enabled, bool) or not isinstance(auto_queue, bool):
+            return HTTPResponse(body="enabled and auto_queue must be booleans", status=400)
+
         updated = PathPair(
             pair_id=pair_id,
-            name=data.get("name", existing.name),
-            remote_path=data.get("remote_path", existing.remote_path),
-            local_path=data.get("local_path", existing.local_path),
-            enabled=data.get("enabled", existing.enabled),
-            auto_queue=data.get("auto_queue", existing.auto_queue),
+            name=name,
+            remote_path=remote_path,
+            local_path=local_path,
+            enabled=enabled,
+            auto_queue=auto_queue,
         )
-        self.__config.update_pair(updated)
+        try:
+            self.__config.update_pair(updated)
+        except ValueError:
+            return HTTPResponse(body="Path pair not found", status=404)
         return HTTPResponse(
             body=json.dumps(updated.to_dict()),
             headers={"Content-Type": "application/json"}

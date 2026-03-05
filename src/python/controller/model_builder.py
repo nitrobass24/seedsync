@@ -21,7 +21,7 @@ class ModelBuilder:
       * remote file system as a Dict[name, SystemFile]
       * lftp status as Dict[name, LftpJobStatus]
     """
-    def __init__(self, pair_id: str = None):
+    def __init__(self, pair_id: Optional[str] = None) -> None:
         self.logger = logging.getLogger("ModelBuilder")
         self.__pair_id = pair_id
         self.__local_files = dict()
