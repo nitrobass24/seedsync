@@ -54,6 +54,7 @@ reviews:
     base_branches:
       - "develop"
       - "master"
+      - "feat/v0.13.0"
 
   tools:
     shellcheck:
