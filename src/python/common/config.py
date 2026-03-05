@@ -237,11 +237,13 @@ class Config(Persist):
     class General(IC):
         debug = PROP("debug", Checkers.null, Converters.bool)
         verbose = PROP("verbose", Checkers.null, Converters.bool)
+        exclude_patterns = PROP("exclude_patterns", Checkers.string_allow_empty, Converters.null)
 
         def __init__(self):
             super().__init__()
             self.debug = None
             self.verbose = None
+            self.exclude_patterns = ""
 
     class Lftp(IC):
         remote_address = PROP("remote_address", Checkers.string_nonempty, Converters.null)
