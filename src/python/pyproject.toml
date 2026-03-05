@@ -7,7 +7,6 @@ authors = []
 [tool.poetry.dependencies]
 python = "^3.8"
 bottle = ">=0.12,<1.0"
-patool = ">=1.12"
 pexpect = ">=4.8"
 requests = ">=2.32.0"
 tblib = ">=3.0"
