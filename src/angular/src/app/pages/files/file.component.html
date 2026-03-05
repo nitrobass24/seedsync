@@ -145,32 +145,20 @@
         <div class="button" appClickStopPropagation
              [attr.disabled]="isLocallyDeletable() ? null : true"
              (click)="!isLocallyDeletable() || onDeleteLocal(file())"
-             [class.loading]="activeAction === FileAction.DELETE_LOCAL">
+             [class.loading]="activeAction === FileAction.DELETE_LOCAL"
+             [class.confirming]="confirmingDelete === 'local'">
             <div class="loader"></div>
             <img src="assets/icons/delete-local.svg" />
-            <div class="text"><span>Delete Local</span></div>
+            <div class="text"><span>{{ confirmingDelete === 'local' ? 'Confirm?' : 'Delete Local' }}</span></div>
         </div>
         <div class="button" appClickStopPropagation
              [attr.disabled]="isRemotelyDeletable() ? null : true"
              (click)="!isRemotelyDeletable() || onDeleteRemote(file())"
-             [class.loading]="activeAction === FileAction.DELETE_REMOTE">
+             [class.loading]="activeAction === FileAction.DELETE_REMOTE"
+             [class.confirming]="confirmingDelete === 'remote'">
             <div class="loader"></div>
             <img src="assets/icons/delete-remote.svg" />
-            <div class="text"><span>Delete Remote</span></div>
+            <div class="text"><span>{{ confirmingDelete === 'remote' ? 'Confirm?' : 'Delete Remote' }}</span></div>
         </div>
     </div>
-
-    <!-- Delete confirmation dialog -->
-    @if (deleteConfirmationType) {
-        <div class="delete-confirmation" appClickStopPropagation>
-            <div class="confirmation-content">
-                <div class="confirmation-title">{{deleteConfirmationTitle}}</div>
-                <div class="confirmation-message" [innerHTML]="deleteConfirmationMessage"></div>
-                <div class="confirmation-buttons">
-                    <button class="btn btn-secondary" (click)="cancelDelete()">Cancel</button>
-                    <button class="btn btn-danger" (click)="confirmDelete()">Delete</button>
-                </div>
-            </div>
-        </div>
-    }
 </div>

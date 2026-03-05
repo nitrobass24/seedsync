@@ -2,7 +2,7 @@
 title: Installation
 ---
 
-SeedSync runs in Docker and does not require anything installed on the remote server beyond SSH access.
+SeedSync runs in Docker. The remote server needs SSH access and Python 3.
 
 ## Requirements
 
@@ -10,6 +10,7 @@ SeedSync runs in Docker and does not require anything installed on the remote se
 
 - Linux-based system (64-bit)
 - SSH access (password or key-based)
+- Python 3 (`python3` must be available on the remote `$PATH`)
 
 ### Local machine
 

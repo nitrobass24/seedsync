@@ -198,6 +198,13 @@
             display: block;
         }
     }
+
+    // Confirm state for delete buttons (first click)
+    &.confirming {
+        opacity: 1.0;
+        background-color: var(--bs-danger, #dc3545);
+        border-color: var(--bs-danger, #dc3545);
+    }
 }
 
 /* action toolbar show and hide */
@@ -206,37 +213,6 @@
 }
 .file.selected .actions {
     display: flex;
-}
-
-/* Delete confirmation dialog */
-.delete-confirmation {
-    background-color: var(--ss-overlay);
-    padding: 15px;
-    margin-top: 10px;
-    border-radius: 4px;
-
-    .confirmation-content {
-        background-color: var(--ss-confirmation-bg);
-        padding: 20px;
-        border-radius: 4px;
-
-        .confirmation-title {
-            font-weight: bold;
-            font-size: 16px;
-            margin-bottom: 10px;
-        }
-
-        .confirmation-message {
-            margin-bottom: 15px;
-        }
-
-        .confirmation-buttons {
-            display: flex;
-            flex-direction: row;
-            justify-content: flex-end;
-            gap: 10px;
-        }
-    }
 }
 
 
@@ -396,8 +372,9 @@
         }
     }
 
-    // ── Delete confirmation ──
-    .delete-confirmation .confirmation-content {
-        border: 1px solid #252C37;
+    // ── Delete confirm button ──
+    .actions .button.confirming {
+        background-color: #C0392B;
+        border-color: #A93226;
     }
 }
