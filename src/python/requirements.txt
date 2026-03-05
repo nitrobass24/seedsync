@@ -2,7 +2,6 @@
 # Minimal runtime dependencies
 
 bottle>=0.12,<1.0
-patool>=1.12
 pexpect>=4.8
 tblib>=3.0
 timeout-decorator>=0.5
