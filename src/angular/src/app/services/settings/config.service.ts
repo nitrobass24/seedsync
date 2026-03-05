@@ -75,10 +75,16 @@ export class ConfigService {
     this.restService.sendRequest(this.CONFIG_GET_URL).subscribe({
       next: (reaction) => {
         if (reaction.success) {
-          const configJson: Config = JSON.parse(reaction.data!);
-          this.configSubject.next(configJson);
-          this.updateStreamApiKey(configJson);
+          try {
+            const configJson: Config = JSON.parse(reaction.data!);
+            this.configSubject.next(configJson);
+            this.updateStreamApiKey(configJson);
+          } catch (e) {
+            this.logger.error('Failed to parse config: %O', e);
+            this.configSubject.next(null);
+          }
         } else {
+          this.logger.error('Failed to get config: %s', reaction.errorMessage);
           this.configSubject.next(null);
         }
       },
