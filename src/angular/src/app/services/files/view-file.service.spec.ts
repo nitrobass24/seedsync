@@ -84,7 +84,8 @@ describe("ViewFileService", () => {
   function emitModelFiles(files: ModelFile[]): void {
     const map = new Map<string, ModelFile>();
     for (const f of files) {
-      map.set(f.name, f);
+      const key = f.pair_id ? `${f.pair_id}:${f.name}` : f.name;
+      map.set(key, f);
     }
     modelFilesSubject.next(map);
   }
@@ -449,5 +450,96 @@ describe("ViewFileService", () => {
     service.queue(fakeVf).subscribe((r) => (result = r));
 
     expect(result.success).toBe(false);
+  });
+
+  // --- Composite key (pair_id:name) ---
+
+  it("should distinguish two files with the same name but different pair_id values", () => {
+    emitModelFiles([
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-a", remote_size: 100 }),
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-b", remote_size: 200 }),
+    ]);
+
+    const files = latestFiles();
+    expect(files.length).toBe(2);
+    expect(files.find((f) => f.pairId === "pair-a")).toBeDefined();
+    expect(files.find((f) => f.pairId === "pair-b")).toBeDefined();
+  });
+
+  it("should select the correct file when same-name files have different pair_ids", () => {
+    emitModelFiles([
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-a", remote_size: 100 }),
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-b", remote_size: 200 }),
+    ]);
+
+    const targetB = latestFiles().find((f) => f.pairId === "pair-b")!;
+    service.setSelected(targetB);
+
+    const files = latestFiles();
+    expect(files.find((f) => f.pairId === "pair-a")!.isSelected).toBe(false);
+    expect(files.find((f) => f.pairId === "pair-b")!.isSelected).toBe(true);
+  });
+
+  it("should check the correct file when same-name files have different pair_ids", () => {
+    emitModelFiles([
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-a", remote_size: 100, state: ModelFileState.DOWNLOADED, local_size: 100 }),
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-b", remote_size: 200, state: ModelFileState.DOWNLOADED, local_size: 200 }),
+    ]);
+
+    const targetA = latestFiles().find((f) => f.pairId === "pair-a")!;
+    service.toggleCheck(targetA);
+
+    const files = latestFiles();
+    expect(files.find((f) => f.pairId === "pair-a")!.isChecked).toBe(true);
+    expect(files.find((f) => f.pairId === "pair-b")!.isChecked).toBe(false);
+  });
+
+  it("should delegate queue() to the correct model file when same-name files have different pair_ids", () => {
+    const mfA = makeModelFile({ name: "movie.mkv", pair_id: "pair-a", remote_size: 100 });
+    const mfB = makeModelFile({ name: "movie.mkv", pair_id: "pair-b", remote_size: 200 });
+    emitModelFiles([mfA, mfB]);
+    mockModelFileService.queue.mockReturnValue(
+      of({ success: true, data: null, errorMessage: null }),
+    );
+
+    const vfB = latestFiles().find((f) => f.pairId === "pair-b")!;
+    service.queue(vfB).subscribe();
+
+    expect(mockModelFileService.queue).toHaveBeenCalledWith(mfB);
+    expect(mockModelFileService.queue).not.toHaveBeenCalledWith(mfA);
+  });
+
+  it("should remove the correct file when same-name files have different pair_ids", () => {
+    emitModelFiles([
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-a", remote_size: 100 }),
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-b", remote_size: 200 }),
+    ]);
+    expect(latestFiles().length).toBe(2);
+
+    // Remove pair-a, keep pair-b
+    emitModelFiles([
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-b", remote_size: 200 }),
+    ]);
+
+    const files = latestFiles();
+    expect(files.length).toBe(1);
+    expect(files[0].pairId).toBe("pair-b");
+  });
+
+  it("should update the correct file when same-name files have different pair_ids", () => {
+    emitModelFiles([
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-a", remote_size: 100, state: ModelFileState.DEFAULT, local_size: 0 }),
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-b", remote_size: 200, state: ModelFileState.DEFAULT, local_size: 0 }),
+    ]);
+
+    // Update only pair-a to DOWNLOADING
+    emitModelFiles([
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-a", remote_size: 100, state: ModelFileState.DOWNLOADING, local_size: 50 }),
+      makeModelFile({ name: "movie.mkv", pair_id: "pair-b", remote_size: 200, state: ModelFileState.DEFAULT, local_size: 0 }),
+    ]);
+
+    const files = latestFiles();
+    expect(files.find((f) => f.pairId === "pair-a")!.status).toBe(ViewFileStatus.DOWNLOADING);
+    expect(files.find((f) => f.pairId === "pair-b")!.status).toBe(ViewFileStatus.DEFAULT);
   });
 });
