@@ -17,6 +17,17 @@ class DeleteLocalProcess(AppOneShotProcess):
 
     def run_once(self):
         file_path = os.path.join(self.__local_path, self.__file_name)
+        # Path containment check: ensure resolved path is strictly inside local_path
+        real_base = os.path.realpath(self.__local_path)
+        real_target = os.path.realpath(file_path)
+        try:
+            common = os.path.commonpath([real_base, real_target])
+        except ValueError:
+            common = None
+        if common != real_base or real_target == real_base:
+            self.logger.error("Path traversal blocked: {} escapes {}".format(
+                real_target, real_base))
+            return
         self.logger.debug("Deleting local file {}".format(self.__file_name))
         if not os.path.exists(file_path):
             self.logger.error("Failed to delete non-existing file: {}".format(file_path))
@@ -45,6 +56,12 @@ class DeleteRemoteProcess(AppOneShotProcess):
 
     def run_once(self):
         self.__ssh.set_base_logger(self.logger)
+        # Reject path traversal in filename (defense-in-depth)
+        normalized = os.path.normpath(self.__file_name)
+        if (not normalized or normalized == os.curdir or normalized == os.pardir
+                or normalized.startswith(".." + os.sep) or os.path.isabs(normalized)):
+            self.logger.error("Path traversal blocked in remote delete: {}".format(self.__file_name))
+            return
         file_path = os.path.join(self.__remote_path, self.__file_name)
         self.logger.info("Deleting remote file: {}".format(self.__file_name))
         if file_path.startswith("~"):
