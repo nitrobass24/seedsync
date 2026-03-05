@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AsyncPipe } from '@angular/common';
 import { Subscription } from 'rxjs';
@@ -16,6 +16,7 @@ import { PathPair } from '../../models/path-pair';
 })
 export class PathPairsComponent implements OnDestroy {
   private readonly pathPairsService = inject(PathPairsService);
+  private readonly cdr = inject(ChangeDetectorRef);
   readonly pairs$ = this.pathPairsService.pairs$;
 
   // Inline editing state
@@ -55,6 +56,7 @@ export class PathPairsComponent implements OnDestroy {
       this.pathPairsService.create(this.addForm).subscribe(() => {
         this.adding = false;
         this.addForm = this.emptyForm();
+        this.cdr.markForCheck();
       }),
     );
   }
@@ -85,6 +87,7 @@ export class PathPairsComponent implements OnDestroy {
       this.pathPairsService.update({ id: this.editingId, ...this.editForm }).subscribe(() => {
         this.editingId = null;
         this.editForm = this.emptyForm();
+        this.cdr.markForCheck();
       }),
     );
   }
@@ -133,6 +136,7 @@ export class PathPairsComponent implements OnDestroy {
     this.confirmResetTimer = setTimeout(() => {
       this.confirmingDeleteId = null;
       this.confirmResetTimer = null;
+      this.cdr.markForCheck();
     }, 3000);
   }
 
