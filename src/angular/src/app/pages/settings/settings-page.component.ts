@@ -1,11 +1,13 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { AsyncPipe, NgTemplateOutlet } from '@angular/common';
+import { Subscription } from 'rxjs';
 
 import { LoggerService } from '../../services/utils/logger.service';
 import { ConfigService } from '../../services/settings/config.service';
 import { NotificationService } from '../../services/utils/notification.service';
 import { ServerCommandService } from '../../services/server/server-command.service';
 import { ConnectedService } from '../../services/utils/connected.service';
+import { PathPairsService } from '../../services/settings/path-pairs.service';
 import { Notification, NotificationLevel, createNotification } from '../../models/notification';
 import { Localization } from '../../models/localization';
 import { Config } from '../../models/config';
@@ -34,8 +36,8 @@ import {
   styleUrls: ['./settings-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class SettingsPageComponent implements OnInit {
-  readonly OPTIONS_CONTEXT_SERVER = OPTIONS_CONTEXT_SERVER;
+export class SettingsPageComponent implements OnInit, OnDestroy {
+  OPTIONS_CONTEXT_SERVER: IOptionsContext = OPTIONS_CONTEXT_SERVER;
   readonly OPTIONS_CONTEXT_DISCOVERY = OPTIONS_CONTEXT_DISCOVERY;
   readonly OPTIONS_CONTEXT_CONNECTIONS = OPTIONS_CONTEXT_CONNECTIONS;
   readonly OPTIONS_CONTEXT_OTHER = OPTIONS_CONTEXT_OTHER;
@@ -53,6 +55,8 @@ export class SettingsPageComponent implements OnInit {
   private readonly notifService = inject(NotificationService);
   private readonly commandService = inject(ServerCommandService);
   private readonly connectedService = inject(ConnectedService);
+  private readonly pathPairsService = inject(PathPairsService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   readonly config$ = this.configService.config$;
 
@@ -63,16 +67,45 @@ export class SettingsPageComponent implements OnInit {
     Localization.Notification.CONFIG_RESTART,
   );
   private badValueNotifs = new Map<string, Notification>();
+  private subscriptions: Subscription[] = [];
+
+  private static readonly OVERRIDE_NOTE = 'Overridden by Path Pairs when any pair is enabled';
 
   ngOnInit(): void {
-    this.connectedService.connected$.subscribe({
-      next: (connected: boolean) => {
-        if (!connected) {
-          this.notifService.hide(this.configRestartNotif);
+    this.subscriptions.push(
+      this.connectedService.connected$.subscribe({
+        next: (connected: boolean) => {
+          if (!connected) {
+            this.notifService.hide(this.configRestartNotif);
+          }
+          this.commandsEnabled = connected;
+        },
+      }),
+    );
+
+    this.subscriptions.push(
+      this.pathPairsService.pairs$.subscribe((pairs) => {
+        const hasEnabledPairs = pairs.some((p) => p.enabled);
+        this.OPTIONS_CONTEXT_SERVER = SettingsPageComponent.buildServerContext(hasEnabledPairs);
+        this.cdr.markForCheck();
+      }),
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.forEach((s) => s.unsubscribe());
+  }
+
+  private static buildServerContext(hasEnabledPairs: boolean): IOptionsContext {
+    return {
+      ...OPTIONS_CONTEXT_SERVER,
+      options: OPTIONS_CONTEXT_SERVER.options.map((option) => {
+        if (hasEnabledPairs && (option.valuePath[1] === 'remote_path' || option.valuePath[1] === 'local_path')) {
+          return { ...option, description: SettingsPageComponent.OVERRIDE_NOTE };
         }
-        this.commandsEnabled = connected;
-      },
-    });
+        return option;
+      }),
+    };
   }
 
   getOptionValue(config: Config | null, valuePath: [string, string]): any {
