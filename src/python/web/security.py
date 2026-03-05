@@ -74,10 +74,17 @@ def install_csrf_protection(app: bottle.Bottle):
         if bottle.request.method in _CSRF_SAFE_METHODS:
             return
 
-        # Exempt genuine loopback connections (server-observed client IP, not client-controlled headers)
+        # Exempt genuine loopback connections — only when no proxy headers are
+        # present, so that traffic forwarded *through* localhost by a reverse
+        # proxy still undergoes CSRF validation.
         remote_addr = bottle.request.environ.get("REMOTE_ADDR", "")
         if remote_addr in _CSRF_LOCALHOST:
-            return
+            has_proxy_header = (
+                bottle.request.get_header("X-Forwarded-For")
+                or bottle.request.get_header("Forwarded")
+            )
+            if not has_proxy_header:
+                return
 
         # Check Origin first, then Referer
         origin = bottle.request.get_header("Origin")

@@ -53,9 +53,11 @@ To fix:
 
 1. Change **Server Script Path** to a location outside your sync tree, such as `~` or `~/.local`.
 2. Remove the conflicting directory from the remote server:
+
    ```bash
    rm -rf /path/to/your/sync/scanfs
    ```
+
 3. Save and restart the container.
 
 ## Where are settings stored?
