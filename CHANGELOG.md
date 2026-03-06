@@ -26,6 +26,13 @@
 - **paste WSGI server** — Replaced with Bottle's built-in multithreaded server (#140)
 - **patool dependency** — Archive extraction calls `unrar`/`7z` directly via subprocess (#141, #145)
 
+### Known Limitations
+
+- **Extraction is single-pair** — Archive extraction uses the first path pair's filesystem paths regardless of which pair downloaded the file (#167)
+- **Shared staging directory** — When staging is enabled with multiple pairs, same-named files from different pairs may collide in the staging directory (#168)
+- **Pair name uniqueness not enforced** — Duplicate pair names can cause ambiguous lookups when `pair_id` is omitted from API requests (#169)
+- **No graceful pause when all pairs disabled** — Controller falls back to legacy pair behavior instead of pausing (#170)
+
 ---
 
 ## [0.12.10] - 2026-03-04

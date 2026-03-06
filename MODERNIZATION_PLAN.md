@@ -161,13 +161,31 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 
 ### 1. scanfs Compatibility
 - Replaced PyInstaller binary with plain Python script in v0.13.0
-- Requires Python 3 on the remote seedbox
+- Requires Python 3.8+ on the remote seedbox
 - Home directory fallback when `/tmp` is restricted (v0.12.10)
 
 ### 2. LFTP Parsing
 - Some edge cases in LFTP output parsing
 - May affect certain server configurations
 - Report issues if encountered
+
+### 3. Multi-Pair Extraction (v0.13.0)
+- Extraction is hard-wired to the first path pair's filesystem paths (#167)
+- Per-pair extraction requires a separate `ExtractProcess` per pair — tracked for future release
+
+### 4. Shared Staging Directory (v0.13.0)
+- All path pairs share a single staging directory when staging is enabled (#168)
+- Same-named files from different pairs will collide
+- Fix: per-pair staging subdirectories
+
+### 5. Pair Name Uniqueness (v0.13.0)
+- Duplicate pair names are not rejected (#169)
+- Can cause ambiguous lookups when `pair_id` is omitted from API requests
+- Fix: validate uniqueness on create/update
+
+### 6. All Pairs Disabled (v0.13.0)
+- Controller falls back to legacy pair instead of pausing gracefully (#170)
+- Better UX would be an idle state with UI indication
 
 ---
 
