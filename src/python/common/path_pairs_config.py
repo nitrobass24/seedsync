@@ -111,12 +111,16 @@ class PathPairsConfig(Persist):
         with self._lock:
             if any(p.id == pair.id for p in self._pairs):
                 raise ValueError("PathPair with id '{}' already exists".format(pair.id))
+            if any(p.name == pair.name for p in self._pairs):
+                raise ValueError("PathPair with name '{}' already exists".format(pair.name))
             self._pairs.append(pair)
 
     def update_pair(self, pair: PathPair):
         with self._lock:
             for i, p in enumerate(self._pairs):
                 if p.id == pair.id:
+                    if any(other.name == pair.name and other.id != pair.id for other in self._pairs):
+                        raise ValueError("PathPair with name '{}' already exists".format(pair.name))
                     self._pairs[i] = pair
                     return
             raise ValueError("PathPair with id '{}' not found".format(pair.id))
