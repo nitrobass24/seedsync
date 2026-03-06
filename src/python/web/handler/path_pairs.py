@@ -48,6 +48,10 @@ class PathPairsHandler(IHandler):
         local_path = local_path.strip()
         if not name:
             return HTTPResponse(body="name must not be empty", status=400)
+        if not remote_path:
+            return HTTPResponse(body="remote_path must not be empty", status=400)
+        if not local_path:
+            return HTTPResponse(body="local_path must not be empty", status=400)
 
         pair = PathPair(
             name=name,
@@ -89,6 +93,10 @@ class PathPairsHandler(IHandler):
         local_path = local_path.strip()
         if not name:
             return HTTPResponse(body="name must not be empty", status=400)
+        if not remote_path:
+            return HTTPResponse(body="remote_path must not be empty", status=400)
+        if not local_path:
+            return HTTPResponse(body="local_path must not be empty", status=400)
 
         updated = PathPair(
             pair_id=pair_id,

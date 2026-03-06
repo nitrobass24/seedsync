@@ -197,19 +197,29 @@ class Extract:
                 with tarfile.open(archive_path) as tf:
                     tf.extractall(out_dir_path)
             elif fmt in ('RAR4', 'RAR5'):
-                result = subprocess.run(
-                    ["unrar", "x", "-o+", "-y", archive_path, out_dir_path + os.sep],
-                    capture_output=True, text=True
-                )
+                try:
+                    result = subprocess.run(
+                        ["unrar", "x", "-o+", "-y", archive_path, out_dir_path + os.sep],
+                        capture_output=True, text=True, timeout=3600
+                    )
+                except subprocess.TimeoutExpired:
+                    raise ExtractError(
+                        "unrar timed out after 3600s: {}".format(archive_path)
+                    )
                 if result.returncode != 0:
                     raise ExtractError(
                         "unrar failed (exit {}): {}".format(result.returncode, result.stderr.strip())
                     )
             elif fmt == '7Z':
-                result = subprocess.run(
-                    ["7z", "x", archive_path, "-o" + out_dir_path, "-y"],
-                    capture_output=True, text=True
-                )
+                try:
+                    result = subprocess.run(
+                        ["7z", "x", archive_path, "-o" + out_dir_path, "-y"],
+                        capture_output=True, text=True, timeout=3600
+                    )
+                except subprocess.TimeoutExpired:
+                    raise ExtractError(
+                        "7z timed out after 3600s: {}".format(archive_path)
+                    )
                 if result.returncode != 0:
                     raise ExtractError(
                         "7z failed (exit {}): {}".format(result.returncode, result.stderr.strip())

@@ -39,9 +39,12 @@ class WebhookNotifier(IModelListener):
                 event_type = "delete_complete"
 
         if event_type and self._config.notifications.webhook_url:
-            self._fire_webhook(event_type, new_file.name)
+            self._fire_webhook(event_type, new_file.name,
+                               pair_id=new_file.pair_id,
+                               full_path=new_file.full_path)
 
-    def _fire_webhook(self, event_type: str, filename: str):
+    def _fire_webhook(self, event_type: str, filename: str,
+                       pair_id: str = None, full_path: str = None):
         """Fire-and-forget POST in a daemon thread."""
         url = self._config.notifications.webhook_url
         payload = {
@@ -49,6 +52,10 @@ class WebhookNotifier(IModelListener):
             "filename": filename,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+        if pair_id:
+            payload["pair_id"] = pair_id
+        if full_path:
+            payload["path"] = full_path
         thread = threading.Thread(
             target=self._send_post,
             args=(url, payload),
@@ -58,7 +65,7 @@ class WebhookNotifier(IModelListener):
 
     def _send_post(self, url: str, payload: dict):
         if not url.startswith(("http://", "https://")):
-            self._logger.warning("Webhook URL rejected (not http/https): %s", url)
+            self._logger.warning("Webhook URL rejected: scheme is not http/https")
             return
         try:
             data = json.dumps(payload).encode("utf-8")

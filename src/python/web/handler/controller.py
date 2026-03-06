@@ -33,6 +33,13 @@ def _validate_filename(file_name: str) -> bool:
     return True
 
 
+def _validate_pair_id(pair_id: Optional[str]) -> Optional[str]:
+    """Return validated pair_id or None. Returns empty string to signal rejection."""
+    if pair_id is not None and pair_id.strip() == "":
+        return ""
+    return pair_id
+
+
 def _decode_and_validate(file_name: str) -> Union[str, HTTPResponse]:
     """
     Decode a double-encoded filename and validate it.
@@ -94,7 +101,9 @@ class ControllerHandler(IHandler):
         if isinstance(file_name, HTTPResponse):
             return file_name
 
-        pair_id = request.params.get("pair_id")
+        pair_id = _validate_pair_id(request.params.get("pair_id"))
+        if pair_id == "":
+            return HTTPResponse(body="pair_id must not be blank", status=400)
         command = Controller.Command(Controller.Command.Action.QUEUE, file_name, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)
@@ -110,7 +119,9 @@ class ControllerHandler(IHandler):
         if isinstance(file_name, HTTPResponse):
             return file_name
 
-        pair_id = request.params.get("pair_id")
+        pair_id = _validate_pair_id(request.params.get("pair_id"))
+        if pair_id == "":
+            return HTTPResponse(body="pair_id must not be blank", status=400)
         command = Controller.Command(Controller.Command.Action.STOP, file_name, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)
@@ -126,7 +137,9 @@ class ControllerHandler(IHandler):
         if isinstance(file_name, HTTPResponse):
             return file_name
 
-        pair_id = request.params.get("pair_id")
+        pair_id = _validate_pair_id(request.params.get("pair_id"))
+        if pair_id == "":
+            return HTTPResponse(body="pair_id must not be blank", status=400)
         command = Controller.Command(Controller.Command.Action.EXTRACT, file_name, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)
@@ -142,7 +155,9 @@ class ControllerHandler(IHandler):
         if isinstance(file_name, HTTPResponse):
             return file_name
 
-        pair_id = request.params.get("pair_id")
+        pair_id = _validate_pair_id(request.params.get("pair_id"))
+        if pair_id == "":
+            return HTTPResponse(body="pair_id must not be blank", status=400)
         command = Controller.Command(Controller.Command.Action.DELETE_LOCAL, file_name, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)
@@ -158,7 +173,9 @@ class ControllerHandler(IHandler):
         if isinstance(file_name, HTTPResponse):
             return file_name
 
-        pair_id = request.params.get("pair_id")
+        pair_id = _validate_pair_id(request.params.get("pair_id"))
+        if pair_id == "":
+            return HTTPResponse(body="pair_id must not be blank", status=400)
         command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, file_name, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)

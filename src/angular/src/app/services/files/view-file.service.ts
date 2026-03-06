@@ -268,12 +268,18 @@ export class ViewFileService {
     }
 
     // Do the removes (no re-sort required)
+    let checkedChanged = false;
     for (const key of removedKeys) {
       updateIndices = true;
-      this.checkedSet.delete(key);
+      if (this.checkedSet.delete(key)) {
+        checkedChanged = true;
+      }
       const index = newViewFiles.findIndex((v) => viewFileKey(v) === key);
       newViewFiles.splice(index, 1);
       this.indices.delete(key);
+    }
+    if (checkedChanged) {
+      this.checkedSubject.next(new Set(this.checkedSet));
     }
 
     if (reSort && this.sortComparator != null) {

@@ -65,7 +65,7 @@ export class FileComponent implements OnChanges, OnDestroy {
       const oldFile: ViewFile | undefined = fileChange.previousValue;
       const newFile: ViewFile | undefined = fileChange.currentValue;
       if (oldFile != null && newFile != null) {
-        if (oldFile.name !== newFile.name) {
+        if (oldFile.pairId !== newFile.pairId || oldFile.name !== newFile.name) {
           this.activeAction = null;
           this.resetConfirmState();
         } else if (oldFile.status !== newFile.status) {
@@ -81,7 +81,7 @@ export class FileComponent implements OnChanges, OnDestroy {
           this.resetConfirmState();
         }
 
-        if (newFile.isSelected && this.fileElement &&
+        if (!oldFile.isSelected && newFile.isSelected && this.fileElement &&
             !FileComponent.isElementInViewport(this.fileElement.nativeElement)) {
           this.fileElement.nativeElement.scrollIntoView();
         }

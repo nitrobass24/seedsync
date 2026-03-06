@@ -1,7 +1,7 @@
 <div id="file-list">
     <div id="header">
         <div class="checkbox">
-            <input type="checkbox" (change)="$any($event.target).checked ? onCheckAll() : onUncheckAll()" />
+            <input type="checkbox" aria-label="Select all files" (change)="$any($event.target).checked ? onCheckAll() : onUncheckAll()" />
         </div>
         <div class="name">Filename</div>
         <div class="status">Status</div>

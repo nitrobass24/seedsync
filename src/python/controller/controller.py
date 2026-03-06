@@ -177,19 +177,25 @@ class Controller:
         # Setup extract process (global -- extraction is local-only)
         # Use the first pair's effective_local_path for extract (backward compat)
         first_pc = self.__pair_contexts[0]
+        if self.__context.config.controller.use_local_path_as_extract_path:
+            extract_out_dir = first_pc.local_path
+        else:
+            extract_out_dir = self.__context.config.controller.extract_path
         if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
             out_dir_path = self.__context.config.controller.staging_path
-        elif self.__context.config.controller.use_local_path_as_extract_path:
-            out_dir_path = first_pc.local_path
+            # When archive is found in the final dir (fallback), extract there
+            out_dir_path_fallback = extract_out_dir
         else:
-            out_dir_path = self.__context.config.controller.extract_path
+            out_dir_path = extract_out_dir
+            out_dir_path_fallback = None
         local_path_fallback = None
         if first_pc.effective_local_path != first_pc.local_path:
             local_path_fallback = first_pc.local_path
         self.__extract_process = ExtractProcess(
             out_dir_path=out_dir_path,
             local_path=first_pc.effective_local_path,
-            local_path_fallback=local_path_fallback
+            local_path_fallback=local_path_fallback,
+            out_dir_path_fallback=out_dir_path_fallback
         )
         self.__extract_process.set_multiprocessing_logger(self.__mp_logger)
 

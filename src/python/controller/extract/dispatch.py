@@ -69,10 +69,12 @@ class ExtractDispatch:
             self.archive_paths.append((archive_path, out_dir_path))
 
     def __init__(self, out_dir_path: str, local_path: str,
-                 local_path_fallback: str = None):
+                 local_path_fallback: str = None,
+                 out_dir_path_fallback: str = None):
         self.__out_dir_path = out_dir_path
         self.__local_path = local_path
         self.__local_path_fallback = local_path_fallback
+        self.__out_dir_path_fallback = out_dir_path_fallback or out_dir_path
 
         self.__task_queue = queue.Queue()
         self.__worker = threading.Thread(name="ExtractWorker",
@@ -110,15 +112,18 @@ class ExtractDispatch:
         return statuses
 
     def __resolve_archive_path(self, relative_path: str):
-        """Find an archive file, checking primary local_path then fallback."""
+        """
+        Find an archive file, checking primary local_path then fallback.
+        Returns (absolute_path, is_fallback) or (None, False).
+        """
         primary = os.path.join(self.__local_path, relative_path)
         if Extract.is_archive(primary):
-            return primary
+            return primary, False
         if self.__local_path_fallback:
             fallback = os.path.join(self.__local_path_fallback, relative_path)
             if Extract.is_archive(fallback):
-                return fallback
-        return None
+                return fallback, True
+        return None, False
 
     def extract(self, model_file: ModelFile):
         self.logger.debug("Received extract for {}".format(model_file.name))
@@ -141,9 +146,10 @@ class ExtractDispatch:
                     frontier += curr_file.get_children()
                 else:
                     if curr_file.local_size is not None and curr_file.local_size > 0:
-                        archive_full_path = self.__resolve_archive_path(curr_file.full_path)
+                        archive_full_path, is_fallback = self.__resolve_archive_path(curr_file.full_path)
                         if archive_full_path:
-                            out_dir_path = os.path.join(self.__out_dir_path,
+                            base_out = self.__out_dir_path_fallback if is_fallback else self.__out_dir_path
+                            out_dir_path = os.path.join(base_out,
                                                         os.path.dirname(curr_file.full_path))
                             task.add_archive(archive_path=archive_full_path,
                                              out_dir_path=out_dir_path)
@@ -162,11 +168,12 @@ class ExtractDispatch:
             # For a single file, it must exist locally and must be an archive
             if model_file.local_size in (None, 0):
                 raise ExtractDispatchError("File does not exist locally: {}".format(model_file.name))
-            archive_full_path = self.__resolve_archive_path(model_file.name)
+            archive_full_path, is_fallback = self.__resolve_archive_path(model_file.name)
             if not archive_full_path:
                 raise ExtractDispatchError("File is not an archive: {}".format(model_file.name))
+            base_out = self.__out_dir_path_fallback if is_fallback else self.__out_dir_path
             task.add_archive(archive_path=archive_full_path,
-                             out_dir_path=self.__out_dir_path)
+                             out_dir_path=base_out)
             self.__task_queue.put(task)
 
     def __worker(self):

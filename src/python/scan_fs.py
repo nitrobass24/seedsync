@@ -91,7 +91,7 @@ class SystemScanner:
         return self.__create_children(self.path_to_scan)
 
     def __create_system_file(self, entry) -> SystemFile:
-        if entry.is_dir():
+        if entry.is_dir(follow_symlinks=False):
             sub_children = self.__create_children(entry.path)
             name = entry.name.encode('utf-8', 'surrogateescape').decode('utf-8', 'replace')
             size = sum(sub_child.size for sub_child in sub_children)

@@ -53,7 +53,7 @@ Full documentation is available at **[nitrobass24.github.io/seedsync](https://ni
 ```yaml
 services:
   seedsync:
-    image: ghcr.io/nitrobass24/seedsync:latest  # or :alpine for a smaller image
+    image: ghcr.io/nitrobass24/seedsync:latest  # or use the -alpine variant (e.g., :alpine, :0.13-alpine)
     container_name: seedsync
     ports:
       - "8800:8800"
