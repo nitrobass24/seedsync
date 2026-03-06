@@ -65,16 +65,15 @@ LABEL maintainer="nitrobass24" \
 # Copy stripped Python runtime from python-deps stage
 COPY --from=python-deps /usr/local/ /usr/local/
 
-# Setup non-free repo, install runtime deps, and configure in a single layer.
+# Install runtime deps in a single layer.
 # lftp, openssh-client, 7zip, ca-certificates are intentionally unpinned
 # to receive security updates on each image rebuild.
+# 7z handles all archive formats (zip, rar, 7z, tar, gz, bz2, xz).
 RUN ldconfig \
-    && sed -i 's/Components: main/Components: main non-free/' /etc/apt/sources.list.d/debian.sources \
     && apt-get update && apt-get install -y --no-install-recommends \
         lftp \
         openssh-client \
         7zip \
-        unrar=1:6.2.6-1+deb12u1 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \

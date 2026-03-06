@@ -3,7 +3,6 @@
 import os
 import subprocess
 import tarfile
-import zipfile
 
 from common import AppError
 
@@ -15,12 +14,14 @@ class ExtractError(AppError):
     pass
 
 
-# Magic byte signatures for archive formats
+# Magic byte signatures for archive formats.
+# All formats are extracted via 7z; signatures are used for fast detection only.
 _ARCHIVE_SIGNATURES = [
     (b'\x52\x61\x72\x21\x1A\x07\x01\x00', 'RAR5'),   # RAR5 (8 bytes, check before RAR4)
     (b'\x52\x61\x72\x21\x1A\x07\x00', 'RAR4'),        # RAR4 (7 bytes)
     (b'\x50\x4B\x03\x04', 'ZIP'),                      # ZIP (4 bytes)
     (b'\x37\x7A\xBC\xAF\x27\x1C', '7Z'),              # 7Z (6 bytes)
+    (b'\xFD\x37\x7A\x58\x5A\x00', 'XZ'),              # XZ (6 bytes)
     (b'\x42\x5A\x68', 'BZIP2'),                        # BZIP2 (3 bytes)
     (b'\x1F\x8B', 'GZIP'),                             # GZIP (2 bytes)
 ]
@@ -28,15 +29,17 @@ _ARCHIVE_SIGNATURES = [
 
 class Extract:
     """
-    Utility to extract archive files
+    Utility to extract archive files.
+    All extraction is performed via the 7z binary.
     """
+
+    _7Z_TIMEOUT_SECS = 3600
+
     @staticmethod
     def verify_archive(archive_path: str):
         """
-        Lightweight verification that an archive file is complete and readable.
-        Checks magic bytes and tail readability to catch truncated files
-        (e.g. incomplete flushes on Docker volume mounts).
-        Raises ExtractError on failure. Silently returns for unrecognized formats.
+        Verify archive integrity using 7z test command.
+        Raises ExtractError on failure.
         """
         if not os.path.isfile(archive_path):
             raise ExtractError("Archive verification failed: file not found: {}".format(archive_path))
@@ -46,40 +49,27 @@ class Extract:
             raise ExtractError("Archive verification failed: empty file: {}".format(archive_path))
 
         try:
-            with open(archive_path, 'rb') as f:
-                # Check magic bytes
-                header = f.read(8)
-                recognized = False
-                for signature, name in _ARCHIVE_SIGNATURES:
-                    if header[:len(signature)] == signature:
-                        recognized = True
-                        break
-
-                if not recognized:
-                    # Unrecognized format — skip verification
-                    return
-
-                # Tail readability check: seek to 1KB before EOF and read
-                tail_offset = max(0, file_size - 1024)
-                f.seek(tail_offset)
-                tail_data = f.read()
-                if len(tail_data) == 0:
-                    raise ExtractError(
-                        "Archive verification failed: truncated or corrupt file: {}".format(archive_path)
-                    )
-        except ExtractError:
-            raise
-        except OSError as e:
+            result = subprocess.run(
+                ["7z", "t", archive_path],
+                capture_output=True, text=True, timeout=Extract._7Z_TIMEOUT_SECS
+            )
+        except subprocess.TimeoutExpired:
             raise ExtractError(
-                "Archive verification failed: unable to read file: {}: {}".format(archive_path, e)
+                "Archive verification timed out after {}s: {}".format(Extract._7Z_TIMEOUT_SECS, archive_path)
+            )
+        except FileNotFoundError:
+            raise ExtractError("7z binary not found; cannot verify archive")
+
+        if result.returncode != 0:
+            raise ExtractError(
+                "Archive verification failed (exit {}): {}".format(result.returncode, result.stderr.strip())
             )
 
     @staticmethod
     def _detect_format(archive_path: str) -> str:
         """
         Detect archive format using magic bytes.
-        Returns format name ('ZIP', 'RAR4', 'RAR5', '7Z', 'GZIP', 'BZIP2', 'TAR')
-        or None if unrecognized.
+        Returns format name or None if unrecognized.
         """
         try:
             with open(archive_path, 'rb') as f:
@@ -106,10 +96,8 @@ class Extract:
     @staticmethod
     def is_archive_fast(archive_path: str) -> bool:
         """
-        Fast version of is_archive that only looks at file extension
-        May return false negatives
-        :param archive_path:
-        :return:
+        Fast version of is_archive that only looks at file extension.
+        May return false negatives.
         """
         file_ext = os.path.splitext(os.path.basename(archive_path))[1]
         if file_ext:
@@ -120,6 +108,7 @@ class Extract:
                 "bz2",
                 "gz",
                 "lz",
+                "xz",
                 "rar",
                 "tar", "tgz", "tbz2",
                 "zip", "zipx"
@@ -128,124 +117,105 @@ class Extract:
             return False
 
     @staticmethod
-    def _check_member_path(member_name: str, real_out_dir: str):
-        """Raise ExtractError if a member path would escape the output directory."""
-        resolved = os.path.realpath(os.path.join(real_out_dir, member_name))
-        try:
-            common = os.path.commonpath([real_out_dir, resolved])
-        except ValueError:
-            common = None
-        if common != real_out_dir:
-            raise ExtractError(
-                "Zip-slip detected: member '{}' escapes target directory '{}'".format(
-                    member_name, real_out_dir
-                )
-            )
-
-    @staticmethod
-    def _pre_validate_members(archive_path: str, out_dir_path: str):
-        """
-        Pre-validate archive members for zip and tar formats before extraction.
-        Rejects symlinks, hardlinks, and path traversal.
-        Returns True if pre-validation was performed, False if format is unsupported
-        for pre-validation (fallback to post-extraction check).
-        """
-        real_out_dir = os.path.realpath(out_dir_path)
-
-        if zipfile.is_zipfile(archive_path):
-            with zipfile.ZipFile(archive_path, 'r') as zf:
-                for info in zf.infolist():
-                    # Reject symlinks (Unix mode S_IFLNK = 0xA000 in upper 16 bits of external_attr)
-                    if (info.external_attr >> 16) & 0xF000 == 0xA000:
-                        raise ExtractError(
-                            "Symlink rejected in archive: '{}'".format(info.filename)
-                        )
-                    Extract._check_member_path(info.filename, real_out_dir)
-            return True
-
-        try:
-            with tarfile.open(archive_path) as tf:
-                for member in tf.getmembers():
-                    if member.issym() or member.islnk():
-                        raise ExtractError(
-                            "Symlink/hardlink rejected in archive: '{}'".format(member.name)
-                        )
-                    Extract._check_member_path(member.name, real_out_dir)
-            return True
-        except tarfile.TarError:
-            pass
-
-        return False
-
-    @staticmethod
     def extract_archive(archive_path: str, out_dir_path: str):
-        fmt = Extract._detect_format(archive_path) if os.path.isfile(archive_path) else None
+        """
+        Extract an archive using 7z.
+        Supports all formats handled by 7z: zip, rar, 7z, tar, gz, bz2, xz, and more.
+        """
+        if not os.path.isfile(archive_path):
+            raise ExtractError("Path is not a valid archive: {}".format(archive_path))
+
+        fmt = Extract._detect_format(archive_path)
         if fmt is None:
             raise ExtractError("Path is not a valid archive: {}".format(archive_path))
+
         try:
-            # Try to create the outdir path
             if not os.path.exists(out_dir_path):
                 os.makedirs(out_dir_path)
 
-            # Pre-validate member paths for zip/tar before extraction
-            pre_validated = Extract._pre_validate_members(archive_path, out_dir_path)
-
-            if fmt == 'ZIP':
-                with zipfile.ZipFile(archive_path, 'r') as zf:
-                    zf.extractall(out_dir_path)
-            elif fmt in ('TAR', 'GZIP', 'BZIP2'):
-                with tarfile.open(archive_path) as tf:
-                    tf.extractall(out_dir_path)
-            elif fmt in ('RAR4', 'RAR5'):
-                try:
-                    result = subprocess.run(
-                        ["unrar", "x", "-o+", "-y", archive_path, out_dir_path + os.sep],
-                        capture_output=True, text=True, timeout=3600
-                    )
-                except subprocess.TimeoutExpired:
-                    raise ExtractError(
-                        "unrar timed out after 3600s: {}".format(archive_path)
-                    )
-                if result.returncode != 0:
-                    raise ExtractError(
-                        "unrar failed (exit {}): {}".format(result.returncode, result.stderr.strip())
-                    )
-            elif fmt == '7Z':
-                try:
-                    result = subprocess.run(
-                        ["7z", "x", archive_path, "-o" + out_dir_path, "-y"],
-                        capture_output=True, text=True, timeout=3600
-                    )
-                except subprocess.TimeoutExpired:
-                    raise ExtractError(
-                        "7z timed out after 3600s: {}".format(archive_path)
-                    )
-                if result.returncode != 0:
-                    raise ExtractError(
-                        "7z failed (exit {}): {}".format(result.returncode, result.stderr.strip())
-                    )
+            # For .tar.gz, .tar.bz2, .tar.xz — 7z extracts the outer compression
+            # to get the .tar, then we need a second pass to extract the tar contents.
+            # Detect this by checking if the inner content is a tar.
+            if fmt in ('GZIP', 'BZIP2', 'XZ'):
+                # Two-pass extraction: decompress → extract tar (if applicable)
+                Extract._extract_compressed_archive(archive_path, out_dir_path)
             else:
-                raise ExtractError("Unsupported archive format: {}".format(fmt))
+                Extract._run_7z(archive_path, out_dir_path)
+
         except ExtractError:
             raise
         except FileNotFoundError as e:
             raise ExtractError(str(e)) from e
-        except (zipfile.BadZipFile, tarfile.TarError) as e:
-            raise ExtractError(str(e)) from e
 
-        # Post-extraction check as fallback for formats that can't be pre-validated (rar, 7z)
-        if not pre_validated:
-            real_out_dir = os.path.realpath(out_dir_path)
-            for dirpath, dirnames, filenames in os.walk(real_out_dir):
-                for name in filenames + dirnames:
-                    full_path = os.path.realpath(os.path.join(dirpath, name))
-                    try:
-                        common = os.path.commonpath([real_out_dir, full_path])
-                    except ValueError:
-                        common = None
-                    if common != real_out_dir:
-                        raise ExtractError(
-                            "Zip-slip detected: extracted path '{}' escapes target directory '{}'".format(
-                                full_path, real_out_dir
-                            )
+        # Post-extraction path validation: ensure nothing escaped the output directory
+        real_out_dir = os.path.realpath(out_dir_path)
+        for dirpath, dirnames, filenames in os.walk(real_out_dir):
+            for name in filenames + dirnames:
+                full_path = os.path.realpath(os.path.join(dirpath, name))
+                if os.path.islink(os.path.join(dirpath, name)):
+                    os.remove(os.path.join(dirpath, name))
+                    continue
+                try:
+                    common = os.path.commonpath([real_out_dir, full_path])
+                except ValueError:
+                    common = None
+                if common != real_out_dir:
+                    raise ExtractError(
+                        "Zip-slip detected: extracted path '{}' escapes target directory '{}'".format(
+                            full_path, real_out_dir
                         )
+                    )
+
+    @staticmethod
+    def _run_7z(archive_path: str, out_dir_path: str):
+        """Run 7z extraction with standard options."""
+        try:
+            result = subprocess.run(
+                ["7z", "x", archive_path, "-o" + out_dir_path, "-y", "-aoa"],
+                capture_output=True, text=True, timeout=Extract._7Z_TIMEOUT_SECS
+            )
+        except subprocess.TimeoutExpired:
+            raise ExtractError(
+                "7z timed out after {}s: {}".format(Extract._7Z_TIMEOUT_SECS, archive_path)
+            )
+        except FileNotFoundError:
+            raise ExtractError("7z binary not found; cannot extract archive")
+
+        if result.returncode != 0:
+            raise ExtractError(
+                "7z failed (exit {}): {}".format(result.returncode, result.stderr.strip())
+            )
+
+    @staticmethod
+    def _extract_compressed_archive(archive_path: str, out_dir_path: str):
+        """
+        Handle .tar.gz, .tar.bz2, .tar.xz and plain .gz, .bz2, .xz files.
+        First pass decompresses to a temp location; if the result is a tar,
+        second pass extracts the tar. Otherwise moves the decompressed file.
+        """
+        import tempfile
+        import shutil
+
+        # Decompress to a temp directory first
+        with tempfile.TemporaryDirectory(prefix="seedsync_extract_") as tmp_dir:
+            Extract._run_7z(archive_path, tmp_dir)
+
+            # Check what we got
+            extracted = os.listdir(tmp_dir)
+            if len(extracted) == 1:
+                inner_path = os.path.join(tmp_dir, extracted[0])
+                # If the inner file is a tar, extract it
+                if os.path.isfile(inner_path) and Extract._detect_format(inner_path) == 'TAR':
+                    Extract._run_7z(inner_path, out_dir_path)
+                    return
+
+            # Not a tar inside — move everything to the output directory
+            for item in extracted:
+                src = os.path.join(tmp_dir, item)
+                dst = os.path.join(out_dir_path, item)
+                if os.path.exists(dst):
+                    if os.path.isdir(dst):
+                        shutil.rmtree(dst)
+                    else:
+                        os.remove(dst)
+                shutil.move(src, dst)

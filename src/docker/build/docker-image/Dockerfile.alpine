@@ -65,14 +65,11 @@ LABEL maintainer="nitrobass24" \
 # Copy stripped Python runtime from python-deps stage
 COPY --from=python-deps /usr/local/ /usr/local/
 
-# Copy unrar binary from linuxserver (not packaged in Alpine).
-# Intentionally unpinned to receive unrar security updates on rebuild.
-COPY --from=linuxserver/unrar /usr/bin/unrar-alpine /usr/bin/unrar
-
 # Install runtime dependencies.
 # setpriv (from util-linux) is used by entrypoint to drop privileges.
 # lftp, openssh-client, 7zip, ca-certificates are intentionally
 # unpinned to receive security updates on each image rebuild.
+# 7z handles all archive formats (zip, rar, 7z, tar, gz, bz2, xz).
 RUN apk add --no-cache \
         lftp \
         openssh-client \
