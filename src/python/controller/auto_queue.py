@@ -332,10 +332,19 @@ class AutoQueue:
         self.__persist_listener.new_patterns.clear()
 
     def _is_auto_queue_enabled_for_file(self, file: ModelFile) -> bool:
-        """Check if auto-queue is enabled for a specific file based on its pair_id."""
+        """Check if auto-queue is enabled for a specific file based on its pair_id.
+
+        When per-pair overrides are active (__pair_auto_queue is non-empty),
+        files with a None pair_id are treated as not auto-queued (the dict
+        lookup returns False for None keys). This is intentional: files
+        without a pair_id don't belong to any enabled pair.
+
+        When no path pairs are active, returns True unconditionally — the
+        caller (process()) already gates on the global __enabled flag.
+        """
         if self.__pair_auto_queue:
             return self.__pair_auto_queue.get(file.pair_id, False)
-        return True  # no path pairs active; global __enabled already checked by caller
+        return True
 
     def __filter_candidates(self,
                             candidates: List[ModelFile],
