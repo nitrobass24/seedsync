@@ -8,6 +8,7 @@ from typing import Optional, List
 import logging
 
 from .dispatch import ExtractDispatch, ExtractStatus, ExtractListener, ExtractDispatchError
+from .extract_request import ExtractRequest
 from common import overrides, AppProcess
 from model import ModelFile
 
@@ -57,14 +58,8 @@ class ExtractProcess(AppProcess):
                                                 is_dir=is_dir)
             self.failed_queue.put(failed_result)
 
-    def __init__(self, out_dir_path: str, local_path: str,
-                 local_path_fallback: str = None,
-                 out_dir_path_fallback: str = None):
+    def __init__(self):
         super().__init__(name=self.__class__.__name__)
-        self.__out_dir_path = out_dir_path
-        self.__local_path = local_path
-        self.__local_path_fallback = local_path_fallback
-        self.__out_dir_path_fallback = out_dir_path_fallback
         self.__command_queue = multiprocessing.Queue()
         self.__status_result_queue = multiprocessing.Queue()
         self.__completed_result_queue = multiprocessing.Queue()
@@ -74,10 +69,7 @@ class ExtractProcess(AppProcess):
     @overrides(AppProcess)
     def run_init(self):
         # Create dispatch inside the process
-        self.__dispatch = ExtractDispatch(out_dir_path=self.__out_dir_path,
-                                          local_path=self.__local_path,
-                                          local_path_fallback=self.__local_path_fallback,
-                                          out_dir_path_fallback=self.__out_dir_path_fallback)
+        self.__dispatch = ExtractDispatch()
 
         # Add extract listener
         listener = ExtractProcess.__ExtractListener(
@@ -99,17 +91,17 @@ class ExtractProcess(AppProcess):
         # Forward all the extract commands
         try:
             while True:
-                file = self.__command_queue.get(block=False)
+                req = self.__command_queue.get(block=False)
                 try:
-                    self.__dispatch.extract(file)
+                    self.__dispatch.extract(req)
                 except ExtractDispatchError as e:
                     self.logger.warning(str(e))
                     # Report dispatch errors as failures so the controller
                     # can transition the file to EXTRACT_FAILED state
                     failed_result = ExtractFailedResult(
                         timestamp=datetime.datetime.now(),
-                        name=file.name,
-                        is_dir=file.is_dir
+                        name=req.model_file.name,
+                        is_dir=req.model_file.is_dir
                     )
                     self.__failed_result_queue.put(failed_result)
         except queue.Empty:
@@ -123,13 +115,13 @@ class ExtractProcess(AppProcess):
 
         time.sleep(ExtractProcess.__DEFAULT_SLEEP_INTERVAL_IN_SECS)
 
-    def extract(self, file: ModelFile):
+    def extract(self, req: ExtractRequest):
         """
         Process-safe method to queue an extraction
-        :param file:
+        :param req:
         :return:
         """
-        self.__command_queue.put(file)
+        self.__command_queue.put(req)
 
     def pop_latest_statuses(self) -> Optional[ExtractStatusResult]:
         """

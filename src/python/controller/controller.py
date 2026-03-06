@@ -11,7 +11,7 @@ import copy
 
 # my libs
 from .scan import ScannerProcess, ActiveScanner, LocalScanner, RemoteScanner
-from .extract import ExtractProcess, ExtractStatus
+from .extract import ExtractProcess, ExtractStatus, ExtractRequest
 from .model_builder import ModelBuilder
 from common import Context, AppError, MultiprocessingLogger, AppOneShotProcess, Constants
 from model import ModelError, ModelFile, Model, ModelDiff, ModelDiffUtil, IModelListener
@@ -175,28 +175,7 @@ class Controller:
         self._sync_persist_to_all_builders()
 
         # Setup extract process (global -- extraction is local-only)
-        # Use the first pair's effective_local_path for extract (backward compat)
-        first_pc = self.__pair_contexts[0]
-        if self.__context.config.controller.use_local_path_as_extract_path:
-            extract_out_dir = first_pc.local_path
-        else:
-            extract_out_dir = self.__context.config.controller.extract_path
-        if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-            out_dir_path = self.__context.config.controller.staging_path
-            # When archive is found in the final dir (fallback), extract there
-            out_dir_path_fallback = extract_out_dir
-        else:
-            out_dir_path = extract_out_dir
-            out_dir_path_fallback = None
-        local_path_fallback = None
-        if first_pc.effective_local_path != first_pc.local_path:
-            local_path_fallback = first_pc.local_path
-        self.__extract_process = ExtractProcess(
-            out_dir_path=out_dir_path,
-            local_path=first_pc.effective_local_path,
-            local_path_fallback=local_path_fallback,
-            out_dir_path_fallback=out_dir_path_fallback
-        )
+        self.__extract_process = ExtractProcess()
         self.__extract_process.set_multiprocessing_logger(self.__mp_logger)
 
         # Keep track of active command processes (shared)
@@ -253,8 +232,9 @@ class Controller:
         pair_logger = self.logger.getChild("Pair[{}]".format(pair_label))
 
         # Determine effective local path: use staging_path when staging is enabled
+        # Each pair gets its own staging subdirectory to prevent cross-pair collisions
         if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-            effective_local_path = self.__context.config.controller.staging_path
+            effective_local_path = os.path.join(self.__context.config.controller.staging_path, pair_id)
             os.makedirs(effective_local_path, exist_ok=True)
         else:
             effective_local_path = local_path
@@ -483,6 +463,36 @@ class Controller:
             except ModelError:
                 pass
         return self.__pair_contexts[0] if self.__pair_contexts else None
+
+    def _build_extract_request(self, file: ModelFile, pc: '_PairContext') -> ExtractRequest:
+        """Build an ExtractRequest with the correct pair-specific paths."""
+        # Determine output directory
+        if self.__context.config.controller.use_local_path_as_extract_path:
+            extract_out_dir = pc.local_path
+        else:
+            extract_out_dir = self.__context.config.controller.extract_path
+
+        # When staging is enabled, archives live in the staging subdir
+        if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
+            pair_staging = os.path.join(self.__context.config.controller.staging_path, pc.pair_id) \
+                if pc.pair_id else self.__context.config.controller.staging_path
+            out_dir_path = pair_staging
+            out_dir_path_fallback = extract_out_dir
+        else:
+            out_dir_path = extract_out_dir
+            out_dir_path_fallback = None
+
+        local_path_fallback = None
+        if pc.effective_local_path != pc.local_path:
+            local_path_fallback = pc.local_path
+
+        return ExtractRequest(
+            model_file=file,
+            local_path=pc.effective_local_path,
+            out_dir_path=out_dir_path,
+            local_path_fallback=local_path_fallback,
+            out_dir_path_fallback=out_dir_path_fallback
+        )
 
     def __update_model(self):
         # Grab the latest extract results (shared)
@@ -819,7 +829,8 @@ class Controller:
                     self.__extract_retry_counts.pop(pkey, None)
                     self.__persist.extract_failed_file_names.discard(pkey)
                     self._sync_persist_to_all_builders()
-                    self.__extract_process.extract(file)
+                    req = self._build_extract_request(file, pc)
+                    self.__extract_process.extract(req)
 
             elif command.action == Controller.Command.Action.DELETE_LOCAL:
                 if file.state not in (
@@ -839,10 +850,12 @@ class Controller:
                     delete_path = pc.local_path
                     if self.__context.config.controller.use_staging and \
                             self.__context.config.controller.staging_path:
-                        staging_file = os.path.join(
-                            self.__context.config.controller.staging_path, file.name)
+                        pair_staging = os.path.join(
+                            self.__context.config.controller.staging_path, pc.pair_id) \
+                            if pc.pair_id else self.__context.config.controller.staging_path
+                        staging_file = os.path.join(pair_staging, file.name)
                         if os.path.exists(staging_file):
-                            delete_path = self.__context.config.controller.staging_path
+                            delete_path = pair_staging
                     process = DeleteLocalProcess(
                         local_path=delete_path,
                         file_name=file.name
@@ -926,9 +939,12 @@ class Controller:
             return
 
         dest_path = pc.local_path if pc else self.__pair_contexts[0].local_path
+        # Use per-pair staging subdirectory
+        staging_source = os.path.join(self.__context.config.controller.staging_path, pair_id) \
+            if pair_id else self.__context.config.controller.staging_path
         self.__moved_file_keys.add(move_key)
         process = MoveProcess(
-            source_path=self.__context.config.controller.staging_path,
+            source_path=staging_source,
             dest_path=dest_path,
             file_name=file_name
         )
