@@ -5,6 +5,7 @@ export interface IOption {
   label: string;
   valuePath: [string, string];
   description: string | null;
+  disabled?: boolean;
 }
 
 export interface IOptionsContext {

@@ -88,6 +88,7 @@
             [type]="option.type"
             [label]="option.label"
             [description]="option.description"
+            [disabled]="!!option.disabled"
             [value]="getOptionValue(config$ | async, option.valuePath)"
             (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
           </app-option>

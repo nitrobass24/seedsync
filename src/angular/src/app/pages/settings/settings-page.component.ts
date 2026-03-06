@@ -105,7 +105,7 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
       ...OPTIONS_CONTEXT_SERVER,
       options: OPTIONS_CONTEXT_SERVER.options.map((option) => {
         if (hasEnabledPairs && (option.valuePath[1] === 'remote_path' || option.valuePath[1] === 'local_path')) {
-          return { ...option, description: SettingsPageComponent.OVERRIDE_NOTE };
+          return { ...option, description: SettingsPageComponent.OVERRIDE_NOTE, disabled: true };
         }
         return option;
       }),
