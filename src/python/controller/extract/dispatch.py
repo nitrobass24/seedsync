@@ -38,10 +38,11 @@ class ExtractStatus:
     class State(Enum):
         EXTRACTING = 0
 
-    def __init__(self, name: str, is_dir: bool, state: State):
+    def __init__(self, name: str, is_dir: bool, state: State, pair_id: str = None):
         self.__name = name
         self.__is_dir = is_dir
         self.__state = state
+        self.__pair_id = pair_id
 
     @property
     def name(self) -> str: return self.__name
@@ -51,6 +52,9 @@ class ExtractStatus:
 
     @property
     def state(self) -> State: return self.__state
+
+    @property
+    def pair_id(self): return self.__pair_id
 
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
@@ -102,7 +106,8 @@ class ExtractDispatch:
         for task in tasks:
             status = ExtractStatus(name=task.root_name,
                                    is_dir=task.root_is_dir,
-                                   state=ExtractStatus.State.EXTRACTING)
+                                   state=ExtractStatus.State.EXTRACTING,
+                                   pair_id=task.pair_id)
             statuses.append(status)
         return statuses
 

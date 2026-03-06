@@ -458,11 +458,15 @@ class Controller:
         return None
 
     def _find_pair_by_id(self, pair_id: str) -> Optional[_PairContext]:
-        """Find the pair context by pair_id."""
+        """Find the pair context by pair_id.
+        Returns default (first) pair when pair_id is None.
+        Returns None when pair_id is provided but not found.
+        """
         if pair_id:
             for pc in self.__pair_contexts:
                 if pc.pair_id == pair_id:
                     return pc
+            return None
         return self.__pair_contexts[0] if self.__pair_contexts else None
 
     def _build_extract_request(self, file: ModelFile, pc: '_PairContext') -> ExtractRequest:
@@ -633,8 +637,12 @@ class Controller:
         for result in latest_failed_extractions:
             # Use pair_id from the extraction result
             result_pc = self._find_pair_by_id(result.pair_id)
-            result_pair_id = result.pair_id
-            retry_key = _persist_key(result_pair_id, result.name)
+            if result_pc is None:
+                self.logger.warning(
+                    "Ignoring extract failure for '{}': pair '{}' no longer exists".format(
+                        result.name, result.pair_id))
+                continue
+            retry_key = _persist_key(result.pair_id, result.name)
             count = self.__extract_retry_counts.get(retry_key, 0) + 1
             self.__extract_retry_counts[retry_key] = count
             if count < 3:
@@ -733,11 +741,18 @@ class Controller:
         if lftp_statuses is not None:
             pc.model_builder.set_lftp_statuses(lftp_statuses)
         if latest_extract_statuses is not None:
-            pc.model_builder.set_extract_statuses(latest_extract_statuses.statuses)
+            pair_statuses = [s for s in latest_extract_statuses.statuses
+                             if s.pair_id == pc.pair_id]
+            pc.model_builder.set_extract_statuses(pair_statuses)
         if latest_extracted_results:
             for result in latest_extracted_results:
                 # Use pair_id from the extraction result
-                owner_pc = self._find_pair_by_id(result.pair_id) or pc
+                owner_pc = self._find_pair_by_id(result.pair_id)
+                if owner_pc is None:
+                    self.logger.warning(
+                        "Ignoring extract completion for '{}': pair '{}' no longer exists".format(
+                            result.name, result.pair_id))
+                    continue
                 pkey = _persist_key(result.pair_id, result.name)
                 self.__persist.extracted_file_names.add(pkey)
                 if self.__context.config.controller.use_staging and \

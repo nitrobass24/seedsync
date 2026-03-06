@@ -12,7 +12,7 @@ import time
 import timeout_decorator
 
 from model import ModelFile
-from controller.extract import ExtractProcess, ExtractListener, ExtractStatus
+from controller.extract import ExtractProcess, ExtractListener, ExtractStatus, ExtractRequest
 
 
 class TestExtractProcess(unittest.TestCase):
@@ -41,44 +41,6 @@ class TestExtractProcess(unittest.TestCase):
             self.process.terminate()
 
     @timeout_decorator.timeout(2)
-    def test_param_out_dir_path(self):
-        self.out_dir_path = multiprocessing.Array(ctypes.c_char, 100)
-        self.ctor_called = multiprocessing.Value('i', 0)
-
-        def mock_ctor(**kwargs):
-            self.out_dir_path.value = str.encode(kwargs["out_dir_path"])
-            self.ctor_called.value = 1
-            return self.mock_dispatch
-        self.mock_dispatch_cls.side_effect = mock_ctor
-
-        self.process = ExtractProcess(out_dir_path="/test/out/path",
-                                      local_path="/test/local/path")
-        self.process.start()
-        # Wait for ctor to be called
-        while self.ctor_called.value == 0:
-            pass
-        self.assertEqual("/test/out/path", self.out_dir_path.value.decode())
-
-    @timeout_decorator.timeout(2)
-    def test_param_out_local_path(self):
-        self.local_path = multiprocessing.Array(ctypes.c_char, 100)
-        self.ctor_called = multiprocessing.Value('i', 0)
-
-        def mock_ctor(**kwargs):
-            self.local_path.value = str.encode(kwargs["local_path"])
-            self.ctor_called.value = 1
-            return self.mock_dispatch
-        self.mock_dispatch_cls.side_effect = mock_ctor
-
-        self.process = ExtractProcess(out_dir_path="/test/out/path",
-                                      local_path="/test/local/path")
-        self.process.start()
-        # Wait for ctor to be called
-        while self.ctor_called.value == 0:
-            pass
-        self.assertEqual("/test/local/path", self.local_path.value.decode())
-
-    @timeout_decorator.timeout(2)
     def test_calls_start_dispatch(self):
         self.start_called = multiprocessing.Value('i', 0)
 
@@ -86,8 +48,7 @@ class TestExtractProcess(unittest.TestCase):
             self.start_called.value = 1
         self.mock_dispatch.start.side_effect = _start
 
-        self.process = ExtractProcess(out_dir_path="/test/out/path",
-                                      local_path="/test/local/path")
+        self.process = ExtractProcess()
         self.process.start()
         while self.start_called.value == 0:
             pass
@@ -116,7 +77,7 @@ class TestExtractProcess(unittest.TestCase):
             return ret
         self.mock_dispatch.status.side_effect = _status
 
-        self.process = ExtractProcess(out_dir_path="", local_path="")
+        self.process = ExtractProcess()
         self.process.start()
 
         # wait for first call to status (actually second call to guarantee first status is queued)
@@ -184,7 +145,7 @@ class TestExtractProcess(unittest.TestCase):
             threading.Thread(target=_callback_sequence()).start()
         self.mock_dispatch.add_listener.side_effect = _add_listener
 
-        self.process = ExtractProcess(out_dir_path="", local_path="")
+        self.process = ExtractProcess()
         self.process.start()
 
         while self.completed_signal.value < 1:
@@ -234,7 +195,8 @@ class TestExtractProcess(unittest.TestCase):
 
         self.extract_counter = multiprocessing.Value('i', 0)
 
-        def _extract(file: ModelFile):
+        def _extract(req: ExtractRequest):
+            file = req.model_file
             print(file.name)
             if self.extract_counter.value == 0:
                 self.assertEqual("a", file.name)
@@ -269,12 +231,16 @@ class TestExtractProcess(unittest.TestCase):
             self.extract_counter.value += 1
         self.mock_dispatch.extract.side_effect = _extract
 
-        self.process = ExtractProcess(out_dir_path="", local_path="")
+        self.process = ExtractProcess()
         self.process.start()
 
-        self.process.extract(a)
+        req_a = ExtractRequest(model_file=a, local_path="/local", out_dir_path="/out")
+        req_b = ExtractRequest(model_file=b, local_path="/local", out_dir_path="/out")
+        req_c = ExtractRequest(model_file=c, local_path="/local", out_dir_path="/out")
+
+        self.process.extract(req_a)
         time.sleep(1)
-        self.process.extract(b)
-        self.process.extract(c)
+        self.process.extract(req_b)
+        self.process.extract(req_c)
         while self.extract_counter.value < 3:
             pass
