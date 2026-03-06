@@ -69,7 +69,7 @@ export class HeaderComponent implements OnInit {
     // Set up a subscriber to show waiting for remote scan notification
     this._serverStatusService.status$.subscribe({
       next: status => {
-        if (status.server.up && status.controller.latestRemoteScanTime == null) {
+        if (status.server.up && status.controller.latestRemoteScanTime == null && !status.controller.noEnabledPairs) {
           if (this._prevWaitingForRemoteScanNotification == null) {
             this._prevWaitingForRemoteScanNotification = createNotification(
               NotificationLevel.INFO,
@@ -89,7 +89,7 @@ export class HeaderComponent implements OnInit {
     // Set up a subscriber to show remote server error notifications
     this._serverStatusService.status$.subscribe({
       next: status => {
-        if (status.server.up && status.controller.latestRemoteScanFailed === true) {
+        if (status.server.up && status.controller.latestRemoteScanFailed === true && !status.controller.noEnabledPairs) {
           const level = NotificationLevel.WARNING;
           const text = Localization.Notification.STATUS_REMOTE_SERVER_ERROR(
             status.controller.latestRemoteScanError ?? ''
