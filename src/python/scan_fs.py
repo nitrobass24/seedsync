@@ -25,7 +25,7 @@ class SystemFile:
                  time_created: datetime = None,
                  time_modified: datetime = None):
         if size < 0:
-            raise ValueError("File size must be greater than zero")
+            raise ValueError("File size must be non-negative")
         self.__name = name
         self.__size = size
         self.__is_dir = is_dir
@@ -131,9 +131,12 @@ class SystemScanner:
             for prefix in self.exclude_prefixes:
                 if entry.name.startswith(prefix):
                     skip = True
-            for suffix in self.exclude_suffixes:
-                if entry.name.endswith(suffix):
-                    skip = True
+                    break
+            if not skip:
+                for suffix in self.exclude_suffixes:
+                    if entry.name.endswith(suffix):
+                        skip = True
+                        break
             if skip:
                 continue
             try:

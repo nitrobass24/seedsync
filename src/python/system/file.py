@@ -15,7 +15,7 @@ class SystemFile:
                  time_created: datetime = None,
                  time_modified: datetime = None):
         if size < 0:
-            raise ValueError("File size must be greater than zero")
+            raise ValueError("File size must be non-negative")
         self.__name = name
         self.__size = size  # in bytes
         self.__is_dir = is_dir
@@ -64,7 +64,6 @@ class SystemFile:
 
     @staticmethod
     def from_dict(d: dict) -> "SystemFile":
-        from datetime import datetime
         tc = datetime.fromisoformat(d["time_created"]) if d.get("time_created") else None
         tm = datetime.fromisoformat(d["time_modified"]) if d.get("time_modified") else None
         sf = SystemFile(name=d["name"], size=d["size"], is_dir=d.get("is_dir", False),

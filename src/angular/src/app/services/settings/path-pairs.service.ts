@@ -31,7 +31,7 @@ export class PathPairsService {
   refresh(): void {
     this.http.get<PathPair[]>(PathPairsService.BASE_URL).pipe(
       catchError((err: HttpErrorResponse) => {
-        this.logger.debug('Failed to load path pairs: %O', err);
+        this.logger.warn('Failed to load path pairs: %O', err);
         return of([]);
       }),
     ).subscribe((pairs) => this.pairsSubject.next(pairs));
@@ -43,7 +43,7 @@ export class PathPairsService {
         this.pairsSubject.next([...this.pairsSubject.getValue(), created]);
       }),
       catchError((err: HttpErrorResponse) => {
-        this.logger.debug('Failed to create path pair: %O', err);
+        this.logger.warn('Failed to create path pair: %O', err);
         return of(null);
       }),
     );
@@ -58,7 +58,7 @@ export class PathPairsService {
         this.pairsSubject.next(pairs);
       }),
       catchError((err: HttpErrorResponse) => {
-        this.logger.debug('Failed to update path pair: %O', err);
+        this.logger.warn('Failed to update path pair: %O', err);
         return of(null);
       }),
     );
@@ -72,7 +72,7 @@ export class PathPairsService {
         return true;
       }),
       catchError((err: HttpErrorResponse) => {
-        this.logger.debug('Failed to delete path pair: %O', err);
+        this.logger.warn('Failed to delete path pair: %O', err);
         return of(false);
       }),
     );

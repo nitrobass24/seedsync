@@ -19,7 +19,7 @@ Both variants are functionally identical. Use `alpine` if image size matters and
 
 - Linux-based system (64-bit)
 - SSH access (password or key-based)
-- Python 3 (`python3` must be available on the remote `$PATH`)
+- Python 3.8+ (`python3` must be available on the remote `$PATH`)
 
 ### Local machine
 

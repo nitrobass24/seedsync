@@ -3,6 +3,7 @@ import { AsyncPipe } from '@angular/common';
 import { Observable } from 'rxjs';
 
 import { ViewFileService } from '../../services/files/view-file.service';
+import { WebReaction } from '../../services/utils/rest.service';
 import { ViewFile } from '../../models/view-file';
 import { ViewFileOptions } from '../../models/view-file-options';
 import { ViewFileOptionsService } from '../../services/files/view-file-options.service';
@@ -86,27 +87,15 @@ export class FileListComponent {
     this.viewFileService.uncheckAll();
   }
 
-  onBulkQueue(): void {
-    this.viewFileService.bulkQueue().subscribe(reactions => {
-      reactions.forEach(r => { if (r.data) this.logger.info(r.data); });
-    });
-  }
+  onBulkQueue(): void { this.handleBulkResponse(this.viewFileService.bulkQueue()); }
+  onBulkStop(): void { this.handleBulkResponse(this.viewFileService.bulkStop()); }
+  onBulkDeleteLocal(): void { this.handleBulkResponse(this.viewFileService.bulkDeleteLocal()); }
+  onBulkDeleteRemote(): void { this.handleBulkResponse(this.viewFileService.bulkDeleteRemote()); }
 
-  onBulkStop(): void {
-    this.viewFileService.bulkStop().subscribe(reactions => {
-      reactions.forEach(r => { if (r.data) this.logger.info(r.data); });
-    });
-  }
-
-  onBulkDeleteLocal(): void {
-    this.viewFileService.bulkDeleteLocal().subscribe(reactions => {
-      reactions.forEach(r => { if (r.data) this.logger.info(r.data); });
-    });
-  }
-
-  onBulkDeleteRemote(): void {
-    this.viewFileService.bulkDeleteRemote().subscribe(reactions => {
-      reactions.forEach(r => { if (r.data) this.logger.info(r.data); });
+  private handleBulkResponse(action$: Observable<WebReaction[]>): void {
+    action$.subscribe({
+      next: (reactions) => reactions.forEach(r => { if (r.data) this.logger.info(r.data); }),
+      error: (err) => this.logger.error('Bulk action failed:', err),
     });
   }
 }

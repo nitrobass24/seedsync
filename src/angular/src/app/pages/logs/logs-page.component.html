@@ -1,12 +1,16 @@
 <div id="logs">
   <div class="log-filters">
+    <label for="log-search">Search logs</label>
     <input
+      id="log-search"
       type="text"
       class="form-control form-control-sm"
       placeholder="Search logs..."
       [(ngModel)]="searchQuery"
       (input)="onSearchChange()" />
+    <label for="log-level">Log level</label>
     <select
+      id="log-level"
       class="form-select form-select-sm"
       [(ngModel)]="levelFilter"
       (change)="onLevelChange()">

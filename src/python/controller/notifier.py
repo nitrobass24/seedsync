@@ -57,6 +57,9 @@ class WebhookNotifier(IModelListener):
         thread.start()
 
     def _send_post(self, url: str, payload: dict):
+        if not url.startswith(("http://", "https://")):
+            self._logger.warning("Webhook URL rejected (not http/https): %s", url)
+            return
         try:
             data = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(

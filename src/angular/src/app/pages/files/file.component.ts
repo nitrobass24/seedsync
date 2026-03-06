@@ -1,6 +1,6 @@
 import {
-  Component, ChangeDetectionStrategy, OnChanges, OnDestroy, SimpleChanges,
-  ViewChild, ElementRef, input, output
+  Component, ChangeDetectionStrategy, ChangeDetectorRef, OnChanges, OnDestroy, SimpleChanges,
+  ViewChild, ElementRef, input, output, inject
 } from '@angular/core';
 import { AsyncPipe, DatePipe } from '@angular/common';
 
@@ -36,6 +36,7 @@ export enum FileAction {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FileComponent implements OnChanges, OnDestroy {
+  private readonly cdr = inject(ChangeDetectorRef);
   ViewFileStatus = ViewFileStatus;
   FileAction = FileAction;
   min = Math.min;
@@ -160,6 +161,7 @@ export class FileComponent implements OnChanges, OnDestroy {
     this.confirmResetTimer = setTimeout(() => {
       this.confirmingDelete = null;
       this.confirmResetTimer = null;
+      this.cdr.markForCheck();
     }, 3000);
   }
 

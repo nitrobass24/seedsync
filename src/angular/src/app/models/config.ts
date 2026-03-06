@@ -60,11 +60,11 @@ export interface Logging {
 }
 
 export interface Notifications {
-    webhook_url: string | null;
-    notify_on_download_complete: boolean | null;
-    notify_on_extraction_complete: boolean | null;
-    notify_on_extraction_failed: boolean | null;
-    notify_on_delete_complete: boolean | null;
+  webhook_url: string | null;
+  notify_on_download_complete: boolean | null;
+  notify_on_extraction_complete: boolean | null;
+  notify_on_extraction_failed: boolean | null;
+  notify_on_delete_complete: boolean | null;
 }
 
 export interface Config {
@@ -134,11 +134,11 @@ export const DEFAULT_LOGGING: Logging = {
 };
 
 export const DEFAULT_NOTIFICATIONS: Notifications = {
-    webhook_url: null,
-    notify_on_download_complete: null,
-    notify_on_extraction_complete: null,
-    notify_on_extraction_failed: null,
-    notify_on_delete_complete: null,
+  webhook_url: null,
+  notify_on_download_complete: null,
+  notify_on_extraction_complete: null,
+  notify_on_extraction_failed: null,
+  notify_on_delete_complete: null,
 };
 
 export const DEFAULT_CONFIG: Config = {

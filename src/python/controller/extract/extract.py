@@ -91,7 +91,7 @@ class Extract:
             return None
         # Also check if it's a plain tar (no magic bytes in _ARCHIVE_SIGNATURES)
         try:
-            with tarfile.open(archive_path) as tf:
+            with tarfile.open(archive_path):
                 return 'TAR'
         except (tarfile.TarError, OSError):
             pass
@@ -219,9 +219,9 @@ class Extract:
         except ExtractError:
             raise
         except FileNotFoundError as e:
-            raise ExtractError(str(e))
+            raise ExtractError(str(e)) from e
         except (zipfile.BadZipFile, tarfile.TarError) as e:
-            raise ExtractError(str(e))
+            raise ExtractError(str(e)) from e
 
         # Post-extraction check as fallback for formats that can't be pre-validated (rar, 7z)
         if not pre_validated:

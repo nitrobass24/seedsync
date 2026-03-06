@@ -379,7 +379,7 @@ class Seedsync:
         dummy = Seedsync.__CONFIG_DUMMY_VALUE
         remote_path = config.lftp.remote_path if config.lftp.remote_path != dummy else ""
         local_path = config.lftp.local_path if config.lftp.local_path != dummy else ""
-        if remote_path or local_path:
+        if remote_path and local_path:
             ppc = PathPairsConfig.migrate_from_legacy(remote_path, local_path)
             ppc.to_file(file_path)
             return ppc

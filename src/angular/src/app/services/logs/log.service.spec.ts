@@ -35,10 +35,10 @@ describe("LogService", () => {
       message: "Test message",
       exc_tb: "",
     };
-    service.onEvent("log-record", JSON.stringify(logJson));
 
     let result: LogRecord | undefined;
     service.logs$.subscribe((r) => (result = r));
+    service.onEvent("log-record", JSON.stringify(logJson));
     expect(result!.time).toEqual(new Date(1000 * 1700000000));
     expect(result!.level).toBe("INFO");
     expect(result!.loggerName).toBe("test.logger");
@@ -61,11 +61,11 @@ describe("LogService", () => {
       message: "Second",
       exc_tb: "traceback here",
     };
-    service.onEvent("log-record", JSON.stringify(log1));
-    service.onEvent("log-record", JSON.stringify(log2));
 
     const results: LogRecord[] = [];
     service.logs$.subscribe((r) => results.push(r));
+    service.onEvent("log-record", JSON.stringify(log1));
+    service.onEvent("log-record", JSON.stringify(log2));
     expect(results.length).toBe(2);
     expect(results[0].message).toBe("First");
     expect(results[1].message).toBe("Second");

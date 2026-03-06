@@ -253,7 +253,7 @@ export class ViewFileService {
       const index = this.indices.get(key)!;
       const oldViewFile = newViewFiles[index];
       const newViewFile = createViewFile(modelFiles.get(key)!, oldViewFile.isSelected);
-      newViewFiles[index] = newViewFile;
+      newViewFiles[index] = { ...newViewFile, isChecked: this.checkedSet.has(key) };
       if (this.sortComparator != null && this.sortComparator(oldViewFile, newViewFile) !== 0) {
         reSort = true;
       }
@@ -263,7 +263,7 @@ export class ViewFileService {
     for (const key of addedKeys) {
       reSort = true;
       const viewFile = createViewFile(modelFiles.get(key)!);
-      newViewFiles.push(viewFile);
+      newViewFiles.push({ ...viewFile, isChecked: this.checkedSet.has(key) });
       this.indices.set(viewFileKey(viewFile), newViewFiles.length - 1);
     }
 

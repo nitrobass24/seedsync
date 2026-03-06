@@ -17,11 +17,14 @@
 ### Changed
 
 - **Python scanfs replaces PyInstaller binary** — Remote scanner is now a plain Python script, eliminating glibc compatibility issues with seedbox servers (#80, #148)
-- **Replace paste WSGI with Bottle built-in** — Removes the paste dependency; Bottle's built-in multithreaded server handles all HTTP (#140)
-- **Replace patool with direct subprocess** — Archive extraction calls `unrar`/`7z` directly instead of going through patool (#141, #145)
 - **JSON serialization for scanfs** — Scanner uses JSON instead of legacy serialization for safer, more debuggable output (#129)
 - **Dual-image CI pipeline** — CI builds and tests both Debian and Alpine variants on every push (#164)
 - **Startup log improvements** — Path pairs dumped at startup for debugging; model logs show short pair ID instead of full GUID (#165)
+
+### Removed
+
+- **paste WSGI server** — Replaced with Bottle's built-in multithreaded server (#140)
+- **patool dependency** — Archive extraction calls `unrar`/`7z` directly via subprocess (#141, #145)
 
 ---
 

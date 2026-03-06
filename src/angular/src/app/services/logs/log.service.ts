@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, ReplaySubject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 
 import { StreamEventHandler, StreamDispatchService } from '../base/stream-dispatch.service';
 import { LogRecord, logRecordFromJson } from '../../models/log-record';
@@ -26,7 +26,7 @@ export class LogService implements StreamEventHandler {
     private readonly streamDispatch = inject(StreamDispatchService);
     private readonly http = inject(HttpClient);
 
-    private readonly logsSubject = new ReplaySubject<LogRecord>();
+    private readonly logsSubject = new Subject<LogRecord>();
 
     readonly logs$: Observable<LogRecord> = this.logsSubject.asObservable();
 

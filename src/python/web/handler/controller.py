@@ -2,7 +2,7 @@
 
 import os
 from threading import Event
-from typing import Union
+from typing import Optional, Union
 from urllib.parse import unquote
 
 from bottle import HTTPResponse, request

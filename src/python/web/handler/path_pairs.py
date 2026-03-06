@@ -43,6 +43,11 @@ class PathPairsHandler(IHandler):
             return HTTPResponse(body="name, remote_path, and local_path must be strings", status=400)
         if not isinstance(enabled, bool) or not isinstance(auto_queue, bool):
             return HTTPResponse(body="enabled and auto_queue must be booleans", status=400)
+        name = name.strip()
+        remote_path = remote_path.strip()
+        local_path = local_path.strip()
+        if not name:
+            return HTTPResponse(body="name must not be empty", status=400)
 
         pair = PathPair(
             name=name,
@@ -79,6 +84,11 @@ class PathPairsHandler(IHandler):
             return HTTPResponse(body="name, remote_path, and local_path must be strings", status=400)
         if not isinstance(enabled, bool) or not isinstance(auto_queue, bool):
             return HTTPResponse(body="enabled and auto_queue must be booleans", status=400)
+        name = name.strip()
+        remote_path = remote_path.strip()
+        local_path = local_path.strip()
+        if not name:
+            return HTTPResponse(body="name must not be empty", status=400)
 
         updated = PathPair(
             pair_id=pair_id,

@@ -2,11 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [master, develop, feat/v0.13.0, feat/alpine-image]
+    branches: [master, develop]
     tags:
       - v[0-9]+.[0-9]+.[0-9]+
   pull_request:
-    branches: [master, develop, feat/v0.13.0, feat/alpine-image]
+    branches: [master, develop]
   workflow_dispatch:
 
 env:
@@ -14,7 +14,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   # Branches/tags that publish Docker images. Update this single list when
   # adding or removing publish-worthy branches.
-  SHOULD_PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/feat/v0.13.0' || github.ref == 'refs/heads/feat/alpine-image' }}
+  SHOULD_PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/develop' }}
 
 jobs:
   unit-test:
@@ -125,7 +125,7 @@ jobs:
 
   build-arm64:
     name: Build (${{ matrix.variant }}, arm64)
-    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/feat/v0.13.0' || github.ref == 'refs/heads/feat/alpine-image' }}
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/develop' }}
     needs: [unit-test]
     runs-on: ubuntu-latest
     strategy:
@@ -229,8 +229,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
-            type=raw,value=v0.13.0-dev,enable=${{ github.ref == 'refs/heads/feat/v0.13.0' }}
-            type=raw,value=dev-debian,enable=${{ github.ref == 'refs/heads/feat/alpine-image' }}
 
       - name: Extract metadata (alpine)
         if: matrix.variant == 'alpine'
@@ -243,8 +241,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}-alpine
             type=raw,value=alpine,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=develop-alpine,enable=${{ github.ref == 'refs/heads/develop' }}
-            type=raw,value=v0.13.0-dev-alpine,enable=${{ github.ref == 'refs/heads/feat/v0.13.0' }}
-            type=raw,value=dev-alpine,enable=${{ github.ref == 'refs/heads/feat/alpine-image' }}
 
       - name: Create multi-arch manifest and push
         working-directory: /tmp/digests

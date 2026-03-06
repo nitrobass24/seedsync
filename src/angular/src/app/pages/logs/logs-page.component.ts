@@ -6,11 +6,15 @@ import {
   ElementRef,
   HostListener,
   OnInit,
+  OnDestroy,
   ViewChild,
   inject,
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subject, Subscription } from 'rxjs';
+import { debounceTime, switchMap, catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
 
 import { LogService, LogHistoryEntry } from '../../services/logs/log.service';
 import { LogRecord, LogLevel } from '../../models/log-record';
@@ -24,7 +28,7 @@ import { DomService } from '../../services/utils/dom.service';
   styleUrls: ['./logs-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class LogsPageComponent implements OnInit, AfterViewChecked {
+export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   readonly LogLevel = LogLevel;
 
   private readonly elementRef = inject(ElementRef);
@@ -47,9 +51,12 @@ export class LogsPageComponent implements OnInit, AfterViewChecked {
   @ViewChild('logTail') logTail!: ElementRef<HTMLElement>;
 
   private pendingScrollToBottom = false;
+  private logsSub!: Subscription;
+  private historySub!: Subscription;
+  private readonly searchChange$ = new Subject<void>();
 
   ngOnInit(): void {
-    this.logService.logs$.subscribe({
+    this.logsSub = this.logService.logs$.subscribe({
       next: (record) => {
         const shouldScroll =
           this.elementRef.nativeElement.offsetParent != null &&
@@ -66,7 +73,29 @@ export class LogsPageComponent implements OnInit, AfterViewChecked {
       },
     });
 
-    this.loadHistory();
+    this.historySub = this.searchChange$.pipe(
+      debounceTime(300),
+      switchMap(() => this.logService.fetchHistory({
+        search: this.searchQuery || undefined,
+        level: this.levelFilter || undefined,
+        limit: 500,
+      }).pipe(
+        catchError(() => of([] as LogHistoryEntry[]))
+      )),
+    ).subscribe((entries) => {
+      this.historyRecords = entries;
+      this.historyLoaded = true;
+      this.changeDetector.detectChanges();
+    });
+
+    // Initial load
+    this.searchChange$.next();
+  }
+
+  ngOnDestroy(): void {
+    this.logsSub?.unsubscribe();
+    this.historySub?.unsubscribe();
+    this.searchChange$.complete();
   }
 
   ngAfterViewChecked(): void {
@@ -90,30 +119,12 @@ export class LogsPageComponent implements OnInit, AfterViewChecked {
     this.refreshScrollButtonVisibility();
   }
 
-  loadHistory(): void {
-    this.logService.fetchHistory({
-      search: this.searchQuery || undefined,
-      level: this.levelFilter || undefined,
-      limit: 500
-    }).subscribe({
-      next: (entries) => {
-        this.historyRecords = entries;
-        this.historyLoaded = true;
-        this.changeDetector.detectChanges();
-      },
-      error: () => {
-        this.historyLoaded = true;
-        this.changeDetector.detectChanges();
-      }
-    });
-  }
-
   onSearchChange(): void {
-    this.loadHistory();
+    this.searchChange$.next();
   }
 
   onLevelChange(): void {
-    this.loadHistory();
+    this.searchChange$.next();
   }
 
   private refreshScrollButtonVisibility(): void {

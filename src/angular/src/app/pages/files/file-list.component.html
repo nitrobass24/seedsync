@@ -9,15 +9,17 @@
         <div class="eta">ETA</div>
         <div class="size">Size</div>
     </div>
-    @if ((checked$ | async)?.size) {
+    @if ((checked$ | async); as checked) {
+      @if (checked.size) {
         <app-bulk-action-bar
-            [count]="(checked$ | async)!.size"
+            [count]="checked.size"
             (queueEvent)="onBulkQueue()"
             (stopEvent)="onBulkStop()"
             (deleteLocalEvent)="onBulkDeleteLocal()"
             (deleteRemoteEvent)="onBulkDeleteRemote()"
             (clearEvent)="onUncheckAll()">
         </app-bulk-action-bar>
+      }
     }
     @for (file of files | async; track identify($index, file)) {
         <div>

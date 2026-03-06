@@ -133,7 +133,7 @@ class PathPairsConfig(Persist):
         try:
             data = json.loads(content)
         except json.JSONDecodeError as e:
-            raise PersistError("Error parsing PathPairsConfig: {}".format(str(e)))
+            raise PersistError("Error parsing PathPairsConfig: {}".format(str(e))) from e
 
         if not isinstance(data, dict):
             raise PersistError("Expected JSON object in PathPairsConfig")
