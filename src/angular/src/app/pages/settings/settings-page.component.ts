@@ -37,7 +37,7 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SettingsPageComponent implements OnInit, OnDestroy {
-  OPTIONS_CONTEXT_SERVER: IOptionsContext = OPTIONS_CONTEXT_SERVER;
+  serverContext: IOptionsContext = OPTIONS_CONTEXT_SERVER;
   readonly OPTIONS_CONTEXT_DISCOVERY = OPTIONS_CONTEXT_DISCOVERY;
   readonly OPTIONS_CONTEXT_CONNECTIONS = OPTIONS_CONTEXT_CONNECTIONS;
   readonly OPTIONS_CONTEXT_OTHER = OPTIONS_CONTEXT_OTHER;
@@ -86,14 +86,16 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
     this.subscriptions.push(
       this.pathPairsService.pairs$.subscribe((pairs) => {
         const hasEnabledPairs = pairs.some((p) => p.enabled);
-        this.OPTIONS_CONTEXT_SERVER = SettingsPageComponent.buildServerContext(hasEnabledPairs);
+        this.serverContext = SettingsPageComponent.buildServerContext(hasEnabledPairs);
         this.cdr.markForCheck();
       }),
     );
   }
 
   ngOnDestroy(): void {
-    this.subscriptions.forEach((s) => s.unsubscribe());
+    for (const s of this.subscriptions) {
+      s.unsubscribe();
+    }
   }
 
   private static buildServerContext(hasEnabledPairs: boolean): IOptionsContext {
