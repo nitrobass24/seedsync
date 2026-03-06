@@ -42,7 +42,18 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
         /usr/local/lib/python3.12/lib-dynload/_codecs_iso*.so
 
 # ==============================================================================
-# Stage 3: Final Runtime Image
+# Stage 3: Build unrar from source (not packaged in Alpine)
+# ==============================================================================
+FROM alpine:3.21 AS unrar-builder
+
+RUN apk add --no-cache build-base curl \
+    && curl -fsSL https://www.rarlab.com/rar/unrarsrc-7.1.6.tar.gz | tar xz \
+    && cd unrar \
+    && make -f makefile -j$(nproc) \
+    && install -m 755 unrar /usr/local/bin/unrar
+
+# ==============================================================================
+# Stage 4: Final Runtime Image
 # ==============================================================================
 FROM alpine:3.21 AS runtime
 
@@ -52,16 +63,18 @@ LABEL maintainer="nitrobass24" \
 # Copy stripped Python runtime from python-deps stage
 COPY --from=python-deps /usr/local/ /usr/local/
 
+# Copy unrar binary from builder
+COPY --from=unrar-builder /usr/local/bin/unrar /usr/local/bin/unrar
+
 # Install runtime dependencies.
 # shadow provides useradd/groupadd/usermod for entrypoint user management.
 # util-linux provides setpriv for dropping privileges.
-# lftp, openssh-client, 7zip, unrar, ca-certificates are intentionally
+# lftp, openssh-client, 7zip, ca-certificates are intentionally
 # unpinned to receive security updates on each image rebuild.
 RUN apk add --no-cache \
         lftp \
         openssh-client \
         7zip \
-        unrar \
         ca-certificates \
         shadow \
         util-linux \
