@@ -12,11 +12,16 @@ This is the modernized fork of `ipsingh06/seedsync`, with updated dependencies a
 ## What you can do
 
 - Sync files quickly using LFTP
+- **Multiple path pairs** — sync from multiple remote directories independently
 - Queue or auto-queue transfers by pattern
+- **Exclude patterns** — filter out unwanted files with glob patterns
+- **Multi-select** — bulk queue, stop, or delete files
 - Extract archives after download
 - Stage downloads on a fast disk, then move to final location
+- **Webhook notifications** — HTTP POST on download/extract events
 - Manage local and remote deletes
 - Monitor transfer status from the web UI
+- **Alpine image** available for smaller deployments
 
 ## Quick start
 

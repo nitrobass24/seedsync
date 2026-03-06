@@ -23,10 +23,6 @@
 - **Dual-image CI pipeline** — CI builds and tests both Debian and Alpine variants on every push (#164)
 - **Startup log improvements** — Path pairs dumped at startup for debugging; model logs show short pair ID instead of full GUID (#165)
 
-### Fixed
-
-- **Server/Local Directory fields disabled when path pairs active** — Prevents confusing edits to legacy fields when path pairs are in use (#163)
-
 ---
 
 ## [0.12.10] - 2026-03-04

@@ -71,6 +71,26 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 | Scanner home directory fallback | #114 | Done |
 | SFTP umask fix | #115 | Done |
 
+### Phase 6: Multi-Pair Architecture & Infrastructure (v0.13.0)
+
+| Task | PR(s) | Status |
+|------|-------|--------|
+| Multiple path pairs with per-pair LFTP/scanner | #122, #149, #155, #161 | Done |
+| Path pairs settings UI | #160, #162, #163 | Done |
+| Exclude patterns for remote files | #146 | Done |
+| Multi-select and bulk operations | #123 | Done |
+| Webhook notifications | #128 | Done |
+| Historical log query endpoint | #124 | Done |
+| Structured JSON logging | #127 | Done |
+| Replace paste WSGI with Bottle built-in | #140 | Done |
+| Replace patool with direct subprocess | #141, #145 | Done |
+| Python scanfs replaces PyInstaller binary | #148 | Done |
+| JSON serialization for scanfs | #129 | Done |
+| Alpine Docker image variant | #164 | Done |
+| Dual-image CI (Debian + Alpine) | #164 | Done |
+| Docker HEALTHCHECK | #164 | Done |
+| Startup log improvements | #165 | Done |
+
 ---
 
 ## Results
@@ -82,8 +102,8 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 | Original fork | 439 MB | Python 3.8, Poetry, Debian packaging |
 | v0.10.0 | 240 MB | Modernized deps, multi-stage build |
 | v0.12.10 | 170 MB | Security hardening release |
-| v0.13.0 (Debian) | ~136 MB (amd64) | Multiple path pairs, Alpine variant |
-| v0.13.0 (Alpine) | ~100 MB (amd64) | Lightweight Alpine variant |
+| v0.13.0 (Debian) | 126 MB (amd64) | Multi-pair architecture, slim build |
+| v0.13.0 (Alpine) | 45 MB (amd64) | Lightweight Alpine variant |
 
 ### Files Changed
 
@@ -109,7 +129,7 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 ```
 +-----------------------------------------------------+
 |                  Docker Container                     |
-|                   (~136 MB amd64)                    |
+|              (126 MB Debian / 45 MB Alpine)           |
 |                                                      |
 |  +-------------+    +-------------+                  |
 |  | Python 3.12 |    | Angular 21  |                  |
@@ -131,74 +151,15 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 
 ## Known Limitations
 
-### 1. scanfs Binary Compatibility (Fixed in v0.9.4)
-- PyInstaller binary built on Debian Bullseye (glibc 2.31) for broad compatibility
-- Supports Linux systems from 2021+
+### 1. scanfs Compatibility
+- Replaced PyInstaller binary with plain Python script in v0.13.0
+- Requires Python 3 on the remote seedbox
 - Home directory fallback when `/tmp` is restricted (v0.12.10)
 
 ### 2. LFTP Parsing
 - Some edge cases in LFTP output parsing
 - May affect certain server configurations
 - Report issues if encountered
-
----
-
-## Release History
-
-### v0.12.10
-
-| Feature | PR | Status |
-|---------|-----|--------|
-| Security hardening bundle | #130 | Done |
-| CSP-compliant Angular build | #134 | Done |
-| Eager ConfigService initialization | #136 | Done |
-| Scanner robustness improvements | #114 | Done |
-| SFTP umask fix | #115 | Done |
-
-### v0.12.0
-
-| Feature | PR(s) | Status |
-|---------|-------|--------|
-| Staging directory for fast-disk downloads | #36 | Done |
-| Dark mode with theme toggle | #37, #51 | Done |
-| Advanced LFTP settings | #40, #44 | Done |
-| Remote server diagnostics | #41 | Done |
-| Graceful config upgrades | #45 | Done |
-
-### v0.10.6
-
-| Feature | Issue | Status |
-|---------|-------|--------|
-| Auto-delete from remote after download | #25 | Done |
-
-### v0.10.5
-
-| Feature | Issue | Status |
-|---------|-------|--------|
-| Delete remote with tilde path | #27 | Done |
-| Remote shell auto-detection | #18 | Done |
-| SSH key auth without password | #21 | Done |
-| Bandwidth/speed limit setting | #24 | Done |
-
-### v0.13.0
-
-| Feature | PR(s) | Status |
-|---------|-------|--------|
-| Multiple path pairs with per-pair LFTP/scanner | #122, #149, #155, #161 | Done |
-| Path pairs settings UI | #160, #162, #163 | Done |
-| Exclude patterns for remote files | #146 | Done |
-| Multi-select and bulk operations | #123 | Done |
-| Webhook notifications | #128 | Done |
-| Historical log query endpoint | #124 | Done |
-| Structured JSON logging | #127 | Done |
-| Replace paste WSGI with Bottle built-in | #140 | Done |
-| Replace patool with direct subprocess | #141, #145 | Done |
-| Python scanfs replaces PyInstaller binary | #148 | Done |
-| JSON serialization for scanfs | #129 | Done |
-| Alpine Docker image variant | #164 | Done |
-| Dual-image CI (Debian + Alpine) | #164 | Done |
-| Docker HEALTHCHECK | #164 | Done |
-| Startup log improvements | #165 | Done |
 
 ---
 

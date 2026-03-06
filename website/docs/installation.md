@@ -4,6 +4,15 @@ title: Installation
 
 SeedSync runs in Docker. The remote server needs SSH access and Python 3.
 
+## Image Variants
+
+| Tag | Base | Size | Notes |
+|-----|------|------|-------|
+| `latest` | Debian Bookworm | ~126 MB | Default, broadest compatibility |
+| `alpine` | Alpine Linux | ~45 MB | Smaller, uses musl libc |
+
+Both variants are functionally identical. Use `alpine` if image size matters and you don't need Debian-specific tooling.
+
 ## Requirements
 
 ### Remote server

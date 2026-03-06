@@ -20,6 +20,35 @@ Open the UI and fill out the Settings page:
 - **Local Path**: Must be `/downloads` inside the container
 - **Server Script Path**: Directory on the remote server where SeedSync copies its scanner utility. Defaults to `/tmp`. Some seedbox providers restrict writes to `/tmp` — if you see an SCP permission error on startup, change this to a directory you own (e.g. `~` or `~/.local`).
 
+## Path Pairs
+
+Path pairs let you sync from multiple remote directories independently. Each pair has its own remote path, local path, and settings.
+
+To configure, go to **Settings → Path Pairs** and add entries. Each pair supports:
+
+- **Name**: Display label for the pair
+- **Remote Path**: Directory on the remote server
+- **Local Path**: Directory inside the container (must be under `/downloads`)
+- **Enabled**: Toggle the pair on or off
+- **Auto Queue**: Automatically queue new files found in this pair's remote path
+- **Exclude Patterns**: Glob patterns to skip (e.g. `*.nfo`, `Sample/`, `*.txt`)
+
+When path pairs are active, the legacy Remote Path and Local Path fields in the main settings are disabled.
+
+:::tip
+Each path pair runs its own LFTP and scanner instance, so downloads and scanning happen independently per pair.
+:::
+
+## Exclude Patterns
+
+Exclude patterns filter out files on the remote server before they appear in the dashboard or get auto-queued. Patterns use glob syntax:
+
+- `*.nfo` — skip all `.nfo` files
+- `Sample/` — skip directories named `Sample`
+- `*.txt` — skip all `.txt` files
+
+Configure exclude patterns per path pair, or in the main settings when using a single remote/local path.
+
 ## Connections
 
 - **Max Parallel Downloads**: Number of items downloading simultaneously
@@ -94,6 +123,10 @@ These settings are collapsed by default under **Advanced LFTP** in the Settings 
 - **Max Retries**: Maximum number of retries on network errors. `0` for unlimited. (`net:max-retries`)
 - **Reconnect Interval Base (s)**: Base delay in seconds before reconnecting after a failure. (`net:reconnect-interval-base`)
 - **Reconnect Interval Multiplier**: Multiplier applied to the reconnect delay after each consecutive failure. (`net:reconnect-interval-multiplier`)
+
+## Webhooks
+
+SeedSync can send HTTP POST notifications when file events occur (download complete, extraction complete, etc.). Configure the webhook URL in Settings under **Notifications**.
 
 ## Advanced config file
 
