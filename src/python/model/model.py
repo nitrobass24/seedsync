@@ -105,7 +105,7 @@ class Model:
         :return:
         """
         key = Model.file_key(file)
-        self.logger.debug("LftpModel: Adding file '{}'".format(key))
+        self.logger.debug("LftpModel: Adding file '{}'".format(file.name))
         if key in self.__files:
             raise ModelError("File already exists in the model")
         self.__files[key] = file
@@ -120,7 +120,7 @@ class Model:
         :return:
         """
         key = Model.make_key(filename, pair_id)
-        self.logger.debug("LftpModel: Removing file '{}'".format(key))
+        self.logger.debug("LftpModel: Removing file '{}'".format(filename))
         if key not in self.__files:
             raise ModelError("File does not exist in the model")
         file = self.__files[key]
@@ -135,7 +135,7 @@ class Model:
         :return:
         """
         key = Model.file_key(file)
-        self.logger.debug("LftpModel: Updating file '{}'".format(key))
+        self.logger.debug("LftpModel: Updating file '{}'".format(file.name))
         if key not in self.__files:
             raise ModelError("File does not exist in the model")
         old_file = self.__files[key]
