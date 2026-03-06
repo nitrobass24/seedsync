@@ -45,6 +45,7 @@ describe("ServerStatusService", () => {
         latest_remote_scan_time: null,
         latest_remote_scan_failed: false,
         latest_remote_scan_error: null,
+        no_enabled_pairs: false,
       },
     };
     service.onEvent("status", JSON.stringify(statusJson));
@@ -69,6 +70,7 @@ describe("ServerStatusService", () => {
         latest_remote_scan_time: "1700000000",
         latest_remote_scan_failed: false,
         latest_remote_scan_error: null,
+        no_enabled_pairs: false,
       },
     };
     service.onEvent("status", JSON.stringify(statusJson));

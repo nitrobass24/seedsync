@@ -16,6 +16,7 @@ class SerializeStatusJson:
     __KEY_CONTROLLER_LATEST_REMOTE_SCAN_TIME = "latest_remote_scan_time"
     __KEY_CONTROLLER_LATEST_REMOTE_SCAN_FAILED = "latest_remote_scan_failed"
     __KEY_CONTROLLER_LATEST_REMOTE_SCAN_ERROR = "latest_remote_scan_error"
+    __KEY_CONTROLLER_NO_ENABLED_PAIRS = "no_enabled_pairs"
 
     @staticmethod
     def status(status: Status) -> str:
@@ -38,6 +39,8 @@ class SerializeStatusJson:
             status.controller.latest_remote_scan_failed
         json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_LATEST_REMOTE_SCAN_ERROR] = \
             status.controller.latest_remote_scan_error
+        json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_NO_ENABLED_PAIRS] = \
+            status.controller.no_enabled_pairs
 
         status_json = json.dumps(json_dict)
         return status_json

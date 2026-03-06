@@ -11,6 +11,7 @@ export interface ServerStatus {
     latestRemoteScanTime: Date | null;
     latestRemoteScanFailed: boolean;
     latestRemoteScanError: string | null;
+    noEnabledPairs: boolean;
   };
 }
 
@@ -28,6 +29,7 @@ export interface ServerStatusJson {
     latest_remote_scan_time: string | null;
     latest_remote_scan_failed: boolean;
     latest_remote_scan_error: string | null;
+    no_enabled_pairs: boolean;
   };
 }
 
@@ -52,6 +54,7 @@ export function serverStatusFromJson(json: ServerStatusJson): ServerStatus {
       latestRemoteScanTime,
       latestRemoteScanFailed: json.controller.latest_remote_scan_failed,
       latestRemoteScanError: json.controller.latest_remote_scan_error,
+      noEnabledPairs: json.controller.no_enabled_pairs,
     },
   };
 }

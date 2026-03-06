@@ -10,6 +10,7 @@ describe('serverStatusFromJson', () => {
         latest_remote_scan_time: null,
         latest_remote_scan_failed: false,
         latest_remote_scan_error: null,
+        no_enabled_pairs: false,
       },
       ...overrides,
     };
@@ -23,6 +24,7 @@ describe('serverStatusFromJson', () => {
         latest_remote_scan_time: null,
         latest_remote_scan_failed: true,
         latest_remote_scan_error: 'Timeout',
+        no_enabled_pairs: false,
       },
     });
 
@@ -41,6 +43,7 @@ describe('serverStatusFromJson', () => {
         latest_remote_scan_time: '1700000100',
         latest_remote_scan_failed: false,
         latest_remote_scan_error: null,
+        no_enabled_pairs: false,
       },
     });
 
