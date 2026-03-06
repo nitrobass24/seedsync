@@ -19,6 +19,7 @@ export class ServerStatusService implements StreamEventHandler {
       latestRemoteScanTime: null,
       latestRemoteScanFailed: false,
       latestRemoteScanError: null,
+      noEnabledPairs: false,
     },
   });
 
@@ -52,6 +53,7 @@ export class ServerStatusService implements StreamEventHandler {
         latestRemoteScanTime: null,
         latestRemoteScanFailed: false,
         latestRemoteScanError: null,
+        noEnabledPairs: false,
       },
     });
   }

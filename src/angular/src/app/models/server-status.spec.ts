@@ -10,6 +10,7 @@ describe('serverStatusFromJson', () => {
         latest_remote_scan_time: null,
         latest_remote_scan_failed: false,
         latest_remote_scan_error: null,
+        no_enabled_pairs: false,
       },
       ...overrides,
     };
@@ -23,6 +24,7 @@ describe('serverStatusFromJson', () => {
         latest_remote_scan_time: null,
         latest_remote_scan_failed: true,
         latest_remote_scan_error: 'Timeout',
+        no_enabled_pairs: false,
       },
     });
 
@@ -32,6 +34,7 @@ describe('serverStatusFromJson', () => {
     expect(result.server.errorMessage).toBe('Connection refused');
     expect(result.controller.latestRemoteScanFailed).toBe(true);
     expect(result.controller.latestRemoteScanError).toBe('Timeout');
+    expect(result.controller.noEnabledPairs).toBe(false);
   });
 
   it('should convert timestamps from seconds to milliseconds', () => {
@@ -41,6 +44,7 @@ describe('serverStatusFromJson', () => {
         latest_remote_scan_time: '1700000100',
         latest_remote_scan_failed: false,
         latest_remote_scan_error: null,
+        no_enabled_pairs: false,
       },
     });
 
@@ -48,6 +52,22 @@ describe('serverStatusFromJson', () => {
 
     expect(result.controller.latestLocalScanTime).toEqual(new Date(1700000000 * 1000));
     expect(result.controller.latestRemoteScanTime).toEqual(new Date(1700000100 * 1000));
+  });
+
+  it('should map no_enabled_pairs to noEnabledPairs', () => {
+    const json = makeJson({
+      controller: {
+        latest_local_scan_time: null,
+        latest_remote_scan_time: null,
+        latest_remote_scan_failed: false,
+        latest_remote_scan_error: null,
+        no_enabled_pairs: true,
+      },
+    });
+
+    const result = serverStatusFromJson(json);
+
+    expect(result.controller.noEnabledPairs).toBe(true);
   });
 
   it('should handle null timestamps', () => {

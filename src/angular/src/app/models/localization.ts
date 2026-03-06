@@ -15,6 +15,8 @@ export class Localization {
     public static readonly STATUS_REMOTE_SERVER_ERROR = (error: string) =>
       `Lost connection to remote server. Retrying automatically. ${error ? '<br />' + error : ''}`;
 
+    public static readonly STATUS_NO_ENABLED_PAIRS = 'All path pairs are disabled. Enable a pair in Settings to start syncing.';
+
     public static readonly NEW_VERSION_AVAILABLE = (url: string) =>
       `A new version of SeedSync is available! Click <a href="${url}" target="blank">here</a> to grab the latest version.`;
   };

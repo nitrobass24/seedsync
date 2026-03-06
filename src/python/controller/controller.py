@@ -202,6 +202,10 @@ class Controller:
         enabled_pairs = [p for p in pairs if p.enabled]
 
         if not enabled_pairs:
+            if pairs:
+                # All configured pairs are disabled — signal idle state
+                self.__context.status.controller.no_enabled_pairs = True
+                self.logger.warning("All path pairs are disabled. Enable a pair in Settings to start syncing.")
             # Backward compatibility: no path pairs configured, use config.lftp
             return [self._create_pair_context(
                 pair_id=None,
@@ -210,6 +214,7 @@ class Controller:
                 local_path=self.__context.config.lftp.local_path
             )]
 
+        self.__context.status.controller.no_enabled_pairs = False
         contexts = []
         for pair in enabled_pairs:
             contexts.append(self._create_pair_context(
