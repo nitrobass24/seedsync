@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { AsyncPipe, NgTemplateOutlet } from '@angular/common';
-import { Subscription } from 'rxjs';
+import { Subscription, distinctUntilChanged, map } from 'rxjs';
 
 import { LoggerService } from '../../services/utils/logger.service';
 import { ConfigService } from '../../services/settings/config.service';
@@ -84,8 +84,10 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
     );
 
     this.subscriptions.push(
-      this.pathPairsService.pairs$.subscribe((pairs) => {
-        const hasEnabledPairs = pairs.some((p) => p.enabled);
+      this.pathPairsService.pairs$.pipe(
+        map((pairs) => pairs.some((p) => p.enabled)),
+        distinctUntilChanged(),
+      ).subscribe((hasEnabledPairs) => {
         this.serverContext = SettingsPageComponent.buildServerContext(hasEnabledPairs);
         this.cdr.markForCheck();
       }),
