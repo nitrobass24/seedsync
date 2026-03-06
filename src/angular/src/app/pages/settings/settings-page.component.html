@@ -10,7 +10,7 @@
       </div>
 
       <ng-container
-        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_AUTOQUEUE">
+        *ngTemplateOutlet="optionsList; context: autoqueueContext">
       </ng-container>
 
       <ng-container
@@ -19,10 +19,6 @@
 
       <ng-container
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_EXTRACT">
-      </ng-container>
-
-      <ng-container
-        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_NOTIFICATIONS">
       </ng-container>
 
       <ng-container
@@ -63,6 +59,10 @@
       <ng-container
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_OTHER">
       </ng-container>
+
+      <ng-container
+        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_NOTIFICATIONS">
+      </ng-container>
     </div>
   </div>
 
@@ -88,6 +88,7 @@
             [type]="option.type"
             [label]="option.label"
             [description]="option.description"
+            [disabled]="!!option.disabled"
             [value]="getOptionValue(config$ | async, option.valuePath)"
             (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
           </app-option>

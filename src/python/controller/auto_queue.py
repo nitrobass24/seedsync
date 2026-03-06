@@ -157,11 +157,21 @@ class AutoQueue:
         self.__controller = controller
         self.__model_listener = AutoQueueModelListener()
         self.__persist_listener = AutoQueuePersistListener()
-        self.__enabled = context.config.autoqueue.enabled
         self.__patterns_only = context.config.autoqueue.patterns_only
         self.__auto_extract_enabled = context.config.autoqueue.auto_extract
         self.__auto_delete_remote_enabled = context.config.autoqueue.auto_delete_remote
         self.__delete_remote_retry_cycles: Dict[str, int] = {}
+
+        # Build per-pair auto_queue lookup.
+        # When path pairs are active, per-pair auto_queue overrides the global setting.
+        path_pairs_config = getattr(context, 'path_pairs_config', None)
+        enabled_pairs = [p for p in path_pairs_config.pairs if p.enabled] if path_pairs_config else []
+        if enabled_pairs:
+            self.__pair_auto_queue: Dict[str, bool] = {p.id: p.auto_queue for p in enabled_pairs}
+            self.__enabled = any(p.auto_queue for p in enabled_pairs)
+        else:
+            self.__pair_auto_queue = {}
+            self.__enabled = context.config.autoqueue.enabled
 
         # Register listeners if ANY auto feature is active (auto-queue, auto-extract,
         # or auto-delete-remote). Previously, all features were gated behind __enabled,
@@ -209,6 +219,7 @@ class AutoQueue:
             files_to_queue = self.__filter_candidates(
                 candidates=queue_candidate_files,
                 accept=lambda f: f.remote_size is not None and f.state == ModelFile.State.DEFAULT
+                                 and self._is_auto_queue_enabled_for_file(f)
             )
 
         ###
@@ -319,6 +330,21 @@ class AutoQueue:
         self.__model_listener.modified_files.clear()
         # Clear the new patterns
         self.__persist_listener.new_patterns.clear()
+
+    def _is_auto_queue_enabled_for_file(self, file: ModelFile) -> bool:
+        """Check if auto-queue is enabled for a specific file based on its pair_id.
+
+        When per-pair overrides are active (__pair_auto_queue is non-empty),
+        files with a None pair_id are treated as not auto-queued (the dict
+        lookup returns False for None keys). This is intentional: files
+        without a pair_id don't belong to any enabled pair.
+
+        When no path pairs are active, returns True unconditionally — the
+        caller (process()) already gates on the global __enabled flag.
+        """
+        if self.__pair_auto_queue:
+            return self.__pair_auto_queue.get(file.pair_id, False)
+        return True
 
     def __filter_candidates(self,
                             candidates: List[ModelFile],

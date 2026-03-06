@@ -38,10 +38,10 @@ import {
 })
 export class SettingsPageComponent implements OnInit, OnDestroy {
   serverContext: IOptionsContext = OPTIONS_CONTEXT_SERVER;
+  autoqueueContext: IOptionsContext = OPTIONS_CONTEXT_AUTOQUEUE;
   readonly OPTIONS_CONTEXT_DISCOVERY = OPTIONS_CONTEXT_DISCOVERY;
   readonly OPTIONS_CONTEXT_CONNECTIONS = OPTIONS_CONTEXT_CONNECTIONS;
   readonly OPTIONS_CONTEXT_OTHER = OPTIONS_CONTEXT_OTHER;
-  readonly OPTIONS_CONTEXT_AUTOQUEUE = OPTIONS_CONTEXT_AUTOQUEUE;
   readonly OPTIONS_CONTEXT_STAGING = OPTIONS_CONTEXT_STAGING;
   readonly OPTIONS_CONTEXT_EXTRACT = OPTIONS_CONTEXT_EXTRACT;
   readonly OPTIONS_CONTEXT_ADVANCED_LFTP = OPTIONS_CONTEXT_ADVANCED_LFTP;
@@ -89,6 +89,7 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
         distinctUntilChanged(),
       ).subscribe((hasEnabledPairs) => {
         this.serverContext = SettingsPageComponent.buildServerContext(hasEnabledPairs);
+        this.autoqueueContext = SettingsPageComponent.buildAutoqueueContext(hasEnabledPairs);
         this.cdr.markForCheck();
       }),
     );
@@ -105,7 +106,19 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
       ...OPTIONS_CONTEXT_SERVER,
       options: OPTIONS_CONTEXT_SERVER.options.map((option) => {
         if (hasEnabledPairs && (option.valuePath[1] === 'remote_path' || option.valuePath[1] === 'local_path')) {
-          return { ...option, description: SettingsPageComponent.OVERRIDE_NOTE };
+          return { ...option, description: SettingsPageComponent.OVERRIDE_NOTE, disabled: true };
+        }
+        return option;
+      }),
+    };
+  }
+
+  private static buildAutoqueueContext(hasEnabledPairs: boolean): IOptionsContext {
+    return {
+      ...OPTIONS_CONTEXT_AUTOQUEUE,
+      options: OPTIONS_CONTEXT_AUTOQUEUE.options.map((option) => {
+        if (hasEnabledPairs && option.valuePath[1] === 'enabled') {
+          return { ...option, description: SettingsPageComponent.OVERRIDE_NOTE, disabled: true };
         }
         return option;
       }),

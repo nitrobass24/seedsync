@@ -21,6 +21,7 @@ export class OptionComponent implements OnInit, OnDestroy {
   readonly label = input<string>('');
   readonly value = input<any>(null);
   readonly description = input<string | null>(null);
+  readonly disabled = input<boolean>(false);
 
   readonly changeEvent = output<any>();
 
