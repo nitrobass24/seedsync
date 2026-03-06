@@ -53,7 +53,7 @@ LABEL maintainer="nitrobass24" \
 COPY --from=python-deps /usr/local/ /usr/local/
 
 # Copy unrar binary from linuxserver (not packaged in Alpine)
-COPY --from=linuxserver/unrar /usr/bin/unrar /usr/bin/unrar
+COPY --from=linuxserver/unrar /usr/bin/unrar-alpine /usr/bin/unrar
 
 # Install runtime dependencies.
 # shadow provides useradd/groupadd/usermod for entrypoint user management.
