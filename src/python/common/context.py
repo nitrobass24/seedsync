@@ -71,6 +71,20 @@ class Context:
                     value = "********" if value else ""
                 self.logger.debug("  {}.{}: {}".format(section, option, value))
 
+        # Print path pairs
+        if self.path_pairs_config and self.path_pairs_config.pairs:
+            self.logger.debug("Path Pairs:")
+            for pair in self.path_pairs_config.pairs:
+                status = "enabled" if pair.enabled else "disabled"
+                aq = "auto_queue=on" if pair.auto_queue else "auto_queue=off"
+                self.logger.debug("  [{}] {} ({}, {})".format(
+                    pair.name or pair.id[:8],
+                    pair.remote_path + " -> " + pair.local_path,
+                    status, aq
+                ))
+        else:
+            self.logger.debug("Path Pairs: (none)")
+
         self.logger.debug("Args:")
         for name, value in self.args.as_dict().items():
             self.logger.debug("  {}: {}".format(name, value))
