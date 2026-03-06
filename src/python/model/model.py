@@ -68,6 +68,13 @@ class Model:
             return "{}:{}".format(pair_id, name)
         return name
 
+    @staticmethod
+    def _log_name(name: str, pair_id: Optional[str] = None) -> str:
+        """Human-readable name for log messages: 'name [ab12cd34]' or just 'name'."""
+        if pair_id:
+            return "{} [{}]".format(name, pair_id[:8])
+        return name
+
     def __init__(self):
         self.logger = logging.getLogger("Model")
         self.__files = {}  # key->ModelFile (key is pair_id:name or just name)
@@ -105,7 +112,7 @@ class Model:
         :return:
         """
         key = Model.file_key(file)
-        self.logger.debug("LftpModel: Adding file '{}'".format(file.name))
+        self.logger.debug("LftpModel: Adding file '{}'".format(Model._log_name(file.name, file.pair_id)))
         if key in self.__files:
             raise ModelError("File already exists in the model")
         self.__files[key] = file
@@ -120,7 +127,7 @@ class Model:
         :return:
         """
         key = Model.make_key(filename, pair_id)
-        self.logger.debug("LftpModel: Removing file '{}'".format(filename))
+        self.logger.debug("LftpModel: Removing file '{}'".format(Model._log_name(filename, pair_id)))
         if key not in self.__files:
             raise ModelError("File does not exist in the model")
         file = self.__files[key]
@@ -135,7 +142,7 @@ class Model:
         :return:
         """
         key = Model.file_key(file)
-        self.logger.debug("LftpModel: Updating file '{}'".format(file.name))
+        self.logger.debug("LftpModel: Updating file '{}'".format(Model._log_name(file.name, file.pair_id)))
         if key not in self.__files:
             raise ModelError("File does not exist in the model")
         old_file = self.__files[key]
