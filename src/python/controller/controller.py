@@ -965,6 +965,14 @@ class Controller:
         # Use per-pair staging subdirectory
         staging_source = os.path.join(self.__context.config.controller.staging_path, pair_id) \
             if pair_id else self.__context.config.controller.staging_path
+
+        # Skip if the file doesn't exist in staging (e.g. already moved in a prior session)
+        staging_file = os.path.join(staging_source, file_name)
+        if not os.path.exists(staging_file):
+            self.logger.debug("Skipping move for {} - not found in staging".format(file_name))
+            self.__moved_file_keys.add(move_key)
+            return
+
         self.__moved_file_keys.add(move_key)
         process = MoveProcess(
             source_path=staging_source,
