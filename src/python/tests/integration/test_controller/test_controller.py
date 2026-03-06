@@ -284,26 +284,16 @@ class TestController(unittest.TestCase):
         # config file
         # Note: seedsynctest account must be set up. See DeveloperReadme.md for details
 
-        # We also need to create an executable that the controller can install on remote
-        # Since we don't have a packaged scanfs executable here, we simply
-        # create an sh script that points to the python script
-        # Note: the executable must be the venv one so any custom imports work
+        # Point directly to scan_fs.py -- the remote scanner runs it via python3
         current_dir_path = os.path.dirname(os.path.realpath(__file__))
         local_script_path = os.path.abspath(os.path.join(current_dir_path, "..", "..", "..", "scan_fs.py"))
-        local_exe_dir = os.path.join(TestController.temp_dir, "scanfs_local")
         remote_exe_dir = os.path.join(TestController.temp_dir, "scanfs_remote")
-        os.makedirs(local_exe_dir, exist_ok=True)
         os.makedirs(remote_exe_dir, exist_ok=True)
         # Allow group access for the seedsynctest account
         os.chmod(remote_exe_dir, 0o775)
-        local_exe_path = os.path.join(local_exe_dir, "scanfs")
         remote_exe_path = remote_exe_dir
-        with open(local_exe_path, "w") as f:
-            f.write("#!/bin/sh\n")
-            f.write("{} {} $*".format(sys.executable, local_script_path))
-        os.chmod(local_exe_path, 0o775)
         ctx_args = Args()
-        ctx_args.local_path_to_scanfs = local_exe_path
+        ctx_args.local_path_to_scanfs = local_script_path
 
         config_dict = {
             "General": {

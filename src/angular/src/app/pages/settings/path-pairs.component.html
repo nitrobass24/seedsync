@@ -1,0 +1,119 @@
+<div class="path-pairs">
+  <div class="header">
+    <span>Path Pairs</span>
+    @if (!adding) {
+      <button class="btn btn-sm btn-add" (click)="onStartAdd()">+ Add</button>
+    }
+  </div>
+  <div class="restart-note">Restart the app after making changes to path pairs.</div>
+
+  @if (adding) {
+    <div class="pair-form">
+      <div class="form-row">
+        <label>Name
+          <input type="text" class="form-control form-control-sm" [(ngModel)]="addForm.name" placeholder="My Pair" />
+        </label>
+      </div>
+      <div class="form-row">
+        <label>Remote Path
+          <input type="text" class="form-control form-control-sm" [(ngModel)]="addForm.remote_path" placeholder="/remote/path" />
+        </label>
+      </div>
+      <div class="form-row">
+        <label>Local Path
+          <input type="text" class="form-control form-control-sm" [(ngModel)]="addForm.local_path" placeholder="/local/path" />
+        </label>
+      </div>
+      <div class="form-row toggles">
+        <label class="toggle-label">
+          <input type="checkbox" class="form-check-input" [(ngModel)]="addForm.enabled" />
+          Enabled
+        </label>
+        <label class="toggle-label">
+          <input type="checkbox" class="form-check-input" [(ngModel)]="addForm.auto_queue" />
+          Auto Queue
+        </label>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-sm btn-save" (click)="onSaveAdd()">Save</button>
+        <button class="btn btn-sm btn-cancel" (click)="onCancelAdd()">Cancel</button>
+      </div>
+    </div>
+  }
+
+  @if ((pairs$ | async); as pairs) {
+    @if (pairs.length === 0 && !adding) {
+      <div class="empty-state">No path pairs configured.</div>
+    }
+
+    @for (pair of pairs; track pair.id) {
+      @if (editingId === pair.id) {
+        <div class="pair-form">
+          <div class="form-row">
+            <label>Name
+              <input type="text" class="form-control form-control-sm" [(ngModel)]="editForm.name" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Remote Path
+              <input type="text" class="form-control form-control-sm" [(ngModel)]="editForm.remote_path" />
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Local Path
+              <input type="text" class="form-control form-control-sm" [(ngModel)]="editForm.local_path" />
+            </label>
+          </div>
+          <div class="form-row toggles">
+            <label class="toggle-label">
+              <input type="checkbox" class="form-check-input" [(ngModel)]="editForm.enabled" />
+              Enabled
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" class="form-check-input" [(ngModel)]="editForm.auto_queue" />
+              Auto Queue
+            </label>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-sm btn-save" (click)="onSaveEdit()">Save</button>
+            <button class="btn btn-sm btn-cancel" (click)="onCancelEdit()">Cancel</button>
+          </div>
+        </div>
+      } @else {
+        <div class="pair-row">
+          <div class="pair-info">
+            <div class="pair-name">{{ pair.name }}</div>
+            <div class="pair-paths">
+              <span class="path-label">Remote:</span> {{ pair.remote_path }}
+            </div>
+            <div class="pair-paths">
+              <span class="path-label">Local:</span> {{ pair.local_path }}
+            </div>
+            <div class="pair-toggles">
+              <label class="toggle-label">
+                <input type="checkbox" class="form-check-input"
+                       [checked]="pair.enabled"
+                       (change)="onToggleEnabled(pair, $any($event.target).checked)" />
+                Enabled
+              </label>
+              <label class="toggle-label">
+                <input type="checkbox" class="form-check-input"
+                       [checked]="pair.auto_queue"
+                       (change)="onToggleAutoQueue(pair, $any($event.target).checked)" />
+                Auto Queue
+              </label>
+            </div>
+          </div>
+          <div class="pair-actions">
+            <button class="btn btn-sm btn-edit" (click)="onStartEdit(pair)">Edit</button>
+            <button class="btn btn-sm btn-delete"
+                    [class.confirming]="confirmingDeleteId === pair.id"
+                    (click)="onDelete(pair.id)">
+              {{ confirmingDeleteId === pair.id ? 'Confirm?' : 'Delete' }}
+            </button>
+          </div>
+        </div>
+      }
+    }
+  }
+</div>

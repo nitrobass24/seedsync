@@ -21,8 +21,9 @@ class ModelBuilder:
       * remote file system as a Dict[name, SystemFile]
       * lftp status as Dict[name, LftpJobStatus]
     """
-    def __init__(self):
+    def __init__(self, pair_id: Optional[str] = None) -> None:
         self.logger = logging.getLogger("ModelBuilder")
+        self.__pair_id = pair_id
         self.__local_files = dict()
         self.__active_files = dict()
         self.__remote_files = dict()
@@ -197,7 +198,7 @@ class ModelBuilder:
                     if _remote.timestamp_modified:
                         _model_file.remote_modified_timestamp = _remote.timestamp_modified
 
-            model_file = ModelFile(name, is_dir)
+            model_file = ModelFile(name, is_dir, pair_id=self.__pair_id)
             # set the file state
             # for now we only set to Queued or Downloading
             # later after all children are built, we can set to Downloaded after performing a check
@@ -234,7 +235,7 @@ class ModelBuilder:
                     if (_remote_child and _is_dir != _remote_child.is_dir) or \
                        (_local_child and _is_dir != _local_child.is_dir):
                         raise ModelError("Mismatch in is_dir between child sources")
-                    _child_model_file = ModelFile(_child_name, _is_dir)
+                    _child_model_file = ModelFile(_child_name, _is_dir, pair_id=self.__pair_id)
 
                     # add it to the parent right away so we can access the full path
                     _model_file.add_child(_child_model_file)

@@ -1,7 +1,4 @@
-# SeedSync Docker Image - Optimized Build
-
-# Force AMD64 for scanfs - it runs on remote seedbox servers, not locally
-ARG SCANFS_PLATFORM=linux/amd64
+# SeedSync Docker Image - Debian Build
 
 # ==============================================================================
 # Stage 1: Build Angular Frontend
@@ -15,35 +12,7 @@ COPY src/angular/ ./
 RUN npx ng build --configuration=production --output-path /build
 
 # ==============================================================================
-# Stage 2: Build scanfs binary with PyInstaller
-# Use Debian Bullseye for glibc compatibility on remote seedboxes
-# Bullseye has glibc 2.31, supporting Linux systems from 2021+
-# IMPORTANT: Force AMD64 platform - scanfs runs on remote server, not locally
-# ==============================================================================
-FROM --platform=$SCANFS_PLATFORM python:3.12-slim-bullseye AS scanfs-builder
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    binutils \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir pyinstaller tblib
-
-COPY src/python/scan_fs.py /src/
-COPY src/python/system/ /src/system/
-COPY src/python/common/ /src/common/
-
-WORKDIR /build
-RUN pyinstaller /src/scan_fs.py \
-    --onefile \
-    -p /src \
-    --distpath /build/dist \
-    --workpath /build/work \
-    --specpath /build \
-    --name scanfs \
-    && strip /build/dist/scanfs 2>/dev/null || true
-
-# ==============================================================================
-# Stage 3: Prepare Python runtime (install deps, strip unused stdlib)
+# Stage 2: Prepare Python runtime (install deps, strip unused stdlib)
 # ==============================================================================
 FROM python:3.12-slim-bookworm AS python-deps
 
@@ -70,10 +39,23 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
         /usr/local/lib/python3.12/lib-dynload/_codecs_hk*.so \
         /usr/local/lib/python3.12/lib-dynload/_codecs_cn*.so \
         /usr/local/lib/python3.12/lib-dynload/_codecs_tw*.so \
-        /usr/local/lib/python3.12/lib-dynload/_codecs_iso*.so
+        /usr/local/lib/python3.12/lib-dynload/_codecs_iso*.so \
+        /usr/local/lib/python3.12/lib-dynload/_curses*.so \
+        /usr/local/lib/python3.12/lib-dynload/_sqlite3*.so \
+        /usr/local/lib/python3.12/lib-dynload/_lzma*.so \
+        /usr/local/lib/python3.12/lib-dynload/_bz2*.so \
+        /usr/local/lib/python3.12/lib-dynload/_crypt*.so \
+        /usr/local/lib/python3.12/lib-dynload/_dbm*.so \
+        /usr/local/lib/python3.12/lib-dynload/_gdbm*.so \
+        /usr/local/lib/python3.12/lib-dynload/audioop*.so \
+        /usr/local/lib/python3.12/lib-dynload/ossaudiodev*.so \
+        /usr/local/lib/python3.12/lib-dynload/nis*.so \
+        /usr/local/lib/python3.12/lib-dynload/readline*.so \
+        /usr/local/lib/python3.12/lib-dynload/_ctypes_test*.so \
+    && find /usr/local/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 # ==============================================================================
-# Stage 4: Final Runtime Image
+# Stage 3: Final Runtime Image
 # ==============================================================================
 FROM debian:bookworm-slim AS runtime
 
@@ -111,11 +93,10 @@ COPY src/python/ /app/python/
 
 # Copy built artifacts from previous stages
 COPY --from=angular-builder /build/browser /app/html
-COPY --from=scanfs-builder /build/dist/scanfs /app/scanfs
 
 # Copy and set up entrypoint
 COPY src/docker/build/docker-image/entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/entrypoint.sh /app/scanfs
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Runtime configuration
 ENV PUID=1000 \
@@ -125,5 +106,8 @@ ENV PUID=1000 \
 EXPOSE 8800
 VOLUME ["/config", "/downloads", "/staging"]
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8800/')" || exit 1
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["python", "/app/python/seedsync.py", "-c", "/config", "--html", "/app/html", "--scanfs", "/app/scanfs"]
+CMD ["python", "/app/python/seedsync.py", "-c", "/config", "--html", "/app/html", "--scanfs", "/app/python/scan_fs.py"]

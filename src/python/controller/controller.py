@@ -1,8 +1,9 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import os
+import fnmatch
 from abc import ABC, abstractmethod
-from typing import Dict, List, Callable, Set
+from typing import Dict, List, Callable, Optional, Set
 from threading import Lock
 from queue import Queue
 from enum import Enum
@@ -20,11 +21,80 @@ from .delete import DeleteLocalProcess, DeleteRemoteProcess
 from .move import MoveProcess
 
 
+def filter_excluded_files(files: List, exclude_patterns_str: str) -> List:
+    if not exclude_patterns_str or not exclude_patterns_str.strip():
+        return files
+    patterns = [p.strip() for p in exclude_patterns_str.split(",") if p.strip()]
+    if not patterns:
+        return files
+    return [f for f in files
+            if not any(fnmatch.fnmatch(f.name.lower(), p.lower()) for p in patterns)]
+
+
 class ControllerError(AppError):
     """
     Exception indicating a controller error
     """
     pass
+
+
+def _persist_key(pair_id, name: str) -> str:
+    """Build a namespaced persist key: 'pair_id:name' or plain 'name' for default pair."""
+    return "{}:{}".format(pair_id, name) if pair_id else name
+
+
+def _strip_persist_key(key: str, pair_id) -> str:
+    """Strip pair_id prefix from a persist key to get the bare file name."""
+    prefix = "{}:".format(pair_id) if pair_id else ""
+    if prefix and key.startswith(prefix):
+        return key[len(prefix):]
+    return key
+
+
+class _PairContext:
+    """
+    Holds all per-pair state: LFTP instance, scanners, scanner processes,
+    model builder, and download tracking.
+    """
+    def __init__(self,
+                 pair_id: Optional[str],
+                 name: str,
+                 remote_path: str,
+                 local_path: str,
+                 effective_local_path: str,
+                 lftp: Lftp,
+                 active_scanner: ActiveScanner,
+                 local_scanner: LocalScanner,
+                 remote_scanner: RemoteScanner,
+                 active_scan_process: ScannerProcess,
+                 local_scan_process: ScannerProcess,
+                 remote_scan_process: ScannerProcess,
+                 model_builder: ModelBuilder):
+        self.pair_id = pair_id
+        self.name = name
+        self.remote_path = remote_path
+        self.local_path = local_path
+        self.effective_local_path = effective_local_path
+        self.lftp = lftp
+        self.active_scanner = active_scanner
+        self.local_scanner = local_scanner
+        self.remote_scanner = remote_scanner
+        self.active_scan_process = active_scan_process
+        self.local_scan_process = local_scan_process
+        self.remote_scan_process = remote_scan_process
+        self.model_builder = model_builder
+
+        # Per-pair tracking state
+        self.active_downloading_file_names: List[str] = []
+        self.active_extracting_file_names: List[str] = []
+        self.prev_downloading_file_names: Set[str] = set()
+        self.pending_completion: Set[str] = set()
+        self.remote_scan_received: bool = False
+        self.local_scan_received: bool = False
+
+        # Temporary storage for latest scan results (set during _update_pair_model_state)
+        self._latest_remote_scan = None
+        self._latest_local_scan = None
 
 
 class Controller:
@@ -57,9 +127,10 @@ class Controller:
                 """Called on action failure"""
                 pass
 
-        def __init__(self, action: Action, filename: str):
+        def __init__(self, action: Action, filename: str, pair_id: str = None):
             self.action = action
             self.filename = filename
+            self.pair_id = pair_id
             self.callbacks = []
 
         def add_callback(self, callback: ICallback):
@@ -86,153 +157,209 @@ class Controller:
         # The command queue
         self.__command_queue = Queue()
 
-        # The model
+        # The model (shared across all pairs)
         self.__model = Model()
         self.__model.set_base_logger(self.logger)
         # Lock for the model
         # Note: While the scanners are in a separate process, the rest of the application
-        #       is threaded in a single process. (The webserver is bottle+paste which is
+        #       is threaded in a single process. (The webserver is bottle+wsgiref which is
         #       multi-threaded). Therefore it is safe to use a threading Lock for the model
         #       (the scanner processes never try to access the model)
         self.__model_lock = Lock()
 
-        # Model builder
-        self.__model_builder = ModelBuilder()
-        self.__model_builder.set_base_logger(self.logger)
-        self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
-        self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
-        self.__model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
-        self.__model_builder.set_auto_delete_remote(
-            bool(self.__context.config.autoqueue.auto_delete_remote)
+        # Setup multiprocess logging (shared)
+        self.__mp_logger = MultiprocessingLogger(self.logger)
+
+        # Build pair contexts, then seed each builder with filtered persist state
+        self.__pair_contexts: List[_PairContext] = self._build_pair_contexts()
+        self._sync_persist_to_all_builders()
+
+        # Setup extract process (global -- extraction is local-only)
+        # Use the first pair's effective_local_path for extract (backward compat)
+        first_pc = self.__pair_contexts[0]
+        if self.__context.config.controller.use_local_path_as_extract_path:
+            extract_out_dir = first_pc.local_path
+        else:
+            extract_out_dir = self.__context.config.controller.extract_path
+        if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
+            out_dir_path = self.__context.config.controller.staging_path
+            # When archive is found in the final dir (fallback), extract there
+            out_dir_path_fallback = extract_out_dir
+        else:
+            out_dir_path = extract_out_dir
+            out_dir_path_fallback = None
+        local_path_fallback = None
+        if first_pc.effective_local_path != first_pc.local_path:
+            local_path_fallback = first_pc.local_path
+        self.__extract_process = ExtractProcess(
+            out_dir_path=out_dir_path,
+            local_path=first_pc.effective_local_path,
+            local_path_fallback=local_path_fallback,
+            out_dir_path_fallback=out_dir_path_fallback
         )
+        self.__extract_process.set_multiprocessing_logger(self.__mp_logger)
+
+        # Keep track of active command processes (shared)
+        self.__active_command_processes = []
+
+        # Keep track of active move processes (staging -> final, shared)
+        self.__active_move_processes = []
+        # Use composite keys (pair_id:name) to avoid collisions across pairs
+        self.__moved_file_keys: Set[str] = set()
+
+        # Track extraction retry counts by composite key (in-memory, resets on restart)
+        self.__extract_retry_counts: Dict[str, int] = {}
+        self.__pending_redownload_keys: Set[str] = set()
+
+        self.__started = False
+
+    def _build_pair_contexts(self) -> List[_PairContext]:
+        """
+        Build a _PairContext for each configured path pair.
+        If no path pairs are configured, create a single default pair from config.lftp
+        for backward compatibility.
+        """
+        pairs = self.__context.path_pairs_config.pairs
+        enabled_pairs = [p for p in pairs if p.enabled]
+
+        if not enabled_pairs:
+            # Backward compatibility: no path pairs configured, use config.lftp
+            return [self._create_pair_context(
+                pair_id=None,
+                name="Default",
+                remote_path=self.__context.config.lftp.remote_path,
+                local_path=self.__context.config.lftp.local_path
+            )]
+
+        contexts = []
+        for pair in enabled_pairs:
+            contexts.append(self._create_pair_context(
+                pair_id=pair.id,
+                name=pair.name,
+                remote_path=pair.remote_path,
+                local_path=pair.local_path
+            ))
+        return contexts
+
+    def _create_pair_context(self,
+                             pair_id: Optional[str],
+                             name: str,
+                             remote_path: str,
+                             local_path: str) -> _PairContext:
+        """
+        Create a fully wired _PairContext with its own LFTP, scanners, and model builder.
+        """
+        pair_label = name or pair_id or "default"
+        pair_logger = self.logger.getChild("Pair[{}]".format(pair_label))
 
         # Determine effective local path: use staging_path when staging is enabled
         if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-            self.__effective_local_path = self.__context.config.controller.staging_path
-            # Ensure the staging directory exists so scanners don't crash
-            os.makedirs(self.__effective_local_path, exist_ok=True)
+            effective_local_path = self.__context.config.controller.staging_path
+            os.makedirs(effective_local_path, exist_ok=True)
         else:
-            self.__effective_local_path = self.__context.config.lftp.local_path
+            effective_local_path = local_path
 
-        # Lftp
-        self.__lftp = Lftp(address=self.__context.config.lftp.remote_address,
-                           port=self.__context.config.lftp.remote_port,
-                           user=self.__context.config.lftp.remote_username,
-                           password=self.__password)
-        self.__lftp.set_base_logger(self.logger)
-        self.__lftp.set_base_remote_dir_path(self.__context.config.lftp.remote_path)
-        self.__lftp.set_base_local_dir_path(self.__effective_local_path)
-        # Configure Lftp
-        self.__lftp.num_parallel_jobs = self.__context.config.lftp.num_max_parallel_downloads
-        self.__lftp.num_parallel_files = self.__context.config.lftp.num_max_parallel_files_per_download
-        self.__lftp.num_connections_per_root_file = self.__context.config.lftp.num_max_connections_per_root_file
-        self.__lftp.num_connections_per_dir_file = self.__context.config.lftp.num_max_connections_per_dir_file
-        self.__lftp.num_max_total_connections = self.__context.config.lftp.num_max_total_connections
-        self.__lftp.use_temp_file = self.__context.config.lftp.use_temp_file
-        self.__lftp.temp_file_name = "*" + Constants.LFTP_TEMP_FILE_SUFFIX
-        if self.__context.config.lftp.net_limit_rate:
-            self.__lftp.rate_limit = self.__context.config.lftp.net_limit_rate
-        if self.__context.config.lftp.net_socket_buffer:
-            self.__lftp.net_socket_buffer = self.__context.config.lftp.net_socket_buffer
-        if self.__context.config.lftp.pget_min_chunk_size:
-            self.__lftp.min_chunk_size = self.__context.config.lftp.pget_min_chunk_size
-        if self.__context.config.lftp.mirror_parallel_directories is not None:
-            self.__lftp.mirror_parallel_directories = self.__context.config.lftp.mirror_parallel_directories
-        if self.__context.config.lftp.net_timeout is not None:
-            self.__lftp.net_timeout = self.__context.config.lftp.net_timeout
-        if self.__context.config.lftp.net_max_retries is not None:
-            self.__lftp.net_max_retries = self.__context.config.lftp.net_max_retries
-        if self.__context.config.lftp.net_reconnect_interval_base is not None:
-            self.__lftp.net_reconnect_interval_base = self.__context.config.lftp.net_reconnect_interval_base
-        if self.__context.config.lftp.net_reconnect_interval_multiplier is not None:
-            self.__lftp.net_reconnect_interval_multiplier = self.__context.config.lftp.net_reconnect_interval_multiplier
-        self.__lftp.set_verbose_logging(self.__context.config.general.verbose)
+        # LFTP instance
+        lftp = Lftp(address=self.__context.config.lftp.remote_address,
+                     port=self.__context.config.lftp.remote_port,
+                     user=self.__context.config.lftp.remote_username,
+                     password=self.__password)
+        lftp.set_base_logger(pair_logger)
+        lftp.set_base_remote_dir_path(remote_path)
+        lftp.set_base_local_dir_path(effective_local_path)
+        self._configure_lftp(lftp)
 
-        # Setup the scanners and scanner processes
-        # ActiveScanner scans the effective path (staging when enabled) for in-progress downloads
-        self.__active_scanner = ActiveScanner(self.__effective_local_path)
-        # LocalScanner always scans the final local_path so moved files are detected
-        # (ActiveScanner handles the staging path during downloads)
-        self.__local_scanner = LocalScanner(
-            local_path=self.__context.config.lftp.local_path,
+        # Scanners
+        active_scanner = ActiveScanner(effective_local_path)
+        local_scanner = LocalScanner(
+            local_path=local_path,
             use_temp_file=self.__context.config.lftp.use_temp_file
         )
-        self.__remote_scanner = RemoteScanner(
+        remote_scanner = RemoteScanner(
             remote_address=self.__context.config.lftp.remote_address,
             remote_username=self.__context.config.lftp.remote_username,
             remote_password=self.__password,
             remote_port=self.__context.config.lftp.remote_port,
-            remote_path_to_scan=self.__context.config.lftp.remote_path,
+            remote_path_to_scan=remote_path,
             local_path_to_scan_script=self.__context.args.local_path_to_scanfs,
             remote_path_to_scan_script=self.__context.config.lftp.remote_path_to_scan_script
         )
 
-        self.__active_scan_process = ScannerProcess(
-            scanner=self.__active_scanner,
+        # Scanner processes
+        active_scan_process = ScannerProcess(
+            scanner=active_scanner,
             interval_in_ms=self.__context.config.controller.interval_ms_downloading_scan,
             verbose=False
         )
-        self.__local_scan_process = ScannerProcess(
-            scanner=self.__local_scanner,
+        local_scan_process = ScannerProcess(
+            scanner=local_scanner,
             interval_in_ms=self.__context.config.controller.interval_ms_local_scan,
         )
-        self.__remote_scan_process = ScannerProcess(
-            scanner=self.__remote_scanner,
+        remote_scan_process = ScannerProcess(
+            scanner=remote_scanner,
             interval_in_ms=self.__context.config.controller.interval_ms_remote_scan,
         )
 
-        # Setup extract process
-        if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-            out_dir_path = self.__context.config.controller.staging_path
-        elif self.__context.config.controller.use_local_path_as_extract_path:
-            out_dir_path = self.__context.config.lftp.local_path
-        else:
-            out_dir_path = self.__context.config.controller.extract_path
-        # When staging is enabled, archives may be in staging or already moved
-        # to local_path. Pass local_path as fallback so extraction can find them.
-        local_path_fallback = None
-        if self.__effective_local_path != self.__context.config.lftp.local_path:
-            local_path_fallback = self.__context.config.lftp.local_path
-        self.__extract_process = ExtractProcess(
-            out_dir_path=out_dir_path,
-            local_path=self.__effective_local_path,
-            local_path_fallback=local_path_fallback
+        # Wire multiprocess logging
+        active_scan_process.set_multiprocessing_logger(self.__mp_logger)
+        local_scan_process.set_multiprocessing_logger(self.__mp_logger)
+        remote_scan_process.set_multiprocessing_logger(self.__mp_logger)
+
+        # Model builder
+        model_builder = ModelBuilder(pair_id=pair_id)
+        model_builder.set_base_logger(pair_logger)
+        # Persist state is filtered per-pair by _sync_persist_to_all_builders()
+        # called after all pair contexts are built. Initialize with empty sets.
+        model_builder.set_downloaded_files(set())
+        model_builder.set_extracted_files(set())
+        model_builder.set_extract_failed_files(set())
+        model_builder.set_auto_delete_remote(
+            bool(self.__context.config.autoqueue.auto_delete_remote)
         )
 
-        # Setup multiprocess logging
-        self.__mp_logger = MultiprocessingLogger(self.logger)
-        self.__active_scan_process.set_multiprocessing_logger(self.__mp_logger)
-        self.__local_scan_process.set_multiprocessing_logger(self.__mp_logger)
-        self.__remote_scan_process.set_multiprocessing_logger(self.__mp_logger)
-        self.__extract_process.set_multiprocessing_logger(self.__mp_logger)
+        return _PairContext(
+            pair_id=pair_id,
+            name=name,
+            remote_path=remote_path,
+            local_path=local_path,
+            effective_local_path=effective_local_path,
+            lftp=lftp,
+            active_scanner=active_scanner,
+            local_scanner=local_scanner,
+            remote_scanner=remote_scanner,
+            active_scan_process=active_scan_process,
+            local_scan_process=local_scan_process,
+            remote_scan_process=remote_scan_process,
+            model_builder=model_builder,
+        )
 
-        # Keep track of active files
-        self.__active_downloading_file_names = []
-        self.__active_extracting_file_names = []
-        # Track previous cycle's downloading files to detect completed downloads
-        self.__prev_downloading_file_names: Set[str] = set()
-        # Track files pending completion (LFTP finished but not yet reached DOWNLOADED state)
-        self.__pending_completion: Set[str] = set()
-
-        # Keep track of active command processes
-        self.__active_command_processes = []
-
-        # Keep track of active move processes (staging -> final)
-        self.__active_move_processes = []
-        # Track files that have been moved from staging to final location
-        # to prevent duplicate moves (e.g. when model re-detects DOWNLOADED after move)
-        self.__moved_file_names: Set[str] = set()
-
-        # Track extraction retry counts (in-memory, resets on restart)
-        self.__extract_retry_counts: Dict[str, int] = {}
-        # Track files pending re-download after extraction failure
-        self.__pending_redownload: Set[str] = set()
-
-        # Track whether we've received initial scans (for persist cleanup)
-        self.__remote_scan_received = False
-        self.__local_scan_received = False
-
-        self.__started = False
+    def _configure_lftp(self, lftp: Lftp):
+        """Apply shared LFTP configuration settings."""
+        cfg = self.__context.config.lftp
+        lftp.num_parallel_jobs = cfg.num_max_parallel_downloads
+        lftp.num_parallel_files = cfg.num_max_parallel_files_per_download
+        lftp.num_connections_per_root_file = cfg.num_max_connections_per_root_file
+        lftp.num_connections_per_dir_file = cfg.num_max_connections_per_dir_file
+        lftp.num_max_total_connections = cfg.num_max_total_connections
+        lftp.use_temp_file = cfg.use_temp_file
+        lftp.temp_file_name = "*" + Constants.LFTP_TEMP_FILE_SUFFIX
+        if cfg.net_limit_rate:
+            lftp.rate_limit = cfg.net_limit_rate
+        if cfg.net_socket_buffer:
+            lftp.net_socket_buffer = cfg.net_socket_buffer
+        if cfg.pget_min_chunk_size:
+            lftp.min_chunk_size = cfg.pget_min_chunk_size
+        if cfg.mirror_parallel_directories is not None:
+            lftp.mirror_parallel_directories = cfg.mirror_parallel_directories
+        if cfg.net_timeout is not None:
+            lftp.net_timeout = cfg.net_timeout
+        if cfg.net_max_retries is not None:
+            lftp.net_max_retries = cfg.net_max_retries
+        if cfg.net_reconnect_interval_base is not None:
+            lftp.net_reconnect_interval_base = cfg.net_reconnect_interval_base
+        if cfg.net_reconnect_interval_multiplier is not None:
+            lftp.net_reconnect_interval_multiplier = cfg.net_reconnect_interval_multiplier
+        lftp.set_verbose_logging(self.__context.config.general.verbose)
 
     def start(self):
         """
@@ -241,9 +368,10 @@ class Controller:
         :return:
         """
         self.logger.debug("Starting controller")
-        self.__active_scan_process.start()
-        self.__local_scan_process.start()
-        self.__remote_scan_process.start()
+        for pc in self.__pair_contexts:
+            pc.active_scan_process.start()
+            pc.local_scan_process.start()
+            pc.remote_scan_process.start()
         self.__extract_process.start()
         self.__mp_logger.start()
         self.__started = True
@@ -264,14 +392,16 @@ class Controller:
     def exit(self):
         self.logger.debug("Exiting controller")
         if self.__started:
-            self.__lftp.exit()
-            self.__active_scan_process.terminate()
-            self.__local_scan_process.terminate()
-            self.__remote_scan_process.terminate()
+            for pc in self.__pair_contexts:
+                pc.lftp.exit()
+                pc.active_scan_process.terminate()
+                pc.local_scan_process.terminate()
+                pc.remote_scan_process.terminate()
             self.__extract_process.terminate()
-            self.__active_scan_process.join()
-            self.__local_scan_process.join()
-            self.__remote_scan_process.join()
+            for pc in self.__pair_contexts:
+                pc.active_scan_process.join()
+                pc.local_scan_process.join()
+                pc.remote_scan_process.join()
             self.__extract_process.join()
             self.__mp_logger.stop()
             self.__started = False
@@ -282,10 +412,8 @@ class Controller:
         Returns a copy of all the model files
         :return:
         """
-        # Lock the model
         self.__model_lock.acquire()
         model_files = self.__get_model_files()
-        # Release the model
         self.__model_lock.release()
         return model_files
 
@@ -295,10 +423,8 @@ class Controller:
         :param listener:
         :return:
         """
-        # Lock the model
         self.__model_lock.acquire()
         self.__model.add_listener(listener)
-        # Release the model
         self.__model_lock.release()
 
     def remove_model_listener(self, listener: IModelListener):
@@ -307,30 +433,19 @@ class Controller:
         :param listener:
         :return:
         """
-        # Lock the model
         self.__model_lock.acquire()
         self.__model.remove_listener(listener)
-        # Release the model
         self.__model_lock.release()
 
     def get_model_files_and_add_listener(self, listener: IModelListener):
         """
         Adds a listener and returns the current state of model files in one atomic operation
-        This guarantees that model update events are not missed or duplicated for the clients
-        Without an atomic operation, the following scenarios can happen:
-            1. get_model() -> model updated -> add_listener()
-               The model update never propagates to client
-            2. add_listener() -> model updated -> get_model()
-               The model update is duplicated on client side (once through listener, and once
-               through the model).
         :param listener:
         :return:
         """
-        # Lock the model
         self.__model_lock.acquire()
         self.__model.add_listener(listener)
         model_files = self.__get_model_files()
-        # Release the model
         self.__model_lock.release()
         return model_files
 
@@ -339,136 +454,81 @@ class Controller:
 
     def __get_model_files(self) -> List[ModelFile]:
         model_files = []
-        for filename in self.__model.get_file_names():
-            model_files.append(copy.deepcopy(self.__model.get_file(filename)))
+        for file in self.__model.get_all_files():
+            model_files.append(copy.deepcopy(file))
         return model_files
 
+    def _get_pair_context_for_command(self, command: Command) -> Optional[_PairContext]:
+        """Find the pair context for a command based on pair_id."""
+        if command.pair_id:
+            for pc in self.__pair_contexts:
+                if pc.pair_id == command.pair_id:
+                    return pc
+            return None
+        return self.__pair_contexts[0] if self.__pair_contexts else None
+
+    def _get_pair_context_for_file(self, file: ModelFile) -> Optional[_PairContext]:
+        """Find the pair context that owns a ModelFile based on its pair_id."""
+        for pc in self.__pair_contexts:
+            if pc.pair_id == file.pair_id:
+                return pc
+        return None
+
+    def _find_pair_for_file_name(self, name: str) -> Optional[_PairContext]:
+        """Find the pair context that contains a file by name (checks model builders)."""
+        for pc in self.__pair_contexts:
+            try:
+                self.__model.get_file(name, pair_id=pc.pair_id)
+                return pc
+            except ModelError:
+                pass
+        return self.__pair_contexts[0] if self.__pair_contexts else None
+
     def __update_model(self):
-        # Grab the latest scan results
-        latest_remote_scan = self.__remote_scan_process.pop_latest_result()
-        latest_local_scan = self.__local_scan_process.pop_latest_result()
-        latest_active_scan = self.__active_scan_process.pop_latest_result()
-
-        # Grab the Lftp status
-        lftp_statuses = None
-        try:
-            lftp_statuses = self.__lftp.status()
-        except LftpError as e:
-            self.logger.warning("Caught lftp error: {}".format(str(e)))
-
-        # Grab the latest extract results
+        # Grab the latest extract results (shared)
         latest_extract_statuses = self.__extract_process.pop_latest_statuses()
-
-        # Grab the latest extracted file names
         latest_extracted_results = self.__extract_process.pop_completed()
-
-        # Grab the latest failed extractions
         latest_failed_extractions = self.__extract_process.pop_failed()
 
-        # Track scan availability for persist cleanup
-        if latest_remote_scan is not None:
-            self.__remote_scan_received = True
-        if latest_local_scan is not None:
-            self.__local_scan_received = True
+        # Process each pair context's scan results and LFTP status
+        for pc in self.__pair_contexts:
+            self._update_pair_model_state(pc, latest_extract_statuses, latest_extracted_results)
 
-        # Update list of active file names
-        if lftp_statuses is not None:
-            current_downloading = set(
-                s.name for s in lftp_statuses if s.state == LftpJobStatus.State.RUNNING
-            )
-            # Detect files that just completed downloading (were in previous cycle but not now)
-            just_completed = self.__prev_downloading_file_names - current_downloading
-            if just_completed:
-                for name in just_completed:
-                    self.logger.info("Download completed (LFTP job finished): {}".format(name))
-                # Add to persist immediately so model_builder can set DOWNLOADED state
-                self.__persist.downloaded_file_names.update(just_completed)
-                # Pass a copy to bypass cache invalidation check (same reference is stored)
-                self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
-                # Track pending completions for active scanner
-                self.__pending_completion.update(just_completed)
-                # Force a local scan so the completed file is picked up
-                self.__local_scan_process.force_scan()
+        # Build an aggregate new model from all pairs
+        any_pair_has_changes = any(pc.model_builder.has_changes() for pc in self.__pair_contexts)
 
-            self.__active_downloading_file_names = list(current_downloading)
-            self.__prev_downloading_file_names = current_downloading
-        else:
-            just_completed = set()
+        if any_pair_has_changes:
+            new_model = Model()
+            new_model.set_base_logger(self.logger)
+            for pc in self.__pair_contexts:
+                pair_model = pc.model_builder.build_model()
+                for file in pair_model.get_all_files():
+                    new_model.add_file(file)
 
-        if latest_extract_statuses is not None:
-            self.__active_extracting_file_names = [
-                s.name for s in latest_extract_statuses.statuses if s.state == ExtractStatus.State.EXTRACTING
-            ]
-
-        # Update the active scanner's state
-        # Include pending completions so files continue to be scanned until they
-        # reach DOWNLOADED/EXTRACTED/DELETED state in the model
-        active_files = self.__active_downloading_file_names + self.__active_extracting_file_names
-        active_files += list(self.__pending_completion)
-        self.__active_scanner.set_active_files(active_files)
-
-        # Push auto_delete_remote config to model builder (picks up runtime changes)
-        self.__model_builder.set_auto_delete_remote(
-            bool(self.__context.config.autoqueue.auto_delete_remote)
-        )
-
-        # Update model builder state
-        if latest_remote_scan is not None:
-            self.__model_builder.set_remote_files(latest_remote_scan.files)
-        if latest_local_scan is not None:
-            self.__model_builder.set_local_files(latest_local_scan.files)
-        if latest_active_scan is not None:
-            self.__model_builder.set_active_files(latest_active_scan.files)
-        if lftp_statuses is not None:
-            self.__model_builder.set_lftp_statuses(lftp_statuses)
-        if latest_extract_statuses is not None:
-            self.__model_builder.set_extract_statuses(latest_extract_statuses.statuses)
-        if latest_extracted_results:
-            for result in latest_extracted_results:
-                self.__persist.extracted_file_names.add(result.name)
-                # Spawn move from staging to final local_path when staging is enabled
-                if self.__context.config.controller.use_staging and \
-                        self.__context.config.controller.staging_path:
-                    self.__spawn_move_process(result.name)
-            self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
-
-        # Build the new model, if needed
-        if self.__model_builder.has_changes():
-            new_model = self.__model_builder.build_model()
-
-            # Lock the model
             self.__model_lock.acquire()
 
-            # Diff the new model with old model
             model_diff = ModelDiffUtil.diff_models(self.__model, new_model)
 
-            # Apply changes to the new model
             for diff in model_diff:
                 if diff.change == ModelDiff.Change.ADDED:
                     self.__model.add_file(diff.new_file)
                 elif diff.change == ModelDiff.Change.REMOVED:
-                    self.__model.remove_file(diff.old_file.name)
+                    self.__model.remove_file(diff.old_file.name, pair_id=diff.old_file.pair_id)
                 elif diff.change == ModelDiff.Change.UPDATED:
                     self.__model.update_file(diff.new_file)
 
-                # Clear move tracking and persist when a file is re-queued for download
-                # so that a fresh download to staging will trigger a new move
+                diff_file = diff.new_file or diff.old_file
+                pc = self._get_pair_context_for_file(diff_file)
+
                 if diff.new_file is not None and \
                         diff.new_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
-                    self.__moved_file_names.discard(diff.new_file.name)
-                    self.__persist.downloaded_file_names.discard(diff.new_file.name)
-                    self.__persist.extracted_file_names.discard(diff.new_file.name)
-                    self.__persist.extract_failed_file_names.discard(diff.new_file.name)
-                    self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
-                    self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
-                    self.__model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
+                    pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
+                    self.__moved_file_keys.discard(pkey)
+                    self.__persist.downloaded_file_names.discard(pkey)
+                    self.__persist.extracted_file_names.discard(pkey)
+                    self.__persist.extract_failed_file_names.discard(pkey)
+                    self._sync_persist_to_all_builders()
 
-                # Detect if a file was just Downloaded
-                #   an Added file in Downloaded state
-                #   an Updated file transitioning to Downloaded state
-                # If so, update the persist state
-                # Note: This step is done after the new model is build because
-                #       model_builder is the one that discovers when a file is Downloaded
                 downloaded = False
                 if diff.change == ModelDiff.Change.ADDED and \
                         diff.new_file.state == ModelFile.State.DOWNLOADED:
@@ -478,117 +538,226 @@ class Controller:
                         diff.old_file.state != ModelFile.State.DOWNLOADED:
                     downloaded = True
                 if downloaded:
-                    self.__persist.downloaded_file_names.add(diff.new_file.name)
-                    self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
+                    pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
+                    self.__persist.downloaded_file_names.add(pkey)
+                    self._sync_persist_to_all_builders()
 
-                    # Move from staging to final location for non-extractable files
-                    # (extractable files are moved after extraction completes)
                     if self.__context.config.controller.use_staging and \
                             self.__context.config.controller.staging_path:
                         will_auto_extract = self.__context.config.autoqueue.auto_extract and \
                                             diff.new_file.is_extractable
                         if not will_auto_extract:
-                            self.__spawn_move_process(diff.new_file.name)
+                            self.__spawn_move_process(diff.new_file.name, pc)
 
-                # Remove from pending completion
-                if diff.new_file is not None and \
-                        diff.new_file.name in self.__pending_completion:
+                if diff.new_file is not None and pc is not None and \
+                        diff.new_file.name in pc.pending_completion:
                     use_staging = self.__context.config.controller.use_staging and \
                                   self.__context.config.controller.staging_path
                     if use_staging:
-                        # With staging, only remove after file has been moved to final location
-                        if diff.new_file.name in self.__moved_file_names:
-                            self.__pending_completion.discard(diff.new_file.name)
+                        move_key = _persist_key(diff.new_file.pair_id, diff.new_file.name)
+                        if move_key in self.__moved_file_keys:
+                            pc.pending_completion.discard(diff.new_file.name)
                         elif diff.new_file.state == ModelFile.State.DELETED:
-                            self.__pending_completion.discard(diff.new_file.name)
+                            pc.pending_completion.discard(diff.new_file.name)
                     else:
-                        # Without staging, remove at terminal states
                         if diff.new_file.state in (ModelFile.State.DOWNLOADED,
                                                     ModelFile.State.EXTRACTED,
                                                     ModelFile.State.EXTRACT_FAILED,
                                                     ModelFile.State.DELETED):
-                            self.__pending_completion.discard(diff.new_file.name)
+                            pc.pending_completion.discard(diff.new_file.name)
 
-                # Re-download retry: queue download when file returns to DEFAULT
                 if diff.new_file is not None and \
                         diff.new_file.state == ModelFile.State.DEFAULT and \
-                        diff.new_file.name in self.__pending_redownload:
-                    self.__pending_redownload.discard(diff.new_file.name)
-                    command = Controller.Command(Controller.Command.Action.QUEUE, diff.new_file.name)
+                        _persist_key(diff.new_file.pair_id, diff.new_file.name) in self.__pending_redownload_keys:
+                    self.__pending_redownload_keys.discard(
+                        _persist_key(diff.new_file.pair_id, diff.new_file.name))
+                    command = Controller.Command(Controller.Command.Action.QUEUE,
+                                                diff.new_file.name,
+                                                pair_id=diff.new_file.pair_id)
                     self.queue_command(command)
 
             # Prune the extracted files list of any files that were deleted locally
-            # This prevents these files from going to EXTRACTED state if they are re-downloaded
-            remove_extracted_file_names = set()
-            existing_file_names = self.__model.get_file_names()
-            for extracted_file_name in self.__persist.extracted_file_names:
-                if extracted_file_name in existing_file_names:
-                    file = self.__model.get_file(extracted_file_name)
-                    if file.state == ModelFile.State.DELETED:
-                        # Deleted locally, remove
-                        remove_extracted_file_names.add(extracted_file_name)
-                else:
-                    # Not in the model at all
-                    # This could be because local and remote scans are not yet available
-                    pass
-            if remove_extracted_file_names:
-                self.logger.info("Removing from extracted list: {}".format(remove_extracted_file_names))
-                self.__persist.extracted_file_names.difference_update(remove_extracted_file_names)
-                self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
+            remove_extracted_keys = set()
+            for pkey in self.__persist.extracted_file_names:
+                # Find the file in the model by checking each pair
+                for _pc in self.__pair_contexts:
+                    bare_name = _strip_persist_key(pkey, _pc.pair_id)
+                    if bare_name != pkey or _pc.pair_id is None:
+                        try:
+                            file = self.__model.get_file(bare_name, pair_id=_pc.pair_id)
+                            if file.state == ModelFile.State.DELETED:
+                                remove_extracted_keys.add(pkey)
+                        except ModelError:
+                            pass
+            if remove_extracted_keys:
+                self.logger.info("Removing from extracted list: {}".format(remove_extracted_keys))
+                self.__persist.extracted_file_names.difference_update(remove_extracted_keys)
+                self._sync_persist_to_all_builders()
 
             # Persist cleanup: remove entries for files absent from all sources
-            # When both remote and local copies are gone, clear persist so the file vanishes.
-            # If re-uploaded to seedbox later, it's treated as brand new.
-            # Exclude files with in-flight moves (staging → local) since the local scanner
-            # hasn't picked them up at the final path yet.
-            if self.__remote_scan_received and self.__local_scan_received:
-                absent_names = set()
-                model_file_names = self.__model.get_file_names()
-                for name in self.__persist.downloaded_file_names:
-                    if name not in model_file_names and name not in self.__moved_file_names:
-                        absent_names.add(name)
-                if absent_names:
-                    self.logger.info("Persist cleanup (both absent): {}".format(absent_names))
-                    self.__persist.downloaded_file_names.difference_update(absent_names)
-                    self.__persist.extracted_file_names.difference_update(absent_names)
-                    self.__persist.extract_failed_file_names.difference_update(absent_names)
-                    self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
-                    self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
-                    self.__model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
+            all_scans_received = all(
+                _pc.remote_scan_received and _pc.local_scan_received
+                for _pc in self.__pair_contexts
+            )
+            if all_scans_received:
+                # Build a set of all composite keys present in the model
+                model_keys = set()
+                for f in self.__model.get_all_files():
+                    model_keys.add(_persist_key(f.pair_id, f.name))
+                absent_keys = set()
+                for pkey in self.__persist.downloaded_file_names:
+                    if pkey not in model_keys and pkey not in self.__moved_file_keys:
+                        absent_keys.add(pkey)
+                if absent_keys:
+                    self.logger.info("Persist cleanup (both absent): {}".format(absent_keys))
+                    self.__persist.downloaded_file_names.difference_update(absent_keys)
+                    self.__persist.extracted_file_names.difference_update(absent_keys)
+                    self.__persist.extract_failed_file_names.difference_update(absent_keys)
+                    self._sync_persist_to_all_builders()
 
-            # Release the model
             self.__model_lock.release()
 
-        # Process extraction failures — retry by re-downloading
+        # Process extraction failures -- retry by re-downloading
         for result in latest_failed_extractions:
-            count = self.__extract_retry_counts.get(result.name, 0) + 1
-            self.__extract_retry_counts[result.name] = count
+            # Find which pair owns this file
+            result_pc = self._find_pair_for_file_name(result.name)
+            result_pair_id = result_pc.pair_id if result_pc else None
+            retry_key = _persist_key(result_pair_id, result.name)
+            count = self.__extract_retry_counts.get(retry_key, 0) + 1
+            self.__extract_retry_counts[retry_key] = count
             if count < 3:
                 self.logger.warning(
                     "Extraction failed for '{}' (attempt {}/3), scheduling re-download".format(
                         result.name, count))
-                # Clean persist for fresh start
-                self.__persist.downloaded_file_names.discard(result.name)
-                self.__persist.extracted_file_names.discard(result.name)
-                self.__model_builder.set_downloaded_files(set(self.__persist.downloaded_file_names))
-                self.__model_builder.set_extracted_files(set(self.__persist.extracted_file_names))
-                # Delete local file so it goes to DEFAULT, then re-download queue triggers
-                self.__pending_redownload.add(result.name)
-                self.__spawn_system_delete_local(result.name)
+                self.__persist.downloaded_file_names.discard(retry_key)
+                self.__persist.extracted_file_names.discard(retry_key)
+                self._sync_persist_to_all_builders()
+                self.__pending_redownload_keys.add(retry_key)
+                self.__spawn_system_delete_local(result.name, result_pc)
             else:
                 self.logger.error(
                     "Extraction failed for '{}' after {} attempts, giving up".format(
                         result.name, count))
-                self.__persist.extract_failed_file_names.add(result.name)
-                self.__model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
+                self.__persist.extract_failed_file_names.add(retry_key)
+                self._sync_persist_to_all_builders()
 
-        # Update the controller status
+        # Update the controller status (use most recent across all pairs)
+        for pc in self.__pair_contexts:
+            if pc._latest_remote_scan is not None:
+                current = self.__context.status.controller.latest_remote_scan_time
+                if current is None or pc._latest_remote_scan.timestamp > current:
+                    self.__context.status.controller.latest_remote_scan_time = pc._latest_remote_scan.timestamp
+                    self.__context.status.controller.latest_remote_scan_failed = pc._latest_remote_scan.failed
+                    self.__context.status.controller.latest_remote_scan_error = pc._latest_remote_scan.error_message
+            if pc._latest_local_scan is not None:
+                current = self.__context.status.controller.latest_local_scan_time
+                if current is None or pc._latest_local_scan.timestamp > current:
+                    self.__context.status.controller.latest_local_scan_time = pc._latest_local_scan.timestamp
+
+    def _update_pair_model_state(self, pc: _PairContext,
+                                 latest_extract_statuses, latest_extracted_results):
+        """
+        Update a single pair context's scan results, LFTP status, and model builder state.
+        """
+        latest_remote_scan = pc.remote_scan_process.pop_latest_result()
+        latest_local_scan = pc.local_scan_process.pop_latest_result()
+        latest_active_scan = pc.active_scan_process.pop_latest_result()
+
+        pc._latest_remote_scan = latest_remote_scan
+        pc._latest_local_scan = latest_local_scan
+
+        lftp_statuses = None
+        try:
+            lftp_statuses = pc.lftp.status()
+        except LftpError as e:
+            self.logger.warning("Caught lftp error (pair {}): {}".format(pc.name, str(e)))
+
         if latest_remote_scan is not None:
-            self.__context.status.controller.latest_remote_scan_time = latest_remote_scan.timestamp
-            self.__context.status.controller.latest_remote_scan_failed = latest_remote_scan.failed
-            self.__context.status.controller.latest_remote_scan_error = latest_remote_scan.error_message
+            pc.remote_scan_received = True
         if latest_local_scan is not None:
-            self.__context.status.controller.latest_local_scan_time = latest_local_scan.timestamp
+            pc.local_scan_received = True
+
+        if lftp_statuses is not None:
+            current_downloading = set(
+                s.name for s in lftp_statuses if s.state == LftpJobStatus.State.RUNNING
+            )
+            just_completed = pc.prev_downloading_file_names - current_downloading
+            if just_completed:
+                for name in just_completed:
+                    self.logger.info("Download completed (LFTP job finished): {}".format(name))
+                self.__persist.downloaded_file_names.update(
+                    _persist_key(pc.pair_id, n) for n in just_completed
+                )
+                self._sync_persist_to_all_builders()
+                pc.pending_completion.update(just_completed)
+                pc.local_scan_process.force_scan()
+
+            pc.active_downloading_file_names = list(current_downloading)
+            pc.prev_downloading_file_names = current_downloading
+
+        if latest_extract_statuses is not None:
+            # Only include extract statuses for files that belong to this pair
+            pc.active_extracting_file_names = [
+                s.name for s in latest_extract_statuses.statuses
+                if s.state == ExtractStatus.State.EXTRACTING
+                and _persist_key(pc.pair_id, s.name) in self.__persist.downloaded_file_names
+            ]
+
+        active_files = pc.active_downloading_file_names + pc.active_extracting_file_names
+        active_files += list(pc.pending_completion)
+        pc.active_scanner.set_active_files(active_files)
+
+        pc.model_builder.set_auto_delete_remote(
+            bool(self.__context.config.autoqueue.auto_delete_remote)
+        )
+
+        if latest_remote_scan is not None:
+            remote_files = self._apply_exclude_patterns(latest_remote_scan.files)
+            pc.model_builder.set_remote_files(remote_files)
+        if latest_local_scan is not None:
+            pc.model_builder.set_local_files(latest_local_scan.files)
+        if latest_active_scan is not None:
+            pc.model_builder.set_active_files(latest_active_scan.files)
+        if lftp_statuses is not None:
+            pc.model_builder.set_lftp_statuses(lftp_statuses)
+        if latest_extract_statuses is not None:
+            pc.model_builder.set_extract_statuses(latest_extract_statuses.statuses)
+        if latest_extracted_results:
+            for result in latest_extracted_results:
+                # Find the pair that owns this file for correct persist key
+                owner_pc = self._find_pair_for_file_name(result.name) or pc
+                pkey = _persist_key(owner_pc.pair_id, result.name)
+                self.__persist.extracted_file_names.add(pkey)
+                if self.__context.config.controller.use_staging and \
+                        self.__context.config.controller.staging_path:
+                    self.__spawn_move_process(result.name, owner_pc)
+            self._sync_persist_to_all_builders()
+
+    def _sync_persist_to_all_builders(self):
+        """Push current persist state to all pair model builders, filtered by pair_id."""
+        for pc in self.__pair_contexts:
+            prefix = "{}:".format(pc.pair_id) if pc.pair_id else ""
+            downloaded = set()
+            extracted = set()
+            extract_failed = set()
+            for key in self.__persist.downloaded_file_names:
+                if prefix and key.startswith(prefix):
+                    downloaded.add(key[len(prefix):])
+                elif not prefix and ":" not in key:
+                    downloaded.add(key)
+            for key in self.__persist.extracted_file_names:
+                if prefix and key.startswith(prefix):
+                    extracted.add(key[len(prefix):])
+                elif not prefix and ":" not in key:
+                    extracted.add(key)
+            for key in self.__persist.extract_failed_file_names:
+                if prefix and key.startswith(prefix):
+                    extract_failed.add(key[len(prefix):])
+                elif not prefix and ":" not in key:
+                    extract_failed.add(key)
+            pc.model_builder.set_downloaded_files(downloaded)
+            pc.model_builder.set_extracted_files(extracted)
+            pc.model_builder.set_extract_failed_files(extract_failed)
 
     def __process_commands(self):
         def _notify_failure(_command: Controller.Command, _msg: str):
@@ -599,8 +768,14 @@ class Controller:
         while not self.__command_queue.empty():
             command = self.__command_queue.get()
             self.logger.info("Received command {} for file {}".format(str(command.action), command.filename))
+
+            pc = self._get_pair_context_for_command(command)
+            if pc is None:
+                _notify_failure(command, "No pair context found for pair_id '{}'".format(command.pair_id))
+                continue
+
             try:
-                file = self.__model.get_file(command.filename)
+                file = self.__model.get_file(command.filename, pair_id=pc.pair_id)
             except ModelError:
                 _notify_failure(command, "File '{}' not found".format(command.filename))
                 continue
@@ -610,7 +785,7 @@ class Controller:
                     _notify_failure(command, "File '{}' does not exist remotely".format(command.filename))
                     continue
                 try:
-                    self.__lftp.queue(file.name, file.is_dir)
+                    pc.lftp.queue(file.name, file.is_dir)
                 except LftpError as e:
                     _notify_failure(command, "Lftp error: {}".format(str(e)))
                     continue
@@ -620,13 +795,12 @@ class Controller:
                     _notify_failure(command, "File '{}' is not Queued or Downloading".format(command.filename))
                     continue
                 try:
-                    self.__lftp.kill(file.name)
+                    pc.lftp.kill(file.name)
                 except LftpError as e:
                     _notify_failure(command, "Lftp error: {}".format(str(e)))
                     continue
 
             elif command.action == Controller.Command.Action.EXTRACT:
-                # Note: We don't check the is_extractable flag because it's just a guess
                 if file.state not in (
                         ModelFile.State.DEFAULT,
                         ModelFile.State.DOWNLOADED,
@@ -641,10 +815,10 @@ class Controller:
                     _notify_failure(command, "File '{}' does not exist locally".format(command.filename))
                     continue
                 else:
-                    # Clear retry count and failed state for fresh extraction
-                    self.__extract_retry_counts.pop(file.name, None)
-                    self.__persist.extract_failed_file_names.discard(file.name)
-                    self.__model_builder.set_extract_failed_files(set(self.__persist.extract_failed_file_names))
+                    pkey = _persist_key(pc.pair_id, file.name)
+                    self.__extract_retry_counts.pop(pkey, None)
+                    self.__persist.extract_failed_file_names.discard(pkey)
+                    self._sync_persist_to_all_builders()
                     self.__extract_process.extract(file)
 
             elif command.action == Controller.Command.Action.DELETE_LOCAL:
@@ -662,10 +836,7 @@ class Controller:
                     _notify_failure(command, "File '{}' does not exist locally".format(command.filename))
                     continue
                 else:
-                    # When staging is enabled, the file may be in the staging path
-                    # (not yet moved) or the final local_path (already moved).
-                    # Check staging first since that's where in-progress files live.
-                    delete_path = self.__context.config.lftp.local_path
+                    delete_path = pc.local_path
                     if self.__context.config.controller.use_staging and \
                             self.__context.config.controller.staging_path:
                         staging_file = os.path.join(
@@ -677,10 +848,10 @@ class Controller:
                         file_name=file.name
                     )
                     process.set_multiprocessing_logger(self.__mp_logger)
-                    def post_callback(delete_path=delete_path):
-                        self.__local_scan_process.force_scan()
-                        if delete_path != self.__context.config.lftp.local_path:
-                            self.__active_scan_process.force_scan()
+                    def post_callback(delete_path=delete_path, _pc=pc):
+                        _pc.local_scan_process.force_scan()
+                        if delete_path != _pc.local_path:
+                            _pc.active_scan_process.force_scan()
                     command_wrapper = Controller.CommandProcessWrapper(
                         process=process,
                         post_callback=post_callback
@@ -709,11 +880,11 @@ class Controller:
                         remote_username=self.__context.config.lftp.remote_username,
                         remote_password=self.__password,
                         remote_port=self.__context.config.lftp.remote_port,
-                        remote_path=self.__context.config.lftp.remote_path,
+                        remote_path=pc.remote_path,
                         file_name=file.name
                     )
                     process.set_multiprocessing_logger(self.__mp_logger)
-                    post_callback = self.__remote_scan_process.force_scan
+                    post_callback = pc.remote_scan_process.force_scan
                     command_wrapper = Controller.CommandProcessWrapper(
                         process=process,
                         post_callback=post_callback
@@ -721,7 +892,6 @@ class Controller:
                     self.__active_command_processes.append(command_wrapper)
                     command_wrapper.process.start()
 
-            # If we get here, it was a success
             for callback in command.callbacks:
                 callback.on_success()
 
@@ -730,37 +900,36 @@ class Controller:
         Propagate any exceptions from child processes/threads to this thread
         :return:
         """
-        try:
-            self.__lftp.raise_pending_error()
-        except LftpError as e:
-            error_str = str(e)
-            # Permanent errors (bad credentials, access denied) must propagate
-            permanent_patterns = ["Login failed", "Access failed"]
-            if any(p in error_str for p in permanent_patterns):
-                raise AppError(error_str) from e
-            self.logger.warning("Caught lftp error: {}".format(error_str))
-        self.__active_scan_process.propagate_exception()
-        self.__local_scan_process.propagate_exception()
-        self.__remote_scan_process.propagate_exception()
+        for pc in self.__pair_contexts:
+            try:
+                pc.lftp.raise_pending_error()
+            except LftpError as e:
+                error_str = str(e)
+                permanent_patterns = ["Login failed", "Access failed"]
+                if any(p in error_str for p in permanent_patterns):
+                    raise AppError(error_str) from e
+                self.logger.warning("Caught lftp error: {}".format(error_str))
+            pc.active_scan_process.propagate_exception()
+            pc.local_scan_process.propagate_exception()
+            pc.remote_scan_process.propagate_exception()
         self.__mp_logger.propagate_exception()
         self.__extract_process.propagate_exception()
 
-    def __spawn_move_process(self, file_name: str):
+    def __spawn_move_process(self, file_name: str, pc: Optional[_PairContext] = None):
         """
         Spawn a MoveProcess to move a file from staging to the final local_path
-        :param file_name:
-        :return:
         """
-        # Skip if this file was already moved (prevents duplicate moves when
-        # model re-detects DOWNLOADED after a move completes)
-        if file_name in self.__moved_file_names:
+        pair_id = pc.pair_id if pc else None
+        move_key = _persist_key(pair_id, file_name)
+        if move_key in self.__moved_file_keys:
             self.logger.debug("Skipping move for {} - already moved".format(file_name))
             return
 
-        self.__moved_file_names.add(file_name)
+        dest_path = pc.local_path if pc else self.__pair_contexts[0].local_path
+        self.__moved_file_keys.add(move_key)
         process = MoveProcess(
             source_path=self.__context.config.controller.staging_path,
-            dest_path=self.__context.config.lftp.local_path,
+            dest_path=dest_path,
             file_name=file_name
         )
         process.set_multiprocessing_logger(self.__mp_logger)
@@ -768,18 +937,20 @@ class Controller:
         process.start()
         self.logger.info("Spawned move process for {} (staging -> local)".format(file_name))
 
-    def __spawn_system_delete_local(self, file_name: str):
+    def __spawn_system_delete_local(self, file_name: str, pc: Optional[_PairContext] = None):
         """System-initiated local delete for extraction retry cleanup."""
+        target_pc = pc or self.__pair_contexts[0]
+        effective_local_path = target_pc.effective_local_path
         process = DeleteLocalProcess(
-            local_path=self.__effective_local_path,
+            local_path=effective_local_path,
             file_name=file_name
         )
         process.set_multiprocessing_logger(self.__mp_logger)
         def post_callback():
-            self.__local_scan_process.force_scan()
-            if self.__effective_local_path != self.__context.config.lftp.local_path:
-                # Staging enabled — also force active scan
-                self.__active_scan_process.force_scan()
+            for _pc in self.__pair_contexts:
+                _pc.local_scan_process.force_scan()
+                if _pc.effective_local_path != _pc.local_path:
+                    _pc.active_scan_process.force_scan()
         command_wrapper = Controller.CommandProcessWrapper(
             process=process,
             post_callback=post_callback
@@ -797,9 +968,7 @@ class Controller:
             if command_process.process.is_alive():
                 still_active_processes.append(command_process)
             else:
-                # Do the post callback
                 command_process.post_callback()
-                # Propagate the exception (log but don't crash the controller)
                 try:
                     command_process.process.propagate_exception()
                 except Exception:
@@ -808,13 +977,16 @@ class Controller:
                                         exc_info=True)
         self.__active_command_processes = still_active_processes
 
-        # Cleanup completed move processes
         still_active_moves = []
         for move_process in self.__active_move_processes:
             if move_process.is_alive():
                 still_active_moves.append(move_process)
             else:
                 move_process.propagate_exception()
-                # Force a local scan so the moved file is detected in its final location
-                self.__local_scan_process.force_scan()
+                for pc in self.__pair_contexts:
+                    pc.local_scan_process.force_scan()
         self.__active_move_processes = still_active_moves
+
+    def _apply_exclude_patterns(self, files: List) -> List:
+        raw = self.__context.config.general.exclude_patterns
+        return filter_excluded_files(files, raw)

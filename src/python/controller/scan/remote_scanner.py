@@ -1,8 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
-import pickle
-import re
+import json
 import time
 from typing import List
 import os
@@ -19,10 +18,9 @@ from system import SystemFile
 
 class RemoteScanner(IScanner):
     """
-    Scanner implementation to scan the remote filesystem
+    Scanner implementation to scan the remote filesystem.
+    Uploads scan_fs.py to the remote and runs it via python3.
     """
-    _REQUIRED_ARCH = "x86_64"
-    _MIN_GLIBC_VERSION = (2, 31)
     _SCAN_MAX_RETRIES = 3
     _SCAN_RETRY_DELAY_SECS = 5
 
@@ -62,11 +60,12 @@ class RemoteScanner(IScanner):
         out = self._run_scanfs_with_retry()
 
         try:
-            remote_files = pickle.loads(out)
-        except pickle.UnpicklingError as err:
-            self.logger.error("Unpickling error: {}\n{}".format(str(err), out))
+            data = json.loads(out)
+            remote_files = [SystemFile.from_dict(d) for d in data]
+        except (json.JSONDecodeError, KeyError, TypeError) as err:
+            self.logger.error("JSON parse error: {}\n{}".format(str(err), out[:500]))
             raise ScannerError(
-                Localization.Error.REMOTE_SERVER_SCAN.format("Invalid pickled data"),
+                Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"),
                 recoverable=False
             )
 
@@ -83,12 +82,12 @@ class RemoteScanner(IScanner):
                 # Use consistent quoting: double quotes if scan path has tilde
                 # (for $HOME expansion), single quotes otherwise
                 if self.__remote_path_to_scan.startswith("~"):
-                    return self.__ssh.shell("{} {}".format(
+                    return self.__ssh.shell("python3 {} {}".format(
                         _escape_remote_path_double(self.__remote_path_to_scan_script),
                         _escape_remote_path_double(self.__remote_path_to_scan))
                     )
                 else:
-                    return self.__ssh.shell("{} {}".format(
+                    return self.__ssh.shell("python3 {} {}".format(
                         _escape_remote_path_single(self.__remote_path_to_scan_script),
                         _escape_remote_path_single(self.__remote_path_to_scan))
                     )
@@ -178,8 +177,6 @@ class RemoteScanner(IScanner):
             except SshcpError as e:
                 self.logger.warning("Could not resolve tilde in script path: {}".format(str(e)))
 
-        self._log_remote_diagnostics()
-
         # Check md5sum on remote to see if we can skip installation
         with open(self.__local_path_to_scan_script, "rb") as f:
             local_md5sum = hashlib.md5(f.read()).hexdigest()
@@ -230,7 +227,7 @@ class RemoteScanner(IScanner):
         if not os.path.isfile(self.__local_path_to_scan_script):
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_SCAN.format(
-                    "Failed to find scanfs executable at {}".format(self.__local_path_to_scan_script)
+                    "Failed to find scan script at {}".format(self.__local_path_to_scan_script)
                 ),
                 recoverable=False
             )
@@ -277,7 +274,7 @@ class RemoteScanner(IScanner):
         )
 
         # Guard: if the fallback path is already a directory, SCP would deposit
-        # the binary inside it and execution would fail with "Is a directory".
+        # the script inside it and execution would fail with "Is a directory".
         try:
             result = self.__ssh.shell(
                 "[ -d {} ] && echo IS_DIRECTORY || echo OK".format(
@@ -312,42 +309,3 @@ class RemoteScanner(IScanner):
                 recoverable=False
             )
 
-    def _log_remote_diagnostics(self):
-        """Log remote OS, architecture, and glibc version. Warn on incompatibilities."""
-        try:
-            cmd = (
-                "uname -m && "
-                "(grep ^PRETTY_NAME /etc/os-release 2>/dev/null || echo unknown) && "
-                "(ldd --version 2>&1 | head -1 || echo unknown)"
-            )
-            out = self.__ssh.shell(cmd).decode().strip()
-            lines = out.splitlines()
-            arch = lines[0].strip() if len(lines) > 0 else "unknown"
-            os_name = lines[1].strip().replace("PRETTY_NAME=", "").strip('"') if len(lines) > 1 else "unknown"
-            glibc_line = lines[2].strip() if len(lines) > 2 else "unknown"
-
-            self.logger.info("Remote server: os={}, arch={}, glibc={}".format(os_name, arch, glibc_line))
-
-            if arch != self._REQUIRED_ARCH:
-                self.logger.warning(
-                    "Remote architecture is {}. scanfs requires x86_64 (amd64).".format(arch)
-                )
-
-            self._check_glibc_version(glibc_line)
-
-        except SshcpError as e:
-            self.logger.warning("Failed to collect remote server diagnostics: {}".format(str(e)))
-
-    def _check_glibc_version(self, glibc_line: str):
-        """Parse glibc version string and warn if too old."""
-        match = re.search(r'(\d+)\.(\d+)', glibc_line)
-        if not match:
-            self.logger.warning("Could not determine remote glibc version")
-            return
-        major, minor = int(match.group(1)), int(match.group(2))
-        if (major, minor) < self._MIN_GLIBC_VERSION:
-            self.logger.warning(
-                "Remote glibc {}.{} is older than required {}.{}. scanfs may fail to run.".format(
-                    major, minor, self._MIN_GLIBC_VERSION[0], self._MIN_GLIBC_VERSION[1]
-                )
-            )

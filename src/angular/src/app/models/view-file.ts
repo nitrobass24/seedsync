@@ -3,6 +3,7 @@
  */
 export interface ViewFile {
   name: string;
+  pairId: string | null;
   isDir: boolean;
   localSize: number;
   remoteSize: number;
@@ -13,6 +14,7 @@ export interface ViewFile {
   fullPath: string;
   isArchive: boolean;
   isSelected: boolean;
+  isChecked: boolean;
   isQueueable: boolean;
   isStoppable: boolean;
   /** Whether file can be queued for extraction (independent of isArchive). */

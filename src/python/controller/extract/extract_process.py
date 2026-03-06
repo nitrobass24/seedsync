@@ -58,11 +58,13 @@ class ExtractProcess(AppProcess):
             self.failed_queue.put(failed_result)
 
     def __init__(self, out_dir_path: str, local_path: str,
-                 local_path_fallback: str = None):
+                 local_path_fallback: str = None,
+                 out_dir_path_fallback: str = None):
         super().__init__(name=self.__class__.__name__)
         self.__out_dir_path = out_dir_path
         self.__local_path = local_path
         self.__local_path_fallback = local_path_fallback
+        self.__out_dir_path_fallback = out_dir_path_fallback
         self.__command_queue = multiprocessing.Queue()
         self.__status_result_queue = multiprocessing.Queue()
         self.__completed_result_queue = multiprocessing.Queue()
@@ -74,7 +76,8 @@ class ExtractProcess(AppProcess):
         # Create dispatch inside the process
         self.__dispatch = ExtractDispatch(out_dir_path=self.__out_dir_path,
                                           local_path=self.__local_path,
-                                          local_path_fallback=self.__local_path_fallback)
+                                          local_path_fallback=self.__local_path_fallback,
+                                          out_dir_path_fallback=self.__out_dir_path_fallback)
 
         # Add extract listener
         listener = ExtractProcess.__ExtractListener(

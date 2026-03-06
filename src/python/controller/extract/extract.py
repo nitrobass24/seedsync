@@ -1,11 +1,9 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import os
+import subprocess
 import tarfile
 import zipfile
-
-import patoolib
-import patoolib.util
 
 from common import AppError
 
@@ -77,15 +75,33 @@ class Extract:
             )
 
     @staticmethod
+    def _detect_format(archive_path: str) -> str:
+        """
+        Detect archive format using magic bytes.
+        Returns format name ('ZIP', 'RAR4', 'RAR5', '7Z', 'GZIP', 'BZIP2', 'TAR')
+        or None if unrecognized.
+        """
+        try:
+            with open(archive_path, 'rb') as f:
+                header = f.read(8)
+            for signature, name in _ARCHIVE_SIGNATURES:
+                if header[:len(signature)] == signature:
+                    return name
+        except OSError:
+            return None
+        # Also check if it's a plain tar (no magic bytes in _ARCHIVE_SIGNATURES)
+        try:
+            with tarfile.open(archive_path):
+                return 'TAR'
+        except (tarfile.TarError, OSError):
+            pass
+        return None
+
+    @staticmethod
     def is_archive(archive_path: str) -> bool:
         if not os.path.isfile(archive_path):
             return False
-        try:
-            # noinspection PyUnusedLocal,PyShadowingBuiltins
-            format, compression = patoolib.get_archive_format(archive_path)
-            return True
-        except patoolib.util.PatoolError:
-            return False
+        return Extract._detect_format(archive_path) is not None
 
     @staticmethod
     def is_archive_fast(archive_path: str) -> bool:
@@ -163,7 +179,8 @@ class Extract:
 
     @staticmethod
     def extract_archive(archive_path: str, out_dir_path: str):
-        if not Extract.is_archive(archive_path):
+        fmt = Extract._detect_format(archive_path) if os.path.isfile(archive_path) else None
+        if fmt is None:
             raise ExtractError("Path is not a valid archive: {}".format(archive_path))
         try:
             # Try to create the outdir path
@@ -173,11 +190,48 @@ class Extract:
             # Pre-validate member paths for zip/tar before extraction
             pre_validated = Extract._pre_validate_members(archive_path, out_dir_path)
 
-            patoolib.extract_archive(archive_path, outdir=out_dir_path, interactive=False)
+            if fmt == 'ZIP':
+                with zipfile.ZipFile(archive_path, 'r') as zf:
+                    zf.extractall(out_dir_path)
+            elif fmt in ('TAR', 'GZIP', 'BZIP2'):
+                with tarfile.open(archive_path) as tf:
+                    tf.extractall(out_dir_path)
+            elif fmt in ('RAR4', 'RAR5'):
+                try:
+                    result = subprocess.run(
+                        ["unrar", "x", "-o+", "-y", archive_path, out_dir_path + os.sep],
+                        capture_output=True, text=True, timeout=3600
+                    )
+                except subprocess.TimeoutExpired:
+                    raise ExtractError(
+                        "unrar timed out after 3600s: {}".format(archive_path)
+                    )
+                if result.returncode != 0:
+                    raise ExtractError(
+                        "unrar failed (exit {}): {}".format(result.returncode, result.stderr.strip())
+                    )
+            elif fmt == '7Z':
+                try:
+                    result = subprocess.run(
+                        ["7z", "x", archive_path, "-o" + out_dir_path, "-y"],
+                        capture_output=True, text=True, timeout=3600
+                    )
+                except subprocess.TimeoutExpired:
+                    raise ExtractError(
+                        "7z timed out after 3600s: {}".format(archive_path)
+                    )
+                if result.returncode != 0:
+                    raise ExtractError(
+                        "7z failed (exit {}): {}".format(result.returncode, result.stderr.strip())
+                    )
+            else:
+                raise ExtractError("Unsupported archive format: {}".format(fmt))
+        except ExtractError:
+            raise
         except FileNotFoundError as e:
-            raise ExtractError(str(e))
-        except patoolib.util.PatoolError as e:
-            raise ExtractError(str(e))
+            raise ExtractError(str(e)) from e
+        except (zipfile.BadZipFile, tarfile.TarError) as e:
+            raise ExtractError(str(e)) from e
 
         # Post-extraction check as fallback for formats that can't be pre-validated (rar, 7z)
         if not pre_validated:

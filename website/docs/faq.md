@@ -62,6 +62,22 @@ To fix:
 
 3. Save and restart the container.
 
+## SeedSync fails with "command not found: python3"
+
+SeedSync requires Python 3 on the remote server to run its filesystem scanner. Most Linux servers include Python 3 by default, but some minimal or container-based seedbox environments may not.
+
+To fix, install Python 3 on your remote server:
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install python3
+
+# CentOS/RHEL
+sudo yum install python3
+```
+
+If you don't have root access, check with your seedbox provider — most will have Python 3 available at a different path or can install it on request.
+
 ## Where are settings stored?
 
 Inside the container at `/config/settings.cfg`.

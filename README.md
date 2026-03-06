@@ -28,10 +28,16 @@ It uses LFTP to transfer files fast!
 ## Features
 
 * Built on top of [LFTP](http://lftp.tech/), the fastest file transfer program
-* Web UI - track and control your transfers from anywhere
+* Web UI — track and control your transfers from anywhere
+* **Multiple path pairs** — sync from multiple remote directories independently
+* **Exclude patterns** — filter out unwanted files with glob patterns
+* **Multi-select** — select multiple files for bulk queue/stop/delete
+* Auto-Queue — only sync the files you want based on pattern matching
 * Automatically extract your files after sync
-* Auto-Queue - only sync the files you want based on pattern matching
+* **Webhook notifications** — HTTP POST on download/extract events
 * Delete local and remote files easily
+* Dark mode, staging directory, bandwidth limiting, and more
+* **Alpine image** — lightweight 45 MB variant available
 * Fully open source!
 
 ## Documentation
@@ -47,7 +53,7 @@ Full documentation is available at **[nitrobass24.github.io/seedsync](https://ni
 ```yaml
 services:
   seedsync:
-    image: ghcr.io/nitrobass24/seedsync:latest
+    image: ghcr.io/nitrobass24/seedsync:latest  # or use the -alpine variant (e.g., :alpine, :0.13-alpine)
     container_name: seedsync
     ports:
       - "8800:8800"
@@ -114,6 +120,10 @@ On first run, access the web UI and configure:
 2. **SSH Credentials**: Username and password
 3. **Remote Path**: Directory on the seedbox to sync from
 4. **Local Path**: Maps to `/downloads` in the container
+
+### Multiple Path Pairs
+
+To sync from multiple remote directories, use **Path Pairs** in Settings. Each pair has its own remote path, local path, auto-queue toggle, and exclude patterns. Path pairs run independent LFTP and scanner instances.
 
 ### SSH Key Authentication
 

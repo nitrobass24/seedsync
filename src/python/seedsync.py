@@ -16,6 +16,9 @@ import platform
 from common import ServiceExit, Context, Constants, Config, Args, AppError
 from common import ServiceRestart
 from common import Localization, Status, ConfigError, Persist, PersistError
+from common import PathPairsConfig
+from common.json_formatter import JsonFormatter
+from controller.notifier import WebhookNotifier
 from controller import Controller, ControllerJob, ControllerPersist, AutoQueue, AutoQueuePersist
 from web import WebAppJob, WebAppBuilder
 
@@ -29,6 +32,7 @@ class Seedsync:
     It is run in the main thread (no daemonization)
     """
     __FILE_CONFIG = "settings.cfg"
+    __FILE_PATH_PAIRS = "path_pairs.json"
     __FILE_AUTO_QUEUE_PERSIST = "autoqueue.persist"
     __FILE_CONTROLLER_PERSIST = "controller.persist"
     __CONFIG_DUMMY_VALUE = "<replace me>"
@@ -70,27 +74,36 @@ class Seedsync:
         ctx_args.html_path = args.html
         ctx_args.debug = is_debug
         ctx_args.exit = args.exit
+        ctx_args.logdir = args.logdir
 
         # Logger setup
         # We separate the main log from the web-access log
+        log_format = config.logging.log_format or "standard"
         logger = self._create_logger(name=Constants.SERVICE_NAME,
                                      debug=is_debug,
-                                     logdir=args.logdir)
+                                     logdir=args.logdir,
+                                     log_format=log_format)
         Seedsync.logger = logger
         web_access_logger = self._create_logger(name=Constants.WEB_ACCESS_LOG_NAME,
                                                 debug=is_debug,
-                                                logdir=args.logdir)
+                                                logdir=args.logdir,
+                                                log_format=log_format)
         logger.info("Debug mode is {}.".format("enabled" if is_debug else "disabled"))
 
         # Create status
         status = Status()
+
+        # Load or migrate path pairs config
+        self.path_pairs_path = os.path.join(args.config_dir, Seedsync.__FILE_PATH_PAIRS)
+        path_pairs_config = self._load_path_pairs_config(self.path_pairs_path, config)
 
         # Create context
         self.context = Context(logger=logger,
                                web_access_logger=web_access_logger,
                                config=config,
                                args=ctx_args,
-                               status=status)
+                               status=status,
+                               path_pairs_config=path_pairs_config)
 
         # Register the signal handlers
         signal.signal(signal.SIGTERM, self.signal)
@@ -112,6 +125,10 @@ class Seedsync:
 
         # Create controller
         controller = Controller(self.context, self.controller_persist)
+
+        # Create webhook notifier
+        webhook_notifier = WebhookNotifier(self.context.config, self.context.logger)
+        controller.add_model_listener(webhook_notifier)
 
         # Create auto queue
         auto_queue = AutoQueue(self.context, self.auto_queue_persist, controller)
@@ -204,6 +221,7 @@ class Seedsync:
         self.controller_persist.to_file(self.controller_persist_path)
         self.auto_queue_persist.to_file(self.auto_queue_persist_path)
         self.context.config.to_file(self.config_path)
+        self.context.path_pairs_config.to_file(self.path_pairs_path)
 
     def signal(self, signum: int, _):
         # noinspection PyUnresolvedReferences
@@ -232,20 +250,14 @@ class Seedsync:
                             default=default_html_path,
                             help="Path to directory containing html resources")
 
-        # Scanfs path is only required if not running a frozen package
-        # For a frozen package, set default to root/scanfs
-        # noinspection PyUnresolvedReferences
-        # noinspection PyProtectedMember
-        default_scanfs_path = os.path.join(sys._MEIPASS, "scanfs") if is_frozen else None
         parser.add_argument("--scanfs",
-                            required=not is_frozen,
-                            default=default_scanfs_path,
-                            help="Path to scanfs executable")
+                            required=True,
+                            help="Path to scan_fs.py script")
 
         return parser.parse_args(args)
 
     @staticmethod
-    def _create_logger(name: str, debug: bool, logdir: Optional[str]) -> logging.Logger:
+    def _create_logger(name: str, debug: bool, logdir: Optional[str], log_format: str = "standard") -> logging.Logger:
         logger = logging.getLogger(name)
 
         # Remove any existing handlers (needed when restarting)
@@ -264,9 +276,12 @@ class Seedsync:
                       )
         else:
             handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(name)s (%(processName)s/%(threadName)s) - %(message)s"
-        )
+        if log_format == "json":
+            formatter = JsonFormatter()
+        else:
+            formatter = logging.Formatter(
+                "%(asctime)s - %(levelname)s - %(name)s (%(processName)s/%(threadName)s) - %(message)s"
+            )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         return logger
@@ -312,6 +327,14 @@ class Seedsync:
         config.autoqueue.auto_extract = True
         config.autoqueue.auto_delete_remote = False
 
+        config.logging.log_format = "standard"
+
+        config.notifications.webhook_url = ""
+        config.notifications.notify_on_download_complete = True
+        config.notifications.notify_on_extraction_complete = True
+        config.notifications.notify_on_extraction_failed = True
+        config.notifications.notify_on_delete_complete = True
+
         config.lftp.net_limit_rate = ""
         config.lftp.net_socket_buffer = "8M"
         config.lftp.pget_min_chunk_size = "100M"
@@ -332,7 +355,7 @@ class Seedsync:
         """
         defaults = Seedsync._create_default_config()
         changed = False
-        for section_attr in ['general', 'lftp', 'controller', 'web', 'autoqueue']:
+        for section_attr in ['general', 'lftp', 'controller', 'web', 'autoqueue', 'logging', 'notifications']:
             section = getattr(config, section_attr)
             default_section = getattr(defaults, section_attr)
             for key in section.as_dict():
@@ -342,6 +365,25 @@ class Seedsync:
                         setattr(section, key, default_value)
                         changed = True
         return changed
+
+    @staticmethod
+    def _load_path_pairs_config(file_path: str, config: Config) -> PathPairsConfig:
+        if os.path.isfile(file_path):
+            try:
+                return PathPairsConfig.from_file(file_path)
+            except PersistError:
+                if Seedsync.logger:
+                    Seedsync.logger.exception("Failed to load path_pairs.json")
+                Seedsync.__backup_file(file_path)
+        # Migrate from legacy single remote_path/local_path
+        dummy = Seedsync.__CONFIG_DUMMY_VALUE
+        remote_path = config.lftp.remote_path if config.lftp.remote_path != dummy else ""
+        local_path = config.lftp.local_path if config.lftp.local_path != dummy else ""
+        if remote_path and local_path:
+            ppc = PathPairsConfig.migrate_from_legacy(remote_path, local_path)
+            ppc.to_file(file_path)
+            return ppc
+        return PathPairsConfig()
 
     @staticmethod
     def _detect_incomplete_config(config: Config) -> bool:
