@@ -1,13 +1,13 @@
 <div id="settings">
   <div id="accordion">
     <div id="left">
+      <ng-container
+        *ngTemplateOutlet="optionsList; context: serverContext">
+      </ng-container>
+
       <div class="card">
         <app-path-pairs></app-path-pairs>
       </div>
-
-      <ng-container
-        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_SERVER">
-      </ng-container>
 
       <ng-container
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_AUTOQUEUE">
