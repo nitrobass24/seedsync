@@ -82,7 +82,8 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 | Original fork | 439 MB | Python 3.8, Poetry, Debian packaging |
 | v0.10.0 | 240 MB | Modernized deps, multi-stage build |
 | v0.12.10 | 170 MB | Security hardening release |
-| v0.12.11 (PR #139) | 136 MB (amd64) | Stripped unused deps and stdlib |
+| v0.13.0 (Debian) | ~136 MB (amd64) | Multiple path pairs, Alpine variant |
+| v0.13.0 (Alpine) | ~100 MB (amd64) | Lightweight Alpine variant |
 
 ### Files Changed
 
@@ -179,14 +180,25 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 | SSH key auth without password | #21 | Done |
 | Bandwidth/speed limit setting | #24 | Done |
 
-## Planned Improvements
+### v0.13.0
 
-| Task | Issue | Priority |
-|------|-------|----------|
-| Replace paste WSGI server with bottle built-in | #140 | Low |
-| Replace patool with direct subprocess calls | #141 | Low |
-| Rewrite scanfs as shell script | #142 | Medium |
-| Alpine Linux Docker image variant | #143 | Medium |
+| Feature | PR(s) | Status |
+|---------|-------|--------|
+| Multiple path pairs with per-pair LFTP/scanner | #122, #149, #155, #161 | Done |
+| Path pairs settings UI | #160, #162, #163 | Done |
+| Exclude patterns for remote files | #146 | Done |
+| Multi-select and bulk operations | #123 | Done |
+| Webhook notifications | #128 | Done |
+| Historical log query endpoint | #124 | Done |
+| Structured JSON logging | #127 | Done |
+| Replace paste WSGI with Bottle built-in | #140 | Done |
+| Replace patool with direct subprocess | #141, #145 | Done |
+| Python scanfs replaces PyInstaller binary | #148 | Done |
+| JSON serialization for scanfs | #129 | Done |
+| Alpine Docker image variant | #164 | Done |
+| Dual-image CI (Debian + Alpine) | #164 | Done |
+| Docker HEALTHCHECK | #164 | Done |
+| Startup log improvements | #165 | Done |
 
 ---
 
