@@ -39,7 +39,20 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
         /usr/local/lib/python3.12/lib-dynload/_codecs_hk*.so \
         /usr/local/lib/python3.12/lib-dynload/_codecs_cn*.so \
         /usr/local/lib/python3.12/lib-dynload/_codecs_tw*.so \
-        /usr/local/lib/python3.12/lib-dynload/_codecs_iso*.so
+        /usr/local/lib/python3.12/lib-dynload/_codecs_iso*.so \
+        /usr/local/lib/python3.12/lib-dynload/_curses*.so \
+        /usr/local/lib/python3.12/lib-dynload/_sqlite3*.so \
+        /usr/local/lib/python3.12/lib-dynload/_lzma*.so \
+        /usr/local/lib/python3.12/lib-dynload/_bz2*.so \
+        /usr/local/lib/python3.12/lib-dynload/_crypt*.so \
+        /usr/local/lib/python3.12/lib-dynload/_dbm*.so \
+        /usr/local/lib/python3.12/lib-dynload/_gdbm*.so \
+        /usr/local/lib/python3.12/lib-dynload/audioop*.so \
+        /usr/local/lib/python3.12/lib-dynload/ossaudiodev*.so \
+        /usr/local/lib/python3.12/lib-dynload/nis*.so \
+        /usr/local/lib/python3.12/lib-dynload/readline*.so \
+        /usr/local/lib/python3.12/lib-dynload/_ctypes_test*.so \
+    && find /usr/local/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 # ==============================================================================
 # Stage 3: Final Runtime Image
