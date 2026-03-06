@@ -234,7 +234,10 @@ class Controller:
         # Determine effective local path: use staging_path when staging is enabled
         # Each pair gets its own staging subdirectory to prevent cross-pair collisions
         if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-            effective_local_path = os.path.join(self.__context.config.controller.staging_path, pair_id)
+            if pair_id:
+                effective_local_path = os.path.join(self.__context.config.controller.staging_path, pair_id)
+            else:
+                effective_local_path = self.__context.config.controller.staging_path
             os.makedirs(effective_local_path, exist_ok=True)
         else:
             effective_local_path = local_path
@@ -454,14 +457,12 @@ class Controller:
                 return pc
         return None
 
-    def _find_pair_for_file_name(self, name: str) -> Optional[_PairContext]:
-        """Find the pair context that contains a file by name (checks model builders)."""
-        for pc in self.__pair_contexts:
-            try:
-                self.__model.get_file(name, pair_id=pc.pair_id)
-                return pc
-            except ModelError:
-                pass
+    def _find_pair_by_id(self, pair_id: str) -> Optional[_PairContext]:
+        """Find the pair context by pair_id."""
+        if pair_id:
+            for pc in self.__pair_contexts:
+                if pc.pair_id == pair_id:
+                    return pc
         return self.__pair_contexts[0] if self.__pair_contexts else None
 
     def _build_extract_request(self, file: ModelFile, pc: '_PairContext') -> ExtractRequest:
@@ -490,6 +491,7 @@ class Controller:
             model_file=file,
             local_path=pc.effective_local_path,
             out_dir_path=out_dir_path,
+            pair_id=pc.pair_id,
             local_path_fallback=local_path_fallback,
             out_dir_path_fallback=out_dir_path_fallback
         )
@@ -629,9 +631,9 @@ class Controller:
 
         # Process extraction failures -- retry by re-downloading
         for result in latest_failed_extractions:
-            # Find which pair owns this file
-            result_pc = self._find_pair_for_file_name(result.name)
-            result_pair_id = result_pc.pair_id if result_pc else None
+            # Use pair_id from the extraction result
+            result_pc = self._find_pair_by_id(result.pair_id)
+            result_pair_id = result.pair_id
             retry_key = _persist_key(result_pair_id, result.name)
             count = self.__extract_retry_counts.get(retry_key, 0) + 1
             self.__extract_retry_counts[retry_key] = count
@@ -734,9 +736,9 @@ class Controller:
             pc.model_builder.set_extract_statuses(latest_extract_statuses.statuses)
         if latest_extracted_results:
             for result in latest_extracted_results:
-                # Find the pair that owns this file for correct persist key
-                owner_pc = self._find_pair_for_file_name(result.name) or pc
-                pkey = _persist_key(owner_pc.pair_id, result.name)
+                # Use pair_id from the extraction result
+                owner_pc = self._find_pair_by_id(result.pair_id) or pc
+                pkey = _persist_key(result.pair_id, result.name)
                 self.__persist.extracted_file_names.add(pkey)
                 if self.__context.config.controller.use_staging and \
                         self.__context.config.controller.staging_path:

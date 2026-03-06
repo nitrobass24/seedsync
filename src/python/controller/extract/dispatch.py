@@ -22,11 +22,11 @@ class ExtractDispatchError(AppError):
 
 class ExtractListener(ABC):
     @abstractmethod
-    def extract_completed(self, name: str, is_dir: bool):
+    def extract_completed(self, name: str, is_dir: bool, pair_id: str = None):
         pass
 
     @abstractmethod
-    def extract_failed(self, name: str, is_dir: bool):
+    def extract_failed(self, name: str, is_dir: bool, pair_id: str = None):
         pass
 
 
@@ -61,9 +61,10 @@ class ExtractDispatch:
     __WORKER_SLEEP_INTERVAL_IN_SECS = 0.5
 
     class _Task:
-        def __init__(self, root_name: str, root_is_dir: bool):
+        def __init__(self, root_name: str, root_is_dir: bool, pair_id: str = None):
             self.root_name = root_name
             self.root_is_dir = root_is_dir
+            self.pair_id = pair_id
             self.archive_paths = []  # list of (archive path, out path) pairs
 
         def add_archive(self, archive_path: str, out_dir_path: str):
@@ -126,12 +127,12 @@ class ExtractDispatch:
         self.logger.debug("Received extract for {}".format(model_file.name))
 
         for task in self.__task_queue.queue:
-            if task.root_name == model_file.name:
+            if task.root_name == model_file.name and task.pair_id == req.pair_id:
                 self.logger.info("Ignoring extract for {}, already exists".format(model_file.name))
                 return
 
         # noinspection PyProtectedMember
-        task = ExtractDispatch._Task(model_file.name, model_file.is_dir)
+        task = ExtractDispatch._Task(model_file.name, model_file.is_dir, req.pair_id)
 
         if model_file.is_dir:
             # For a directory, try and find all archives
@@ -215,9 +216,9 @@ class ExtractDispatch:
                 self.__listeners_lock.acquire()
                 for listener in self.__listeners:
                     if completed:
-                        listener.extract_completed(task.root_name, task.root_is_dir)
+                        listener.extract_completed(task.root_name, task.root_is_dir, task.pair_id)
                     else:
-                        listener.extract_failed(task.root_name, task.root_is_dir)
+                        listener.extract_failed(task.root_name, task.root_is_dir, task.pair_id)
                 self.__listeners_lock.release()
 
             time.sleep(ExtractDispatch.__WORKER_SLEEP_INTERVAL_IN_SECS)

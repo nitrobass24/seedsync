@@ -20,17 +20,19 @@ class ExtractStatusResult:
 
 
 class ExtractCompletedResult:
-    def __init__(self, timestamp: datetime, name: str, is_dir: bool):
+    def __init__(self, timestamp: datetime, name: str, is_dir: bool, pair_id: str = None):
         self.timestamp = timestamp
         self.name = name
         self.is_dir = is_dir
+        self.pair_id = pair_id
 
 
 class ExtractFailedResult:
-    def __init__(self, timestamp: datetime, name: str, is_dir: bool):
+    def __init__(self, timestamp: datetime, name: str, is_dir: bool, pair_id: str = None):
         self.timestamp = timestamp
         self.name = name
         self.is_dir = is_dir
+        self.pair_id = pair_id
 
 
 class ExtractProcess(AppProcess):
@@ -44,18 +46,20 @@ class ExtractProcess(AppProcess):
             self.completed_queue = completed_queue
             self.failed_queue = failed_queue
 
-        def extract_completed(self, name: str, is_dir: bool):
+        def extract_completed(self, name: str, is_dir: bool, pair_id: str = None):
             self.logger.info("Extraction completed for {}".format(name))
             completed_result = ExtractCompletedResult(timestamp=datetime.datetime.now(),
                                                       name=name,
-                                                      is_dir=is_dir)
+                                                      is_dir=is_dir,
+                                                      pair_id=pair_id)
             self.completed_queue.put(completed_result)
 
-        def extract_failed(self, name: str, is_dir: bool):
+        def extract_failed(self, name: str, is_dir: bool, pair_id: str = None):
             self.logger.error("Extraction failed for {}".format(name))
             failed_result = ExtractFailedResult(timestamp=datetime.datetime.now(),
                                                 name=name,
-                                                is_dir=is_dir)
+                                                is_dir=is_dir,
+                                                pair_id=pair_id)
             self.failed_queue.put(failed_result)
 
     def __init__(self):
@@ -101,7 +105,8 @@ class ExtractProcess(AppProcess):
                     failed_result = ExtractFailedResult(
                         timestamp=datetime.datetime.now(),
                         name=req.model_file.name,
-                        is_dir=req.model_file.is_dir
+                        is_dir=req.model_file.is_dir,
+                        pair_id=req.pair_id
                     )
                     self.__failed_result_queue.put(failed_result)
         except queue.Empty:
