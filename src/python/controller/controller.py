@@ -719,7 +719,8 @@ class Controller:
             # Only include extract statuses for files that belong to this pair
             pc.active_extracting_file_names = [
                 s.name for s in latest_extract_statuses.statuses
-                if s.state == ExtractStatus.State.EXTRACTING
+                if s.pair_id == pc.pair_id
+                and s.state == ExtractStatus.State.EXTRACTING
                 and _persist_key(pc.pair_id, s.name) in self.__persist.downloaded_file_names
             ]
 
