@@ -60,7 +60,12 @@ class PathPairsHandler(IHandler):
             enabled=enabled,
             auto_queue=auto_queue,
         )
-        self.__config.add_pair(pair)
+        try:
+            self.__config.add_pair(pair)
+        except ValueError as e:
+            if "name" in str(e) and "already exists" in str(e):
+                return HTTPResponse(body=str(e), status=409)
+            raise
         return HTTPResponse(
             body=json.dumps(pair.to_dict()),
             status=201,
@@ -108,7 +113,9 @@ class PathPairsHandler(IHandler):
         )
         try:
             self.__config.update_pair(updated)
-        except ValueError:
+        except ValueError as e:
+            if "name" in str(e) and "already exists" in str(e):
+                return HTTPResponse(body=str(e), status=409)
             return HTTPResponse(body="Path pair not found", status=404)
         return HTTPResponse(
             body=json.dumps(updated.to_dict()),

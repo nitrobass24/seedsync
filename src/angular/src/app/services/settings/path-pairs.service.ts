@@ -44,6 +44,9 @@ export class PathPairsService {
       }),
       catchError((err: HttpErrorResponse) => {
         this.logger.warn('Failed to create path pair: %O', err);
+        if (err.status === 409) {
+          throw err;
+        }
         return of(null);
       }),
     );
@@ -59,6 +62,9 @@ export class PathPairsService {
       }),
       catchError((err: HttpErrorResponse) => {
         this.logger.warn('Failed to update path pair: %O', err);
+        if (err.status === 409) {
+          throw err;
+        }
         return of(null);
       }),
     );

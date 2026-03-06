@@ -27,6 +27,13 @@
     border-bottom: 1px solid var(--ss-border);
   }
 
+  .error-message {
+    padding: 6px 15px;
+    font-size: 80%;
+    color: var(--bs-danger, #dc3545);
+    border-bottom: 1px solid var(--ss-border);
+  }
+
   .empty-state {
     padding: 15px 20px;
     color: var(--ss-text-muted);

@@ -1,7 +1,9 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AsyncPipe } from '@angular/common';
-import { Subscription } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { EMPTY, Subscription } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 
 import { PathPairsService } from '../../services/settings/path-pairs.service';
 import { PathPair } from '../../models/path-pair';
@@ -27,6 +29,9 @@ export class PathPairsComponent implements OnDestroy {
   adding = false;
   addForm: Omit<PathPair, 'id'> = this.emptyForm();
 
+  // Error message
+  errorMessage: string | null = null;
+
   // Double-click delete confirmation
   confirmingDeleteId: string | null = null;
   private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
@@ -45,17 +50,28 @@ export class PathPairsComponent implements OnDestroy {
     this.cancelEdit();
     this.adding = true;
     this.addForm = this.emptyForm();
+    this.errorMessage = null;
   }
 
   onCancelAdd(): void {
     this.adding = false;
     this.addForm = this.emptyForm();
+    this.errorMessage = null;
   }
 
   onSaveAdd(): void {
     if (!this.addForm.name.trim()) return;
+    this.errorMessage = null;
     this.subscriptions.push(
-      this.pathPairsService.create(this.addForm).subscribe((created) => {
+      this.pathPairsService.create(this.addForm).pipe(
+        catchError((err: HttpErrorResponse) => {
+          if (err.status === 409) {
+            this.errorMessage = 'A path pair with that name already exists.';
+          }
+          this.cdr.markForCheck();
+          return EMPTY;
+        }),
+      ).subscribe((created) => {
         if (!created) {
           this.cdr.markForCheck();
           return;
@@ -85,12 +101,22 @@ export class PathPairsComponent implements OnDestroy {
   onCancelEdit(): void {
     this.editingId = null;
     this.editForm = this.emptyForm();
+    this.errorMessage = null;
   }
 
   onSaveEdit(): void {
     if (!this.editingId || !this.editForm.name.trim()) return;
+    this.errorMessage = null;
     this.subscriptions.push(
-      this.pathPairsService.update({ id: this.editingId, ...this.editForm }).subscribe((updated) => {
+      this.pathPairsService.update({ id: this.editingId, ...this.editForm }).pipe(
+        catchError((err: HttpErrorResponse) => {
+          if (err.status === 409) {
+            this.errorMessage = 'A path pair with that name already exists.';
+          }
+          this.cdr.markForCheck();
+          return EMPTY;
+        }),
+      ).subscribe((updated) => {
         if (!updated) {
           this.cdr.markForCheck();
           return;
