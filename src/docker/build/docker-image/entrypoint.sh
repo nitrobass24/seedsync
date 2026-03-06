@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 # SeedSync Docker Entrypoint
@@ -39,7 +39,7 @@ if [ -n "$EXISTING_USER" ]; then
 else
     USERNAME="seedsync"
     echo "Creating user: $USERNAME (UID=$USER_ID, GID=$GROUP_ID)"
-    useradd -u "$USER_ID" -g "$GROUP_ID" -d /home/$USERNAME -m -s /bin/bash "$USERNAME"
+    useradd -u "$USER_ID" -g "$GROUP_ID" -d /home/$USERNAME -m -s /bin/sh "$USERNAME"
 fi
 
 # Get the user's home directory (may not be /home/$USERNAME for existing users)
