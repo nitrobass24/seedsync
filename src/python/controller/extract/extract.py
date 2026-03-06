@@ -50,7 +50,7 @@ class Extract:
 
         try:
             result = subprocess.run(
-                ["7z", "t", archive_path],
+                ["7z", "t", "--", archive_path],
                 capture_output=True, text=True, timeout=Extract._7Z_TIMEOUT_SECS
             )
         except subprocess.TimeoutExpired:
@@ -171,7 +171,7 @@ class Extract:
         """Run 7z extraction with standard options."""
         try:
             result = subprocess.run(
-                ["7z", "x", archive_path, "-o" + out_dir_path, "-y", "-aoa"],
+                ["7z", "x", "-o" + out_dir_path, "-y", "-aoa", "--", archive_path],
                 capture_output=True, text=True, timeout=Extract._7Z_TIMEOUT_SECS
             )
         except subprocess.TimeoutExpired:
@@ -197,7 +197,7 @@ class Extract:
         import shutil
 
         # Decompress to a temp directory first
-        with tempfile.TemporaryDirectory(prefix="seedsync_extract_") as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="seedsync_extract_", dir=out_dir_path) as tmp_dir:
             Extract._run_7z(archive_path, tmp_dir)
 
             # Check what we got
