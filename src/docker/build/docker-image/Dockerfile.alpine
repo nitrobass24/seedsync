@@ -106,7 +106,7 @@ EXPOSE 8800
 VOLUME ["/config", "/downloads", "/staging"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -q --spider http://localhost:8800/ || exit 1
+  CMD wget -q --spider http://127.0.0.1:${WEB_PORT:-8800}/ || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["python", "/app/python/seedsync.py", "-c", "/config", "--html", "/app/html", "--scanfs", "/app/python/scan_fs.py"]
