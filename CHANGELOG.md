@@ -12,26 +12,30 @@
 - **Historical log query** — `/server/logs` endpoint with search, filter, and level controls; accessible from the UI (#124)
 - **Structured JSON logging** — Optional JSON log format for log aggregation tools (#127)
 - **Alpine Docker image** — Lightweight Alpine variant alongside the Debian image, published as `*-alpine` tags (#164)
-- **Docker HEALTHCHECK** — Built-in health check for container orchestrators (#164)
+- **Docker HEALTHCHECK** — Built-in health check for container orchestrators with `WEB_PORT` env var support (#164, #180)
 
 ### Changed
 
 - **Python scanfs replaces PyInstaller binary** — Remote scanner is now a plain Python script, eliminating glibc compatibility issues with seedbox servers (#80, #148)
 - **JSON serialization for scanfs** — Scanner uses JSON instead of legacy serialization for safer, more debuggable output (#129)
-- **Dual-image CI pipeline** — CI builds and tests both Debian and Alpine variants on every push (#164)
+- **Consolidated extraction to 7z** — All archive extraction (zip, rar, 7z, tar, gz, bz2, xz) now uses the single `7z` binary, removing the `unrar` dependency and reducing image size (#178)
+- **Dual-image CI pipeline** — CI builds and tests both Debian and Alpine variants on every push, with parallel arm64 builds on develop (#164, #175, #176)
 - **Startup log improvements** — Path pairs dumped at startup for debugging; model logs show short pair ID instead of full GUID (#165)
+
+### Fixed
+
+- **Per-pair extraction pipeline** — Extraction now uses the correct path pair's filesystem paths instead of always using the first pair (#167, #173)
+- **Per-pair staging subdirectories** — Each path pair gets its own staging subdirectory, preventing filename collisions (#168, #173)
+- **Unique pair name enforcement** — Duplicate pair names are now rejected on create/update (#169, #172)
+- **Graceful pause when all pairs disabled** — Controller idles cleanly and the UI shows an informational banner instead of falling back to legacy behavior (#170, #174)
+- **Spurious staging moves on restart** — Files already moved to their final location are no longer re-queued for move on container restart (#177, #179)
+- **Healthcheck IPv6 resolution** — Healthcheck uses `127.0.0.1` explicitly instead of `localhost`, which resolved to IPv6 `::1` on Alpine (#180)
 
 ### Removed
 
 - **paste WSGI server** — Replaced with Bottle's built-in multithreaded server (#140)
-- **patool dependency** — Archive extraction calls `unrar`/`7z` directly via subprocess (#141, #145)
-
-### Known Limitations
-
-- **Extraction is single-pair** — Archive extraction uses the first path pair's filesystem paths regardless of which pair downloaded the file (#167)
-- **Shared staging directory** — When staging is enabled with multiple pairs, same-named files from different pairs may collide in the staging directory (#168)
-- **Pair name uniqueness not enforced** — Duplicate pair names can cause ambiguous lookups when `pair_id` is omitted from API requests (#169)
-- **No graceful pause when all pairs disabled** — Controller falls back to legacy pair behavior instead of pausing (#170)
+- **patool dependency** — Archive extraction consolidated to 7z (#141, #145, #178)
+- **unrar dependency** — Removed in favor of 7z which handles all RAR formats (#178)
 
 ---
 

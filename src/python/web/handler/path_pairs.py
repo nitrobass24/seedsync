@@ -26,19 +26,18 @@ class PathPairsHandler(IHandler):
             headers={"Content-Type": "application/json"}
         )
 
-    def __handle_create(self):
-        try:
-            data = json.loads(request.body.read().decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return HTTPResponse(body="Invalid JSON", status=400)
-        if not isinstance(data, dict):
-            return HTTPResponse(body="Expected JSON object", status=400)
-
-        name = data.get("name", "")
-        remote_path = data.get("remote_path", "")
-        local_path = data.get("local_path", "")
-        enabled = data.get("enabled", True)
-        auto_queue = data.get("auto_queue", True)
+    @staticmethod
+    def __validate_pair_params(data: dict, defaults=None):
+        """Validate and extract path pair parameters from request data.
+        Returns (name, remote_path, local_path, enabled, auto_queue) or an HTTPResponse on error.
+        When defaults is provided (a PathPair), missing keys fall back to its values.
+        """
+        d = defaults
+        name = data.get("name", d.name if d else "")
+        remote_path = data.get("remote_path", d.remote_path if d else "")
+        local_path = data.get("local_path", d.local_path if d else "")
+        enabled = data.get("enabled", d.enabled if d else True)
+        auto_queue = data.get("auto_queue", d.auto_queue if d else True)
         if not isinstance(name, str) or not isinstance(remote_path, str) or not isinstance(local_path, str):
             return HTTPResponse(body="name, remote_path, and local_path must be strings", status=400)
         if not isinstance(enabled, bool) or not isinstance(auto_queue, bool):
@@ -52,6 +51,20 @@ class PathPairsHandler(IHandler):
             return HTTPResponse(body="remote_path must not be empty", status=400)
         if not local_path:
             return HTTPResponse(body="local_path must not be empty", status=400)
+        return name, remote_path, local_path, enabled, auto_queue
+
+    def __handle_create(self):
+        try:
+            data = json.loads(request.body.read().decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return HTTPResponse(body="Invalid JSON", status=400)
+        if not isinstance(data, dict):
+            return HTTPResponse(body="Expected JSON object", status=400)
+
+        result = self.__validate_pair_params(data)
+        if isinstance(result, HTTPResponse):
+            return result
+        name, remote_path, local_path, enabled, auto_queue = result
 
         pair = PathPair(
             name=name,
@@ -84,24 +97,10 @@ class PathPairsHandler(IHandler):
         if not isinstance(data, dict):
             return HTTPResponse(body="Expected JSON object", status=400)
 
-        name = data.get("name", existing.name)
-        remote_path = data.get("remote_path", existing.remote_path)
-        local_path = data.get("local_path", existing.local_path)
-        enabled = data.get("enabled", existing.enabled)
-        auto_queue = data.get("auto_queue", existing.auto_queue)
-        if not isinstance(name, str) or not isinstance(remote_path, str) or not isinstance(local_path, str):
-            return HTTPResponse(body="name, remote_path, and local_path must be strings", status=400)
-        if not isinstance(enabled, bool) or not isinstance(auto_queue, bool):
-            return HTTPResponse(body="enabled and auto_queue must be booleans", status=400)
-        name = name.strip()
-        remote_path = remote_path.strip()
-        local_path = local_path.strip()
-        if not name:
-            return HTTPResponse(body="name must not be empty", status=400)
-        if not remote_path:
-            return HTTPResponse(body="remote_path must not be empty", status=400)
-        if not local_path:
-            return HTTPResponse(body="local_path must not be empty", status=400)
+        result = self.__validate_pair_params(data, defaults=existing)
+        if isinstance(result, HTTPResponse):
+            return result
+        name, remote_path, local_path, enabled, auto_queue = result
 
         updated = PathPair(
             pair_id=pair_id,
@@ -127,4 +126,4 @@ class PathPairsHandler(IHandler):
             self.__config.remove_pair(pair_id)
         except ValueError:
             return HTTPResponse(body="Path pair not found", status=404)
-        return HTTPResponse(body="Deleted")
+        return HTTPResponse(status=204)

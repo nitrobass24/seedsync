@@ -62,7 +62,7 @@ class RemoteScanner(IScanner):
         try:
             data = json.loads(out)
             remote_files = [SystemFile.from_dict(d) for d in data]
-        except (json.JSONDecodeError, KeyError, TypeError) as err:
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError) as err:
             self.logger.error("JSON parse error: {}\n{}".format(str(err), out[:500]))
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"),

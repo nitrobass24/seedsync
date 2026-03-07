@@ -181,7 +181,7 @@ make stop     # Stop container
 
 ### Testing
 ```bash
-cd src/angular && npx ng test    # Run 181 Vitest unit tests
+cd src/angular && npx ng test    # Run 182 Vitest unit tests
 # CI also runs: Docker build, container startup, web UI accessibility
 ```
 

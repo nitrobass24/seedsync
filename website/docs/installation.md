@@ -81,7 +81,7 @@ Password-based SSH works, but key-based auth is more secure and reliable.
 2. Mount your SSH directory into the container:
 
 ```bash
--v ~/.ssh:/home/seedsync/.ssh
+-v ~/.ssh:/home/seedsync/.ssh:ro
 ```
 
 3. In the UI, enable **Use password-less key-based authentication** and restart the container.

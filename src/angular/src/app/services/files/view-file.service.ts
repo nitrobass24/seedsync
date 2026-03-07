@@ -211,7 +211,7 @@ export class ViewFileService {
     }
     this.files = newViewFiles;
     this.indices.clear();
-    newViewFiles.forEach((value, index) => this.indices.set(viewFileKey(value), index));
+    newViewFiles.forEach((value, index) => { this.indices.set(viewFileKey(value), index); });
 
     this.pushViewFiles();
   }
@@ -289,7 +289,7 @@ export class ViewFileService {
     }
     if (updateIndices) {
       this.indices.clear();
-      newViewFiles.forEach((value, index) => this.indices.set(viewFileKey(value), index));
+      newViewFiles.forEach((value, index) => { this.indices.set(viewFileKey(value), index); });
     }
 
     this.files = newViewFiles;

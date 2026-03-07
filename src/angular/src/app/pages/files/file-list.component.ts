@@ -30,7 +30,7 @@ export class FileListComponent {
   identify = FileListComponent.identify;
 
   static identify(index: number, item: ViewFile): string {
-    return item.name;
+    return `${item.pairId || ''}:${item.name}`;
   }
 
   onSelect(file: ViewFile): void {
@@ -94,7 +94,20 @@ export class FileListComponent {
 
   private handleBulkResponse(action$: Observable<WebReaction[]>): void {
     action$.subscribe({
-      next: (reactions) => reactions.forEach(r => { if (r.data) this.logger.info(r.data); }),
+      next: (reactions) => {
+        let failures = 0;
+        reactions.forEach(r => {
+          if (r.success) {
+            if (r.data) this.logger.info(r.data);
+          } else {
+            failures++;
+            this.logger.error('Bulk item failed:', r.errorMessage || r.data);
+          }
+        });
+        if (failures > 0) {
+          this.logger.warn(`Bulk action: ${failures} of ${reactions.length} items failed`);
+        }
+      },
       error: (err) => this.logger.error('Bulk action failed:', err),
     });
   }

@@ -79,6 +79,7 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
             this.notifService.hide(this.configRestartNotif);
           }
           this.commandsEnabled = connected;
+          this.cdr.markForCheck();
         },
       }),
     );
