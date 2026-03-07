@@ -242,7 +242,7 @@ jobs:
       - name: Extract metadata (debian, release)
         if: matrix.variant == 'debian' && startsWith(github.ref, 'refs/tags/v')
         id: meta-debian-release
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -253,7 +253,7 @@ jobs:
       - name: Extract metadata (alpine, release)
         if: matrix.variant == 'alpine' && startsWith(github.ref, 'refs/tags/v')
         id: meta-alpine-release
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -264,7 +264,7 @@ jobs:
       - name: Extract metadata (debian, develop)
         if: matrix.variant == 'debian' && github.ref == 'refs/heads/develop'
         id: meta-debian-develop
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -273,7 +273,7 @@ jobs:
       - name: Extract metadata (alpine, develop)
         if: matrix.variant == 'alpine' && github.ref == 'refs/heads/develop'
         id: meta-alpine-develop
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
