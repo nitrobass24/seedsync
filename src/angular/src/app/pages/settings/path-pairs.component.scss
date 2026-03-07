@@ -1,0 +1,232 @@
+@use '../../common/common' as *;
+
+.path-pairs {
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 80%;
+    font-weight: 500;
+    padding: 10px 15px;
+    background-color: var(--ss-header-bg);
+    border-bottom: 1px solid var(--ss-border);
+
+    .btn-add {
+      @extend %button;
+
+      padding: 2px 10px;
+      font-size: 85%;
+    }
+  }
+
+  .restart-note {
+    padding: 6px 15px;
+    font-size: 80%;
+    color: var(--ss-text-muted);
+    font-style: italic;
+    border-bottom: 1px solid var(--ss-border);
+  }
+
+  .error-message {
+    padding: 6px 15px;
+    font-size: 80%;
+    color: var(--bs-danger, #dc3545);
+    border-bottom: 1px solid var(--ss-border);
+  }
+
+  .empty-state {
+    padding: 15px 20px;
+    color: var(--ss-text-muted);
+    font-size: 90%;
+  }
+
+  .pair-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--ss-border);
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    .pair-info {
+      flex: 1;
+      min-width: 0;
+
+      .pair-name {
+        font-weight: 600;
+        margin-bottom: 2px;
+      }
+
+      .pair-paths {
+        font-size: 85%;
+        color: var(--ss-text-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        .path-label {
+          font-weight: 500;
+          color: var(--ss-text);
+        }
+      }
+
+      .pair-toggles {
+        margin-top: 4px;
+        display: flex;
+        gap: 15px;
+      }
+    }
+
+    .pair-actions {
+      display: flex;
+      gap: 5px;
+      margin-left: 10px;
+      flex-shrink: 0;
+      align-items: flex-start;
+
+      .btn-edit {
+        @extend %button;
+
+        padding: 2px 10px;
+        font-size: 85%;
+      }
+
+      .btn-delete {
+        background-color: var(--ss-action-remove);
+        border: 1px solid var(--ss-action-remove-border);
+        color: white;
+        border-radius: 4px;
+        padding: 2px 10px;
+        font-size: 85%;
+        cursor: pointer;
+        user-select: none;
+
+        &:active {
+          background-color: var(--ss-action-remove-active);
+        }
+
+        &.confirming {
+          background-color: var(--bs-danger, #dc3545);
+          border-color: var(--bs-danger, #dc3545);
+        }
+      }
+    }
+  }
+
+  .pair-form {
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--ss-border);
+
+    .form-row {
+      margin-bottom: 6px;
+
+      label {
+        width: 100%;
+        font-size: 85%;
+        font-weight: 500;
+      }
+
+      input[type="text"] {
+        width: 100%;
+        margin-top: 2px;
+      }
+
+      &.toggles {
+        display: flex;
+        gap: 15px;
+        margin-top: 4px;
+      }
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 5px;
+      margin-top: 8px;
+
+      .btn-save {
+        @extend %button;
+
+        padding: 2px 12px;
+        font-size: 85%;
+      }
+
+      .btn-cancel {
+        background-color: transparent;
+        border: 1px solid var(--ss-border);
+        color: var(--ss-text);
+        border-radius: 4px;
+        padding: 2px 12px;
+        font-size: 85%;
+        cursor: pointer;
+        user-select: none;
+      }
+    }
+  }
+
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 85%;
+    cursor: pointer;
+
+    .form-check-input {
+      width: 16px;
+      height: 16px;
+      min-width: 16px;
+      margin: 0;
+      box-shadow: none;
+      cursor: pointer;
+    }
+  }
+}
+
+// Dark mode
+:host-context([data-bs-theme="dark"]) {
+  .path-pairs {
+    .header {
+      background-color: #161A21;
+      border-color: #252C37;
+      color: #8A93A6;
+    }
+
+    .pair-form {
+      input[type="text"] {
+        background-color: #1D222B;
+        border: 1px solid #252C37;
+        color: #E6EAF2;
+
+        &::placeholder {
+          color: #525A6B;
+        }
+
+        &:focus {
+          border-color: #4C8DFF;
+          outline: none;
+          box-shadow: none;
+        }
+      }
+
+      .btn-cancel {
+        border-color: #252C37;
+        color: #8A93A6;
+      }
+    }
+
+    .pair-row {
+      border-color: #252C37;
+    }
+
+    .form-check-input {
+      accent-color: #3ECF8E;
+    }
+
+    .btn-delete.confirming {
+      background-color: #C0392B;
+      border-color: #A93226;
+    }
+  }
+}

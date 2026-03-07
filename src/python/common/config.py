@@ -237,11 +237,13 @@ class Config(Persist):
     class General(IC):
         debug = PROP("debug", Checkers.null, Converters.bool)
         verbose = PROP("verbose", Checkers.null, Converters.bool)
+        exclude_patterns = PROP("exclude_patterns", Checkers.string_allow_empty, Converters.null)
 
         def __init__(self):
             super().__init__()
             self.debug = None
             self.verbose = None
+            self.exclude_patterns = ""
 
     class Lftp(IC):
         remote_address = PROP("remote_address", Checkers.string_nonempty, Converters.null)
@@ -341,12 +343,36 @@ class Config(Persist):
             self.auto_extract = None
             self.auto_delete_remote = None
 
+    class Logging(IC):
+        log_format = PROP("log_format", Checkers.string_allow_empty, Converters.null)
+
+        def __init__(self):
+            super().__init__()
+            self.log_format = "standard"
+
+    class Notifications(IC):
+        webhook_url = PROP("webhook_url", Checkers.string_allow_empty, Converters.null)
+        notify_on_download_complete = PROP("notify_on_download_complete", Checkers.null, Converters.bool)
+        notify_on_extraction_complete = PROP("notify_on_extraction_complete", Checkers.null, Converters.bool)
+        notify_on_extraction_failed = PROP("notify_on_extraction_failed", Checkers.null, Converters.bool)
+        notify_on_delete_complete = PROP("notify_on_delete_complete", Checkers.null, Converters.bool)
+
+        def __init__(self):
+            super().__init__()
+            self.webhook_url = ""
+            self.notify_on_download_complete = True
+            self.notify_on_extraction_complete = True
+            self.notify_on_extraction_failed = True
+            self.notify_on_delete_complete = True
+
     def __init__(self):
         self.general = Config.General()
         self.lftp = Config.Lftp()
         self.controller = Config.Controller()
         self.web = Config.Web()
         self.autoqueue = Config.AutoQueue()
+        self.logging = Config.Logging()
+        self.notifications = Config.Notifications()
 
     @staticmethod
     def _check_section(dct: OuterConfigType, name: str) -> InnerConfigType:
@@ -405,6 +431,8 @@ class Config(Persist):
         config.controller = Config.Controller.from_dict(config_dict.pop("Controller", {}))
         config.web = Config.Web.from_dict(config_dict.pop("Web", {}))
         config.autoqueue = Config.AutoQueue.from_dict(config_dict.pop("AutoQueue", {}))
+        config.logging = Config.Logging.from_dict(config_dict.pop("Logging", {}))
+        config.notifications = Config.Notifications.from_dict(config_dict.pop("Notifications", {}))
 
         Config._check_empty_outer_dict(config_dict)
         return config
@@ -418,6 +446,8 @@ class Config(Persist):
         config_dict["Controller"] = self.controller.as_dict()
         config_dict["Web"] = self.web.as_dict()
         config_dict["AutoQueue"] = self.autoqueue.as_dict()
+        config_dict["Logging"] = self.logging.as_dict()
+        config_dict["Notifications"] = self.notifications.as_dict()
         return config_dict
 
     def has_section(self, name: str) -> bool:

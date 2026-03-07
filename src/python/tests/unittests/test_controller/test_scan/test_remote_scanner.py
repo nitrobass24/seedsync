@@ -3,10 +3,10 @@
 import unittest
 import logging
 import sys
+import json
 from unittest.mock import patch, call, ANY
 import tempfile
 import os
-import pickle
 import shutil
 
 from controller.scan import RemoteScanner, ScannerError
@@ -36,7 +36,7 @@ class TestRemoteScanner(unittest.TestCase):
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
         handler.setFormatter(formatter)
 
-        # Ssh to return mangled binary by default
+        # Ssh to return mangled data by default
         self.mock_ssh.shell.return_value = b'error'
 
     @classmethod
@@ -67,9 +67,8 @@ class TestRemoteScanner(unittest.TestCase):
         Create a shell side_effect from a list of responses.
         Each entry is either a bytes value to return, or an Exception to raise.
         The shell call sequence on first scan is:
-          1. _log_remote_diagnostics()
-          2. md5sum check
-          3. scanfs (possibly retried)
+          1. md5sum check
+          2. scanfs (possibly retried)
         """
         self._shell_call_index = 0
 
@@ -79,7 +78,7 @@ class TestRemoteScanner(unittest.TestCase):
             if idx < len(responses):
                 resp = responses[idx]
             else:
-                resp = pickle.dumps([])
+                resp = json.dumps([]).encode()
             if isinstance(resp, Exception):
                 raise resp
             return resp
@@ -113,12 +112,11 @@ class TestRemoteScanner(unittest.TestCase):
     def test_installs_scan_script_on_first_scan(self):
         scanner = self._make_scanner()
 
-        # Call sequence: diagnostics, md5sum (non-matching), scanfs
+        # Call sequence: md5sum (non-matching), scanfs
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                # diagnostics
-            b'',                # md5sum - doesn't match, triggers install
-            pickle.dumps([]),   # scanfs
-            pickle.dumps([]),   # second scan: scanfs (no install)
+            b'',                            # md5sum - doesn't match, triggers install
+            json.dumps([]).encode(),         # scanfs
+            json.dumps([]).encode(),         # second scan: scanfs (no install)
         ])
 
         scanner.scan()
@@ -136,9 +134,8 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner(remote_script_path="/remote/path/to/scan")
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                # diagnostics
-            b'',                # md5sum - doesn't match
-            pickle.dumps([]),   # scanfs
+            b'',                            # md5sum - doesn't match
+            json.dumps([]).encode(),         # scanfs
         ])
 
         scanner.scan()
@@ -152,16 +149,15 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                # diagnostics
-            b'',                # md5sum
-            pickle.dumps([]),   # scanfs
+            b'',                            # md5sum
+            json.dumps([]).encode(),         # scanfs
         ])
 
         scanner.scan()
-        # 3 calls: diagnostics, md5sum, scanfs
-        self.assertEqual(3, self.mock_ssh.shell.call_count)
-        # Second call should be the md5sum command
-        md5sum_call = self.mock_ssh.shell.call_args_list[1]
+        # 2 calls: md5sum, scanfs
+        self.assertEqual(2, self.mock_ssh.shell.call_count)
+        # First call should be the md5sum command
+        md5sum_call = self.mock_ssh.shell.call_args_list[0]
         self.assertEqual(
             call("md5sum '/remote/path/to/scan/script' | awk '{print $1}' || echo"),
             md5sum_call
@@ -172,10 +168,9 @@ class TestRemoteScanner(unittest.TestCase):
 
         # md5sum of empty file
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                                        # diagnostics
             b'd41d8cd98f00b204e9800998ecf8427e',        # md5sum - matches
-            pickle.dumps([]),                           # scanfs
-            pickle.dumps([]),                           # second scan: scanfs
+            json.dumps([]).encode(),                     # scanfs
+            json.dumps([]).encode(),                     # second scan: scanfs
         ])
 
         scanner.scan()
@@ -190,9 +185,8 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                        # diagnostics
-            b'some output from md5sum',  # md5sum - doesn't match
-            pickle.dumps([]),           # scanfs
+            b'some output from md5sum',      # md5sum - doesn't match
+            json.dumps([]).encode(),          # scanfs
         ])
 
         scanner.scan()
@@ -205,8 +199,7 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                        # diagnostics
-            SshcpError("an ssh error"), # md5sum fails
+            SshcpError("an ssh error"),      # md5sum fails
         ])
 
         with self.assertRaises(ScannerError) as ctx:
@@ -218,16 +211,15 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                # diagnostics
-            b'',                # md5sum
-            pickle.dumps([]),   # scanfs
+            b'',                            # md5sum
+            json.dumps([]).encode(),         # scanfs
         ])
 
         scanner.scan()
-        # 3 calls: diagnostics, md5sum, scanfs
-        self.assertEqual(3, self.mock_ssh.shell.call_count)
+        # 2 calls: md5sum, scanfs
+        self.assertEqual(2, self.mock_ssh.shell.call_count)
         self.mock_ssh.shell.assert_called_with(
-            "'/remote/path/to/scan/script' '/remote/path/to/scan'"
+            "python3 '/remote/path/to/scan/script' '/remote/path/to/scan'"
         )
 
     def test_handles_tilde_path_for_shell_expansion(self):
@@ -235,17 +227,16 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner(remote_path="~/data/torrents")
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                # diagnostics
-            b'',                # md5sum
-            pickle.dumps([]),   # scanfs
+            b'',                            # md5sum
+            json.dumps([]).encode(),         # scanfs
         ])
 
         scanner.scan()
-        self.assertEqual(3, self.mock_ssh.shell.call_count)
+        self.assertEqual(2, self.mock_ssh.shell.call_count)
         # When scan path has tilde, both paths use double quotes for consistent quoting
         # Tilde is converted to $HOME for shell expansion
         self.mock_ssh.shell.assert_called_with(
-            "\"/remote/path/to/scan/script\" \"$HOME/data/torrents\""
+            "python3 \"/remote/path/to/scan/script\" \"$HOME/data/torrents\""
         )
 
     def test_raises_nonrecoverable_error_on_first_failed_ssh(self):
@@ -253,9 +244,8 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                        # diagnostics
-            b'',                        # md5sum
-            SshcpError("an ssh error"), # scanfs fails (non-transient)
+            b'',                            # md5sum
+            SshcpError("an ssh error"),      # scanfs fails (non-transient)
         ])
 
         with self.assertRaises(ScannerError) as ctx:
@@ -268,9 +258,8 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                        # diagnostics
-            b'',                        # md5sum
-            pickle.dumps([]),           # first scanfs - success
+            b'',                            # md5sum
+            json.dumps([]).encode(),         # first scanfs - success
             # second scan: 3 retry attempts all fail
             SshcpError("an ssh error"),
             SshcpError("an ssh error"),
@@ -288,15 +277,14 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                        # diagnostics
-            b'',                        # md5sum
-            pickle.dumps([]),           # first scanfs - success
+            b'',                            # md5sum
+            json.dumps([]).encode(),         # first scanfs - success
             # second scan: 3 retry attempts all fail
             SshcpError("an ssh error"),
             SshcpError("an ssh error"),
             SshcpError("an ssh error"),
             # third scan: success
-            pickle.dumps([]),
+            json.dumps([]).encode(),
         ])
 
         scanner.scan()  # no error first time
@@ -326,7 +314,7 @@ class TestRemoteScanner(unittest.TestCase):
 
         with self.assertRaises(ScannerError) as ctx:
             scanner.scan()
-        self.assertEqual(Localization.Error.REMOTE_SERVER_SCAN.format("Invalid pickled data"), str(ctx.exception))
+        self.assertEqual(Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"), str(ctx.exception))
         self.assertFalse(ctx.exception.recoverable)
 
     def test_raises_nonrecoverable_error_on_shell_detection_failure(self):
@@ -347,10 +335,9 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                # diagnostics
-            b'',                # md5sum
-            pickle.dumps([]),   # scanfs
-            pickle.dumps([]),   # second scan: scanfs
+            b'',                            # md5sum
+            json.dumps([]).encode(),         # scanfs
+            json.dumps([]).encode(),         # second scan: scanfs
         ])
 
         scanner.scan()
@@ -366,9 +353,8 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                                                    # diagnostics
             b'',                                                    # md5sum
-            SshcpError("SystemScannerError: something failed"),    # scanfs - no retry
+            SshcpError("SystemScannerError: something failed"),     # scanfs - no retry
         ])
 
         with self.assertRaises(ScannerError) as ctx:
@@ -384,10 +370,9 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                                # diagnostics
-            b'',                                # md5sum
-            SshcpError("Timed out after 180s"), # scanfs attempt 1 - transient
-            pickle.dumps([]),                   # scanfs attempt 2 - success
+            b'',                                    # md5sum
+            SshcpError("Timed out after 180s"),     # scanfs attempt 1 - transient
+            json.dumps([]).encode(),                 # scanfs attempt 2 - success
         ])
 
         scanner.scan()  # should succeed after retry
@@ -398,11 +383,10 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                                # diagnostics
-            b'',                                # md5sum
-            SshcpError("Timed out after 180s"), # attempt 1
-            SshcpError("Timed out after 180s"), # attempt 2
-            SshcpError("Timed out after 180s"), # attempt 3
+            b'',                                    # md5sum
+            SshcpError("Timed out after 180s"),     # attempt 1
+            SshcpError("Timed out after 180s"),     # attempt 2
+            SshcpError("Timed out after 180s"),     # attempt 3
         ])
 
         with self.assertRaises(ScannerError) as ctx:
@@ -416,7 +400,6 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                                    # diagnostics
             b'',                                    # md5sum
             SshcpError("Incorrect password"),       # scanfs - non-transient
         ])
@@ -444,7 +427,6 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',                                    # diagnostics
             SshcpError("Timed out after 30s"),      # md5sum - transient
         ])
 
@@ -457,7 +439,6 @@ class TestRemoteScanner(unittest.TestCase):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect([
-            b'',    # diagnostics
             b'',    # md5sum - doesn't match, triggers install
         ])
         self.mock_ssh.copy.side_effect = SshcpError("lost connection")

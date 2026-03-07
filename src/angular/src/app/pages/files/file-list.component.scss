@@ -22,6 +22,8 @@
 
     /* width */
     /* NOTE: make sure this is in-sync with ".file .content" */
+    #header .checkbox   {width: 30px; min-width: 30px; display: flex; align-items: center; justify-content: center;}
+    #header .checkbox input[type="checkbox"] {width: 16px; height: 16px; cursor: pointer;}
     #header .status     {width: 100px; min-width: 100px;}
     #header .name       {flex-grow: 1;}
     #header .speed      {width: 100px; min-width: 100px;}

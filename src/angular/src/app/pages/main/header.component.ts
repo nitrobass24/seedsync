@@ -27,6 +27,7 @@ export class HeaderComponent implements OnInit {
   private _prevServerNotification: Notification | null = null;
   private _prevWaitingForRemoteScanNotification: Notification | null = null;
   private _prevRemoteServerErrorNotification: Notification | null = null;
+  private _prevNoEnabledPairsNotification: Notification | null = null;
 
   constructor() {
     this.notifications$ = this._notificationService.notifications$;
@@ -68,7 +69,7 @@ export class HeaderComponent implements OnInit {
     // Set up a subscriber to show waiting for remote scan notification
     this._serverStatusService.status$.subscribe({
       next: status => {
-        if (status.server.up && status.controller.latestRemoteScanTime == null) {
+        if (status.server.up && status.controller.latestRemoteScanTime == null && !status.controller.noEnabledPairs) {
           if (this._prevWaitingForRemoteScanNotification == null) {
             this._prevWaitingForRemoteScanNotification = createNotification(
               NotificationLevel.INFO,
@@ -88,7 +89,7 @@ export class HeaderComponent implements OnInit {
     // Set up a subscriber to show remote server error notifications
     this._serverStatusService.status$.subscribe({
       next: status => {
-        if (status.server.up && status.controller.latestRemoteScanFailed === true) {
+        if (status.server.up && status.controller.latestRemoteScanFailed === true && !status.controller.noEnabledPairs) {
           const level = NotificationLevel.WARNING;
           const text = Localization.Notification.STATUS_REMOTE_SERVER_ERROR(
             status.controller.latestRemoteScanError ?? ''
@@ -106,6 +107,26 @@ export class HeaderComponent implements OnInit {
           if (this._prevRemoteServerErrorNotification != null) {
             this._notificationService.hide(this._prevRemoteServerErrorNotification);
             this._prevRemoteServerErrorNotification = null;
+          }
+        }
+      }
+    });
+
+    // Set up a subscriber to show no-enabled-pairs notification
+    this._serverStatusService.status$.subscribe({
+      next: status => {
+        if (status.server.up && status.controller.noEnabledPairs) {
+          if (this._prevNoEnabledPairsNotification == null) {
+            this._prevNoEnabledPairsNotification = createNotification(
+              NotificationLevel.WARNING,
+              Localization.Notification.STATUS_NO_ENABLED_PAIRS
+            );
+            this._notificationService.show(this._prevNoEnabledPairsNotification);
+          }
+        } else {
+          if (this._prevNoEnabledPairsNotification != null) {
+            this._notificationService.hide(this._prevNoEnabledPairsNotification);
+            this._prevNoEnabledPairsNotification = null;
           }
         }
       }

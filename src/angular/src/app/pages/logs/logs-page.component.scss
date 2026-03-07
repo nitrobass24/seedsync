@@ -9,6 +9,39 @@
     flex-direction: column;
     justify-content: center;
 
+    .log-filters {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 10px;
+        padding: 5px 0;
+
+        input {
+            flex: 1;
+            max-width: 300px;
+        }
+
+        select {
+            width: auto;
+            max-width: 150px;
+        }
+    }
+
+    .history-section {
+        margin-bottom: 10px;
+
+        .history-header {
+            font-weight: bold;
+            font-size: 80%;
+            color: var(--ss-text-muted);
+            margin-bottom: 5px;
+        }
+    }
+
+    .log-divider {
+        border-color: var(--ss-border);
+        margin: 10px 0;
+    }
+
     .log-marker {
         width: 100%;
         height: 2px;

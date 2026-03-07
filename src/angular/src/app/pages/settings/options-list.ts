@@ -5,6 +5,7 @@ export interface IOption {
   label: string;
   valuePath: [string, string];
   description: string | null;
+  disabled?: boolean;
 }
 
 export interface IOptionsContext {
@@ -72,6 +73,14 @@ export const OPTIONS_CONTEXT_DISCOVERY: IOptionsContext = {
   header: 'File Discovery',
   id: 'file-discovery',
   options: [
+    {
+      type: OptionType.Text,
+      label: 'Exclude Patterns',
+      valuePath: ['general', 'exclude_patterns'],
+      description:
+        'Comma-separated glob patterns for files to ignore (e.g. ".*,*.nfo,*.txt"). ' +
+        'Matching remote files will be hidden and never synced.',
+    },
     {
       type: OptionType.Text,
       label: 'Remote Scan Interval (ms)',
@@ -289,6 +298,56 @@ export const OPTIONS_CONTEXT_ADVANCED_LFTP: IOptionsContext = {
       description:
         'Multiplier applied to the reconnect delay after each consecutive failure.\n' +
         '(net:reconnect-interval-multiplier)',
+    },
+  ],
+};
+
+export const OPTIONS_CONTEXT_LOGGING: IOptionsContext = {
+  header: 'Logging',
+  id: 'logging',
+  options: [
+    {
+      type: OptionType.Text,
+      label: 'Log Format',
+      valuePath: ['logging', 'log_format'],
+      description: 'Log output format: "standard" or "json"',
+    },
+  ],
+};
+
+export const OPTIONS_CONTEXT_NOTIFICATIONS: IOptionsContext = {
+  header: 'Notifications',
+  id: 'notifications',
+  options: [
+    {
+      type: OptionType.Text,
+      label: 'Webhook URL',
+      valuePath: ['notifications', 'webhook_url'],
+      description: 'HTTP(S) URL to POST notifications to. Leave empty to disable.',
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Notify on download complete',
+      valuePath: ['notifications', 'notify_on_download_complete'],
+      description: null,
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Notify on extraction complete',
+      valuePath: ['notifications', 'notify_on_extraction_complete'],
+      description: null,
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Notify on extraction failed',
+      valuePath: ['notifications', 'notify_on_extraction_failed'],
+      description: null,
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Notify on delete complete',
+      valuePath: ['notifications', 'notify_on_delete_complete'],
+      description: null,
     },
   ],
 };

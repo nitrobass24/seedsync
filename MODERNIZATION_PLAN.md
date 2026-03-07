@@ -2,7 +2,7 @@
 
 This document summarizes the modernization work completed on SeedSync.
 
-## Project Status: ✅ COMPLETE
+## Project Status: COMPLETE
 
 The fork at [github.com/nitrobass24/seedsync](https://github.com/nitrobass24/seedsync) is now fully functional with modern dependencies and Docker-only deployment.
 
@@ -10,50 +10,94 @@ The fork at [github.com/nitrobass24/seedsync](https://github.com/nitrobass24/see
 
 ## What Was Done
 
-### Phase 1: Fix Docker Build ✅
+### Phase 1: Fix Docker Build
 
 | Task | Status |
 |------|--------|
-| Create complete multi-stage Dockerfile | ✅ Done |
-| Update Python 3.8 → 3.12 | ✅ Done |
-| Fix Angular build (node-sass → sass) | ✅ Done |
-| Fix entrypoint.sh permissions | ✅ Done |
-| Verify web UI loads | ✅ Done |
+| Create complete multi-stage Dockerfile | Done |
+| Update Python 3.8 to 3.12 | Done |
+| Fix Angular build (node-sass to sass) | Done |
+| Fix entrypoint.sh permissions | Done |
+| Verify web UI loads | Done |
 
-### Phase 2: Dependency Updates ✅
-
-| Task | Status |
-|------|--------|
-| Update Python dependencies | ✅ Done |
-| Remove Poetry (use pip) | ✅ Done |
-| Remove mkdocs from runtime | ✅ Done |
-| Fix Python 3.12 deprecation warnings | ✅ Done |
-
-### Phase 3: Simplify for Docker-Only ✅
+### Phase 2: Dependency Updates
 
 | Task | Status |
 |------|--------|
-| Remove Debian packaging | ✅ Done |
-| Remove legacy build files | ✅ Done |
-| Simplify Makefile | ✅ Done |
-| Update GitHub Actions | ✅ Done |
-| Update documentation | ✅ Done |
+| Update Python dependencies | Done |
+| Remove Poetry (use pip) | Done |
+| Remove mkdocs from runtime | Done |
+| Fix Python 3.12 deprecation warnings | Done |
 
-### Phase 4: Angular Modernization ✅
+### Phase 3: Simplify for Docker-Only
+
+| Task | Status |
+|------|--------|
+| Remove Debian packaging | Done |
+| Remove legacy build files | Done |
+| Simplify Makefile | Done |
+| Update GitHub Actions | Done |
+| Update documentation | Done |
+
+### Phase 4: Angular Modernization
 
 Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v0.10.0 attempt).
 
 | Task | Status |
 |------|--------|
-| Upgrade Angular 4 → 21 | ✅ Done |
-| Standalone components (no NgModules) | ✅ Done |
-| Bootstrap 4 → 5.3 with JS bundle | ✅ Done |
-| Replace Immutable.js with native TypeScript | ✅ Done |
-| Replace ngx-modialog with inline patterns | ✅ Done |
-| RxJS 5 → 7 pipe operators | ✅ Done |
-| Update Dockerfile to Node 22 | ✅ Done |
-| Font Awesome 4 → 7 | ✅ Done |
-| Replace css-element-queries with ResizeObserver | ✅ Done |
+| Upgrade Angular 4 to 21 | Done |
+| Standalone components (no NgModules) | Done |
+| Bootstrap 4 to 5.3 with JS bundle | Done |
+| Replace Immutable.js with native TypeScript | Done |
+| Replace ngx-modialog with inline patterns | Done |
+| RxJS 5 to 7 pipe operators | Done |
+| Update Dockerfile to Node 22 | Done |
+| Font Awesome 4 to 7 | Done |
+| Replace css-element-queries with ResizeObserver | Done |
+
+### Phase 5: Security Hardening (v0.12.10)
+
+| Task | PR | Status |
+|------|-----|--------|
+| Security response headers (CSP, X-Frame-Options, etc.) | #130 | Done |
+| CSRF protection with Origin/Referer validation | #130 | Done |
+| Per-IP rate limiting (120 req/60s sliding window) | #130 | Done |
+| Optional API key authentication | #130 | Done |
+| Filename validation and path traversal protection | #130 | Done |
+| Zip-slip extraction protection (pre/post validation) | #130 | Done |
+| Config file auto-backup (keeps last 10) | #130 | Done |
+| CSP-compliant Angular build | #134 | Done |
+| Eager ConfigService initialization | #136 | Done |
+| Scanner home directory fallback | #114 | Done |
+| SFTP umask fix | #115 | Done |
+
+### Phase 6: Multi-Pair Architecture & Infrastructure (v0.13.0)
+
+| Task | PR(s) | Status |
+|------|-------|--------|
+| Multiple path pairs with per-pair LFTP/scanner | #122, #149, #155, #161 | Done |
+| Path pairs settings UI | #160, #162, #163 | Done |
+| Exclude patterns for remote files | #146 | Done |
+| Multi-select and bulk operations | #123 | Done |
+| Webhook notifications | #128 | Done |
+| Historical log query endpoint | #124 | Done |
+| Structured JSON logging | #127 | Done |
+| Replace paste WSGI with Bottle built-in | #140 | Done |
+| Replace patool with direct subprocess | #141, #145 | Done |
+| Python scanfs replaces PyInstaller binary | #148 | Done |
+| JSON serialization for scanfs | #129 | Done |
+| Alpine Docker image variant | #164 | Done |
+| Dual-image CI (Debian + Alpine) | #164 | Done |
+| Docker HEALTHCHECK | #164 | Done |
+| Startup log improvements | #165 | Done |
+| Enforce unique path pair names | #172 | Done |
+| Per-pair extraction pipeline with pair_id | #173 | Done |
+| Graceful pause when all pairs disabled | #174 | Done |
+| CI publish develop images | #175 | Done |
+| CI parallel arm64 builds on develop | #176 | Done |
+| Consolidate all extraction to 7z, remove unrar | #178 | Done |
+| Fix spurious staging moves on restart | #179 | Done |
+| Fix healthcheck IPv6 + WEB_PORT env var | #180 | Done |
 
 ---
 
@@ -61,11 +105,13 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 
 ### Image Size Reduction
 
-| Metric | Before | After | Change |
-|--------|--------|-------|--------|
-| Image Size | 439 MB | 240 MB | **-45%** |
-| Python | 3.8 | 3.12 | Current |
-| Poetry | 90 MB overhead | 0 | Removed |
+| Version | Image Size | Notes |
+|---------|-----------|-------|
+| Original fork | 439 MB | Python 3.8, Poetry, Debian packaging |
+| v0.10.0 | 240 MB | Modernized deps, multi-stage build |
+| v0.12.10 | 170 MB | Security hardening release |
+| v0.13.0 (Debian) | 126 MB (amd64) | Multi-pair architecture, slim build |
+| v0.13.0 (Alpine) | 45 MB (amd64) | Lightweight Alpine variant |
 
 ### Files Changed
 
@@ -82,7 +128,6 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 - `.github/workflows/ci.yml` - Simplified CI/CD
 - `Makefile` - Docker-focused commands
 - `README.md` - Docker-only instructions
-- `doc/DeveloperReadme.md` - Updated dev guide
 - `CHANGELOG.md` - Release notes
 
 ---
@@ -90,73 +135,42 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  Docker Container                    │
-│                     (240 MB)                        │
-│                                                     │
-│  ┌─────────────┐    ┌─────────────┐               │
-│  │  Python 3.12│    │ Angular 21  │               │
-│  │   Bottle    │◄───│   Web UI    │               │
-│  │  REST API   │    │             │               │
-│  └──────┬──────┘    └─────────────┘               │
-│         │                                          │
-│  ┌──────▼──────┐    ┌─────────────┐               │
-│  │ Controller  │───►│    LFTP     │──► Seedbox   │
-│  └─────────────┘    └─────────────┘               │
-│                                                     │
-└─────────────────────────────────────────────────────┘
++------------------------------------------------------------------+
+|                      Docker Container                             |
+|                (126 MB Debian / 45 MB Alpine)                     |
+|                                                                   |
+|  +-------------+       +-------------+                            |
+|  | Python 3.12 |       | Angular 21  |                            |
+|  |   Bottle    |<------|   Web UI    |                            |
+|  |  REST API   |       |             |                            |
+|  +------+------+       +-------------+                            |
+|         |                                                         |
+|  +------v-------------------------------------------------+       |
+|  |                    Controller                           |       |
+|  |                                                         |       |
+|  |  +-- PathPair 1 --+   +-- PathPair 2 --+   ...         |       |
+|  |  | LFTP  Scanner  |   | LFTP  Scanner  |               |       |
+|  |  +-------+--------+   +-------+--------+               |       |
+|  |          |                     |                        |       |
+|  +----------+---------------------+------------------------+       |
+|             |                     |                               |
+|             v                     v                               |
+|          Seedbox (per-pair remote/local paths)                    |
+|                                                                   |
+|  +-------------+                                                  |
+|  |  Security   | CSP, CSRF, Rate Limit, API Key                  |
+|  +-------------+                                                  |
++------------------------------------------------------------------+
 ```
 
 ---
 
 ## Known Limitations
 
-### 1. scanfs Binary Compatibility ✅ FIXED in v0.9.4
-- ~~PyInstaller binary may not work on all seedbox servers~~ Fixed by building on Debian Buster (glibc 2.28)
-- Now supports Linux systems from 2018+
-- Some providers still restrict `/tmp` execution - Workaround: Set `TMPDIR` on remote server
-
-### 2. LFTP Parsing
-- Some edge cases in LFTP output parsing
-- May affect certain server configurations
-- Report issues if encountered
-
----
-
-## v0.10.6 Improvements
-
-| Feature | Issue | Status |
-|---------|-------|--------|
-| Auto-delete from remote after download | #25 | ✅ Done |
-
-## v0.10.5 Improvements
-
-| Feature | Issue | Status |
-|---------|-------|--------|
-| Delete remote with tilde path | #27 | ✅ Done |
-| Remote shell auto-detection | #18 | ✅ Done |
-| SSH key auth without password | #21 | ✅ Done |
-| Bandwidth/speed limit setting | #24 | ✅ Done |
-
-## v0.12.0 Improvements
-
-| Feature | PR(s) | Status |
-|---------|-------|--------|
-| Staging directory for fast-disk downloads | #36 | ✅ Done |
-| Dark mode with theme toggle | #37, #51 | ✅ Done |
-| Advanced LFTP settings | #40, #44 | ✅ Done |
-| Remote server diagnostics | #41 | ✅ Done |
-| Graceful config upgrades | #45 | ✅ Done |
-
-## Future Improvements (Optional)
-
-If you want to continue development:
-
-1. ~~**Angular unit tests** - Port old Jasmine tests to Vitest for the Angular 21 codebase~~ ✅ Done — 125 tests across 15 spec files
-2. **Python scanfs fallback** - Run scanner as Python script instead of binary (for restricted servers)
-3. **Memory profiling** - If high memory usage reported
-4. **Additional tests** - Expand test coverage
-5. ~~**Dark mode** - Requested in issue #22~~ ✅ Done in v0.12.0
+### 1. scanfs Compatibility
+- Replaced PyInstaller binary with plain Python script in v0.13.0
+- Requires Python 3.8+ on the remote seedbox
+- Home directory fallback when `/tmp` is restricted (v0.12.10)
 
 ---
 
@@ -172,8 +186,8 @@ make stop     # Stop container
 
 ### Release
 ```bash
-git tag v0.10.0
-git push origin v0.10.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 # GitHub Actions handles the rest
 ```
 
@@ -181,7 +195,7 @@ git push origin v0.10.0
 ```
 Web UI: http://localhost:8800
 Volumes: /config, /downloads
-Env: PUID, PGID
+Env: PUID, PGID, UMASK
 ```
 
 ---
@@ -190,4 +204,3 @@ Env: PUID, PGID
 
 - Original project: [ipsingh06/seedsync](https://github.com/ipsingh06/seedsync)
 - Modernization: [nitrobass24/seedsync](https://github.com/nitrobass24/seedsync)
-

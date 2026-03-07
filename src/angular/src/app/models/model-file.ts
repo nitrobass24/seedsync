@@ -4,6 +4,7 @@
  */
 export interface ModelFile {
   name: string;
+  pair_id: string | null;
   is_dir: boolean;
   local_size: number;
   remote_size: number;
@@ -49,6 +50,7 @@ export function modelFileFromJson(json: any): ModelFile {
 
   return {
     name: json.name,
+    pair_id: json.pair_id ?? null,
     is_dir: json.is_dir,
     local_size: json.local_size,
     remote_size: json.remote_size,

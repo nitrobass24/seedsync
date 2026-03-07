@@ -67,6 +67,16 @@ describe('modelFileFromJson', () => {
     }
   });
 
+  it('should parse pair_id from JSON', () => {
+    const result = modelFileFromJson(makeJson({ pair_id: 'abc-123' }));
+    expect(result.pair_id).toBe('abc-123');
+  });
+
+  it('should default pair_id to null when missing', () => {
+    const result = modelFileFromJson(makeJson());
+    expect(result.pair_id).toBeNull();
+  });
+
   it('should fall back to DEFAULT for unknown state strings', () => {
     const result = modelFileFromJson(makeJson({ state: 'UNKNOWN_STATE' }));
     expect(result.state).toBe(ModelFileState.DEFAULT);
