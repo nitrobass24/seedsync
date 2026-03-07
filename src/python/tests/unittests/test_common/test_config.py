@@ -392,7 +392,9 @@ class TestConfig(unittest.TestCase):
 
     def test_from_file(self):
         # Create empty config file
-        config_file = open(tempfile.mktemp(suffix="test_config"), "w")
+        fd, config_file_path = tempfile.mkstemp(suffix="test_config")
+        os.close(fd)
+        config_file = open(config_file_path, "w")
 
         config_file.write("""
         [General]
@@ -486,7 +488,8 @@ class TestConfig(unittest.TestCase):
         os.remove(config_file.name)
 
     def test_to_file(self):
-        config_file_path = tempfile.mktemp(suffix="test_config")
+        fd, config_file_path = tempfile.mkstemp(suffix="test_config")
+        os.close(fd)
 
         config = Config()
         config.general.debug = True
