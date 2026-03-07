@@ -6,6 +6,10 @@ updates:
       interval: "weekly"
     target-branch: "develop"
     open-pull-requests-limit: 10
+    groups:
+      angular:
+        patterns:
+          - "@angular/*"
 
   - package-ecosystem: "npm"
     directory: "/website"
