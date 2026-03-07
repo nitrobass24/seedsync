@@ -172,18 +172,6 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 - Requires Python 3.8+ on the remote seedbox
 - Home directory fallback when `/tmp` is restricted (v0.12.10)
 
-### 2. ~~Multi-Pair Extraction~~ (resolved in v0.13.0, PR #173)
-- Per-pair extraction pipeline with `pair_id` propagation
-
-### 3. ~~Shared Staging Directory~~ (resolved in v0.13.0, PR #173)
-- Each pair now uses its own staging subdirectory
-
-### 4. ~~Pair Name Uniqueness~~ (resolved in v0.13.0, PR #172)
-- Unique names enforced on create/update
-
-### 5. ~~All Pairs Disabled~~ (resolved in v0.13.0, PR #174)
-- Controller idles gracefully with UI banner
-
 ---
 
 ## Quick Reference
