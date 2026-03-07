@@ -1,7 +1,7 @@
 <div class="file" [class.selected]="file().isSelected" #fileElement>
     <div class="content">
         <div class="checkbox" (click)="onCheck($event, file())">
-            <input type="checkbox" [checked]="file().isChecked" (click)="$event.stopPropagation()" />
+            <input type="checkbox" [checked]="file().isChecked" />
         </div>
         <div class="status">
             @if (file().status === ViewFileStatus.DEFAULT && file().remoteSize > 0) {

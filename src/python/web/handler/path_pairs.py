@@ -127,4 +127,4 @@ class PathPairsHandler(IHandler):
             self.__config.remove_pair(pair_id)
         except ValueError:
             return HTTPResponse(body="Path pair not found", status=404)
-        return HTTPResponse(body="Deleted")
+        return HTTPResponse(status=204)

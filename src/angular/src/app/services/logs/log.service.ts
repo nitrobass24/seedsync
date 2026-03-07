@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, Subject } from 'rxjs';
 
 import { StreamEventHandler, StreamDispatchService } from '../base/stream-dispatch.service';
@@ -47,12 +47,11 @@ export class LogService implements StreamEventHandler {
     onDisconnected(): void {}
 
     fetchHistory(params: LogHistoryParams = {}): Observable<LogHistoryEntry[]> {
-        const queryParts: string[] = [];
-        if (params.search) queryParts.push(`search=${encodeURIComponent(params.search)}`);
-        if (params.level) queryParts.push(`level=${encodeURIComponent(params.level)}`);
-        if (params.limit) queryParts.push(`limit=${params.limit}`);
-        if (params.before) queryParts.push(`before=${params.before}`);
-        const qs = queryParts.length > 0 ? '?' + queryParts.join('&') : '';
-        return this.http.get<LogHistoryEntry[]>(`/server/logs${qs}`);
+        let httpParams = new HttpParams();
+        if (params.search) httpParams = httpParams.set('search', params.search);
+        if (params.level) httpParams = httpParams.set('level', params.level);
+        if (params.limit) httpParams = httpParams.set('limit', params.limit.toString());
+        if (params.before) httpParams = httpParams.set('before', params.before.toString());
+        return this.http.get<LogHistoryEntry[]>('/server/logs', { params: httpParams });
     }
 }

@@ -1,6 +1,6 @@
 <div id="logs">
   <div class="log-filters">
-    <label for="log-search">Search logs</label>
+    <label for="log-search" class="visually-hidden">Search logs</label>
     <input
       id="log-search"
       type="text"
@@ -8,7 +8,7 @@
       placeholder="Search logs..."
       [(ngModel)]="searchQuery"
       (input)="onSearchChange()" />
-    <label for="log-level">Log level</label>
+    <label for="log-level" class="visually-hidden">Log level</label>
     <select
       id="log-level"
       class="form-select form-select-sm"
@@ -29,11 +29,11 @@
       @for (entry of historyRecords; track $index) {
         <p
           class="record"
-          [class.debug]="entry.level === 'DEBUG'"
-          [class.info]="entry.level === 'INFO'"
-          [class.warning]="entry.level === 'WARNING'"
-          [class.error]="entry.level === 'ERROR'"
-          [class.critical]="entry.level === 'CRITICAL'">
+          [class.debug]="entry.level === LogLevel.DEBUG"
+          [class.info]="entry.level === LogLevel.INFO"
+          [class.warning]="entry.level === LogLevel.WARNING"
+          [class.error]="entry.level === LogLevel.ERROR"
+          [class.critical]="entry.level === LogLevel.CRITICAL">
           {{ entry.timestamp }} -
           {{ entry.level }} -
           {{ entry.logger }} -
