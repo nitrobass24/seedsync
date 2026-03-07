@@ -90,6 +90,14 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 | Dual-image CI (Debian + Alpine) | #164 | Done |
 | Docker HEALTHCHECK | #164 | Done |
 | Startup log improvements | #165 | Done |
+| Enforce unique path pair names | #172 | Done |
+| Per-pair extraction pipeline with pair_id | #173 | Done |
+| Graceful pause when all pairs disabled | #174 | Done |
+| CI publish develop images | #175 | Done |
+| CI parallel arm64 builds on develop | #176 | Done |
+| Consolidate all extraction to 7z, remove unrar | #178 | Done |
+| Fix spurious staging moves on restart | #179 | Done |
+| Fix healthcheck IPv6 + WEB_PORT env var | #180 | Done |
 
 ---
 
@@ -164,23 +172,17 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 - Requires Python 3.8+ on the remote seedbox
 - Home directory fallback when `/tmp` is restricted (v0.12.10)
 
-### 2. Multi-Pair Extraction (v0.13.0)
-- Extraction is hard-wired to the first path pair's filesystem paths (#167)
-- Per-pair extraction requires a separate `ExtractProcess` per pair — tracked for future release
+### 2. ~~Multi-Pair Extraction~~ (resolved in v0.13.0, PR #173)
+- Per-pair extraction pipeline with `pair_id` propagation
 
-### 3. Shared Staging Directory (v0.13.0)
-- All path pairs share a single staging directory when staging is enabled (#168)
-- Same-named files from different pairs will collide
-- Fix: per-pair staging subdirectories
+### 3. ~~Shared Staging Directory~~ (resolved in v0.13.0, PR #173)
+- Each pair now uses its own staging subdirectory
 
-### 4. Pair Name Uniqueness (v0.13.0)
-- Duplicate pair names are not rejected (#169)
-- Can cause ambiguous lookups when `pair_id` is omitted from API requests
-- Fix: validate uniqueness on create/update
+### 4. ~~Pair Name Uniqueness~~ (resolved in v0.13.0, PR #172)
+- Unique names enforced on create/update
 
-### 5. All Pairs Disabled (v0.13.0)
-- Controller falls back to legacy pair instead of pausing gracefully (#170)
-- Better UX would be an idle state with UI indication
+### 5. ~~All Pairs Disabled~~ (resolved in v0.13.0, PR #174)
+- Controller idles gracefully with UI banner
 
 ---
 
