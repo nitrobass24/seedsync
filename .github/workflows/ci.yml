@@ -161,7 +161,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download Angular build artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: angular-build
           path: /tmp/angular-output
@@ -227,13 +227,13 @@ jobs:
         variant: [debian, alpine]
     steps:
       - name: Download amd64 digest
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: digests-${{ matrix.variant }}-amd64
           path: /tmp/digests
 
       - name: Download arm64 digest
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: digests-${{ matrix.variant }}-arm64
           path: /tmp/digests
