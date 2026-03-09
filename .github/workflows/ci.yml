@@ -65,7 +65,7 @@ jobs:
         run: npx ng build --configuration=production --output-path /tmp/angular-output/build
 
       - name: Upload Angular build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: angular-build
           path: /tmp/angular-output
@@ -138,7 +138,7 @@ jobs:
 
       - name: Upload digest
         if: env.SHOULD_PUBLISH == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ matrix.variant }}-amd64
           path: /tmp/digests/*
@@ -202,7 +202,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ matrix.variant }}-arm64
           path: /tmp/digests/*
