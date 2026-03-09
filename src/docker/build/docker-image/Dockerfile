@@ -62,7 +62,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
 FROM debian:bookworm-slim AS archive-tools
 
 ARG TARGETARCH
-RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils \
+RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && case "${TARGETARCH}" in \
          amd64) ARCH="x64" ;; \
