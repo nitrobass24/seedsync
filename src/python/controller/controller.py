@@ -576,7 +576,9 @@ class Controller:
                         move_key = _persist_key(diff.new_file.pair_id, diff.new_file.name)
                         if move_key in self.__moved_file_keys:
                             pc.pending_completion.discard(diff.new_file.name)
-                        elif diff.new_file.state == ModelFile.State.DELETED:
+                        elif diff.new_file.state in (ModelFile.State.DELETED,
+                                                      ModelFile.State.EXTRACTED,
+                                                      ModelFile.State.EXTRACT_FAILED):
                             pc.pending_completion.discard(diff.new_file.name)
                     else:
                         if diff.new_file.state in (ModelFile.State.DOWNLOADED,
