@@ -187,8 +187,6 @@ class Controller:
         self.__moved_file_keys: Set[str] = set()
 
         # Track extraction retry counts by composite key (in-memory, resets on restart)
-        self.__extract_retry_counts: Dict[str, int] = {}
-        self.__pending_redownload_keys: Set[str] = set()
 
         self.__started = False
 
@@ -587,15 +585,6 @@ class Controller:
                                                     ModelFile.State.DELETED):
                             pc.pending_completion.discard(diff.new_file.name)
 
-                if diff.new_file is not None and \
-                        diff.new_file.state == ModelFile.State.DEFAULT and \
-                        _persist_key(diff.new_file.pair_id, diff.new_file.name) in self.__pending_redownload_keys:
-                    self.__pending_redownload_keys.discard(
-                        _persist_key(diff.new_file.pair_id, diff.new_file.name))
-                    command = Controller.Command(Controller.Command.Action.QUEUE,
-                                                diff.new_file.name,
-                                                pair_id=diff.new_file.pair_id)
-                    self.queue_command(command)
 
             # Prune the extracted files list of any files that were deleted locally
             remove_extracted_keys = set()
@@ -638,33 +627,12 @@ class Controller:
 
             self.__model_lock.release()
 
-        # Process extraction failures -- retry by re-downloading
+        # Process extraction failures — mark as failed immediately
         for result in latest_failed_extractions:
-            # Use pair_id from the extraction result
-            result_pc = self._find_pair_by_id(result.pair_id)
-            if result_pc is None:
-                self.logger.warning(
-                    "Ignoring extract failure for '{}': pair '{}' no longer exists".format(
-                        result.name, result.pair_id))
-                continue
-            retry_key = _persist_key(result.pair_id, result.name)
-            count = self.__extract_retry_counts.get(retry_key, 0) + 1
-            self.__extract_retry_counts[retry_key] = count
-            if count < 3:
-                self.logger.warning(
-                    "Extraction failed for '{}' (attempt {}/3), scheduling re-download".format(
-                        result.name, count))
-                self.__persist.downloaded_file_names.discard(retry_key)
-                self.__persist.extracted_file_names.discard(retry_key)
-                self._sync_persist_to_all_builders()
-                self.__pending_redownload_keys.add(retry_key)
-                self.__spawn_system_delete_local(result.name, result_pc)
-            else:
-                self.logger.error(
-                    "Extraction failed for '{}' after {} attempts, giving up".format(
-                        result.name, count))
-                self.__persist.extract_failed_file_names.add(retry_key)
-                self._sync_persist_to_all_builders()
+            self.logger.error("Extraction failed for '{}'".format(result.name))
+            fail_key = _persist_key(result.pair_id, result.name)
+            self.__persist.extract_failed_file_names.add(fail_key)
+            self._sync_persist_to_all_builders()
 
         # Update the controller status (use most recent across all pairs)
         for pc in self.__pair_contexts:
@@ -849,7 +817,6 @@ class Controller:
                     continue
                 else:
                     pkey = _persist_key(pc.pair_id, file.name)
-                    self.__extract_retry_counts.pop(pkey, None)
                     self.__persist.extract_failed_file_names.discard(pkey)
                     self._sync_persist_to_all_builders()
                     req = self._build_extract_request(file, pc)
@@ -983,27 +950,6 @@ class Controller:
         self.__active_move_processes.append(process)
         process.start()
         self.logger.info("Spawned move process for {} (staging -> local)".format(file_name))
-
-    def __spawn_system_delete_local(self, file_name: str, pc: Optional[_PairContext] = None):
-        """System-initiated local delete for extraction retry cleanup."""
-        target_pc = pc or self.__pair_contexts[0]
-        effective_local_path = target_pc.effective_local_path
-        process = DeleteLocalProcess(
-            local_path=effective_local_path,
-            file_name=file_name
-        )
-        process.set_multiprocessing_logger(self.__mp_logger)
-        def post_callback():
-            for _pc in self.__pair_contexts:
-                _pc.local_scan_process.force_scan()
-                if _pc.effective_local_path != _pc.local_path:
-                    _pc.active_scan_process.force_scan()
-        command_wrapper = Controller.CommandProcessWrapper(
-            process=process,
-            post_callback=post_callback
-        )
-        self.__active_command_processes.append(command_wrapper)
-        command_wrapper.process.start()
 
     def __cleanup_commands(self):
         """
