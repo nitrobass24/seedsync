@@ -66,15 +66,15 @@ LABEL maintainer="nitrobass24" \
 COPY --from=python-deps /usr/local/ /usr/local/
 
 # Copy unrar binary from linuxserver (not packaged in Alpine).
-# Intentionally unpinned to receive unrar security updates on rebuild.
+# The official 7zz binary is glibc-linked and won't run on Alpine (musl).
+# Alpine's 7zip package lacks the RAR codec, so unrar handles RAR archives.
 COPY --from=linuxserver/unrar /usr/bin/unrar-alpine /usr/bin/unrar
 
 # Install runtime dependencies.
 # setpriv (from util-linux) is used by entrypoint to drop privileges.
 # lftp, openssh-client, 7zip, ca-certificates are intentionally
 # unpinned to receive security updates on each image rebuild.
-# 7z handles most archive formats (zip, 7z, tar, gz, bz2, xz).
-# unrar (copied above) handles RAR archives — the 7zip package lacks the RAR codec.
+# 7z handles most formats; unrar (above) handles RAR archives.
 RUN apk add --no-cache \
         lftp \
         openssh-client \

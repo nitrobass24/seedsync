@@ -55,7 +55,25 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
     && find /usr/local/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 # ==============================================================================
-# Stage 3: Final Runtime Image
+# Stage 3: Download official 7-Zip 26.00 (includes RAR codec)
+# ==============================================================================
+# The Debian/Alpine 7zip packages strip the proprietary RAR codec.
+# 7-Zip 26.00+ includes RAR support in the official Linux binary.
+FROM debian:bookworm-slim AS archive-tools
+
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && case "${TARGETARCH}" in \
+         amd64) ARCH="x64" ;; \
+         arm64) ARCH="arm64" ;; \
+         *) echo "Unsupported arch: ${TARGETARCH}" && exit 1 ;; \
+       esac \
+    && wget -qO /tmp/7z.tar.xz "https://www.7-zip.org/a/7z2600-linux-${ARCH}.tar.xz" \
+    && mkdir /tmp/7z && tar -xJf /tmp/7z.tar.xz -C /tmp/7z
+
+# ==============================================================================
+# Stage 4: Final Runtime Image
 # ==============================================================================
 FROM debian:bookworm-slim AS runtime
 
@@ -65,22 +83,20 @@ LABEL maintainer="nitrobass24" \
 # Copy stripped Python runtime from python-deps stage
 COPY --from=python-deps /usr/local/ /usr/local/
 
+# Copy official 7zz binary (with RAR codec support)
+COPY --from=archive-tools /tmp/7z/7zz /usr/bin/7zz
+RUN ln -sf /usr/bin/7zz /usr/bin/7z
+
 # Install runtime deps in a single layer.
-# lftp, openssh-client, 7zip, ca-certificates are intentionally unpinned
+# lftp, openssh-client, ca-certificates are intentionally unpinned
 # to receive security updates on each image rebuild.
-# 7z handles most archive formats (zip, 7z, tar, gz, bz2, xz).
-# unrar (from non-free) handles RAR archives — the 7zip package lacks the RAR codec.
 RUN ldconfig \
-    && sed -i 's/Components: main/Components: main non-free/' /etc/apt/sources.list.d/debian.sources \
     && apt-get update && apt-get install -y --no-install-recommends \
         lftp \
         openssh-client \
-        7zip \
-        unrar \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean \
-    && ln -sf /usr/bin/7zz /usr/bin/7z
+    && apt-get clean
 
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8 \
