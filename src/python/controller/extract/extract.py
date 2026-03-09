@@ -30,8 +30,7 @@ _ARCHIVE_SIGNATURES = [
 class Extract:
     """
     Utility to extract archive files.
-    Most formats use 7z. RAR archives try 7z first (v26.00+ has RAR codec),
-    falling back to unrar for environments where 7z lacks RAR support.
+    All extraction is performed via 7z (built from source with RAR codec).
     """
 
     _7Z_TIMEOUT_SECS = 3600
@@ -137,10 +136,7 @@ class Extract:
             # For .tar.gz, .tar.bz2, .tar.xz — 7z extracts the outer compression
             # to get the .tar, then we need a second pass to extract the tar contents.
             # Detect this by checking if the inner content is a tar.
-            if fmt in ('RAR4', 'RAR5'):
-                # Try 7z first (v26.00+ includes RAR codec), fall back to unrar
-                Extract._extract_rar(archive_path, out_dir_path)
-            elif fmt in ('GZIP', 'BZIP2', 'XZ'):
+            if fmt in ('GZIP', 'BZIP2', 'XZ'):
                 # Two-pass extraction: decompress → extract tar (if applicable)
                 Extract._extract_compressed_archive(archive_path, out_dir_path)
             else:
@@ -194,43 +190,6 @@ class Extract:
                 details = "{}\n--- stdout (last 20 lines) ---\n{}".format(details, stdout_tail)
             raise ExtractError(
                 "7z failed (exit {}): {}".format(result.returncode, details)
-            )
-
-    @staticmethod
-    def _extract_rar(archive_path: str, out_dir_path: str):
-        """Extract RAR archive: try 7z first, fall back to unrar."""
-        try:
-            Extract._run_7z(archive_path, out_dir_path)
-        except ExtractError:
-            # 7z lacks RAR codec (e.g. Alpine) — fall back to unrar
-            Extract._run_unrar(archive_path, out_dir_path)
-
-    @staticmethod
-    def _run_unrar(archive_path: str, out_dir_path: str):
-        """Run unrar extraction for RAR archives."""
-        # unrar requires the output path to end with a path separator
-        if not out_dir_path.endswith(os.sep):
-            out_dir_path += os.sep
-        try:
-            result = subprocess.run(
-                ["unrar", "x", "-o+", "-y", "--", archive_path, out_dir_path],
-                capture_output=True, text=True, timeout=Extract._7Z_TIMEOUT_SECS
-            )
-        except subprocess.TimeoutExpired:
-            raise ExtractError(
-                "unrar timed out after {}s: {}".format(Extract._7Z_TIMEOUT_SECS, archive_path)
-            )
-        except FileNotFoundError:
-            raise ExtractError("Neither 7z nor unrar can extract RAR archive: {}".format(archive_path))
-
-        if result.returncode != 0:
-            details = result.stderr.strip()
-            if result.stdout.strip():
-                stdout_lines = result.stdout.strip().splitlines()
-                stdout_tail = "\n".join(stdout_lines[-20:])
-                details = "{}\n--- stdout (last 20 lines) ---\n{}".format(details, stdout_tail)
-            raise ExtractError(
-                "unrar failed (exit {}): {}".format(result.returncode, details)
             )
 
     @staticmethod

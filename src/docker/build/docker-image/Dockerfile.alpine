@@ -55,7 +55,21 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
     && find /usr/local/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 # ==============================================================================
-# Stage 3: Final Runtime Image
+# Stage 3: Build 7-Zip 26.00 from source (includes RAR codec)
+# ==============================================================================
+# The Alpine 7zip package strips the proprietary RAR codec.
+# Building from source includes full RAR1-5 support.
+FROM alpine:3.21 AS archive-tools
+
+RUN apk add --no-cache build-base curl xz \
+    && mkdir -p /tmp/7z-src \
+    && curl -sL https://www.7-zip.org/a/7z2600-src.tar.xz | tar -xJ -C /tmp/7z-src \
+    && cd /tmp/7z-src/CPP/7zip/Bundles/Alone2 \
+    && make -f makefile.gcc -j$(nproc) \
+    && cp _o/7zz /usr/local/bin/7zz
+
+# ==============================================================================
+# Stage 4: Final Runtime Image
 # ==============================================================================
 FROM alpine:3.21 AS runtime
 
@@ -65,24 +79,20 @@ LABEL maintainer="nitrobass24" \
 # Copy stripped Python runtime from python-deps stage
 COPY --from=python-deps /usr/local/ /usr/local/
 
-# Copy unrar binary from linuxserver (not packaged in Alpine).
-# The official 7zz binary is glibc-linked and won't run on Alpine (musl).
-# Alpine's 7zip package lacks the RAR codec, so unrar handles RAR archives.
-COPY --from=linuxserver/unrar /usr/bin/unrar-alpine /usr/bin/unrar
+# Copy 7zz binary built from source (with RAR codec support)
+COPY --from=archive-tools /usr/local/bin/7zz /usr/bin/7zz
+RUN ln -sf /usr/bin/7zz /usr/bin/7z
 
 # Install runtime dependencies.
 # setpriv (from util-linux) is used by entrypoint to drop privileges.
-# lftp, openssh-client, 7zip, ca-certificates are intentionally
+# lftp, openssh-client, ca-certificates are intentionally
 # unpinned to receive security updates on each image rebuild.
-# 7z handles most formats; unrar (above) handles RAR archives.
 RUN apk add --no-cache \
         lftp \
         openssh-client \
-        7zip \
         ca-certificates \
         setpriv \
-        libstdc++ \
-    && ln -sf /usr/bin/7zz /usr/bin/7z
+        libstdc++
 
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8 \
