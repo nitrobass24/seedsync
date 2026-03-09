@@ -2,7 +2,7 @@
 
 import json
 from abc import ABC, abstractmethod
-from typing import Dict, Set, List, Callable, Tuple
+from typing import Dict, Optional, Set, List, Callable, Tuple
 import fnmatch
 
 from common import overrides, Constants, Context, Persist, PersistError, Serializable
@@ -160,7 +160,7 @@ class AutoQueue:
         self.__patterns_only = context.config.autoqueue.patterns_only
         self.__auto_extract_enabled = context.config.autoqueue.auto_extract
         self.__auto_delete_remote_enabled = context.config.autoqueue.auto_delete_remote
-        self.__delete_remote_retry_cycles: Dict[str, int] = {}
+        self.__delete_remote_retry_cycles: Dict[Tuple[str, Optional[str]], int] = {}
 
         # Build per-pair auto_queue lookup.
         # When path pairs are active, per-pair auto_queue overrides the global setting.
@@ -350,7 +350,7 @@ class AutoQueue:
 
     def __filter_candidates(self,
                             candidates: List[ModelFile],
-                            accept: Callable[[ModelFile], bool]) -> List[Tuple[str, str, AutoQueuePattern]]:
+                            accept: Callable[[ModelFile], bool]) -> List[Tuple[str, Optional[str], AutoQueuePattern]]:
         """
         Given a list of candidate files, filter out those that match the accept criteria
         Also takes into consideration new patterns that were added
