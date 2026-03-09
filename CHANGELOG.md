@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.13.1] - 2026-03-09
+
+### Fixed
+
+- **RAR archive extraction** — Use source-built 7-Zip 26.00 with RAR codec support; distro packages strip the proprietary RAR codec (#204, #210, #212)
+- **Extract/move pipeline stall** — Fix `pending_completion` never clearing for files in EXTRACTED or EXTRACT_FAILED state when staging is enabled (#208)
+- **Auto-delete with path pairs** — Fix auto-queue commands missing `pair_id` for path pair configurations (#205)
+- **Pre-extraction false negatives** — Remove redundant archive verification that rejected valid archives (#207)
+
+### Changed
+
+- **Pre-built 7-Zip Docker image** — Extract 7zz binary from `ghcr.io/nitrobass24/docker-7zip` instead of compiling from source during CI (#212)
+
+### Security
+
+- **CodeQL alerts resolved** — Fix code scanning alerts identified by GitHub CodeQL (#197)
+
 ## [0.13.0] - 2026-03-06
 
 ### Added
