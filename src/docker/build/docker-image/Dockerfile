@@ -68,7 +68,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -sL https://www.7-zip.org/a/7z2600-src.tar.xz | tar -xJ -C /tmp/7z-src \
     && cd /tmp/7z-src/CPP/7zip/Bundles/Alone2 \
     && make -f makefile.gcc -j$(nproc) \
-    && cp _o/7zz /usr/local/bin/7zz
+    && cp _o/7zz /usr/local/bin/7zz \
+    && /usr/local/bin/7zz i | grep -q Rar5
 
 # ==============================================================================
 # Stage 4: Final Runtime Image
