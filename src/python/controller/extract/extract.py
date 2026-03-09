@@ -182,8 +182,15 @@ class Extract:
             raise ExtractError("7z binary not found; cannot extract archive")
 
         if result.returncode != 0:
+            # 7z puts some diagnostics in stdout, some in stderr — include both
+            details = result.stderr.strip()
+            if result.stdout.strip():
+                # Extract the tail of stdout (last 20 lines) to catch the error summary
+                stdout_lines = result.stdout.strip().splitlines()
+                stdout_tail = "\n".join(stdout_lines[-20:])
+                details = "{}\n--- stdout (last 20 lines) ---\n{}".format(details, stdout_tail)
             raise ExtractError(
-                "7z failed (exit {}): {}".format(result.returncode, result.stderr.strip())
+                "7z failed (exit {}): {}".format(result.returncode, details)
             )
 
     @staticmethod
