@@ -55,22 +55,20 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
     && find /usr/local/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 # ==============================================================================
-# Stage 3: Download official 7-Zip 26.00 (includes RAR codec)
+# Stage 3: Build 7-Zip 26.00 from source (includes RAR codec)
 # ==============================================================================
-# The Debian/Alpine 7zip packages strip the proprietary RAR codec.
-# 7-Zip 26.00+ includes RAR support in the official Linux binary.
+# The Debian 7zip package strips the proprietary RAR codec.
+# Building from source includes full RAR1-5 support.
 FROM debian:bookworm-slim AS archive-tools
 
-ARG TARGETARCH
-RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential curl xz-utils ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && case "${TARGETARCH}" in \
-         amd64) ARCH="x64" ;; \
-         arm64) ARCH="arm64" ;; \
-         *) echo "Unsupported arch: ${TARGETARCH}" && exit 1 ;; \
-       esac \
-    && wget -qO /tmp/7z.tar.xz "https://www.7-zip.org/a/7z2600-linux-${ARCH}.tar.xz" \
-    && mkdir /tmp/7z && tar -xJf /tmp/7z.tar.xz -C /tmp/7z
+    && mkdir -p /tmp/7z-src \
+    && curl -sL https://www.7-zip.org/a/7z2600-src.tar.xz | tar -xJ -C /tmp/7z-src \
+    && cd /tmp/7z-src/CPP/7zip/Bundles/Alone2 \
+    && make -f makefile.gcc -j$(nproc) \
+    && cp _o/7zz /usr/local/bin/7zz
 
 # ==============================================================================
 # Stage 4: Final Runtime Image
@@ -83,8 +81,8 @@ LABEL maintainer="nitrobass24" \
 # Copy stripped Python runtime from python-deps stage
 COPY --from=python-deps /usr/local/ /usr/local/
 
-# Copy official 7zz binary (with RAR codec support)
-COPY --from=archive-tools /tmp/7z/7zz /usr/bin/7zz
+# Copy 7zz binary built from source (with RAR codec support)
+COPY --from=archive-tools /usr/local/bin/7zz /usr/bin/7zz
 RUN ln -sf /usr/bin/7zz /usr/bin/7z
 
 # Install runtime deps in a single layer.
