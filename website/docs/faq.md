@@ -78,6 +78,36 @@ sudo yum install python3
 
 If you don't have root access, check with your seedbox provider — most will have Python 3 available at a different path or can install it on request.
 
+## What is the recommended way to set up SeedSync with my torrent client?
+
+The best approach is to use **hard links** with a dedicated completion directory. This keeps SeedSync's sync directory clean, avoids downloading files you don't want, and lets your torrents continue seeding without interference.
+
+### How it works
+
+1. **Configure your torrent client** (ruTorrent, qBittorrent, etc.) to hard link completed downloads into a dedicated directory. For example, if your client downloads to `/downloads/tv`, have it hard link completed files to `/downloads/complete`.
+2. **Point SeedSync** at the completion directory (`/downloads/complete`).
+3. **Enable Auto-Queue** and turn on **"Delete remote file after syncing"** in SeedSync settings.
+
+Hard links don't consume extra disk space on the seedbox — they create another reference to the same data on disk. When SeedSync finishes syncing and deletes from `/downloads/complete`, only the hard link is removed. The original file stays intact for seeding.
+
+### Setting up hard links
+
+- **qBittorrent**: Use [qbit-hardlinker](https://github.com/gravelfreeman/qbit-hardlinker) to automatically hard link completed downloads to your SeedSync directory.
+- **ruTorrent**: Use the "Autotools" plugin with the "Move to" option, or a post-completion script that creates hard links.
+
+### Example directory layout
+
+```
+/downloads/
+├── tv/              ← Sonarr downloads here, torrents continue seeding
+├── movies/          ← Radarr downloads here
+└── complete/        ← Hard links go here, SeedSync watches this directory
+```
+
+:::tip
+This setup also solves the common problem of setting up SeedSync on a seedbox that already has many existing files. Since only newly completed downloads get hard linked into the completion directory, SeedSync won't try to sync your entire library.
+:::
+
 ## Where are settings stored?
 
 Inside the container at `/config/settings.cfg`.

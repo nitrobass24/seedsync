@@ -223,6 +223,12 @@ Fix:
 2. Remove the conflicting directory from the remote server: `rm -rf /your/sync/path/scanfs`
 3. Restart the container
 
+### Recommended Setup with Hard Links
+
+The preferred way to use SeedSync is with a dedicated completion directory using **hard links**. Configure your torrent client to hard link completed downloads to a separate folder (e.g., `/downloads/complete`), point SeedSync at that folder, and enable auto-delete of remote files after syncing. Hard links don't use extra disk space, and your originals remain intact for seeding.
+
+See the [FAQ](https://nitrobass24.github.io/seedsync/faq#what-is-the-recommended-way-to-set-up-seedsync-with-my-torrent-client) for a detailed setup guide and [qbit-hardlinker](https://github.com/gravelfreeman/qbit-hardlinker) for qBittorrent integration.
+
 ## Report an Issue
 
 Please report issues on the [issues page](https://github.com/nitrobass24/seedsync/issues).
