@@ -2,7 +2,7 @@
 
 import json
 from abc import ABC, abstractmethod
-from typing import Dict, Set, List, Callable, Tuple
+from typing import Dict, Optional, Set, List, Callable, Tuple
 import fnmatch
 
 from common import overrides, Constants, Context, Persist, PersistError, Serializable
@@ -160,7 +160,7 @@ class AutoQueue:
         self.__patterns_only = context.config.autoqueue.patterns_only
         self.__auto_extract_enabled = context.config.autoqueue.auto_extract
         self.__auto_delete_remote_enabled = context.config.autoqueue.auto_delete_remote
-        self.__delete_remote_retry_cycles: Dict[str, int] = {}
+        self.__delete_remote_retry_cycles: Dict[Tuple[str, Optional[str]], int] = {}
 
         # Build per-pair auto_queue lookup.
         # When path pairs are active, per-pair auto_queue overrides the global setting.
@@ -282,47 +282,49 @@ class AutoQueue:
         ###
 
         # Send the queue commands
-        for filename, pattern in files_to_queue:
+        for filename, pair_id, pattern in files_to_queue:
             self.logger.info(
                 "Auto queueing '{}'".format(filename) +
                 (" for pattern '{}'".format(pattern.pattern) if pattern else "")
             )
-            command = Controller.Command(Controller.Command.Action.QUEUE, filename)
+            command = Controller.Command(Controller.Command.Action.QUEUE, filename, pair_id=pair_id)
             self.__controller.queue_command(command)
 
         # Send the extract commands
-        for filename, pattern in files_to_extract:
+        for filename, pair_id, pattern in files_to_extract:
             self.logger.info(
                 "Auto extracting '{}'".format(filename) +
                 (" for pattern '{}'".format(pattern.pattern) if pattern else "")
             )
-            command = Controller.Command(Controller.Command.Action.EXTRACT, filename)
+            command = Controller.Command(Controller.Command.Action.EXTRACT, filename, pair_id=pair_id)
             self.__controller.queue_command(command)
 
         # Send the delete remote commands (after extract so extraction happens first)
-        for filename, pattern in files_to_delete_remote:
+        for filename, pair_id, pattern in files_to_delete_remote:
             self.logger.info(
                 "Auto deleting remote '{}'".format(filename) +
                 (" for pattern '{}'".format(pattern.pattern) if pattern else "")
             )
-            command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, filename)
+            command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, filename, pair_id=pair_id)
             self.__controller.queue_command(command)
 
         # Retry delete-remote for DELETED files where remote still exists
         RETRY_INTERVAL = 20  # cycles between retries
         if self.__auto_delete_remote_enabled:
-            already_sent = {name for name, _ in files_to_delete_remote}
+            already_sent = {(name, pid) for name, pid, _ in files_to_delete_remote}
             model_files = self.__controller.get_model_files()
             new_retry_cycles = {}
             for file in model_files:
                 if file.state == ModelFile.State.DELETED and file.remote_size is not None:
-                    count = self.__delete_remote_retry_cycles.get(file.name, RETRY_INTERVAL)
-                    if file.name not in already_sent and count >= RETRY_INTERVAL:
-                        command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, file.name)
+                    retry_key = (file.name, file.pair_id)
+                    count = self.__delete_remote_retry_cycles.get(retry_key, RETRY_INTERVAL)
+                    if retry_key not in already_sent and count >= RETRY_INTERVAL:
+                        command = Controller.Command(Controller.Command.Action.DELETE_REMOTE,
+                                                     file.name, pair_id=file.pair_id)
                         self.__controller.queue_command(command)
-                        new_retry_cycles[file.name] = 0
+                        new_retry_cycles[retry_key] = 0
                     else:
-                        new_retry_cycles[file.name] = count + 1
+                        new_retry_cycles[retry_key] = count + 1
             self.__delete_remote_retry_cycles = new_retry_cycles
 
         # Clear the processed files
@@ -348,7 +350,7 @@ class AutoQueue:
 
     def __filter_candidates(self,
                             candidates: List[ModelFile],
-                            accept: Callable[[ModelFile], bool]) -> List[Tuple[str, AutoQueuePattern]]:
+                            accept: Callable[[ModelFile], bool]) -> List[Tuple[str, Optional[str], AutoQueuePattern]]:
         """
         Given a list of candidate files, filter out those that match the accept criteria
         Also takes into consideration new patterns that were added
@@ -356,10 +358,10 @@ class AutoQueue:
         new patterns
         :param candidates:
         :param accept:
-        :return: list of (filename, pattern) pairs
+        :return: list of (filename, pair_id, pattern) tuples
         """
-        # Files accepted and matched, filename -> pattern map
-        # Filename key prevents a file from being accepted twice
+        # Files accepted and matched, (name, pair_id) -> pattern map
+        # Composite key prevents a file from being accepted twice
         files_matched = dict()
 
         # Step 1: run candidates through all the patterns if they are enabled
@@ -368,10 +370,10 @@ class AutoQueue:
             if self.__patterns_only:
                 for pattern in self.__persist.patterns:
                     if accept(file) and self.__match(pattern, file):
-                        files_matched[file.name] = pattern
+                        files_matched[(file.name, file.pair_id)] = pattern
                         break
             elif accept(file):
-                files_matched[file.name] = None
+                files_matched[(file.name, file.pair_id)] = None
 
         # Step 2: run new pattern through all the files
         if self.__persist_listener.new_patterns:
@@ -379,9 +381,10 @@ class AutoQueue:
             for new_pattern in self.__persist_listener.new_patterns:
                 for file in model_files:
                     if accept(file) and self.__match(new_pattern, file):
-                        files_matched[file.name] = new_pattern
+                        files_matched[(file.name, file.pair_id)] = new_pattern
 
-        return list(zip(files_matched.keys(), files_matched.values()))
+        return [(name, pair_id, pattern)
+                for (name, pair_id), pattern in files_matched.items()]
 
     @staticmethod
     def __match(pattern: AutoQueuePattern, file: ModelFile) -> bool:
