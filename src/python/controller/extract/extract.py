@@ -30,10 +30,20 @@ _ARCHIVE_SIGNATURES = [
 class Extract:
     """
     Utility to extract archive files.
-    All extraction is performed via the 7z binary.
+    All extraction is performed via 7z (built from source with RAR codec).
     """
 
     _7Z_TIMEOUT_SECS = 3600
+
+    @staticmethod
+    def _format_7z_error(result: subprocess.CompletedProcess, prefix: str) -> str:
+        """Format a 7z failure message with both stderr and stdout details."""
+        details = result.stderr.strip()
+        if result.stdout.strip():
+            stdout_lines = result.stdout.strip().splitlines()
+            stdout_tail = "\n".join(stdout_lines[-20:])
+            details = "{}\n--- stdout (last 20 lines) ---\n{}".format(details, stdout_tail)
+        return "{} (exit {}): {}".format(prefix, result.returncode, details)
 
     @staticmethod
     def verify_archive(archive_path: str):
@@ -61,9 +71,7 @@ class Extract:
             raise ExtractError("7z binary not found; cannot verify archive")
 
         if result.returncode != 0:
-            raise ExtractError(
-                "Archive verification failed (exit {}): {}".format(result.returncode, result.stderr.strip())
-            )
+            raise ExtractError(Extract._format_7z_error(result, "Archive verification failed"))
 
     @staticmethod
     def _detect_format(archive_path: str) -> str:
@@ -182,9 +190,7 @@ class Extract:
             raise ExtractError("7z binary not found; cannot extract archive")
 
         if result.returncode != 0:
-            raise ExtractError(
-                "7z failed (exit {}): {}".format(result.returncode, result.stderr.strip())
-            )
+            raise ExtractError(Extract._format_7z_error(result, "7z failed"))
 
     @staticmethod
     def _extract_compressed_archive(archive_path: str, out_dir_path: str):

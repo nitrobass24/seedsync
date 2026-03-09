@@ -55,7 +55,24 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
     && find /usr/local/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 # ==============================================================================
-# Stage 3: Final Runtime Image
+# Stage 3: Build 7-Zip 26.00 from source (includes RAR codec)
+# ==============================================================================
+# The Debian 7zip package strips the proprietary RAR codec.
+# Building from source includes full RAR1-5 support.
+FROM debian:bookworm-slim AS archive-tools
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential curl xz-utils ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /tmp/7z-src \
+    && curl -sL https://www.7-zip.org/a/7z2600-src.tar.xz | tar -xJ -C /tmp/7z-src \
+    && cd /tmp/7z-src/CPP/7zip/Bundles/Alone2 \
+    && make -f makefile.gcc -j$(nproc) \
+    && cp _o/7zz /usr/local/bin/7zz \
+    && /usr/local/bin/7zz i | grep -q Rar5
+
+# ==============================================================================
+# Stage 4: Final Runtime Image
 # ==============================================================================
 FROM debian:bookworm-slim AS runtime
 
@@ -65,19 +82,20 @@ LABEL maintainer="nitrobass24" \
 # Copy stripped Python runtime from python-deps stage
 COPY --from=python-deps /usr/local/ /usr/local/
 
+# Copy 7zz binary built from source (with RAR codec support)
+COPY --from=archive-tools /usr/local/bin/7zz /usr/bin/7zz
+RUN ln -sf /usr/bin/7zz /usr/bin/7z
+
 # Install runtime deps in a single layer.
-# lftp, openssh-client, 7zip, ca-certificates are intentionally unpinned
+# lftp, openssh-client, ca-certificates are intentionally unpinned
 # to receive security updates on each image rebuild.
-# 7z handles all archive formats (zip, rar, 7z, tar, gz, bz2, xz).
 RUN ldconfig \
     && apt-get update && apt-get install -y --no-install-recommends \
         lftp \
         openssh-client \
-        7zip \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean \
-    && ln -sf /usr/bin/7zz /usr/bin/7z
+    && apt-get clean
 
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8 \
