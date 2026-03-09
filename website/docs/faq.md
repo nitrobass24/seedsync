@@ -88,16 +88,20 @@ The best approach is to use **hard links** with a dedicated completion directory
 2. **Point SeedSync** at the completion directory (`/downloads/complete`).
 3. **Enable Auto-Queue** and turn on **"Delete remote file after syncing"** in SeedSync settings.
 
+:::note
+Hard links only work when both directories are on the **same filesystem**. If your download and completion directories are on different mounts, use a bind mount to place them on the same filesystem, or use a copy-on-complete script instead (at the cost of extra disk space).
+:::
+
 Hard links don't consume extra disk space on the seedbox — they create another reference to the same data on disk. When SeedSync finishes syncing and deletes from `/downloads/complete`, only the hard link is removed. The original file stays intact for seeding.
 
 ### Setting up hard links
 
 - **qBittorrent**: Use [qbit-hardlinker](https://github.com/gravelfreeman/qbit-hardlinker) to automatically hard link completed downloads to your SeedSync directory.
-- **ruTorrent**: Use the "Autotools" plugin with the "Move to" option, or a post-completion script that creates hard links.
+- **ruTorrent**: Use a post-completion script that creates hard links. Note that the Autotools "Move to" option performs a *move*, not a hard link — this would break seeding since the original file is relocated.
 
 ### Example directory layout
 
-```
+```text
 /downloads/
 ├── tv/              ← Sonarr downloads here, torrents continue seeding
 ├── movies/          ← Radarr downloads here
