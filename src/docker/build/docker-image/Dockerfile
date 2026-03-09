@@ -59,7 +59,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
 # ==============================================================================
 # The Debian/Alpine 7zip packages strip the proprietary RAR codec.
 # The official 7zz binary from 7-zip.org includes full RAR support.
-FROM debian:bookworm-slim AS 7zip-downloader
+FROM debian:bookworm-slim AS archive-tools
 
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends wget xz-utils \
@@ -84,7 +84,7 @@ LABEL maintainer="nitrobass24" \
 COPY --from=python-deps /usr/local/ /usr/local/
 
 # Copy official 7zz binary (with RAR codec support)
-COPY --from=7zip-downloader /tmp/7z/7zz /usr/bin/7zz
+COPY --from=archive-tools /tmp/7z/7zz /usr/bin/7zz
 RUN ln -sf /usr/bin/7zz /usr/bin/7z
 
 # Install runtime deps in a single layer.
