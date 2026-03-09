@@ -62,7 +62,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
 FROM alpine:3.21 AS archive-tools
 
 ARG TARGETARCH
-RUN apk add --no-cache wget xz \
+RUN apk add --no-cache wget xz ca-certificates \
     && case "${TARGETARCH}" in \
          amd64) ARCH="x64" ;; \
          arm64) ARCH="arm64" ;; \
