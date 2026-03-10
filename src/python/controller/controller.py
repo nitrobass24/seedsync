@@ -42,12 +42,12 @@ class ControllerError(AppError):
 _KEY_SEP = "\x1f"
 
 
-def _persist_key(pair_id, name: str) -> str:
+def _persist_key(pair_id: Optional[str], name: str) -> str:
     """Build a namespaced persist key: 'pair_id<US>name' or plain 'name' for default pair."""
     return "{}{}{}".format(pair_id, _KEY_SEP, name) if pair_id else name
 
 
-def _strip_persist_key(key: str, pair_id) -> str:
+def _strip_persist_key(key: str, pair_id: Optional[str]) -> str:
     """Strip pair_id prefix from a persist key to get the bare file name.
 
     Handles both the current unit-separator (\\x1f) and the legacy colon (':')
