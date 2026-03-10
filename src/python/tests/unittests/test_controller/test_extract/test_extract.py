@@ -168,9 +168,9 @@ class TestExtractTwoPassTarVsPlain(unittest.TestCase):
                 with tarfile.open(tar_inner, 'w') as tar:
                     tar.add(self.inner_file, arcname="inner_file.txt")
             else:
-                # Second pass: extract the tar contents
-                with tarfile.open(archive_path) as tar:
-                    tar.extractall(out_dir_path)
+                # Second pass: simulate 7z extracting the tar contents
+                with open(os.path.join(out_dir_path, "inner_file.txt"), 'wb') as f:
+                    f.write(self.file_content)
 
         with patch.object(Extract, '_run_7z', side_effect=fake_run_7z):
             Extract.extract_archive(self.tar_gz_path, self.out_dir)
