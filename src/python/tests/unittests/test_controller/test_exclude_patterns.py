@@ -183,3 +183,40 @@ class TestFilterExcludedFilesRecursive(unittest.TestCase):
         result = filter_excluded_files([d], "*.nfo, *.txt, Sample")
         self.assertEqual(1, len(result))
         self.assertEqual(["ep.mkv"], [c.name for c in result[0].children])
+
+    def test_special_characters_in_filenames(self):
+        """Files with spaces, brackets, and other special chars should match correctly."""
+        d = self._make_dir("show", [
+            SystemFile("Episode [720p].mkv", 100, False),
+            SystemFile("Episode [720p].nfo", 5, False),
+            SystemFile("file (1).txt", 3, False),
+        ])
+        result = filter_excluded_files([d], "*.nfo, *.txt")
+        self.assertEqual(1, len(result))
+        self.assertEqual(["Episode [720p].mkv"], [c.name for c in result[0].children])
+
+    def test_all_children_filtered_leaves_empty_dir(self):
+        """When all children of a dir are excluded, the dir should remain but be empty."""
+        d = self._make_dir("show", [
+            SystemFile("info.nfo", 5, False),
+            SystemFile("poster.nfo", 3, False),
+        ])
+        result = filter_excluded_files([d], "*.nfo")
+        self.assertEqual(1, len(result))
+        self.assertEqual("show", result[0].name)
+        self.assertEqual([], result[0].children)
+
+    def test_four_levels_deep(self):
+        """Patterns should apply even at 4 levels of nesting."""
+        l3 = self._make_dir("sub", [
+            SystemFile("deep.nfo", 1, False),
+            SystemFile("deep.mkv", 100, False),
+        ])
+        l2 = self._make_dir("season1", [l3])
+        l1 = self._make_dir("show", [l2])
+        root = self._make_dir("library", [l1])
+        result = filter_excluded_files([root], "*.nfo")
+        # Navigate to the deepest level
+        deep = result[0].children[0].children[0].children[0]
+        self.assertEqual("sub", deep.name)
+        self.assertEqual(["deep.mkv"], [c.name for c in deep.children])
