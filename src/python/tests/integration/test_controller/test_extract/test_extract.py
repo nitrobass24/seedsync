@@ -101,6 +101,8 @@ class TestExtract(unittest.TestCase):
         self.assertTrue(Extract.is_archive_fast("c.bz2"))
         self.assertTrue(Extract.is_archive_fast("d.tar.gz"))
         self.assertTrue(Extract.is_archive_fast("e.7z"))
+        self.assertTrue(Extract.is_archive_fast("f.lz"))
+        self.assertTrue(Extract.is_archive_fast("g.zipx"))
 
         self.assertFalse(Extract.is_archive_fast("a"))
         self.assertFalse(Extract.is_archive_fast("a.b"))
@@ -140,6 +142,20 @@ class TestExtract(unittest.TestCase):
     def test_is_archive_rar_split(self):
         self.assertTrue(Extract.is_archive(TestExtract.ar_rar_split_p1))
         self.assertTrue(Extract.is_archive(TestExtract.ar_rar_split_p2))
+
+    def test_is_archive_lzip_magic_bytes(self):
+        """is_archive detects Lzip files via LZIP magic bytes."""
+        path = os.path.join(TestExtract.temp_dir, "file.lz")
+        # LZIP magic bytes: 0x4C 0x5A 0x49 0x50 followed by version byte
+        with open(path, 'wb') as f:
+            f.write(b'\x4C\x5A\x49\x50\x01' + os.urandom(64))
+        self.assertTrue(Extract.is_archive(path))
+
+    def test_is_archive_zipx_uses_zip_magic_bytes(self):
+        """A .zipx file with ZIP magic bytes is detected as an archive."""
+        path = os.path.join(TestExtract.temp_dir, "file.zipx")
+        shutil.copy(TestExtract.ar_zip, path)
+        self.assertTrue(Extract.is_archive(path))
 
     def test_is_archive_tar_gz(self):
         self.assertTrue(Extract.is_archive(TestExtract.ar_tar_gz))
