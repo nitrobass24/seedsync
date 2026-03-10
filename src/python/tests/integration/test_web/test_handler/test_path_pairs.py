@@ -278,7 +278,7 @@ class TestPathPairsHandler(BaseTestWebApp):
         self.assertEqual(404, resp.status_int)
 
     def test_update_duplicate_name(self):
-        p1 = self._add_pair(name="Movies")
+        self._add_pair(name="Movies")
         p2 = self._add_pair(name="TV", remote_path="/r/tv",
                             local_path="/l/tv")
         data = {"name": "Movies"}
