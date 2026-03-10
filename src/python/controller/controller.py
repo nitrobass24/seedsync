@@ -3,7 +3,7 @@
 import os
 import fnmatch
 from abc import ABC, abstractmethod
-from typing import Dict, List, Callable, Optional, Set
+from typing import List, Callable, Optional, Set
 from threading import Lock
 from queue import Queue
 from enum import Enum
