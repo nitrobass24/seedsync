@@ -21,14 +21,50 @@ from .delete import DeleteLocalProcess, DeleteRemoteProcess
 from .move import MoveProcess
 
 
+def _matches_exclude(name: str, patterns: List[str]) -> bool:
+    """Return True if *name* matches any of the exclude patterns (case-insensitive)."""
+    return any(fnmatch.fnmatch(name.lower(), p.lower()) for p in patterns)
+
+
+def _filter_children(file, patterns: List[str]):
+    """Return a copy of *file* with excluded children (and their subtrees) removed.
+
+    If a directory child matches a pattern the entire subtree is dropped.
+    Non-matching directory children are recursed into so their own children
+    are filtered as well.
+    """
+    from system import SystemFile  # avoid circular import at module level
+
+    filtered = SystemFile(
+        name=file.name,
+        size=file.size,
+        is_dir=file.is_dir,
+        time_created=file.timestamp_created,
+        time_modified=file.timestamp_modified,
+    )
+    for child in file.children:
+        if _matches_exclude(child.name, patterns):
+            continue  # drop matched child (and its subtree)
+        if child.is_dir and child.children:
+            child = _filter_children(child, patterns)
+        filtered.add_child(child)
+    return filtered
+
+
 def filter_excluded_files(files: List, exclude_patterns_str: str) -> List:
     if not exclude_patterns_str or not exclude_patterns_str.strip():
         return files
     patterns = [p.strip() for p in exclude_patterns_str.split(",") if p.strip()]
     if not patterns:
         return files
-    return [f for f in files
-            if not any(fnmatch.fnmatch(f.name.lower(), p.lower()) for p in patterns)]
+    result = []
+    for f in files:
+        if _matches_exclude(f.name, patterns):
+            continue
+        if f.is_dir and f.children:
+            f = _filter_children(f, patterns)
+        result.append(f)
+    return result
 
 
 class ControllerError(AppError):
