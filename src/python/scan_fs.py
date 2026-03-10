@@ -178,8 +178,8 @@ class SystemScanner:
 
 
 if __name__ == "__main__":
-    if sys.hexversion < 0x03050000:
-        sys.exit("Python 3.5 or newer is required to run this program.")
+    if sys.hexversion < 0x03060000:
+        sys.exit("Python 3.6 or newer is required to run this program.")
 
     import argparse
     parser = argparse.ArgumentParser(description="File size scanner")
