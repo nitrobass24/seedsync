@@ -50,6 +50,14 @@ export class ViewFileService {
       for (const pair of pairs) {
         this.pairNameMap.set(pair.id, pair.name);
       }
+      // Rebuild pairName on existing view files immediately
+      if (this.files.length > 0) {
+        this.files = this.files.map(f => ({
+          ...f,
+          pairName: f.pairId ? (this.pairNameMap.get(f.pairId) ?? null) : null,
+        }));
+        this.pushViewFiles();
+      }
     });
 
     this.modelFileService.files$.subscribe({

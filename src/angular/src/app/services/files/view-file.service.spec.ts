@@ -563,15 +563,14 @@ describe("ViewFileService", () => {
     expect(latestFiles()[0].pairName).toBeNull();
   });
 
-  it("should resolve pairName when pairs arrive before model files", () => {
+  it("should update pairName immediately when pairs$ emits after model files", () => {
     // Pairs not yet known
     pairsSubject.next([]);
     emitModelFiles([makeModelFile({ name: "file1", pair_id: "pair-a", remote_size: 100 })]);
     expect(latestFiles()[0].pairName).toBeNull();
 
-    // Pairs arrive, then model file changes trigger rebuild
+    // Pairs arrive — view should rebuild automatically without new model file emission
     pairsSubject.next([{ id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false }]);
-    emitModelFiles([makeModelFile({ name: "file1", pair_id: "pair-a", remote_size: 100, local_size: 50 })]);
     expect(latestFiles()[0].pairName).toBe("Seedbox");
   });
 
