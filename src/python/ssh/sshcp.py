@@ -12,7 +12,7 @@ from common import AppError
 
 # pexpect.spawn uses forkpty which triggers a DeprecationWarning in
 # multi-threaded processes. This is safe because the forked child
-# immediately exec's the lftp binary — no Python code runs post-fork.
+# immediately exec's the ssh/scp/sftp binary — no Python code runs post-fork.
 warnings.filterwarnings("ignore", message=".*fork.*", category=DeprecationWarning)
 
 

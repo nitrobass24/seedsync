@@ -3,7 +3,7 @@
 import unittest
 import logging
 import sys
-import time
+
 from unittest.mock import MagicMock
 
 from controller import IScanner, ScannerProcess, ScannerError
@@ -59,7 +59,7 @@ class TestScannerProcess(unittest.TestCase):
         # Scan #0: single file with children
         mock_scanner.scan.return_value = [a]
         process.run_loop()
-        time.sleep(0.1)  # let multiprocessing.Queue flush
+
         result = process.pop_latest_result()
         self.assertIsNotNone(result)
         self.assertEqual(1, len(result.files))
@@ -77,7 +77,7 @@ class TestScannerProcess(unittest.TestCase):
         # Scan #1: two files with nested children
         mock_scanner.scan.return_value = [a, b]
         process.run_loop()
-        time.sleep(0.1)
+
         result = process.pop_latest_result()
         self.assertIsNotNone(result)
         self.assertEqual(2, len(result.files))
@@ -97,7 +97,7 @@ class TestScannerProcess(unittest.TestCase):
         # Scan #2: single file
         mock_scanner.scan.return_value = [c]
         process.run_loop()
-        time.sleep(0.1)
+
         result = process.pop_latest_result()
         self.assertIsNotNone(result)
         self.assertEqual(1, len(result.files))
@@ -108,7 +108,7 @@ class TestScannerProcess(unittest.TestCase):
         # Scan #3: empty
         mock_scanner.scan.return_value = []
         process.run_loop()
-        time.sleep(0.1)
+
         result = process.pop_latest_result()
         self.assertIsNotNone(result)
         self.assertEqual(0, len(result.files))
@@ -121,7 +121,7 @@ class TestScannerProcess(unittest.TestCase):
         process = ScannerProcess(scanner=mock_scanner, interval_in_ms=100)
         process.run_init()
         process.run_loop()
-        time.sleep(0.1)  # let multiprocessing.Queue flush
+
 
         result = process.pop_latest_result()
         self.assertIsNotNone(result)
