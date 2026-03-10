@@ -45,7 +45,7 @@ def _filter_children(file, patterns: List[str]):
     for child in file.children:
         if _matches_exclude(child.name, patterns):
             continue  # drop matched child (and its subtree)
-        if child.is_dir and child.children:
+        if child.is_dir:
             child = _filter_children(child, patterns)
         filtered.add_child(child)
     return filtered
@@ -61,7 +61,7 @@ def filter_excluded_files(files: List, exclude_patterns_str: str) -> List:
     for f in files:
         if _matches_exclude(f.name, patterns):
             continue
-        if f.is_dir and f.children:
+        if f.is_dir:
             f = _filter_children(f, patterns)
         result.append(f)
     return result
