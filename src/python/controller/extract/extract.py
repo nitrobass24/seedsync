@@ -196,7 +196,7 @@ class Extract:
     @staticmethod
     def _extract_compressed_archive(archive_path: str, out_dir_path: str):
         """
-        Handle .tar.gz, .tar.bz2, .tar.xz and plain .gz, .bz2, .xz files.
+        Handle .tar.gz, .tar.bz2, .tar.xz, .tar.lz and plain .gz, .bz2, .xz, .lz files.
         First pass decompresses to a temp location; if the result is a tar,
         second pass extracts the tar. Otherwise moves the decompressed file.
         """
