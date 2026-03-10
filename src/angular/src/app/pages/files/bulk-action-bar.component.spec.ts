@@ -17,6 +17,15 @@ describe('BulkActionBarComponent', () => {
     component = fixture.componentInstance;
   });
 
+  function findButtonByText(text: string): HTMLButtonElement {
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
+    const btn = buttons.find((el) => el.textContent?.includes(text));
+    expect(btn).toBeTruthy();
+    return btn!;
+  }
+
   it('should create the component', () => {
     expect(component).toBeTruthy();
   });
@@ -40,8 +49,7 @@ describe('BulkActionBarComponent', () => {
     let emitted = false;
     component.queueEvent.subscribe(() => (emitted = true));
 
-    const btn = fixture.nativeElement.querySelector('button:nth-of-type(1)') as HTMLButtonElement;
-    expect(btn.textContent).toContain('Queue');
+    const btn = findButtonByText('Queue');
     btn.click();
 
     expect(emitted).toBe(true);
@@ -51,8 +59,7 @@ describe('BulkActionBarComponent', () => {
     let emitted = false;
     component.stopEvent.subscribe(() => (emitted = true));
 
-    const btn = fixture.nativeElement.querySelector('button:nth-of-type(2)') as HTMLButtonElement;
-    expect(btn.textContent).toContain('Stop');
+    const btn = findButtonByText('Stop');
     btn.click();
 
     expect(emitted).toBe(true);
@@ -62,8 +69,7 @@ describe('BulkActionBarComponent', () => {
     let emitted = false;
     component.deleteLocalEvent.subscribe(() => (emitted = true));
 
-    const btn = fixture.nativeElement.querySelector('button:nth-of-type(3)') as HTMLButtonElement;
-    expect(btn.textContent).toContain('Delete Local');
+    const btn = findButtonByText('Delete Local');
     btn.click();
 
     expect(emitted).toBe(true);
@@ -73,8 +79,7 @@ describe('BulkActionBarComponent', () => {
     let emitted = false;
     component.deleteRemoteEvent.subscribe(() => (emitted = true));
 
-    const btn = fixture.nativeElement.querySelector('button:nth-of-type(4)') as HTMLButtonElement;
-    expect(btn.textContent).toContain('Delete Remote');
+    const btn = findButtonByText('Delete Remote');
     btn.click();
 
     expect(emitted).toBe(true);
@@ -84,8 +89,7 @@ describe('BulkActionBarComponent', () => {
     let emitted = false;
     component.clearEvent.subscribe(() => (emitted = true));
 
-    const btn = fixture.nativeElement.querySelector('button:nth-of-type(5)') as HTMLButtonElement;
-    expect(btn.textContent).toContain('Clear');
+    const btn = findButtonByText('Clear');
     btn.click();
 
     expect(emitted).toBe(true);

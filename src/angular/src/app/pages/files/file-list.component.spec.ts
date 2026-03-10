@@ -6,7 +6,6 @@ import { FileListComponent } from './file-list.component';
 import { ViewFileService } from '../../services/files/view-file.service';
 import { ViewFileOptionsService } from '../../services/files/view-file-options.service';
 import { LoggerService } from '../../services/utils/logger.service';
-import { WebReaction } from '../../services/utils/rest.service';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
 import { ViewFileOptions, SortMethod } from '../../models/view-file-options';
 
