@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import copy
 import json
 import logging
 import os
@@ -104,7 +105,7 @@ class PathPairsConfig(Persist):
         with self._lock:
             for p in self._pairs:
                 if p.id == pair_id:
-                    return p
+                    return copy.deepcopy(p)
             return None
 
     def add_pair(self, pair: PathPair):

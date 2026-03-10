@@ -84,7 +84,7 @@ describe("ViewFileService", () => {
   function emitModelFiles(files: ModelFile[]): void {
     const map = new Map<string, ModelFile>();
     for (const f of files) {
-      const key = f.pair_id ? `${f.pair_id}:${f.name}` : f.name;
+      const key = f.pair_id ? `${f.pair_id}\x1f${f.name}` : f.name;
       map.set(key, f);
     }
     modelFilesSubject.next(map);

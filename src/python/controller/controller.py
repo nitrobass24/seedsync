@@ -3,7 +3,7 @@
 import os
 import fnmatch
 from abc import ABC, abstractmethod
-from typing import Dict, List, Callable, Optional, Set
+from typing import List, Callable, Optional, Set
 from threading import Lock
 from queue import Queue
 from enum import Enum
@@ -74,16 +74,28 @@ class ControllerError(AppError):
     pass
 
 
-def _persist_key(pair_id, name: str) -> str:
-    """Build a namespaced persist key: 'pair_id:name' or plain 'name' for default pair."""
-    return "{}:{}".format(pair_id, name) if pair_id else name
+# ASCII Unit Separator – safe composite-key delimiter that cannot appear in filenames
+_KEY_SEP = "\x1f"
 
 
-def _strip_persist_key(key: str, pair_id) -> str:
-    """Strip pair_id prefix from a persist key to get the bare file name."""
-    prefix = "{}:".format(pair_id) if pair_id else ""
-    if prefix and key.startswith(prefix):
-        return key[len(prefix):]
+def _persist_key(pair_id: Optional[str], name: str) -> str:
+    """Build a namespaced persist key: 'pair_id<US>name' or plain 'name' for default pair."""
+    return "{}{}{}".format(pair_id, _KEY_SEP, name) if pair_id else name
+
+
+def _strip_persist_key(key: str, pair_id: Optional[str]) -> str:
+    """Strip pair_id prefix from a persist key to get the bare file name.
+
+    Handles both the current unit-separator (\\x1f) and the legacy colon (':')
+    delimiter so that old persisted keys are still correctly parsed.
+    """
+    if not pair_id:
+        return key
+    # Try the current separator first, then legacy colon
+    for sep in (_KEY_SEP, ":"):
+        prefix = "{}{}".format(pair_id, sep)
+        if key.startswith(prefix):
+            return key[len(prefix):]
     return key
 
 
@@ -774,25 +786,31 @@ class Controller:
 
     def _sync_persist_to_all_builders(self):
         """Push current persist state to all pair model builders, filtered by pair_id."""
+        namespaced_prefixes = tuple(
+            f"{other_pc.pair_id}{sep}"
+            for other_pc in self.__pair_contexts
+            if other_pc.pair_id
+            for sep in (_KEY_SEP, ":")
+        )
         for pc in self.__pair_contexts:
-            prefix = "{}:".format(pc.pair_id) if pc.pair_id else ""
+            prefix = f"{pc.pair_id}{_KEY_SEP}" if pc.pair_id else ""
             downloaded = set()
             extracted = set()
             extract_failed = set()
             for key in self.__persist.downloaded_file_names:
                 if prefix and key.startswith(prefix):
                     downloaded.add(key[len(prefix):])
-                elif not prefix and ":" not in key:
+                elif not prefix and not key.startswith(namespaced_prefixes):
                     downloaded.add(key)
             for key in self.__persist.extracted_file_names:
                 if prefix and key.startswith(prefix):
                     extracted.add(key[len(prefix):])
-                elif not prefix and ":" not in key:
+                elif not prefix and not key.startswith(namespaced_prefixes):
                     extracted.add(key)
             for key in self.__persist.extract_failed_file_names:
                 if prefix and key.startswith(prefix):
                     extract_failed.add(key[len(prefix):])
-                elif not prefix and ":" not in key:
+                elif not prefix and not key.startswith(namespaced_prefixes):
                     extract_failed.add(key)
             pc.model_builder.set_downloaded_files(downloaded)
             pc.model_builder.set_extracted_files(extracted)
