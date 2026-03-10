@@ -794,6 +794,8 @@ class Controller:
         )
         for pc in self.__pair_contexts:
             prefix = f"{pc.pair_id}{_KEY_SEP}" if pc.pair_id else ""
+            # Defense-in-depth: from_str() migrates colon keys at load time,
+            # but we check both separators here in case of incomplete migration.
             legacy_prefix = f"{pc.pair_id}:" if pc.pair_id else ""
             downloaded = set()
             extracted = set()

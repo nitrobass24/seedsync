@@ -73,6 +73,7 @@ export class PathPairsComponent implements OnDestroy {
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((created) => {
       if (!created) {
+        this.errorMessage = 'Failed to create path pair. Please try again.';
         this.cdr.markForCheck();
         return;
       }
@@ -119,6 +120,7 @@ export class PathPairsComponent implements OnDestroy {
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((updated) => {
       if (!updated) {
+        this.errorMessage = 'Failed to update path pair. Please try again.';
         this.cdr.markForCheck();
         return;
       }
@@ -137,6 +139,7 @@ export class PathPairsComponent implements OnDestroy {
         takeUntilDestroyed(this.destroyRef),
       ).subscribe((success) => {
         if (success) {
+          this.errorMessage = null;
           this.confirmingDeleteId = null;
         } else {
           this.errorMessage = 'Failed to delete path pair. Please try again.';
