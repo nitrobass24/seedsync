@@ -1,6 +1,7 @@
 import json
 import logging
 import threading
+import time
 import urllib.request
 from datetime import datetime, timezone
 
@@ -50,7 +51,7 @@ class WebhookNotifier(IModelListener):
         """Drain in-flight webhook threads and prevent new ones from being queued.
 
         Args:
-            timeout: Maximum seconds to wait for in-flight threads to complete.
+            timeout: Maximum total seconds to wait for all in-flight threads to complete.
         """
         with self._lock:
             self._shutdown_flag = True
@@ -61,16 +62,18 @@ class WebhookNotifier(IModelListener):
             return
 
         self._logger.info("Webhook notifier shutting down, waiting for %d in-flight thread(s)", len(threads))
+        deadline = time.monotonic() + timeout
         for thread in threads:
-            thread.join(timeout=timeout)
+            remaining = max(0, deadline - time.monotonic())
+            thread.join(timeout=remaining)
 
         with self._lock:
-            remaining = [t for t in self._active_threads if t.is_alive()]
+            still_alive = [t for t in self._active_threads if t.is_alive()]
 
-        if remaining:
+        if still_alive:
             self._logger.warning(
                 "Webhook notifier shutdown: %d thread(s) did not complete within %.1fs timeout",
-                len(remaining), timeout
+                len(still_alive), timeout
             )
         else:
             self._logger.info("Webhook notifier shutdown: all threads completed")
@@ -78,11 +81,6 @@ class WebhookNotifier(IModelListener):
     def _fire_webhook(self, event_type: str, filename: str,
                        pair_id: str = None, full_path: str = None):
         """Fire-and-forget POST in a daemon thread."""
-        with self._lock:
-            if self._shutdown_flag:
-                self._logger.debug("Webhook suppressed during shutdown: %s %s", event_type, filename)
-                return
-
         url = self._config.notifications.webhook_url
         payload = {
             "event_type": event_type,
@@ -99,6 +97,9 @@ class WebhookNotifier(IModelListener):
             daemon=True
         )
         with self._lock:
+            if self._shutdown_flag:
+                self._logger.debug("Webhook suppressed during shutdown: %s %s", event_type, filename)
+                return
             self._active_threads.add(thread)
         thread.start()
 
