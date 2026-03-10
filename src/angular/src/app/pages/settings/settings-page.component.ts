@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, OnDestroy, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AsyncPipe, NgTemplateOutlet } from '@angular/common';
-import { Subscription, distinctUntilChanged, map } from 'rxjs';
+import { distinctUntilChanged, map } from 'rxjs';
 
 import { LoggerService } from '../../services/utils/logger.service';
 import { ConfigService } from '../../services/settings/config.service';
@@ -36,7 +37,7 @@ import {
   styleUrls: ['./settings-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class SettingsPageComponent implements OnInit, OnDestroy {
+export class SettingsPageComponent implements OnInit {
   serverContext: IOptionsContext = OPTIONS_CONTEXT_SERVER;
   autoqueueContext: IOptionsContext = OPTIONS_CONTEXT_AUTOQUEUE;
   readonly OPTIONS_CONTEXT_DISCOVERY = OPTIONS_CONTEXT_DISCOVERY;
@@ -57,6 +58,7 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
   private readonly connectedService = inject(ConnectedService);
   private readonly pathPairsService = inject(PathPairsService);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly config$ = this.configService.config$;
 
@@ -67,39 +69,31 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
     Localization.Notification.CONFIG_RESTART,
   );
   private badValueNotifs = new Map<string, Notification>();
-  private subscriptions: Subscription[] = [];
 
   private static readonly OVERRIDE_NOTE = 'Overridden by Path Pairs when any pair is enabled';
 
   ngOnInit(): void {
-    this.subscriptions.push(
-      this.connectedService.connected$.subscribe({
-        next: (connected: boolean) => {
-          if (!connected) {
-            this.notifService.hide(this.configRestartNotif);
-          }
-          this.commandsEnabled = connected;
-          this.cdr.markForCheck();
-        },
-      }),
-    );
-
-    this.subscriptions.push(
-      this.pathPairsService.pairs$.pipe(
-        map((pairs) => pairs.some((p) => p.enabled)),
-        distinctUntilChanged(),
-      ).subscribe((hasEnabledPairs) => {
-        this.serverContext = SettingsPageComponent.buildServerContext(hasEnabledPairs);
-        this.autoqueueContext = SettingsPageComponent.buildAutoqueueContext(hasEnabledPairs);
+    this.connectedService.connected$.pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
+      next: (connected: boolean) => {
+        if (!connected) {
+          this.notifService.hide(this.configRestartNotif);
+        }
+        this.commandsEnabled = connected;
         this.cdr.markForCheck();
-      }),
-    );
-  }
+      },
+    });
 
-  ngOnDestroy(): void {
-    for (const s of this.subscriptions) {
-      s.unsubscribe();
-    }
+    this.pathPairsService.pairs$.pipe(
+      map((pairs) => pairs.some((p) => p.enabled)),
+      distinctUntilChanged(),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((hasEnabledPairs) => {
+      this.serverContext = SettingsPageComponent.buildServerContext(hasEnabledPairs);
+      this.autoqueueContext = SettingsPageComponent.buildAutoqueueContext(hasEnabledPairs);
+      this.cdr.markForCheck();
+    });
   }
 
   private static buildServerContext(hasEnabledPairs: boolean): IOptionsContext {

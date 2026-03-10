@@ -1,4 +1,5 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { ROUTE_INFOS } from '../../routes';
@@ -24,15 +25,20 @@ export class SidebarComponent implements OnInit {
   private readonly _connectedService = inject(ConnectedService);
   private readonly _commandService = inject(ServerCommandService);
   private readonly _themeService = inject(ThemeService);
+  private readonly _destroyRef = inject(DestroyRef);
 
   ngOnInit() {
-    this._connectedService.connected$.subscribe({
+    this._connectedService.connected$.pipe(
+      takeUntilDestroyed(this._destroyRef),
+    ).subscribe({
       next: (connected: boolean) => {
         this.commandsEnabled = connected;
       }
     });
 
-    this._themeService.theme$.subscribe({
+    this._themeService.theme$.pipe(
+      takeUntilDestroyed(this._destroyRef),
+    ).subscribe({
       next: (theme: Theme) => {
         this.theme = theme;
       }

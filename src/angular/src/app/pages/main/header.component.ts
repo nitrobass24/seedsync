@@ -1,4 +1,5 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { Observable } from 'rxjs';
 
@@ -23,6 +24,7 @@ export class HeaderComponent implements OnInit {
   private readonly _logger = inject(LoggerService);
   private readonly _serverStatusService = inject(ServerStatusService);
   private readonly _notificationService = inject(NotificationService);
+  private readonly _destroyRef = inject(DestroyRef);
 
   private _prevServerNotification: Notification | null = null;
   private _prevWaitingForRemoteScanNotification: Notification | null = null;
@@ -39,7 +41,9 @@ export class HeaderComponent implements OnInit {
 
   ngOnInit() {
     // Set up a subscriber to show server status notifications
-    this._serverStatusService.status$.subscribe({
+    this._serverStatusService.status$.pipe(
+      takeUntilDestroyed(this._destroyRef),
+    ).subscribe({
       next: status => {
         if (status.server.up) {
           if (this._prevServerNotification != null) {
@@ -67,7 +71,9 @@ export class HeaderComponent implements OnInit {
     });
 
     // Set up a subscriber to show waiting for remote scan notification
-    this._serverStatusService.status$.subscribe({
+    this._serverStatusService.status$.pipe(
+      takeUntilDestroyed(this._destroyRef),
+    ).subscribe({
       next: status => {
         if (status.server.up && status.controller.latestRemoteScanTime == null && !status.controller.noEnabledPairs) {
           if (this._prevWaitingForRemoteScanNotification == null) {
@@ -87,7 +93,9 @@ export class HeaderComponent implements OnInit {
     });
 
     // Set up a subscriber to show remote server error notifications
-    this._serverStatusService.status$.subscribe({
+    this._serverStatusService.status$.pipe(
+      takeUntilDestroyed(this._destroyRef),
+    ).subscribe({
       next: status => {
         if (status.server.up && status.controller.latestRemoteScanFailed === true && !status.controller.noEnabledPairs) {
           const level = NotificationLevel.WARNING;
@@ -113,7 +121,9 @@ export class HeaderComponent implements OnInit {
     });
 
     // Set up a subscriber to show no-enabled-pairs notification
-    this._serverStatusService.status$.subscribe({
+    this._serverStatusService.status$.pipe(
+      takeUntilDestroyed(this._destroyRef),
+    ).subscribe({
       next: status => {
         if (status.server.up && status.controller.noEnabledPairs) {
           if (this._prevNoEnabledPairsNotification == null) {
