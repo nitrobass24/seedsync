@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { AsyncPipe } from '@angular/common';
+import { AsyncPipe, NgTemplateOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { EMPTY, Subscription } from 'rxjs';
 import { catchError } from 'rxjs/operators';
@@ -11,7 +11,7 @@ import { PathPair } from '../../models/path-pair';
 @Component({
   selector: 'app-path-pairs',
   standalone: true,
-  imports: [FormsModule, AsyncPipe],
+  imports: [FormsModule, AsyncPipe, NgTemplateOutlet],
   templateUrl: './path-pairs.component.html',
   styleUrls: ['./path-pairs.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
