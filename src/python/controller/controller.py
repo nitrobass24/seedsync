@@ -48,10 +48,18 @@ def _persist_key(pair_id, name: str) -> str:
 
 
 def _strip_persist_key(key: str, pair_id) -> str:
-    """Strip pair_id prefix from a persist key to get the bare file name."""
-    prefix = "{}{}".format(pair_id, _KEY_SEP) if pair_id else ""
-    if prefix and key.startswith(prefix):
-        return key[len(prefix):]
+    """Strip pair_id prefix from a persist key to get the bare file name.
+
+    Handles both the current unit-separator (\\x1f) and the legacy colon (':')
+    delimiter so that old persisted keys are still correctly parsed.
+    """
+    if not pair_id:
+        return key
+    # Try the current separator first, then legacy colon
+    for sep in (_KEY_SEP, ":"):
+        prefix = "{}{}".format(pair_id, sep)
+        if key.startswith(prefix):
+            return key[len(prefix):]
     return key
 
 
