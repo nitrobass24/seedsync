@@ -24,7 +24,7 @@ _ARCHIVE_SIGNATURES = [
     (b'\xFD\x37\x7A\x58\x5A\x00', 'XZ'),              # XZ (6 bytes)
     (b'\x42\x5A\x68', 'BZIP2'),                        # BZIP2 (3 bytes)
     (b'\x1F\x8B', 'GZIP'),                             # GZIP (2 bytes)
-    (b'\x4C\x5A\x49\x50', 'LZIP'),                     # LZIP (4 bytes, "LZIP")
+    (b'\x4C\x5A\x49\x50\x01', 'LZIP'),                  # LZIP (5 bytes: "LZIP" + version 1)
 ]
 
 
