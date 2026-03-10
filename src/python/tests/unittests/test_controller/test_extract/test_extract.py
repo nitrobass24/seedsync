@@ -9,7 +9,7 @@ import os
 import shutil
 import tarfile
 import tempfile
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from controller.extract import Extract, ExtractError
 
@@ -199,3 +199,91 @@ class TestExtractTwoPassTarVsPlain(unittest.TestCase):
         self.assertTrue(os.path.isfile(result_path))
         with open(result_path, 'rb') as f:
             self.assertEqual(self.plain_content, f.read())
+
+    def test_tar_bz2_detected_as_bzip2(self):
+        """A .tar.bz2 file has BZIP2 magic bytes and routes through two-pass."""
+        tar_bz2_path = os.path.join(self.temp_dir, "archive.tar.bz2")
+        with tarfile.open(tar_bz2_path, 'w:bz2') as tar:
+            tar.add(self.inner_file, arcname="inner_file.txt")
+        fmt = Extract._detect_format(tar_bz2_path)
+        self.assertEqual('BZIP2', fmt)
+
+
+class TestExtractErrorCases(unittest.TestCase):
+    """Tests for error handling in extraction."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix="test_extract_errors_")
+        self.out_dir = os.path.join(self.temp_dir, "output")
+        os.makedirs(self.out_dir)
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir)
+
+    def test_extract_nonexistent_file_raises_error(self):
+        fake_path = os.path.join(self.temp_dir, "nonexistent.gz")
+        with self.assertRaises(ExtractError):
+            Extract.extract_archive(fake_path, self.out_dir)
+
+    def test_detect_format_returns_none_for_unknown(self):
+        unknown_path = os.path.join(self.temp_dir, "unknown.dat")
+        with open(unknown_path, 'wb') as f:
+            f.write(b"this is not an archive at all")
+        fmt = Extract._detect_format(unknown_path)
+        self.assertIsNone(fmt)
+
+    def test_is_archive_returns_false_for_nonexistent(self):
+        self.assertFalse(Extract.is_archive(os.path.join(self.temp_dir, "no.gz")))
+
+    def test_is_archive_fast_returns_false_for_non_archive_ext(self):
+        self.assertFalse(Extract.is_archive_fast("file.txt"))
+        self.assertFalse(Extract.is_archive_fast("file.jpg"))
+        self.assertFalse(Extract.is_archive_fast("noext"))
+
+    def test_extract_corrupt_gzip_raises_error(self):
+        """A file with gzip magic bytes but corrupt content should raise ExtractError."""
+        corrupt_path = os.path.join(self.temp_dir, "corrupt.gz")
+        with open(corrupt_path, 'wb') as f:
+            # Write gzip magic bytes followed by garbage
+            f.write(b'\x1F\x8B' + b'\x00' * 50)
+
+        # _detect_format should still detect it as GZIP (magic bytes match)
+        fmt = Extract._detect_format(corrupt_path)
+        self.assertEqual('GZIP', fmt)
+
+        # extract_archive should raise because 7z will fail on corrupt data
+        with patch.object(Extract, '_run_7z', side_effect=ExtractError("7z failed")):
+            with self.assertRaises(ExtractError):
+                Extract.extract_archive(corrupt_path, self.out_dir)
+
+    def test_extract_corrupt_bzip2_raises_error(self):
+        """A file with bzip2 magic bytes but corrupt content should raise ExtractError."""
+        corrupt_path = os.path.join(self.temp_dir, "corrupt.bz2")
+        with open(corrupt_path, 'wb') as f:
+            # Write bzip2 magic bytes followed by garbage
+            f.write(b'\x42\x5A\x68' + b'\x00' * 50)
+
+        fmt = Extract._detect_format(corrupt_path)
+        self.assertEqual('BZIP2', fmt)
+
+        with patch.object(Extract, '_run_7z', side_effect=ExtractError("7z failed")):
+            with self.assertRaises(ExtractError):
+                Extract.extract_archive(corrupt_path, self.out_dir)
+
+    def test_two_pass_with_multiple_decompressed_files(self):
+        """When 7z produces multiple files, all should be moved to output dir."""
+        gz_path = os.path.join(self.temp_dir, "multi.gz")
+        with gzip.open(gz_path, 'wb') as f:
+            f.write(b"content")
+
+        def fake_run_7z(archive_path, out_dir_path):
+            # Simulate 7z producing multiple files
+            for name in ["file_a.txt", "file_b.txt"]:
+                with open(os.path.join(out_dir_path, name), 'wb') as f:
+                    f.write(b"data for " + name.encode())
+
+        with patch.object(Extract, '_run_7z', side_effect=fake_run_7z):
+            Extract.extract_archive(gz_path, self.out_dir)
+
+        self.assertTrue(os.path.isfile(os.path.join(self.out_dir, "file_a.txt")))
+        self.assertTrue(os.path.isfile(os.path.join(self.out_dir, "file_b.txt")))
