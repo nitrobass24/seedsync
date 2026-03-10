@@ -207,6 +207,9 @@ class Seedsync:
                 controller_job.join()
             webapp_job.join()
 
+            # Drain in-flight webhook notifications
+            webhook_notifier.shutdown()
+
             # Last persist
             self.persist()
 
