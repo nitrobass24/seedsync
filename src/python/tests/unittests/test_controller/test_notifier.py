@@ -45,8 +45,6 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
         notifier = self._make_notifier()
         barrier = threading.Event()
 
-        original_send = notifier._send_post
-
         def slow_send(url, payload):
             barrier.wait(timeout=5)
 
