@@ -750,25 +750,31 @@ class Controller:
 
     def _sync_persist_to_all_builders(self):
         """Push current persist state to all pair model builders, filtered by pair_id."""
+        namespaced_prefixes = tuple(
+            f"{other_pc.pair_id}{sep}"
+            for other_pc in self.__pair_contexts
+            if other_pc.pair_id
+            for sep in (_KEY_SEP, ":")
+        )
         for pc in self.__pair_contexts:
-            prefix = "{}{}".format(pc.pair_id, _KEY_SEP) if pc.pair_id else ""
+            prefix = f"{pc.pair_id}{_KEY_SEP}" if pc.pair_id else ""
             downloaded = set()
             extracted = set()
             extract_failed = set()
             for key in self.__persist.downloaded_file_names:
                 if prefix and key.startswith(prefix):
                     downloaded.add(key[len(prefix):])
-                elif not prefix and _KEY_SEP not in key and ":" not in key:
+                elif not prefix and not key.startswith(namespaced_prefixes):
                     downloaded.add(key)
             for key in self.__persist.extracted_file_names:
                 if prefix and key.startswith(prefix):
                     extracted.add(key[len(prefix):])
-                elif not prefix and _KEY_SEP not in key and ":" not in key:
+                elif not prefix and not key.startswith(namespaced_prefixes):
                     extracted.add(key)
             for key in self.__persist.extract_failed_file_names:
                 if prefix and key.startswith(prefix):
                     extract_failed.add(key[len(prefix):])
-                elif not prefix and _KEY_SEP not in key and ":" not in key:
+                elif not prefix and not key.startswith(namespaced_prefixes):
                     extract_failed.add(key)
             pc.model_builder.set_downloaded_files(downloaded)
             pc.model_builder.set_extracted_files(extracted)
