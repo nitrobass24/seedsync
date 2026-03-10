@@ -2,12 +2,18 @@
 
 import logging
 import time
+import warnings
 from typing import Optional, List
 
 import pexpect
 
 # my libs
 from common import AppError
+
+# pexpect.spawn uses forkpty which triggers a DeprecationWarning in
+# multi-threaded processes. This is safe because the forked child
+# immediately exec's the lftp binary — no Python code runs post-fork.
+warnings.filterwarnings("ignore", message=".*fork.*", category=DeprecationWarning)
 
 
 class SshcpError(AppError):

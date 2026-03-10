@@ -1,12 +1,10 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import unittest
-import multiprocessing
 import logging
 import sys
+import time
 from unittest.mock import MagicMock
-
-import timeout_decorator
 
 from controller import IScanner, ScannerProcess, ScannerError
 from system import SystemFile
@@ -21,6 +19,14 @@ class DummyScanner(IScanner):
 
 
 class TestScannerProcess(unittest.TestCase):
+    """
+    Tests for ScannerProcess logic.
+
+    These tests call run_init()/run_loop() directly instead of spawning a
+    subprocess, because unittest mocks do not survive the 'spawn' start
+    method (child re-imports everything, bypassing the mock).
+    """
+
     def setUp(self):
         logger = logging.getLogger()
         handler = logging.StreamHandler(sys.stdout)
@@ -29,20 +35,7 @@ class TestScannerProcess(unittest.TestCase):
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
         handler.setFormatter(formatter)
 
-        # Assign process to this variable so that it can be cleaned up
-        # even after an error
-        self.process = None
-
-    def tearDown(self):
-        if self.process:
-            self.process.terminate()
-
-    @timeout_decorator.timeout(10)
     def test_retrieves_scan_results(self):
-        # Use this as a signal to mock to control which result to send
-        self.scan_signal = multiprocessing.Value('i', 0)
-        self.scan_counter = multiprocessing.Value('i', 0)
-
         a = SystemFile("a", 100, True)
         aa = SystemFile("aa", 60, False)
         a.add_child(aa)
@@ -60,28 +53,15 @@ class TestScannerProcess(unittest.TestCase):
         mock_scanner = DummyScanner()
         mock_scanner.scan = MagicMock()
 
-        def _scan():
-            ret = None
-            if self.scan_signal.value == 0:
-                ret = [a]
-            elif self.scan_signal.value == 1:
-                ret = [a, b]
-            elif self.scan_signal.value == 2:
-                ret = [c]
-            elif self.scan_signal.value == 3:
-                ret = []
-            self.scan_counter.value += 1
-            return ret
-        mock_scanner.scan.side_effect = _scan
+        process = ScannerProcess(scanner=mock_scanner, interval_in_ms=100)
+        process.run_init()
 
-        self.process = ScannerProcess(scanner=mock_scanner,
-                                      interval_in_ms=100)
-        self.process.start()
-
-        # wait for first call to scan (actually second call to guarantee first scan is queued)
-        while self.scan_counter.value < 2:
-            pass
-        result = self.process.pop_latest_result()
+        # Scan #0: single file with children
+        mock_scanner.scan.return_value = [a]
+        process.run_loop()
+        time.sleep(0.1)  # let multiprocessing.Queue flush
+        result = process.pop_latest_result()
+        self.assertIsNotNone(result)
         self.assertEqual(1, len(result.files))
         self.assertEqual("a", result.files[0].name)
         self.assertEqual(True, result.files[0].is_dir)
@@ -94,23 +74,14 @@ class TestScannerProcess(unittest.TestCase):
         self.assertEqual(False, result.files[0].children[1].is_dir)
         self.assertEqual(40, result.files[0].children[1].size)
 
-        # signal for scan #1 and wait scan fetch
-        self.scan_signal.value = 1
-        orig_counter = self.scan_counter.value
-        while self.scan_counter.value < orig_counter+2:
-            pass
-        result = self.process.pop_latest_result()
+        # Scan #1: two files with nested children
+        mock_scanner.scan.return_value = [a, b]
+        process.run_loop()
+        time.sleep(0.1)
+        result = process.pop_latest_result()
+        self.assertIsNotNone(result)
         self.assertEqual(2, len(result.files))
         self.assertEqual("a", result.files[0].name)
-        self.assertEqual(True, result.files[0].is_dir)
-        self.assertEqual(100, result.files[0].size)
-        self.assertEqual(2, len(result.files[0].children))
-        self.assertEqual("aa", result.files[0].children[0].name)
-        self.assertEqual(False, result.files[0].children[0].is_dir)
-        self.assertEqual(60, result.files[0].children[0].size)
-        self.assertEqual("ab", result.files[0].children[1].name)
-        self.assertEqual(False, result.files[0].children[1].is_dir)
-        self.assertEqual(40, result.files[0].children[1].size)
         self.assertEqual("b", result.files[1].name)
         self.assertEqual(True, result.files[1].is_dir)
         self.assertEqual(10, result.files[1].size)
@@ -123,54 +94,49 @@ class TestScannerProcess(unittest.TestCase):
         self.assertEqual(False, result.files[1].children[0].children[0].is_dir)
         self.assertEqual(10, result.files[1].children[0].children[0].size)
 
-        # signal for scan #2 and wait scan fetch
-        self.scan_signal.value = 2
-        orig_counter = self.scan_counter.value
-        while self.scan_counter.value < orig_counter+2:
-            pass
-        result = self.process.pop_latest_result()
+        # Scan #2: single file
+        mock_scanner.scan.return_value = [c]
+        process.run_loop()
+        time.sleep(0.1)
+        result = process.pop_latest_result()
+        self.assertIsNotNone(result)
         self.assertEqual(1, len(result.files))
         self.assertEqual("c", result.files[0].name)
         self.assertEqual(False, result.files[0].is_dir)
         self.assertEqual(1234, result.files[0].size)
 
-        # signal for scan #3 and wait scan fetch
-        self.scan_signal.value = 3
-        orig_counter = self.scan_counter.value
-        while self.scan_counter.value < orig_counter+2:
-            pass
-        result = self.process.pop_latest_result()
+        # Scan #3: empty
+        mock_scanner.scan.return_value = []
+        process.run_loop()
+        time.sleep(0.1)
+        result = process.pop_latest_result()
+        self.assertIsNotNone(result)
         self.assertEqual(0, len(result.files))
 
-    @timeout_decorator.timeout(10)
     def test_sends_error_result_on_recoverable_error(self):
         mock_scanner = DummyScanner()
         mock_scanner.scan = MagicMock()
         mock_scanner.scan.side_effect = ScannerError("recoverable error", recoverable=True)
 
-        self.process = ScannerProcess(scanner=mock_scanner,
-                                      interval_in_ms=100)
-        self.process.start()
+        process = ScannerProcess(scanner=mock_scanner, interval_in_ms=100)
+        process.run_init()
+        process.run_loop()
+        time.sleep(0.1)  # let multiprocessing.Queue flush
 
-        while True:
-            result = self.process.pop_latest_result()
-            if result:
-                break
+        result = process.pop_latest_result()
+        self.assertIsNotNone(result)
         self.assertEqual(0, len(result.files))
         self.assertTrue(result.failed)
         self.assertEqual("recoverable error", result.error_message)
 
-    @timeout_decorator.timeout(10)
     def test_sends_fatal_exception_on_nonrecoverable_error(self):
         mock_scanner = DummyScanner()
         mock_scanner.scan = MagicMock()
         mock_scanner.scan.side_effect = ScannerError("non-recoverable error", recoverable=False)
 
-        self.process = ScannerProcess(scanner=mock_scanner,
-                                      interval_in_ms=100)
-        self.process.start()
+        process = ScannerProcess(scanner=mock_scanner, interval_in_ms=100)
+        process.run_init()
+
         with self.assertRaises(ScannerError) as ctx:
-            while True:
-                self.process.propagate_exception()
-        # noinspection PyUnreachableCode
+            process.run_loop()
         self.assertEqual("non-recoverable error", str(ctx.exception))

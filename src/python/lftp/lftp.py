@@ -2,11 +2,17 @@
 
 import logging
 import re
+import warnings
 from functools import wraps
 from typing import Callable, Union, List, Optional
 
 # 3rd party libs
 import pexpect
+
+# pexpect.spawn uses forkpty which triggers a DeprecationWarning in
+# multi-threaded processes. This is safe because the forked child
+# immediately exec's the lftp binary — no Python code runs post-fork.
+warnings.filterwarnings("ignore", message=".*fork.*", category=DeprecationWarning)
 
 # my libs
 from common import AppError
