@@ -38,14 +38,18 @@ class ControllerError(AppError):
     pass
 
 
+# ASCII Unit Separator – safe composite-key delimiter that cannot appear in filenames
+_KEY_SEP = "\x1f"
+
+
 def _persist_key(pair_id, name: str) -> str:
-    """Build a namespaced persist key: 'pair_id:name' or plain 'name' for default pair."""
-    return "{}:{}".format(pair_id, name) if pair_id else name
+    """Build a namespaced persist key: 'pair_id<US>name' or plain 'name' for default pair."""
+    return "{}{}{}".format(pair_id, _KEY_SEP, name) if pair_id else name
 
 
 def _strip_persist_key(key: str, pair_id) -> str:
     """Strip pair_id prefix from a persist key to get the bare file name."""
-    prefix = "{}:".format(pair_id) if pair_id else ""
+    prefix = "{}{}".format(pair_id, _KEY_SEP) if pair_id else ""
     if prefix and key.startswith(prefix):
         return key[len(prefix):]
     return key

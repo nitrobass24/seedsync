@@ -1,6 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from typing import List
+from typing import Any, Dict, List
 from datetime import datetime
 
 
@@ -52,7 +52,7 @@ class SystemFile:
             raise TypeError("Cannot add children to a file")
         self.__children.append(file)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> Dict[str, Any]:
         return {
             "name": self.__name,
             "size": self.__size,
