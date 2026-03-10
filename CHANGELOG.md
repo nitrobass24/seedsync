@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.13.2] - 2026-03-10
+
+### Fixed
+
+- **Recursive exclude filtering** — Exclude patterns now filter through nested children, not just top-level files (#158, #217)
+- **Persist key separator** — Replace colon separator with non-printable unit separator (`\x1f`) to avoid conflicts with filenames containing colons; includes backward-compatible migration of existing persist data (#221)
+- **Default-pair filenames with colons** — Fix `_sync_persist_to_all_builders` incorrectly excluding filenames like `Show 01:02.mkv` from default pair contexts (#221)
+- **Python version check placement** — Move version guard above project imports so the friendly error message displays on older Python versions (#224)
+- **Angular memory leaks** — Fix 6 leaked subscriptions in header and sidebar components (#220)
+
+### Added
+
+- **LZIP archive detection** — `is_archive()` now recognizes LZIP format with 5-byte magic signature (#218)
+- **Plain gzip/bzip2 extraction** — Support extraction of standalone `.gz` and `.bz2` files (not just `.tar.gz`/`.tar.bz2`) (#219)
+- **Webhook graceful shutdown** — `WebhookNotifier.shutdown()` drains in-flight webhook threads with a configurable timeout, preventing lost notifications on exit (#222)
+- **67 new tests** — Unit tests for extraction, exclude patterns, webhook drain, persist migration, file-list component, bulk-action-bar component, and path pairs CRUD handler (#219, #226, #227)
+
+### Changed
+
+- **Angular subscription cleanup** — Migrate 6 components from manual `Subscription[]`/`ngOnDestroy` to `takeUntilDestroyed` pattern (#220)
+- **Shared form template** — Extract duplicated path-pairs form fields into `ng-template` with `*ngTemplateOutlet` (#223)
+- **Defensive copy for path pairs** — `PathPairsConfig.get_pair()` returns deep copies to prevent external mutation of internal state (#221)
+- **Dependency cleanup** — Move `timeout-decorator` from runtime to test-only; remove unused localization strings (#224)
+- **Angular dependency updates** — Bump Angular group dependencies (#213)
+
 ## [0.13.1] - 2026-03-09
 
 ### Fixed

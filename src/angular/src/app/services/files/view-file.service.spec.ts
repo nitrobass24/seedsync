@@ -6,6 +6,7 @@ import { ModelFileService } from "./model-file.service";
 import { LoggerService } from "../utils/logger.service";
 import { ModelFile, ModelFileState } from "../../models/model-file";
 import { ViewFile, ViewFileStatus } from "../../models/view-file";
+import { fileKey } from "./file-key";
 
 function makeModelFile(
   overrides: Partial<ModelFile> & { name: string },
@@ -84,7 +85,7 @@ describe("ViewFileService", () => {
   function emitModelFiles(files: ModelFile[]): void {
     const map = new Map<string, ModelFile>();
     for (const f of files) {
-      const key = f.pair_id ? `${f.pair_id}:${f.name}` : f.name;
+      const key = fileKey(f.pair_id, f.name);
       map.set(key, f);
     }
     modelFilesSubject.next(map);

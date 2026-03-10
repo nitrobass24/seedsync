@@ -181,9 +181,45 @@ make stop     # Stop container
 
 ### Testing
 ```bash
-cd src/angular && npx ng test    # Run 182 Vitest unit tests
+cd src/angular && npx ng test    # Angular Vitest unit tests
+# Python tests run in Docker via CI (pytest in test-image)
 # CI also runs: Docker build, container startup, web UI accessibility
 ```
+
+## Test Requirements
+
+Every PR MUST include appropriate test changes. Tests are not optional — they ship with the code.
+
+### When adding a feature
+- Add unit tests for all new logic (services, components, utilities, handlers)
+- Cover the happy path, edge cases, and error/validation paths
+- If adding a new API endpoint, add integration tests using `WebTest`/`TestApp`
+
+### When fixing a bug
+- Add a test that reproduces the bug (fails before fix, passes after)
+- If the bug was in untested code, add baseline tests for the surrounding logic
+
+### When refactoring
+- Existing tests must continue to pass without modification (unless the refactor intentionally changes behavior)
+- If refactoring reveals untested code, add tests for it
+
+### When removing code
+- Remove or update tests that cover the deleted code
+- Do not leave dead test code behind
+
+### Test structure
+
+| Layer | Framework | Location | Runner |
+|-------|-----------|----------|--------|
+| Angular unit tests | Vitest | `src/angular/src/**/*.spec.ts` | `cd src/angular && npx ng test` |
+| Python unit tests | unittest | `src/python/tests/unittests/` | pytest (in Docker test-image) |
+| Python integration tests | unittest + WebTest | `src/python/tests/integration/` | pytest (in Docker test-image) |
+
+### Test conventions
+- **Angular**: Use `describe`/`it` from Vitest. Mock services with `vi.fn()`. Use `TestBed` for component tests. Query DOM by text content or stable attributes, not positional selectors (`nth-of-type`).
+- **Python**: Use `unittest.TestCase`. Use `unittest.mock.MagicMock`/`patch` for mocking. Integration tests for web handlers use `webtest.TestApp` with `BaseTestWebApp`.
+- **Naming**: Test files mirror source files — `foo.service.ts` → `foo.service.spec.ts`, `controller.py` → `test_controller.py`.
+- **No flaky tests**: Avoid `time.sleep` in tests where possible. Use `threading.Event` or barriers for synchronization. Use `timeout_decorator` for tests that might hang.
 
 ## GitHub Repository
 

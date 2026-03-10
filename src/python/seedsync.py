@@ -12,6 +12,9 @@ from typing import Optional, Type, TypeVar
 import shutil
 import platform
 
+if sys.hexversion < 0x030C0000:
+    sys.exit("Python 3.12 or newer is required to run this program.")
+
 # my libs
 from common import ServiceExit, Context, Constants, Config, Args, AppError
 from common import ServiceRestart
@@ -206,6 +209,9 @@ class Seedsync:
             if do_start_controller:
                 controller_job.join()
             webapp_job.join()
+
+            # Drain in-flight webhook notifications
+            webhook_notifier.shutdown()
 
             # Last persist
             self.persist()
@@ -438,9 +444,6 @@ class Seedsync:
 
 
 if __name__ == "__main__":
-    if sys.hexversion < 0x03050000:
-        sys.exit("Python 3.5 or newer is required to run this program.")
-
     # Apply UMASK env var before spawning any child processes (e.g. lftp via pexpect).
     # The shell umask set in entrypoint.sh is not reliably inherited through the
     # setpriv exec chain in all container environments, so we set it explicitly here.

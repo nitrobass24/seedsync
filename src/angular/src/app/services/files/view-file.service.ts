@@ -6,13 +6,10 @@ import { ModelFileService } from './model-file.service';
 import { RestService, WebReaction } from '../utils/rest.service';
 import { ModelFile, ModelFileState } from '../../models/model-file';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
+import { fileKey } from './file-key';
 
 function viewFileKey(vf: ViewFile): string {
-  return vf.pairId ? `${vf.pairId}:${vf.name}` : vf.name;
-}
-
-function modelFileKey(mf: ModelFile): string {
-  return mf.pair_id ? `${mf.pair_id}:${mf.name}` : mf.name;
+  return fileKey(vf.pairId, vf.name);
 }
 
 export interface ViewFileFilterCriteria {

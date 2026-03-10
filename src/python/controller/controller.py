@@ -3,7 +3,7 @@
 import os
 import fnmatch
 from abc import ABC, abstractmethod
-from typing import Dict, List, Callable, Optional, Set
+from typing import List, Callable, Optional, Set
 from threading import Lock
 from queue import Queue
 from enum import Enum
@@ -21,14 +21,50 @@ from .delete import DeleteLocalProcess, DeleteRemoteProcess
 from .move import MoveProcess
 
 
+def _matches_exclude(name: str, patterns: List[str]) -> bool:
+    """Return True if *name* matches any of the exclude patterns (case-insensitive)."""
+    return any(fnmatch.fnmatch(name.lower(), p.lower()) for p in patterns)
+
+
+def _filter_children(file, patterns: List[str]):
+    """Return a copy of *file* with excluded children (and their subtrees) removed.
+
+    If a directory child matches a pattern the entire subtree is dropped.
+    Non-matching directory children are recursed into so their own children
+    are filtered as well.
+    """
+    from system import SystemFile  # avoid circular import at module level
+
+    filtered = SystemFile(
+        name=file.name,
+        size=file.size,
+        is_dir=file.is_dir,
+        time_created=file.timestamp_created,
+        time_modified=file.timestamp_modified,
+    )
+    for child in file.children:
+        if _matches_exclude(child.name, patterns):
+            continue  # drop matched child (and its subtree)
+        if child.is_dir:
+            child = _filter_children(child, patterns)
+        filtered.add_child(child)
+    return filtered
+
+
 def filter_excluded_files(files: List, exclude_patterns_str: str) -> List:
     if not exclude_patterns_str or not exclude_patterns_str.strip():
         return files
     patterns = [p.strip() for p in exclude_patterns_str.split(",") if p.strip()]
     if not patterns:
         return files
-    return [f for f in files
-            if not any(fnmatch.fnmatch(f.name.lower(), p.lower()) for p in patterns)]
+    result = []
+    for f in files:
+        if _matches_exclude(f.name, patterns):
+            continue
+        if f.is_dir:
+            f = _filter_children(f, patterns)
+        result.append(f)
+    return result
 
 
 class ControllerError(AppError):
@@ -38,16 +74,28 @@ class ControllerError(AppError):
     pass
 
 
-def _persist_key(pair_id, name: str) -> str:
-    """Build a namespaced persist key: 'pair_id:name' or plain 'name' for default pair."""
-    return "{}:{}".format(pair_id, name) if pair_id else name
+# ASCII Unit Separator – safe composite-key delimiter that cannot appear in filenames
+_KEY_SEP = "\x1f"
 
 
-def _strip_persist_key(key: str, pair_id) -> str:
-    """Strip pair_id prefix from a persist key to get the bare file name."""
-    prefix = "{}:".format(pair_id) if pair_id else ""
-    if prefix and key.startswith(prefix):
-        return key[len(prefix):]
+def _persist_key(pair_id: Optional[str], name: str) -> str:
+    """Build a namespaced persist key: 'pair_id<US>name' or plain 'name' for default pair."""
+    return "{}{}{}".format(pair_id, _KEY_SEP, name) if pair_id else name
+
+
+def _strip_persist_key(key: str, pair_id: Optional[str]) -> str:
+    """Strip pair_id prefix from a persist key to get the bare file name.
+
+    Handles both the current unit-separator (\\x1f) and the legacy colon (':')
+    delimiter so that old persisted keys are still correctly parsed.
+    """
+    if not pair_id:
+        return key
+    # Try the current separator first, then legacy colon
+    for sep in (_KEY_SEP, ":"):
+        prefix = "{}{}".format(pair_id, sep)
+        if key.startswith(prefix):
+            return key[len(prefix):]
     return key
 
 
@@ -738,25 +786,40 @@ class Controller:
 
     def _sync_persist_to_all_builders(self):
         """Push current persist state to all pair model builders, filtered by pair_id."""
+        namespaced_prefixes = tuple(
+            f"{other_pc.pair_id}{sep}"
+            for other_pc in self.__pair_contexts
+            if other_pc.pair_id
+            for sep in (_KEY_SEP, ":")
+        )
         for pc in self.__pair_contexts:
-            prefix = "{}:".format(pc.pair_id) if pc.pair_id else ""
+            prefix = f"{pc.pair_id}{_KEY_SEP}" if pc.pair_id else ""
+            # Defense-in-depth: from_str() migrates colon keys at load time,
+            # but we check both separators here in case of incomplete migration.
+            legacy_prefix = f"{pc.pair_id}:" if pc.pair_id else ""
             downloaded = set()
             extracted = set()
             extract_failed = set()
             for key in self.__persist.downloaded_file_names:
                 if prefix and key.startswith(prefix):
                     downloaded.add(key[len(prefix):])
-                elif not prefix and ":" not in key:
+                elif prefix and legacy_prefix and key.startswith(legacy_prefix):
+                    downloaded.add(key[len(legacy_prefix):])
+                elif not prefix and not key.startswith(namespaced_prefixes):
                     downloaded.add(key)
             for key in self.__persist.extracted_file_names:
                 if prefix and key.startswith(prefix):
                     extracted.add(key[len(prefix):])
-                elif not prefix and ":" not in key:
+                elif prefix and legacy_prefix and key.startswith(legacy_prefix):
+                    extracted.add(key[len(legacy_prefix):])
+                elif not prefix and not key.startswith(namespaced_prefixes):
                     extracted.add(key)
             for key in self.__persist.extract_failed_file_names:
                 if prefix and key.startswith(prefix):
                     extract_failed.add(key[len(prefix):])
-                elif not prefix and ":" not in key:
+                elif prefix and legacy_prefix and key.startswith(legacy_prefix):
+                    extract_failed.add(key[len(legacy_prefix):])
+                elif not prefix and not key.startswith(namespaced_prefixes):
                     extract_failed.add(key)
             pc.model_builder.set_downloaded_files(downloaded)
             pc.model_builder.set_extracted_files(extracted)

@@ -1,8 +1,8 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, DestroyRef, inject, OnDestroy } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { AsyncPipe } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
-import { EMPTY, Subscription } from 'rxjs';
+import { AsyncPipe, NgTemplateOutlet } from '@angular/common';
+import { EMPTY } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 
 import { PathPairsService } from '../../services/settings/path-pairs.service';
@@ -11,7 +11,7 @@ import { PathPair } from '../../models/path-pair';
 @Component({
   selector: 'app-path-pairs',
   standalone: true,
-  imports: [FormsModule, AsyncPipe],
+  imports: [FormsModule, AsyncPipe, NgTemplateOutlet],
   templateUrl: './path-pairs.component.html',
   styleUrls: ['./path-pairs.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -19,6 +19,7 @@ import { PathPair } from '../../models/path-pair';
 export class PathPairsComponent implements OnDestroy {
   private readonly pathPairsService = inject(PathPairsService);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly destroyRef = inject(DestroyRef);
   readonly pairs$ = this.pathPairsService.pairs$;
 
   // Inline editing state
@@ -35,13 +36,9 @@ export class PathPairsComponent implements OnDestroy {
   // Double-click delete confirmation
   confirmingDeleteId: string | null = null;
   private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
-  private subscriptions: Subscription[] = [];
 
   ngOnDestroy(): void {
     this.clearConfirmTimer();
-    this.subscriptions.forEach((s) => {
-      s.unsubscribe();
-    });
   }
 
   // --- Add ---
@@ -62,25 +59,23 @@ export class PathPairsComponent implements OnDestroy {
   onSaveAdd(): void {
     if (!this.addForm.name.trim()) return;
     this.errorMessage = null;
-    this.subscriptions.push(
-      this.pathPairsService.create(this.addForm).pipe(
-        catchError((err: HttpErrorResponse) => {
-          if (err.status === 409) {
-            this.errorMessage = 'A path pair with that name already exists.';
-          }
-          this.cdr.markForCheck();
-          return EMPTY;
-        }),
-      ).subscribe((created) => {
-        if (!created) {
-          this.cdr.markForCheck();
-          return;
-        }
-        this.adding = false;
-        this.addForm = this.emptyForm();
+    this.pathPairsService.create(this.addForm).pipe(
+      catchError(() => {
+        this.errorMessage = 'A path pair with that name already exists.';
         this.cdr.markForCheck();
+        return EMPTY;
       }),
-    );
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((created) => {
+      if (!created) {
+        this.errorMessage = 'Failed to create path pair. Please try again.';
+        this.cdr.markForCheck();
+        return;
+      }
+      this.adding = false;
+      this.addForm = this.emptyForm();
+      this.cdr.markForCheck();
+    });
   }
 
   // --- Edit ---
@@ -107,25 +102,23 @@ export class PathPairsComponent implements OnDestroy {
   onSaveEdit(): void {
     if (!this.editingId || !this.editForm.name.trim()) return;
     this.errorMessage = null;
-    this.subscriptions.push(
-      this.pathPairsService.update({ id: this.editingId, ...this.editForm }).pipe(
-        catchError((err: HttpErrorResponse) => {
-          if (err.status === 409) {
-            this.errorMessage = 'A path pair with that name already exists.';
-          }
-          this.cdr.markForCheck();
-          return EMPTY;
-        }),
-      ).subscribe((updated) => {
-        if (!updated) {
-          this.cdr.markForCheck();
-          return;
-        }
-        this.editingId = null;
-        this.editForm = this.emptyForm();
+    this.pathPairsService.update({ id: this.editingId, ...this.editForm }).pipe(
+      catchError(() => {
+        this.errorMessage = 'A path pair with that name already exists.';
         this.cdr.markForCheck();
+        return EMPTY;
       }),
-    );
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((updated) => {
+      if (!updated) {
+        this.errorMessage = 'Failed to update path pair. Please try again.';
+        this.cdr.markForCheck();
+        return;
+      }
+      this.editingId = null;
+      this.editForm = this.emptyForm();
+      this.cdr.markForCheck();
+    });
   }
 
   // --- Delete (double-click confirm) ---
@@ -133,8 +126,18 @@ export class PathPairsComponent implements OnDestroy {
   onDelete(pairId: string): void {
     if (this.confirmingDeleteId === pairId) {
       this.clearConfirmTimer();
-      this.confirmingDeleteId = null;
-      this.subscriptions.push(this.pathPairsService.remove(pairId).subscribe());
+      this.pathPairsService.remove(pairId).pipe(
+        takeUntilDestroyed(this.destroyRef),
+      ).subscribe((success) => {
+        if (success) {
+          this.errorMessage = null;
+          this.confirmingDeleteId = null;
+        } else {
+          this.errorMessage = 'Failed to delete path pair. Please try again.';
+          this.confirmingDeleteId = null;
+        }
+        this.cdr.markForCheck();
+      });
     } else {
       this.setConfirming(pairId);
     }
@@ -143,15 +146,15 @@ export class PathPairsComponent implements OnDestroy {
   // --- Toggle fields ---
 
   onToggleEnabled(pair: PathPair, enabled: boolean): void {
-    this.subscriptions.push(
-      this.pathPairsService.update({ ...pair, enabled }).subscribe(),
-    );
+    this.pathPairsService.update({ ...pair, enabled }).pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe();
   }
 
   onToggleAutoQueue(pair: PathPair, autoQueue: boolean): void {
-    this.subscriptions.push(
-      this.pathPairsService.update({ ...pair, auto_queue: autoQueue }).subscribe(),
-    );
+    this.pathPairsService.update({ ...pair, auto_queue: autoQueue }).pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe();
   }
 
   // --- Helpers ---

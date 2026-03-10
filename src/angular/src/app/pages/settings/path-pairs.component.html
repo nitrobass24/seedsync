@@ -1,3 +1,31 @@
+<ng-template #pairFormFields let-form="form">
+  <div class="form-row">
+    <label>Name
+      <input type="text" class="form-control form-control-sm" [(ngModel)]="form.name" placeholder="My Pair" />
+    </label>
+  </div>
+  <div class="form-row">
+    <label>Remote Path
+      <input type="text" class="form-control form-control-sm" [(ngModel)]="form.remote_path" placeholder="/remote/path" />
+    </label>
+  </div>
+  <div class="form-row">
+    <label>Local Path
+      <input type="text" class="form-control form-control-sm" [(ngModel)]="form.local_path" placeholder="/local/path" />
+    </label>
+  </div>
+  <div class="form-row toggles">
+    <label class="toggle-label">
+      <input type="checkbox" class="form-check-input" [(ngModel)]="form.enabled" />
+      Enabled
+    </label>
+    <label class="toggle-label">
+      <input type="checkbox" class="form-check-input" [(ngModel)]="form.auto_queue" />
+      Auto Queue
+    </label>
+  </div>
+</ng-template>
+
 <div class="path-pairs">
   <div class="header">
     <span>Path Pairs</span>
@@ -12,31 +40,7 @@
 
   @if (adding) {
     <div class="pair-form">
-      <div class="form-row">
-        <label>Name
-          <input type="text" class="form-control form-control-sm" [(ngModel)]="addForm.name" placeholder="My Pair" />
-        </label>
-      </div>
-      <div class="form-row">
-        <label>Remote Path
-          <input type="text" class="form-control form-control-sm" [(ngModel)]="addForm.remote_path" placeholder="/remote/path" />
-        </label>
-      </div>
-      <div class="form-row">
-        <label>Local Path
-          <input type="text" class="form-control form-control-sm" [(ngModel)]="addForm.local_path" placeholder="/local/path" />
-        </label>
-      </div>
-      <div class="form-row toggles">
-        <label class="toggle-label">
-          <input type="checkbox" class="form-check-input" [(ngModel)]="addForm.enabled" />
-          Enabled
-        </label>
-        <label class="toggle-label">
-          <input type="checkbox" class="form-check-input" [(ngModel)]="addForm.auto_queue" />
-          Auto Queue
-        </label>
-      </div>
+      <ng-container *ngTemplateOutlet="pairFormFields; context: { form: addForm }"></ng-container>
       <div class="form-actions">
         <button class="btn btn-sm btn-save" (click)="onSaveAdd()">Save</button>
         <button class="btn btn-sm btn-cancel" (click)="onCancelAdd()">Cancel</button>
@@ -52,31 +56,7 @@
     @for (pair of pairs; track pair.id) {
       @if (editingId === pair.id) {
         <div class="pair-form">
-          <div class="form-row">
-            <label>Name
-              <input type="text" class="form-control form-control-sm" [(ngModel)]="editForm.name" />
-            </label>
-          </div>
-          <div class="form-row">
-            <label>Remote Path
-              <input type="text" class="form-control form-control-sm" [(ngModel)]="editForm.remote_path" />
-            </label>
-          </div>
-          <div class="form-row">
-            <label>Local Path
-              <input type="text" class="form-control form-control-sm" [(ngModel)]="editForm.local_path" />
-            </label>
-          </div>
-          <div class="form-row toggles">
-            <label class="toggle-label">
-              <input type="checkbox" class="form-check-input" [(ngModel)]="editForm.enabled" />
-              Enabled
-            </label>
-            <label class="toggle-label">
-              <input type="checkbox" class="form-check-input" [(ngModel)]="editForm.auto_queue" />
-              Auto Queue
-            </label>
-          </div>
+          <ng-container *ngTemplateOutlet="pairFormFields; context: { form: editForm }"></ng-container>
           <div class="form-actions">
             <button class="btn btn-sm btn-save" (click)="onSaveEdit()">Save</button>
             <button class="btn btn-sm btn-cancel" (click)="onCancelEdit()">Cancel</button>

@@ -19,11 +19,12 @@ class ExtractError(AppError):
 _ARCHIVE_SIGNATURES = [
     (b'\x52\x61\x72\x21\x1A\x07\x01\x00', 'RAR5'),   # RAR5 (8 bytes, check before RAR4)
     (b'\x52\x61\x72\x21\x1A\x07\x00', 'RAR4'),        # RAR4 (7 bytes)
-    (b'\x50\x4B\x03\x04', 'ZIP'),                      # ZIP (4 bytes)
+    (b'\x50\x4B\x03\x04', 'ZIP'),                      # ZIP (4 bytes; also covers .zipx variant)
     (b'\x37\x7A\xBC\xAF\x27\x1C', '7Z'),              # 7Z (6 bytes)
     (b'\xFD\x37\x7A\x58\x5A\x00', 'XZ'),              # XZ (6 bytes)
     (b'\x42\x5A\x68', 'BZIP2'),                        # BZIP2 (3 bytes)
     (b'\x1F\x8B', 'GZIP'),                             # GZIP (2 bytes)
+    (b'\x4C\x5A\x49\x50\x01', 'LZIP'),                  # LZIP (5 bytes: "LZIP" + version 1)
 ]
 
 
@@ -144,7 +145,7 @@ class Extract:
             # For .tar.gz, .tar.bz2, .tar.xz — 7z extracts the outer compression
             # to get the .tar, then we need a second pass to extract the tar contents.
             # Detect this by checking if the inner content is a tar.
-            if fmt in ('GZIP', 'BZIP2', 'XZ'):
+            if fmt in ('GZIP', 'BZIP2', 'XZ', 'LZIP'):
                 # Two-pass extraction: decompress → extract tar (if applicable)
                 Extract._extract_compressed_archive(archive_path, out_dir_path)
             else:
@@ -195,7 +196,7 @@ class Extract:
     @staticmethod
     def _extract_compressed_archive(archive_path: str, out_dir_path: str):
         """
-        Handle .tar.gz, .tar.bz2, .tar.xz and plain .gz, .bz2, .xz files.
+        Handle .tar.gz, .tar.bz2, .tar.xz, .tar.lz and plain .gz, .bz2, .xz, .lz files.
         First pass decompresses to a temp location; if the result is a tar,
         second pass extracts the tar. Otherwise moves the decompressed file.
         """

@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  DestroyRef,
   ElementRef,
   HostListener,
   OnInit,
@@ -10,9 +11,10 @@ import {
   ViewChild,
   inject,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject, Subscription } from 'rxjs';
+import { Subject } from 'rxjs';
 import { debounceTime, switchMap, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
@@ -35,6 +37,7 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   private readonly changeDetector = inject(ChangeDetectorRef);
   private readonly logService = inject(LogService);
   private readonly domService = inject(DomService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly headerHeight$ = this.domService.headerHeight$;
 
@@ -51,12 +54,12 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   @ViewChild('logTail') logTail!: ElementRef<HTMLElement>;
 
   private pendingScrollToBottom = false;
-  private logsSub!: Subscription;
-  private historySub!: Subscription;
   private readonly searchChange$ = new Subject<void>();
 
   ngOnInit(): void {
-    this.logsSub = this.logService.logs$.subscribe({
+    this.logService.logs$.pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
       next: (record) => {
         const shouldScroll =
           this.elementRef.nativeElement.offsetParent != null &&
@@ -73,7 +76,7 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
       },
     });
 
-    this.historySub = this.searchChange$.pipe(
+    this.searchChange$.pipe(
       debounceTime(300),
       switchMap(() => this.logService.fetchHistory({
         search: this.searchQuery || undefined,
@@ -82,6 +85,7 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
       }).pipe(
         catchError(() => of([] as LogHistoryEntry[]))
       )),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe((entries) => {
       this.historyRecords = entries;
       this.historyLoaded = true;
@@ -93,8 +97,6 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   ngOnDestroy(): void {
-    this.logsSub?.unsubscribe();
-    this.historySub?.unsubscribe();
     this.searchChange$.complete();
   }
 
