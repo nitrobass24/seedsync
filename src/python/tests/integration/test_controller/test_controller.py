@@ -2254,10 +2254,8 @@ class TestController(unittest.TestCase):
         self.assertFalse(os.path.exists(file_path))
 
     @timeout_decorator.timeout(20)
-    @unittest.skip
+    @unittest.skip("Crashes dbus on some systems - see sudo systemctl restart systemd-logind")
     def test_download_with_excessive_connections(self):
-        # Note: this test sometimes crashes the dbus
-        #       reset with: sudo systemctl restart systemd-logind
 
         # Test excessive connections and a large LFTP status output
         #     - large files names to blow up the status
