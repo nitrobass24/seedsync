@@ -9,6 +9,7 @@ import { ViewFile } from '../../models/view-file';
 import { ViewFileOptions } from '../../models/view-file-options';
 import { ViewFileOptionsService } from '../../services/files/view-file-options.service';
 import { LoggerService } from '../../services/utils/logger.service';
+import { fileKey } from '../../services/files/file-key';
 import { FileComponent } from './file.component';
 import { BulkActionBarComponent } from './bulk-action-bar.component';
 
@@ -32,7 +33,7 @@ export class FileListComponent {
   identify = FileListComponent.identify;
 
   static identify(index: number, item: ViewFile): string {
-    return `${item.pairId || ''}:${item.name}`;
+    return fileKey(item.pairId, item.name);
   }
 
   onSelect(file: ViewFile): void {

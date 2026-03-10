@@ -64,6 +64,8 @@ export class PathPairsComponent implements OnDestroy {
       catchError((err: HttpErrorResponse) => {
         if (err.status === 409) {
           this.errorMessage = 'A path pair with that name already exists.';
+        } else {
+          this.errorMessage = 'Failed to create path pair. Please try again.';
         }
         this.cdr.markForCheck();
         return EMPTY;
@@ -108,6 +110,8 @@ export class PathPairsComponent implements OnDestroy {
       catchError((err: HttpErrorResponse) => {
         if (err.status === 409) {
           this.errorMessage = 'A path pair with that name already exists.';
+        } else {
+          this.errorMessage = 'Failed to update path pair. Please try again.';
         }
         this.cdr.markForCheck();
         return EMPTY;
@@ -129,10 +133,17 @@ export class PathPairsComponent implements OnDestroy {
   onDelete(pairId: string): void {
     if (this.confirmingDeleteId === pairId) {
       this.clearConfirmTimer();
-      this.confirmingDeleteId = null;
       this.pathPairsService.remove(pairId).pipe(
         takeUntilDestroyed(this.destroyRef),
-      ).subscribe();
+      ).subscribe((success) => {
+        if (success) {
+          this.confirmingDeleteId = null;
+        } else {
+          this.errorMessage = 'Failed to delete path pair. Please try again.';
+          this.confirmingDeleteId = null;
+        }
+        this.cdr.markForCheck();
+      });
     } else {
       this.setConfirming(pairId);
     }
