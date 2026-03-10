@@ -2,7 +2,6 @@ import { Component, ChangeDetectionStrategy, ChangeDetectorRef, DestroyRef, inje
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { AsyncPipe, NgTemplateOutlet } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
 import { EMPTY } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 
@@ -61,12 +60,8 @@ export class PathPairsComponent implements OnDestroy {
     if (!this.addForm.name.trim()) return;
     this.errorMessage = null;
     this.pathPairsService.create(this.addForm).pipe(
-      catchError((err: HttpErrorResponse) => {
-        if (err.status === 409) {
-          this.errorMessage = 'A path pair with that name already exists.';
-        } else {
-          this.errorMessage = 'Failed to create path pair. Please try again.';
-        }
+      catchError(() => {
+        this.errorMessage = 'A path pair with that name already exists.';
         this.cdr.markForCheck();
         return EMPTY;
       }),
@@ -108,12 +103,8 @@ export class PathPairsComponent implements OnDestroy {
     if (!this.editingId || !this.editForm.name.trim()) return;
     this.errorMessage = null;
     this.pathPairsService.update({ id: this.editingId, ...this.editForm }).pipe(
-      catchError((err: HttpErrorResponse) => {
-        if (err.status === 409) {
-          this.errorMessage = 'A path pair with that name already exists.';
-        } else {
-          this.errorMessage = 'Failed to update path pair. Please try again.';
-        }
+      catchError(() => {
+        this.errorMessage = 'A path pair with that name already exists.';
         this.cdr.markForCheck();
         return EMPTY;
       }),
