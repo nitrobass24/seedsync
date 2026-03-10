@@ -28,6 +28,7 @@
 .content .checkbox {width: 30px; min-width: 30px; display: flex; align-items: center; justify-content: center;}
 .content .checkbox input[type="checkbox"] {width: 16px; height: 16px; cursor: pointer; pointer-events: none;}
 .content .status   {width: 100px; min-width: 100px;}
+.content .pair     {display: none;}
 .content .name     {flex-grow: 1; flex-basis: calc(100% - 100px);}
 .content .speed    {width: 100px; min-width: 100px;}
 /* .content .eta is hidden on mobile */
@@ -227,6 +228,7 @@
     /* NOTE: make sure this is in-sync with "#file-list #header" */
     .content .checkbox  {width: 30px; min-width: 30px;}
     .content .status    {width: 100px; min-width: 100px;}
+    .content .pair      {width: 100px; min-width: 100px; display: inline;}
     .content .name      {flex-grow: 1;}
     .content .speed     {width: 100px; min-width: 100px;}
     .content .eta       {width: 100px; min-width: 100px;}
@@ -241,11 +243,12 @@
 
     /* Re-order columns */
     .content .checkbox {order: 0;}
-    .content .status {order: 2;}
     .content .name {order: 1;}
-    .content .speed {order: 3;}
-    .content .eta {order: 4;}
-    .content .size {order: 5;}
+    .content .pair {order: 2;}
+    .content .status {order: 3;}
+    .content .speed {order: 4;}
+    .content .eta {order: 5;}
+    .content .size {order: 6;}
 
     /* Hide the inner eta, show outer eta */
     .content .eta {display: inline;}
@@ -276,6 +279,11 @@
     // ── Typography hierarchy ──
     .content .name .text .title {
         color: #E6EAF2;
+    }
+
+    .content .pair {
+        color: #8A93A6;
+        font-size: 90%;
     }
 
     .content .eta {

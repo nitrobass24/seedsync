@@ -3,8 +3,10 @@ import { TestBed } from "@angular/core/testing";
 import { BehaviorSubject, of } from "rxjs";
 import { ViewFileService, ViewFileFilterCriteria } from "./view-file.service";
 import { ModelFileService } from "./model-file.service";
+import { PathPairsService } from "../settings/path-pairs.service";
 import { LoggerService } from "../utils/logger.service";
 import { ModelFile, ModelFileState } from "../../models/model-file";
+import { PathPair } from "../../models/path-pair";
 import { ViewFile, ViewFileStatus } from "../../models/view-file";
 import { fileKey } from "./file-key";
 
@@ -33,6 +35,7 @@ function makeModelFile(
 describe("ViewFileService", () => {
   let service: ViewFileService;
   let modelFilesSubject: BehaviorSubject<Map<string, ModelFile>>;
+  let pairsSubject: BehaviorSubject<PathPair[]>;
   let mockModelFileService: {
     files$: ReturnType<BehaviorSubject<Map<string, ModelFile>>["asObservable"]>;
     queue: ReturnType<typeof vi.fn>;
@@ -44,6 +47,7 @@ describe("ViewFileService", () => {
 
   beforeEach(() => {
     modelFilesSubject = new BehaviorSubject<Map<string, ModelFile>>(new Map());
+    pairsSubject = new BehaviorSubject<PathPair[]>([]);
     mockModelFileService = {
       files$: modelFilesSubject.asObservable(),
       queue: vi.fn(),
@@ -56,6 +60,7 @@ describe("ViewFileService", () => {
       providers: [
         ViewFileService,
         { provide: ModelFileService, useValue: mockModelFileService },
+        { provide: PathPairsService, useValue: { pairs$: pairsSubject.asObservable() } },
         {
           provide: LoggerService,
           useValue: {
@@ -525,6 +530,49 @@ describe("ViewFileService", () => {
     const files = latestFiles();
     expect(files.length).toBe(1);
     expect(files[0].pairId).toBe("pair-b");
+  });
+
+  // --- Pair name resolution ---
+
+  it("should set pairName to null when pair_id is null", () => {
+    pairsSubject.next([{ id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false }]);
+    emitModelFiles([makeModelFile({ name: "file1", pair_id: null, remote_size: 100 })]);
+
+    expect(latestFiles()[0].pairName).toBeNull();
+  });
+
+  it("should resolve pairName from PathPairsService when pair_id matches", () => {
+    pairsSubject.next([
+      { id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false },
+      { id: "pair-b", name: "Media", remote_path: "/r2", local_path: "/l2", enabled: true, auto_queue: false },
+    ]);
+    emitModelFiles([
+      makeModelFile({ name: "file1", pair_id: "pair-a", remote_size: 100 }),
+      makeModelFile({ name: "file2", pair_id: "pair-b", remote_size: 200 }),
+    ]);
+
+    const files = latestFiles();
+    expect(files.find((f) => f.pairId === "pair-a")!.pairName).toBe("Seedbox");
+    expect(files.find((f) => f.pairId === "pair-b")!.pairName).toBe("Media");
+  });
+
+  it("should set pairName to null when pair_id does not match any known pair", () => {
+    pairsSubject.next([{ id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false }]);
+    emitModelFiles([makeModelFile({ name: "file1", pair_id: "pair-unknown", remote_size: 100 })]);
+
+    expect(latestFiles()[0].pairName).toBeNull();
+  });
+
+  it("should resolve pairName when pairs arrive before model files", () => {
+    // Pairs not yet known
+    pairsSubject.next([]);
+    emitModelFiles([makeModelFile({ name: "file1", pair_id: "pair-a", remote_size: 100 })]);
+    expect(latestFiles()[0].pairName).toBeNull();
+
+    // Pairs arrive, then model file changes trigger rebuild
+    pairsSubject.next([{ id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false }]);
+    emitModelFiles([makeModelFile({ name: "file1", pair_id: "pair-a", remote_size: 100, local_size: 50 })]);
+    expect(latestFiles()[0].pairName).toBe("Seedbox");
   });
 
   it("should update the correct file when same-name files have different pair_ids", () => {

@@ -34,6 +34,7 @@ function makeViewFile(overrides: Partial<ViewFile> = {}): ViewFile {
   return {
     name: 'test.txt',
     pairId: null,
+    pairName: null,
     isDir: false,
     localSize: 100,
     remoteSize: 200,
@@ -157,6 +158,7 @@ describe('FileListComponent', () => {
     const header = fixture.nativeElement.querySelector('#header');
     expect(header).toBeTruthy();
     expect(header.textContent).toContain('Filename');
+    expect(header.textContent).toContain('Pair');
     expect(header.textContent).toContain('Status');
     expect(header.textContent).toContain('Speed');
     expect(header.textContent).toContain('ETA');

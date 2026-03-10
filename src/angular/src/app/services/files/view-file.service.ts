@@ -3,6 +3,7 @@ import { BehaviorSubject, Observable, of, forkJoin } from 'rxjs';
 
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
+import { PathPairsService } from '../settings/path-pairs.service';
 import { RestService, WebReaction } from '../utils/rest.service';
 import { ModelFile, ModelFileState } from '../../models/model-file';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
@@ -22,7 +23,9 @@ export type ViewFileComparator = (a: ViewFile, b: ViewFile) => number;
 export class ViewFileService {
   private readonly logger = inject(LoggerService);
   private readonly modelFileService = inject(ModelFileService);
+  private readonly pathPairsService = inject(PathPairsService);
 
+  private pairNameMap = new Map<string, string>();
   private files: ViewFile[] = [];
   private readonly filesSubject = new BehaviorSubject<ViewFile[]>([]);
   private readonly filteredFilesSubject = new BehaviorSubject<ViewFile[]>([]);
@@ -42,6 +45,13 @@ export class ViewFileService {
   readonly checked$ = this.checkedSubject.asObservable();
 
   constructor() {
+    this.pathPairsService.pairs$.subscribe((pairs) => {
+      this.pairNameMap.clear();
+      for (const pair of pairs) {
+        this.pairNameMap.set(pair.id, pair.name);
+      }
+    });
+
     this.modelFileService.files$.subscribe({
       next: (modelFiles) => {
         const t0 = performance.now();
@@ -249,7 +259,7 @@ export class ViewFileService {
     for (const key of updatedKeys) {
       const index = this.indices.get(key)!;
       const oldViewFile = newViewFiles[index];
-      const newViewFile = createViewFile(modelFiles.get(key)!, oldViewFile.isSelected);
+      const newViewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap, oldViewFile.isSelected);
       newViewFiles[index] = { ...newViewFile, isChecked: this.checkedSet.has(key) };
       if (this.sortComparator != null && this.sortComparator(oldViewFile, newViewFile) !== 0) {
         reSort = true;
@@ -259,7 +269,7 @@ export class ViewFileService {
     // Do the adds (requires re-sort)
     for (const key of addedKeys) {
       reSort = true;
-      const viewFile = createViewFile(modelFiles.get(key)!);
+      const viewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap);
       newViewFiles.push({ ...viewFile, isChecked: this.checkedSet.has(key) });
       this.indices.set(viewFileKey(viewFile), newViewFiles.length - 1);
     }
@@ -342,7 +352,7 @@ function modelFilesEqual(a: ModelFile, b: ModelFile): boolean {
   );
 }
 
-function createViewFile(modelFile: ModelFile, isSelected: boolean = false): ViewFile {
+function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, isSelected: boolean = false): ViewFile {
   const localSize = modelFile.local_size ?? 0;
   const remoteSize = modelFile.remote_size ?? 0;
   let percentDownloaded: number;
@@ -419,6 +429,7 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
   return {
     name: modelFile.name,
     pairId: modelFile.pair_id,
+    pairName: modelFile.pair_id ? (pairNameMap.get(modelFile.pair_id) ?? null) : null,
     isDir: modelFile.is_dir,
     localSize,
     remoteSize,
