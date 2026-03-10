@@ -127,6 +127,33 @@ class TestControllerPersist(unittest.TestCase):
             persist.extract_failed_file_names,
         )
 
+    def test_legacy_colon_in_filename_greedy_match(self):
+        """Greedy regex: 'uuid:movie:part1.mkv' becomes 'uuid\\x1fmovie:part1.mkv'."""
+        uuid1 = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        content = json.dumps({
+            "downloaded": ["{}:movie:part1.mkv".format(uuid1)],
+            "extracted": [],
+        })
+        persist = ControllerPersist.from_str(content)
+
+        sep = "\x1f"
+        self.assertEqual(
+            {"{}{}movie:part1.mkv".format(uuid1, sep)},
+            persist.downloaded_file_names,
+        )
+
+    def test_plain_filename_with_colon_not_migrated(self):
+        """A filename like 'movie:part1.mkv' without a UUID prefix should NOT be migrated."""
+        content = json.dumps({
+            "downloaded": ["movie:part1.mkv"],
+            "extracted": [],
+        })
+        persist = ControllerPersist.from_str(content)
+        self.assertEqual(
+            {"movie:part1.mkv"},
+            persist.downloaded_file_names,
+        )
+
     def test_new_unit_separator_keys_unchanged(self):
         """Keys already using \\x1f should not be modified."""
         uuid1 = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"

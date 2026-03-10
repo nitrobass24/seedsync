@@ -94,7 +94,7 @@ class PathPairsConfig(Persist):
     @property
     def pairs(self) -> List[PathPair]:
         with self._lock:
-            return list(self._pairs)
+            return [copy.deepcopy(p) for p in self._pairs]
 
     @pairs.setter
     def pairs(self, value: List[PathPair]):

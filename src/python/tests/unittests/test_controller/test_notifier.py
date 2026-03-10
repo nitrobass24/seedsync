@@ -44,14 +44,15 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
         """Shutdown joins in-flight threads."""
         notifier = self._make_notifier()
         barrier = threading.Event()
+        started = threading.Event()
 
         def slow_send(url, payload):
+            started.set()
             barrier.wait(timeout=5)
 
         with patch.object(notifier, '_send_post', side_effect=slow_send):
             notifier._fire_webhook("download_complete", "test.txt")
-            # Thread is now blocked on barrier
-            time.sleep(0.05)  # Let thread start
+            started.wait(timeout=5)
 
             with notifier._lock:
                 self.assertEqual(len(notifier._active_threads), 1)
@@ -67,13 +68,15 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
         """Shutdown returns after timeout even if threads are stuck."""
         notifier = self._make_notifier()
         barrier = threading.Event()
+        started = threading.Event()
 
         def stuck_send(url, payload):
+            started.set()
             barrier.wait(timeout=10)
 
         with patch.object(notifier, '_send_post', side_effect=stuck_send):
             notifier._fire_webhook("download_complete", "test.txt")
-            time.sleep(0.05)
+            started.wait(timeout=5)
 
             start = time.monotonic()
             notifier.shutdown(timeout=0.2)
@@ -84,18 +87,21 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
 
         # Clean up: release stuck thread
         barrier.set()
-        time.sleep(0.1)
 
     def test_thread_removed_on_exception(self):
         """Thread is removed from _active_threads even if _send_post raises."""
         notifier = self._make_notifier()
+        started = threading.Event()
 
         def failing_send(url, payload):
+            started.set()
             raise RuntimeError("webhook failed")
 
         with patch.object(notifier, '_send_post', side_effect=failing_send):
             notifier._fire_webhook("download_complete", "test.txt")
-            time.sleep(0.1)  # Let thread finish
+            started.wait(timeout=5)
+            # Give the thread a moment to complete the exception handling
+            notifier.shutdown(timeout=2)
 
             with notifier._lock:
                 self.assertEqual(len(notifier._active_threads), 0)
@@ -122,17 +128,25 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
         """Total shutdown time should be bounded by timeout, not timeout * N."""
         notifier = self._make_notifier()
         barriers = []
+        all_started = threading.Event()
+        started_count = 0
+        started_lock = threading.Lock()
 
         def slow_send(url, payload):
+            nonlocal started_count
             b = threading.Event()
             barriers.append(b)
+            with started_lock:
+                started_count += 1
+                if started_count >= 5:
+                    all_started.set()
             b.wait(timeout=10)
 
         with patch.object(notifier, '_send_post', side_effect=slow_send):
             # Fire 5 webhooks
             for i in range(5):
                 notifier._fire_webhook("download_complete", f"file{i}.txt")
-            time.sleep(0.1)
+            all_started.wait(timeout=5)
 
             start = time.monotonic()
             notifier.shutdown(timeout=0.3)
@@ -145,7 +159,6 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
         # Clean up
         for b in barriers:
             b.set()
-        time.sleep(0.1)
 
 
 if __name__ == '__main__':

@@ -167,8 +167,12 @@ class TestFilterExcludedFilesRecursive(unittest.TestCase):
             inner_file,
         ])
         original_child_count = len(d.children)
-        filter_excluded_files([d], "*.nfo")
+        result = filter_excluded_files([d], "*.nfo")
         self.assertEqual(original_child_count, len(d.children))
+        # Original children still contain the same objects
+        self.assertIn(inner_file, d.children)
+        # Returned filtered tree is a different object instance than the original
+        self.assertIsNot(result[0], d)
 
     def test_multiple_patterns_recursive(self):
         """Multiple comma-separated patterns should all apply recursively."""

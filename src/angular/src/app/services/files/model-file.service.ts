@@ -5,10 +5,7 @@ import { StreamEventHandler, StreamDispatchService } from '../base/stream-dispat
 import { LoggerService } from '../utils/logger.service';
 import { RestService, WebReaction } from '../utils/rest.service';
 import { ModelFile, modelFileFromJson } from '../../models/model-file';
-
-function fileKey(file: ModelFile): string {
-  return file.pair_id ? `${file.pair_id}:${file.name}` : file.name;
-}
+import { fileKey } from './file-key';
 
 @Injectable({ providedIn: 'root' })
 export class ModelFileService implements StreamEventHandler {
@@ -95,7 +92,7 @@ export class ModelFileService implements StreamEventHandler {
       const newMap = new Map<string, ModelFile>();
       for (const file of parsed) {
         const modelFile = modelFileFromJson(file);
-        newMap.set(fileKey(modelFile), modelFile);
+        newMap.set(fileKey(modelFile.pair_id, modelFile.name), modelFile);
       }
       t1 = performance.now();
       this.logger.debug('ModelFile map creation took', (t1 - t0).toFixed(0), 'ms');
@@ -104,7 +101,7 @@ export class ModelFileService implements StreamEventHandler {
     } else if (name === this.EVENT_ADDED) {
       const parsed: { new_file: any } = JSON.parse(data);
       const file = modelFileFromJson(parsed.new_file);
-      const key = fileKey(file);
+      const key = fileKey(file.pair_id, file.name);
       if (currentFiles.has(key)) {
         this.logger.error('ModelFile named ' + key + ' already exists');
       } else {
@@ -116,7 +113,7 @@ export class ModelFileService implements StreamEventHandler {
     } else if (name === this.EVENT_REMOVED) {
       const parsed: { old_file: any } = JSON.parse(data);
       const file = modelFileFromJson(parsed.old_file);
-      const key = fileKey(file);
+      const key = fileKey(file.pair_id, file.name);
       if (currentFiles.has(key)) {
         const updated = new Map(currentFiles);
         updated.delete(key);
@@ -128,7 +125,7 @@ export class ModelFileService implements StreamEventHandler {
     } else if (name === this.EVENT_UPDATED) {
       const parsed: { new_file: any } = JSON.parse(data);
       const file = modelFileFromJson(parsed.new_file);
-      const key = fileKey(file);
+      const key = fileKey(file.pair_id, file.name);
       if (currentFiles.has(key)) {
         const updated = new Map(currentFiles);
         updated.set(key, file);

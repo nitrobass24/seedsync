@@ -8,6 +8,7 @@ import { ViewFileOptionsService } from '../../services/files/view-file-options.s
 import { LoggerService } from '../../services/utils/logger.service';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
 import { ViewFileOptions, SortMethod } from '../../models/view-file-options';
+import { fileKey } from '../../services/files/file-key';
 
 interface MockViewFileService {
   filteredFiles$: Observable<ViewFile[]>;
@@ -338,12 +339,12 @@ describe('FileListComponent', () => {
 
   it('should generate track key from pairId and name', () => {
     const file = makeViewFile({ pairId: 'pair-x', name: 'movie.mkv' });
-    expect(FileListComponent.identify(0, file)).toBe('pair-x:movie.mkv');
+    expect(FileListComponent.identify(0, file)).toBe(fileKey('pair-x', 'movie.mkv'));
   });
 
-  it('should generate track key with empty prefix when pairId is null', () => {
+  it('should generate track key with just name when pairId is null', () => {
     const file = makeViewFile({ pairId: null, name: 'movie.mkv' });
-    expect(FileListComponent.identify(0, file)).toBe(':movie.mkv');
+    expect(FileListComponent.identify(0, file)).toBe(fileKey(null, 'movie.mkv'));
   });
 
   // --- Bulk response handling ---
