@@ -9,6 +9,7 @@ function makeViewFile(overrides: Partial<ViewFile> = {}): ViewFile {
   return {
     name: 'test.txt',
     pairId: null,
+    pairName: null,
     isDir: false,
     localSize: 100,
     remoteSize: 200,
