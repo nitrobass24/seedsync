@@ -44,6 +44,8 @@ class MultiprocessingLogger:
     def stop(self):
         self.__listener_shutdown.set()
         self.__listener.join()
+        self.__queue.close()
+        self.__queue.join_thread()
 
     def propagate_exception(self):
         """

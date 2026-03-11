@@ -120,6 +120,18 @@ class ExtractProcess(AppProcess):
 
         time.sleep(ExtractProcess.__DEFAULT_SLEEP_INTERVAL_IN_SECS)
 
+    @overrides(AppProcess)
+    def close_queues(self):
+        self.__command_queue.close()
+        self.__command_queue.join_thread()
+        self.__status_result_queue.close()
+        self.__status_result_queue.join_thread()
+        self.__completed_result_queue.close()
+        self.__completed_result_queue.join_thread()
+        self.__failed_result_queue.close()
+        self.__failed_result_queue.join_thread()
+        super().close_queues()
+
     def extract(self, req: ExtractRequest):
         """
         Process-safe method to queue an extraction

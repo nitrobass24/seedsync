@@ -226,3 +226,30 @@ class TestScannerProcessSpawned(unittest.TestCase):
         with self.assertRaises(ScannerError) as ctx:
             process.propagate_exception()
         self.assertEqual("fatal-from-child", str(ctx.exception))
+
+    def test_close_queues_releases_resources(self):
+        """Verify close_queues() can be called after join without error."""
+        files = [SystemFile("test.txt", 10, False)]
+        scanner = PicklableScanner(files=files)
+        process = ScannerProcess(scanner=scanner, interval_in_ms=50)
+
+        log_queue = multiprocessing.Queue()
+        process.set_mp_log_queue(log_queue, logging.DEBUG)
+
+        process.start()
+
+        # Wait for at least one result
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if process.pop_latest_result() is not None:
+                break
+            time.sleep(0.05)
+
+        process.terminate()
+        process.join(timeout=5)
+        self.assertFalse(process.is_alive())
+
+        # close_queues() should not raise
+        process.close_queues()
+        log_queue.close()
+        log_queue.join_thread()

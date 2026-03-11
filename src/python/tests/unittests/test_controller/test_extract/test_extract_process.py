@@ -177,3 +177,9 @@ class TestExtractProcess(unittest.TestCase):
         self.assertEqual("c", call_2.model_file.name)
         self.assertEqual(False, call_2.model_file.is_dir)
         self.assertEqual(1234, call_2.model_file.local_size)
+
+    def test_close_queues_releases_resources(self):
+        self.process.run_init()
+        self.process.run_loop()
+        # close_queues() should not raise
+        self.process.close_queues()
