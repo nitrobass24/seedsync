@@ -6,6 +6,7 @@ export interface IOption {
   valuePath: [string, string];
   description: string | null;
   disabled?: boolean;
+  choices?: string[];
 }
 
 export interface IOptionsContext {
@@ -369,10 +370,11 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
       description: 'Automatically validate files when download completes',
     },
     {
-      type: OptionType.Text,
+      type: OptionType.Select,
       label: 'Hash Algorithm',
       valuePath: ['validate', 'algorithm'],
-      description: 'Checksum algorithm: md5, sha1, or sha256',
+      description: 'Checksum algorithm used for integrity verification',
+      choices: ['md5', 'sha1', 'sha256'],
     },
   ],
 };

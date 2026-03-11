@@ -45,6 +45,23 @@ class TestConverters(unittest.TestCase):
         self.assertEqual("Bad config: TestConverters.bad (-3.14) must be a boolean value", str(e.exception))
 
 
+class TestCheckers(unittest.TestCase):
+    def test_algorithm_allowed(self):
+        self.assertEqual("md5", Checkers.algorithm_allowed(None, "", "md5"))
+        self.assertEqual("sha1", Checkers.algorithm_allowed(None, "", "sha1"))
+        self.assertEqual("sha256", Checkers.algorithm_allowed(None, "", "sha256"))
+        # Case normalization
+        self.assertEqual("md5", Checkers.algorithm_allowed(None, "", "MD5"))
+        self.assertEqual("sha256", Checkers.algorithm_allowed(None, "", "SHA256"))
+        # Invalid algorithm
+        with self.assertRaises(ConfigError):
+            Checkers.algorithm_allowed(TestCheckers, "algo", "sha-256")
+        with self.assertRaises(ConfigError):
+            Checkers.algorithm_allowed(TestCheckers, "algo", "")
+        with self.assertRaises(ConfigError):
+            Checkers.algorithm_allowed(TestCheckers, "algo", "invalid")
+
+
 class DummyInnerConfig(InnerConfig):
     c_prop1 = InnerConfig._create_property("prop1", Checkers.null, Converters.null)
     a_prop2 = InnerConfig._create_property("prop2", Checkers.null, Converters.null)

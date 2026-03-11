@@ -104,6 +104,18 @@ class Checkers:
             ))
         return value
 
+    @staticmethod
+    def algorithm_allowed(cls: T, name: str, value: str) -> str:
+        allowed = {"md5", "sha1", "sha256"}
+        normalized = value.strip().lower() if value else ""
+        if normalized not in allowed:
+            raise ConfigError(
+                "Bad config: {}.{} ({}) must be one of: {}".format(
+                    cls.__name__, name, value, ", ".join(sorted(allowed))
+                )
+            )
+        return normalized
+
 
 class InnerConfig(ABC):
     """
@@ -367,7 +379,7 @@ class Config(Persist):
 
     class Validate(IC):
         enabled = PROP("enabled", Checkers.null, Converters.bool)
-        algorithm = PROP("algorithm", Checkers.string_nonempty, Converters.null)
+        algorithm = PROP("algorithm", Checkers.algorithm_allowed, Converters.null)
         auto_validate = PROP("auto_validate", Checkers.null, Converters.bool)
 
         def __init__(self):

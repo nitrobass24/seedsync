@@ -114,10 +114,11 @@ class TestValidateProcess(unittest.TestCase):
         self.process.validate(req)
         time.sleep(0.1)
 
-        # run_loop processes the validation (completes it) and publishes status
+        # run_loop emits status before the blocking call (with VALIDATING) and
+        # after completion (empty). pop_latest_statuses drains the queue and
+        # returns the last result — which should be the post-completion empty one.
         self.process.run_loop()
 
-        # After completion, status should show empty (validation finished)
         status = self.process.pop_latest_statuses()
         self.assertIsNotNone(status)
         self.assertEqual(0, len(status.statuses))
@@ -184,6 +185,20 @@ class TestValidateProcess(unittest.TestCase):
 
         completed = self.process.pop_completed()
         self.assertEqual(1, len(completed))
+
+    def test_missing_local_file_reports_failure(self):
+        req = self._make_request(local_path="/nonexistent/path")
+        self.process.validate(req)
+        time.sleep(0.1)
+        self.process.run_loop()
+
+        completed = self.process.pop_completed()
+        self.assertEqual(0, len(completed))
+
+        failed = self.process.pop_failed()
+        self.assertEqual(1, len(failed))
+        self.assertIn("does not exist", failed[0].error_message)
+        self.assertFalse(failed[0].is_checksum_mismatch)
 
     def test_close_queues_releases_resources(self):
         # close_queues is also called in tearDown; calling it twice should be safe

@@ -700,7 +700,10 @@ class Controller:
                             self.__context.config.controller.staging_path:
                         will_auto_extract = self.__context.config.autoqueue.auto_extract and \
                                             diff.new_file.is_extractable
-                        if not will_auto_extract:
+                        will_auto_validate = self.__context.config.validate.enabled and \
+                                             self.__context.config.validate.auto_validate and \
+                                             diff.new_file.remote_size is not None
+                        if not will_auto_extract and not will_auto_validate:
                             self.__spawn_move_process(diff.new_file.name, pc)
 
                 if diff.new_file is not None and pc is not None and \
@@ -784,6 +787,8 @@ class Controller:
             self.__persist.validated_file_names.add(pkey)
             self.__persist.corrupt_file_names.discard(pkey)
             self._sync_persist_to_all_builders()
+            # If staging is active, spawn the move process now that validation finished
+            self._spawn_deferred_move(result.pair_id, result.name)
 
         # Process validation failures
         for result in latest_failed_validations:
@@ -800,6 +805,8 @@ class Controller:
                 # just log so the user can retry
                 self.logger.warning("Validation error for '{}' (not marking corrupt): {}".format(
                     result.name, result.error_message))
+            # Spawn deferred move regardless of failure type — validation is done
+            self._spawn_deferred_move(result.pair_id, result.name)
 
         # Update the controller status (use most recent across all pairs)
         for pc in self.__pair_contexts:
@@ -1169,6 +1176,22 @@ class Controller:
         self.__mp_logger.propagate_exception()
         self.__extract_process.propagate_exception()
         self.__validate_process.propagate_exception()
+
+    def _spawn_deferred_move(self, pair_id: Optional[str], file_name: str):
+        """Spawn the staging→final move for a file whose validation just finished.
+
+        Only acts when staging is enabled; looks up the owning pair context by pair_id.
+        """
+        if not (self.__context.config.controller.use_staging and
+                self.__context.config.controller.staging_path):
+            return
+        pc = self._find_pair_by_id(pair_id)
+        if pc is None:
+            self.logger.warning(
+                "Cannot spawn deferred move for '{}': pair '{}' not found".format(
+                    file_name, pair_id))
+            return
+        self.__spawn_move_process(file_name, pc)
 
     def __spawn_move_process(self, file_name: str, pc: Optional[_PairContext] = None):
         """

@@ -43,5 +43,22 @@
         }
       </label>
     }
+
+    @case (OptionType.Select) {
+      <label>
+        <span class="name">{{ label() }}</span>
+        <select class="form-select"
+                [disabled]="disabled() || value() == null"
+                [ngModel]="value()"
+                (ngModelChange)="onChange($event)">
+          @for (option of choices(); track option) {
+            <option [value]="option">{{ option }}</option>
+          }
+        </select>
+        @if (description()) {
+          <span class="description">{{ description() }}</span>
+        }
+      </label>
+    }
   }
 </div>

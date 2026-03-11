@@ -79,7 +79,7 @@ class ChecksumMismatchError(ValueError):
     pass
 
 
-_ALLOWED_ALGORITHMS = frozenset({"md5", "sha1", "sha256", "sha-256"})
+_ALLOWED_ALGORITHMS = frozenset({"md5", "sha1", "sha256"})
 
 
 class ValidateProcess(AppProcess):
@@ -115,6 +115,19 @@ class ValidateProcess(AppProcess):
                 self.__active_validations[key] = req
         except queue.Empty:
             pass
+
+        # Publish current status BEFORE the blocking call so the active request
+        # appears as VALIDATING to the UI.
+        if self.__active_validations:
+            statuses = [
+                ValidateStatus(name=req.name, is_dir=req.is_dir,
+                               state=ValidateStatus.State.VALIDATING, pair_id=req.pair_id)
+                for req in self.__active_validations.values()
+            ]
+            self.__status_result_queue.put(ValidateStatusResult(
+                timestamp=datetime.datetime.now(),
+                statuses=statuses,
+            ))
 
         # Process one validation at a time (blocking but in child process)
         if self.__active_validations:
@@ -153,19 +166,17 @@ class ValidateProcess(AppProcess):
             finally:
                 del self.__active_validations[key]
 
-        # Publish current status
-        statuses = [
-            ValidateStatus(name=req.name, is_dir=req.is_dir,
-                           state=ValidateStatus.State.VALIDATING, pair_id=req.pair_id)
-            for req in self.__active_validations.values()
-        ]
-        status_result = ValidateStatusResult(
-            timestamp=datetime.datetime.now(),
-            statuses=statuses,
-        )
-        self.__status_result_queue.put(status_result)
-
-        if not self.__active_validations:
+            # Publish post-completion status (the completed item is now removed)
+            statuses = [
+                ValidateStatus(name=r.name, is_dir=r.is_dir,
+                               state=ValidateStatus.State.VALIDATING, pair_id=r.pair_id)
+                for r in self.__active_validations.values()
+            ]
+            self.__status_result_queue.put(ValidateStatusResult(
+                timestamp=datetime.datetime.now(),
+                statuses=statuses,
+            ))
+        else:
             time.sleep(ValidateProcess.__DEFAULT_SLEEP_INTERVAL_IN_SECS)
 
     def _validate_file(self, req: ValidateRequest):
@@ -175,9 +186,14 @@ class ValidateProcess(AppProcess):
         if req.algorithm not in _ALLOWED_ALGORITHMS:
             raise ValueError("Unsupported hash algorithm: {}".format(req.algorithm))
 
+        if not os.path.exists(file_path):
+            raise FileNotFoundError("Local path does not exist: {}".format(file_path))
+
         sshcp = self._create_ssh(req)
 
         if req.is_dir:
+            if not os.path.isdir(file_path):
+                raise ValueError("Expected directory but found file: {}".format(file_path))
             self._validate_directory(req, file_path, sshcp)
         else:
             local_hash = self._hash_local_file(file_path, req.algorithm)
@@ -191,21 +207,72 @@ class ValidateProcess(AppProcess):
             self.logger.info("Validated {}: {}".format(req.name, local_hash))
 
     def _validate_directory(self, req: ValidateRequest, local_dir: str, sshcp):
-        """Recursively validate all files in a directory."""
+        """Validate all files in a directory by comparing local and remote checksums.
+
+        Performs symmetric validation: collects local file set via os.walk and
+        remote file set via SSH 'find', then compares the union of both sets.
+        Files only on one side are flagged as mismatches.
+        """
+        # Build local file set (relative paths from local_dir)
+        local_rel_paths = set()
         for root, _dirs, files in os.walk(local_dir):
             for filename in files:
                 local_file = os.path.join(root, filename)
-                # Relative path from the pair's local_path for the remote command
                 rel_path = os.path.relpath(local_file, req.local_path)
-                local_hash = self._hash_local_file(local_file, req.algorithm)
-                remote_hash = self._hash_remote_file(req, rel_path, req.algorithm, sshcp)
-                if not hmac.compare_digest(local_hash, remote_hash):
-                    raise ChecksumMismatchError(
-                        "Checksum mismatch for {}: local={} remote={}".format(
-                            rel_path, local_hash, remote_hash
-                        )
+                local_rel_paths.add(rel_path)
+
+        # Build remote file set via SSH find
+        remote_dir = os.path.join(req.remote_path, req.name)
+        quoted_dir = shlex.quote(remote_dir)
+        find_cmd = 'find {} -type f'.format(quoted_dir)
+        try:
+            find_output = sshcp.shell(find_cmd)
+            remote_abs_paths = find_output.decode().strip().split('\n')
+            remote_rel_paths = set()
+            for abs_path in remote_abs_paths:
+                abs_path = abs_path.strip()
+                if abs_path:
+                    rel = os.path.relpath(abs_path, req.remote_path)
+                    remote_rel_paths.add(rel)
+        except Exception as e:
+            self.logger.warning("Failed to list remote directory: {}".format(str(e)))
+            # Fall back to local-only validation (original behavior)
+            remote_rel_paths = local_rel_paths.copy()
+
+        # Validate the union of both sets
+        all_paths = local_rel_paths | remote_rel_paths
+        mismatches = []
+
+        for rel_path in sorted(all_paths):
+            local_file = os.path.join(req.local_path, rel_path)
+            is_local = rel_path in local_rel_paths
+            is_remote = rel_path in remote_rel_paths
+
+            if is_local and not is_remote:
+                mismatches.append("Local-only file: {}".format(rel_path))
+                continue
+            if is_remote and not is_local:
+                mismatches.append("Remote-only file: {}".format(rel_path))
+                continue
+
+            # Both exist — compare hashes
+            local_hash = self._hash_local_file(local_file, req.algorithm)
+            remote_hash = self._hash_remote_file(req, rel_path, req.algorithm, sshcp)
+            if not hmac.compare_digest(local_hash, remote_hash):
+                mismatches.append(
+                    "Checksum mismatch for {}: local={} remote={}".format(
+                        rel_path, local_hash, remote_hash
                     )
+                )
+            else:
                 self.logger.debug("Validated file {}: {}".format(rel_path, local_hash))
+
+        if mismatches:
+            raise ChecksumMismatchError(
+                "Directory validation failed for {}: {}".format(
+                    req.name, "; ".join(mismatches)
+                )
+            )
         self.logger.info("Validated directory {}".format(req.name))
 
     @staticmethod
@@ -239,7 +306,7 @@ class ValidateProcess(AppProcess):
         """Build the remote hash command for the given algorithm."""
         if algorithm == "md5":
             return 'md5sum {}'.format(quoted_file)
-        elif algorithm in ("sha256", "sha-256"):
+        elif algorithm == "sha256":
             return 'sha256sum {}'.format(quoted_file)
         elif algorithm == "sha1":
             return 'sha1sum {}'.format(quoted_file)

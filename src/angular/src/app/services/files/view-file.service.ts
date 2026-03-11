@@ -460,7 +460,7 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
       ViewFileStatus.EXTRACT_FAILED,
       ViewFileStatus.VALIDATED,
       ViewFileStatus.CORRUPT,
-    ].includes(status) && modelFile.local_size != null && remoteSize > 0;
+    ].includes(status) && modelFile.local_size != null && modelFile.remote_size != null;
 
   return {
     name: modelFile.name,

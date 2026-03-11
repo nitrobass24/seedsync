@@ -159,7 +159,7 @@
              (click)="!isValidatable() || onValidate(file())"
              [class.loading]="activeAction === FileAction.VALIDATE">
             <div class="loader"></div>
-            <img src="assets/icons/validate.svg" />
+            <img src="assets/icons/validate.svg" alt="" aria-hidden="true" />
             <div class="text"><span>Validate</span></div>
         </div>
         <div class="button" appClickStopPropagation
