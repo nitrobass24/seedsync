@@ -6,6 +6,7 @@ export enum OptionType {
   Text,
   Checkbox,
   Password,
+  Select,
 }
 
 @Component({
@@ -22,6 +23,7 @@ export class OptionComponent implements OnInit, OnDestroy {
   readonly value = input<any>(null);
   readonly description = input<string | null>(null);
   readonly disabled = input<boolean>(false);
+  readonly choices = input<string[]>([]);
 
   readonly changeEvent = output<any>();
 

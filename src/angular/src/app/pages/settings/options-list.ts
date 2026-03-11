@@ -6,6 +6,7 @@ export interface IOption {
   valuePath: [string, string];
   description: string | null;
   disabled?: boolean;
+  choices?: string[];
 }
 
 export interface IOptionsContext {
@@ -348,6 +349,32 @@ export const OPTIONS_CONTEXT_NOTIFICATIONS: IOptionsContext = {
       label: 'Notify on delete complete',
       valuePath: ['notifications', 'notify_on_delete_complete'],
       description: null,
+    },
+  ],
+};
+
+export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
+  header: 'Integrity Check',
+  id: 'integrity-check',
+  options: [
+    {
+      type: OptionType.Checkbox,
+      label: 'Enable integrity checking',
+      valuePath: ['validate', 'enabled'],
+      description: 'Verify file checksums after download by comparing local and remote hashes',
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Auto-validate after download',
+      valuePath: ['validate', 'auto_validate'],
+      description: 'Automatically validate files when download completes',
+    },
+    {
+      type: OptionType.Select,
+      label: 'Hash Algorithm',
+      valuePath: ['validate', 'algorithm'],
+      description: 'Checksum algorithm used for integrity verification',
+      choices: ['md5', 'sha1', 'sha256'],
     },
   ],
 };

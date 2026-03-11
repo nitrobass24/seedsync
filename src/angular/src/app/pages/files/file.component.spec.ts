@@ -26,6 +26,7 @@ function makeViewFile(overrides: Partial<ViewFile> = {}): ViewFile {
     isExtractable: false,
     isLocallyDeletable: true,
     isRemotelyDeletable: true,
+    isValidatable: false,
     localCreatedTimestamp: null,
     localModifiedTimestamp: null,
     remoteCreatedTimestamp: null,
@@ -120,6 +121,18 @@ describe('FileComponent.ngOnChanges', () => {
     });
 
     expect(component.activeAction).toBe(FileAction.QUEUE);
+  });
+
+  it('should clear activeAction for VALIDATE when status changes', () => {
+    component.activeAction = FileAction.VALIDATE;
+    const oldFile = makeViewFile({ status: ViewFileStatus.DOWNLOADED });
+    const newFile = makeViewFile({ status: ViewFileStatus.VALIDATING });
+
+    component.ngOnChanges({
+      file: new SimpleChange(oldFile, newFile, false),
+    });
+
+    expect(component.activeAction).toBeNull();
   });
 });
 

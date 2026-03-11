@@ -16,6 +16,7 @@ export enum FileAction {
   QUEUE,
   STOP,
   EXTRACT,
+  VALIDATE,
   DELETE_LOCAL,
   DELETE_REMOTE
 }
@@ -51,6 +52,7 @@ export class FileComponent implements OnChanges, OnDestroy {
   stopEvent = output<ViewFile>();
   extractEvent = output<ViewFile>();
   deleteLocalEvent = output<ViewFile>();
+  validateEvent = output<ViewFile>();
   deleteRemoteEvent = output<ViewFile>();
 
   activeAction: FileAction | null = null;
@@ -79,6 +81,9 @@ export class FileComponent implements OnChanges, OnDestroy {
                    oldFile.isLocallyDeletable && !newFile.isLocallyDeletable) {
           this.activeAction = null;
           this.resetConfirmState();
+        } else if (this.activeAction === FileAction.VALIDATE &&
+                   oldFile.isValidatable && !newFile.isValidatable) {
+          this.activeAction = null;
         }
 
         if (!oldFile.isSelected && newFile.isSelected && this.fileElement &&
@@ -110,6 +115,10 @@ export class FileComponent implements OnChanges, OnDestroy {
     return this.activeAction == null && this.file().isExtractable && this.file().isArchive;
   }
 
+  isValidatable(): boolean {
+    return this.activeAction == null && this.file().isValidatable;
+  }
+
   isLocallyDeletable(): boolean {
     return this.activeAction == null && this.file().isLocallyDeletable;
   }
@@ -131,6 +140,11 @@ export class FileComponent implements OnChanges, OnDestroy {
   onExtract(file: ViewFile): void {
     this.activeAction = FileAction.EXTRACT;
     this.extractEvent.emit(file);
+  }
+
+  onValidate(file: ViewFile): void {
+    this.activeAction = FileAction.VALIDATE;
+    this.validateEvent.emit(file);
   }
 
   onDeleteLocal(file: ViewFile): void {

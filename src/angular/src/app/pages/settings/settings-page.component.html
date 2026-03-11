@@ -22,6 +22,10 @@
       </ng-container>
 
       <ng-container
+        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_VALIDATE">
+      </ng-container>
+
+      <ng-container
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_DISCOVERY">
       </ng-container>
     </div>
@@ -43,6 +47,7 @@
                   [type]="option.type"
                   [label]="option.label"
                   [description]="option.description"
+                  [choices]="option.choices || []"
                   [value]="getOptionValue(config$ | async, option.valuePath)"
                   (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
                 </app-option>
@@ -89,6 +94,7 @@
             [label]="option.label"
             [description]="option.description"
             [disabled]="!!option.disabled"
+            [choices]="option.choices || []"
             [value]="getOptionValue(config$ | async, option.valuePath)"
             (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
           </app-option>

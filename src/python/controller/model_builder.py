@@ -10,6 +10,7 @@ from system import SystemFile
 from lftp import LftpJobStatus
 from model import ModelFile, Model, ModelError
 from .extract import ExtractStatus, Extract
+from .validate import ValidateStatus
 
 
 class ModelBuilder:
@@ -32,6 +33,9 @@ class ModelBuilder:
         self.__extract_statuses = dict()
         self.__extracted_files = set()
         self.__extract_failed_files = set()
+        self.__validate_statuses = dict()
+        self.__validated_files = set()
+        self.__corrupt_files = set()
         self.__auto_delete_remote = False
         self.__cached_model = None
         self.__smoothed_etas = dict()
@@ -94,6 +98,27 @@ class ModelBuilder:
         if self.__extract_failed_files != prev_extract_failed_files:
             self.__cached_model = None
 
+    def set_validate_statuses(self, validate_statuses: List[ValidateStatus]):
+        prev_validate_statuses = self.__validate_statuses
+        self.__validate_statuses = {status.name: status for status in validate_statuses}
+        # Invalidate the cache
+        if self.__validate_statuses != prev_validate_statuses:
+            self.__cached_model = None
+
+    def set_validated_files(self, validated_files: Set[str]):
+        prev_validated_files = self.__validated_files
+        self.__validated_files = validated_files
+        # Invalidate the cache
+        if self.__validated_files != prev_validated_files:
+            self.__cached_model = None
+
+    def set_corrupt_files(self, corrupt_files: Set[str]):
+        prev_corrupt_files = self.__corrupt_files
+        self.__corrupt_files = corrupt_files
+        # Invalidate the cache
+        if self.__corrupt_files != prev_corrupt_files:
+            self.__cached_model = None
+
     def set_auto_delete_remote(self, enabled: bool):
         if self.__auto_delete_remote != enabled:
             self.__auto_delete_remote = enabled
@@ -108,6 +133,9 @@ class ModelBuilder:
         self.__extract_statuses.clear()
         self.__extracted_files.clear()
         self.__extract_failed_files.clear()
+        self.__validate_statuses.clear()
+        self.__validated_files.clear()
+        self.__corrupt_files.clear()
         self.__auto_delete_remote = False
         self.__cached_model = None
         self.__smoothed_etas.clear()
@@ -397,6 +425,34 @@ class ModelBuilder:
             # next we check if root has failed extraction
             if model_file.name in self.__extract_failed_files and model_file.state == ModelFile.State.DOWNLOADED:
                     model_file.state = ModelFile.State.EXTRACT_FAILED
+
+            # next we check if root is Validating
+            # root is Validating if it has a validate status, is in an expected state, and exists locally
+            if model_file.name in self.__validate_statuses:
+                if model_file.state in (
+                    ModelFile.State.DEFAULT,
+                    ModelFile.State.DOWNLOADED,
+                    ModelFile.State.EXTRACTED,
+                    ModelFile.State.EXTRACT_FAILED,
+                ) and model_file.local_size is not None:
+                    model_file.state = ModelFile.State.VALIDATING
+                else:
+                    self.logger.warning("File {} has validate status but is in state {}".format(
+                        model_file.name, str(model_file.state)))
+
+            # next we check if root is Validated
+            # root is Validated if it is in Downloaded/Extracted/ExtractFailed state and in validated files list
+            if model_file.name in self.__validated_files and model_file.state in (
+                    ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED, ModelFile.State.EXTRACT_FAILED):
+                model_file.state = ModelFile.State.VALIDATED
+
+            # next we check if root is Corrupt
+            # root is Corrupt if it is in Downloaded/Extracted/ExtractFailed/Validated state and in corrupt files list
+            # Corrupt overrides Validated because corruption is discovered after validation
+            if model_file.name in self.__corrupt_files and model_file.state in (
+                    ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED,
+                    ModelFile.State.EXTRACT_FAILED, ModelFile.State.VALIDATED):
+                model_file.state = ModelFile.State.CORRUPT
 
             model.add_file(model_file)
 

@@ -129,6 +129,11 @@ export class ViewFileService {
     return this.createAction(file, (f) => this.modelFileService.deleteRemote(f));
   }
 
+  validate(file: ViewFile): Observable<WebReaction> {
+    this.logger.debug('Validate view file: ' + file.name);
+    return this.createAction(file, (f) => this.modelFileService.validate(f));
+  }
+
   toggleCheck(file: ViewFile): void {
     const key = viewFileKey(file);
     if (this.checkedSet.has(key)) {
@@ -400,13 +405,22 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     case ModelFileState.EXTRACT_FAILED:
       status = ViewFileStatus.EXTRACT_FAILED;
       break;
+    case ModelFileState.VALIDATING:
+      status = ViewFileStatus.VALIDATING;
+      break;
+    case ModelFileState.VALIDATED:
+      status = ViewFileStatus.VALIDATED;
+      break;
+    case ModelFileState.CORRUPT:
+      status = ViewFileStatus.CORRUPT;
+      break;
     default:
       status = ViewFileStatus.DEFAULT;
   }
 
   const isQueueable =
-    [ViewFileStatus.DEFAULT, ViewFileStatus.STOPPED, ViewFileStatus.DELETED].includes(status) &&
-    remoteSize > 0;
+    ([ViewFileStatus.DEFAULT, ViewFileStatus.STOPPED, ViewFileStatus.DELETED].includes(status) && remoteSize > 0) ||
+    status === ViewFileStatus.CORRUPT;
   const isStoppable = [ViewFileStatus.QUEUED, ViewFileStatus.DOWNLOADING].includes(status);
   const isExtractable =
     [
@@ -415,6 +429,8 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
       ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
     ].includes(status) && localSize > 0;
   const isLocallyDeletable =
     [
@@ -423,6 +439,8 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
       ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
     ].includes(status) && localSize > 0;
   const isRemotelyDeletable =
     [
@@ -431,8 +449,18 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
       ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
       ViewFileStatus.DELETED,
     ].includes(status) && remoteSize > 0;
+  const isValidatable =
+    [
+      ViewFileStatus.DOWNLOADED,
+      ViewFileStatus.EXTRACTED,
+      ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
+    ].includes(status) && modelFile.local_size != null && modelFile.remote_size != null;
 
   return {
     name: modelFile.name,
@@ -454,6 +482,7 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     isExtractable,
     isLocallyDeletable,
     isRemotelyDeletable,
+    isValidatable,
     localCreatedTimestamp: modelFile.local_created_timestamp,
     localModifiedTimestamp: modelFile.local_modified_timestamp,
     remoteCreatedTimestamp: modelFile.remote_created_timestamp,

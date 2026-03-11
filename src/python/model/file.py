@@ -25,6 +25,9 @@ class ModelFile:
         EXTRACTING = 5
         EXTRACTED = 6
         EXTRACT_FAILED = 7
+        VALIDATING = 8
+        VALIDATED = 9
+        CORRUPT = 10
 
     def __init__(self, name: str, is_dir: bool, pair_id: str = None):
         self.__name = name  # file or folder name

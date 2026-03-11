@@ -5,31 +5,40 @@
         </div>
         <div class="status">
             @if (file().status === ViewFileStatus.DEFAULT && file().remoteSize > 0) {
-                <img src="assets/icons/default-remote.svg" id="default-remote" />
+                <img src="assets/icons/default-remote.svg" class="default-remote" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.QUEUED) {
-                <img src="assets/icons/queued.svg" id="queued" />
+                <img src="assets/icons/queued.svg" class="queued" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.DOWNLOADING) {
-                <img src="assets/icons/downloading.svg" id="downloading" />
+                <img src="assets/icons/downloading.svg" class="downloading" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.DOWNLOADED) {
-                <img src="assets/icons/downloaded.svg" id="downloaded" />
+                <img src="assets/icons/downloaded.svg" class="downloaded" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.STOPPED) {
-                <img src="assets/icons/stopped.svg" id="stopped" />
+                <img src="assets/icons/stopped.svg" class="stopped" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.DELETED) {
-                <img src="assets/icons/deleted.svg" id="deleted" />
+                <img src="assets/icons/deleted.svg" class="deleted" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.EXTRACTING) {
-                <img src="assets/icons/extracting.svg" id="extracting" />
+                <img src="assets/icons/extracting.svg" class="extracting" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.EXTRACTED) {
-                <img src="assets/icons/extracted.svg" id="extracted" />
+                <img src="assets/icons/extracted.svg" class="extracted" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.EXTRACT_FAILED) {
-                <img src="assets/icons/extracting.svg" id="extract-failed" />
+                <img src="assets/icons/extracting.svg" class="extract-failed" alt="" aria-hidden="true" />
+            }
+            @if (file().status === ViewFileStatus.VALIDATING) {
+                <img src="assets/icons/validating.svg" class="validating" alt="" aria-hidden="true" />
+            }
+            @if (file().status === ViewFileStatus.VALIDATED) {
+                <img src="assets/icons/validated.svg" class="validated" alt="" aria-hidden="true" />
+            }
+            @if (file().status === ViewFileStatus.CORRUPT) {
+                <img src="assets/icons/corrupt.svg" class="corrupt" alt="" aria-hidden="true" />
             }
             <!-- don't show text for default status -->
             @if (file().status !== ViewFileStatus.DEFAULT) {
@@ -98,11 +107,13 @@
                 <div class="progress-bar" role="progressbar"
                      [class.progress-bar-animated]="
                         file().status === ViewFileStatus.DOWNLOADING ||
-                        file().status === ViewFileStatus.EXTRACTING
+                        file().status === ViewFileStatus.EXTRACTING ||
+                        file().status === ViewFileStatus.VALIDATING
                      "
                      [class.progress-bar-striped]="
                         file().status === ViewFileStatus.DOWNLOADING ||
-                        file().status === ViewFileStatus.EXTRACTING
+                        file().status === ViewFileStatus.EXTRACTING ||
+                        file().status === ViewFileStatus.VALIDATING
                      "
                      [attr.aria-valuenow]="file().percentDownloaded" aria-valuemin="0" aria-valuemax="100"
                      [style.width]="
@@ -142,6 +153,14 @@
             <div class="loader"></div>
             <img src="assets/icons/extract.svg" />
             <div class="text"><span>Extract</span></div>
+        </div>
+        <div class="button" appClickStopPropagation
+             [attr.disabled]="isValidatable() ? null : true"
+             (click)="!isValidatable() || onValidate(file())"
+             [class.loading]="activeAction === FileAction.VALIDATE">
+            <div class="loader"></div>
+            <img src="assets/icons/validate.svg" alt="" aria-hidden="true" />
+            <div class="text"><span>Validate</span></div>
         </div>
         <div class="button" appClickStopPropagation
              [attr.disabled]="isLocallyDeletable() ? null : true"

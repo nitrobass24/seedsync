@@ -68,6 +68,14 @@ export class FileListComponent {
     });
   }
 
+  onValidate(file: ViewFile): void {
+    this.viewFileService.validate(file).pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(data => {
+      this.logger.info(data);
+    });
+  }
+
   onDeleteLocal(file: ViewFile): void {
     this.viewFileService.deleteLocal(file).pipe(
       takeUntilDestroyed(this.destroyRef),

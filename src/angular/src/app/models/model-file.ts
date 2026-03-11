@@ -29,6 +29,9 @@ export enum ModelFileState {
   EXTRACTING      = 'extracting',
   EXTRACTED       = 'extracted',
   EXTRACT_FAILED  = 'extract_failed',
+  VALIDATING      = 'validating',
+  VALIDATED       = 'validated',
+  CORRUPT         = 'corrupt',
 }
 
 const STATE_LOOKUP: Record<string, ModelFileState> = {
@@ -40,6 +43,9 @@ const STATE_LOOKUP: Record<string, ModelFileState> = {
   EXTRACTING:     ModelFileState.EXTRACTING,
   EXTRACTED:      ModelFileState.EXTRACTED,
   EXTRACT_FAILED: ModelFileState.EXTRACT_FAILED,
+  VALIDATING:     ModelFileState.VALIDATING,
+  VALIDATED:      ModelFileState.VALIDATED,
+  CORRUPT:        ModelFileState.CORRUPT,
 };
 
 export function modelFileFromJson(json: any): ModelFile {
