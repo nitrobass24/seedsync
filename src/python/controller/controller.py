@@ -54,7 +54,7 @@ def _filter_children(file, patterns: List[str]):
 def filter_excluded_files(files: List, exclude_patterns_str: str) -> List:
     if not exclude_patterns_str or not exclude_patterns_str.strip():
         return files
-    patterns = [p.strip() for p in exclude_patterns_str.split(",") if p.strip()]
+    patterns = [p.strip().rstrip("/") for p in exclude_patterns_str.split(",") if p.strip()]
     if not patterns:
         return files
     result = []
