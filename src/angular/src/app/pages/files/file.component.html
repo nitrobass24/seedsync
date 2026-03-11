@@ -5,40 +5,40 @@
         </div>
         <div class="status">
             @if (file().status === ViewFileStatus.DEFAULT && file().remoteSize > 0) {
-                <img src="assets/icons/default-remote.svg" id="default-remote" />
+                <img src="assets/icons/default-remote.svg" class="default-remote" />
             }
             @if (file().status === ViewFileStatus.QUEUED) {
-                <img src="assets/icons/queued.svg" id="queued" />
+                <img src="assets/icons/queued.svg" class="queued" />
             }
             @if (file().status === ViewFileStatus.DOWNLOADING) {
-                <img src="assets/icons/downloading.svg" id="downloading" />
+                <img src="assets/icons/downloading.svg" class="downloading" />
             }
             @if (file().status === ViewFileStatus.DOWNLOADED) {
-                <img src="assets/icons/downloaded.svg" id="downloaded" />
+                <img src="assets/icons/downloaded.svg" class="downloaded" />
             }
             @if (file().status === ViewFileStatus.STOPPED) {
-                <img src="assets/icons/stopped.svg" id="stopped" />
+                <img src="assets/icons/stopped.svg" class="stopped" />
             }
             @if (file().status === ViewFileStatus.DELETED) {
-                <img src="assets/icons/deleted.svg" id="deleted" />
+                <img src="assets/icons/deleted.svg" class="deleted" />
             }
             @if (file().status === ViewFileStatus.EXTRACTING) {
-                <img src="assets/icons/extracting.svg" id="extracting" />
+                <img src="assets/icons/extracting.svg" class="extracting" />
             }
             @if (file().status === ViewFileStatus.EXTRACTED) {
-                <img src="assets/icons/extracted.svg" id="extracted" />
+                <img src="assets/icons/extracted.svg" class="extracted" />
             }
             @if (file().status === ViewFileStatus.EXTRACT_FAILED) {
-                <img src="assets/icons/extracting.svg" id="extract-failed" />
+                <img src="assets/icons/extracting.svg" class="extract-failed" />
             }
             @if (file().status === ViewFileStatus.VALIDATING) {
-                <img src="assets/icons/validating.svg" id="validating" alt="" aria-hidden="true" />
+                <img src="assets/icons/validating.svg" class="validating" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.VALIDATED) {
-                <img src="assets/icons/validated.svg" id="validated" alt="" aria-hidden="true" />
+                <img src="assets/icons/validated.svg" class="validated" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.CORRUPT) {
-                <img src="assets/icons/corrupt.svg" id="corrupt" alt="" aria-hidden="true" />
+                <img src="assets/icons/corrupt.svg" class="corrupt" alt="" aria-hidden="true" />
             }
             <!-- don't show text for default status -->
             @if (file().status !== ViewFileStatus.DEFAULT) {

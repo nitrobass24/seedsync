@@ -419,8 +419,8 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
   }
 
   const isQueueable =
-    [ViewFileStatus.DEFAULT, ViewFileStatus.STOPPED, ViewFileStatus.DELETED, ViewFileStatus.CORRUPT].includes(status) &&
-    remoteSize > 0;
+    ([ViewFileStatus.DEFAULT, ViewFileStatus.STOPPED, ViewFileStatus.DELETED].includes(status) && remoteSize > 0) ||
+    status === ViewFileStatus.CORRUPT;
   const isStoppable = [ViewFileStatus.QUEUED, ViewFileStatus.DOWNLOADING].includes(status);
   const isExtractable =
     [

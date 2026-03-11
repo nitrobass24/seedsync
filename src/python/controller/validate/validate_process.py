@@ -235,9 +235,7 @@ class ValidateProcess(AppProcess):
                     rel = os.path.relpath(abs_path, req.remote_path)
                     remote_rel_paths.add(rel)
         except Exception as e:
-            self.logger.warning("Failed to list remote directory: {}".format(str(e)))
-            # Fall back to local-only validation (original behavior)
-            remote_rel_paths = local_rel_paths.copy()
+            raise ValueError("Failed to list remote directory {}: {}".format(remote_dir, str(e))) from e
 
         # Validate the union of both sets
         all_paths = local_rel_paths | remote_rel_paths

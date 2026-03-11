@@ -89,14 +89,14 @@
     }
 
     // Optical weighting
-    img#downloading, img#downloaded {
+    img.downloading, img.downloaded {
         width: 45px;
     }
-    img#default-remote {
+    img.default-remote {
         width: 45px;
         height: 45px;
     }
-    img#stopped {
+    img.stopped {
         width: 30px;
     }
 
@@ -340,18 +340,18 @@
     $tint-pink: brightness(0) saturate(100%) invert(50%) sepia(40%) saturate(800%) hue-rotate(320deg) brightness(100%) contrast(95%);
 
     .content .status {
-        img#downloading  { filter: $tint-blue; }
-        img#downloaded   { filter: $tint-green; }
-        img#queued       { filter: $tint-amber; }
-        img#extracted    { filter: $tint-green; }
-        img#stopped      { filter: $tint-muted; }
-        img#default-remote { filter: $tint-subtle; }
-        img#deleted      { filter: $tint-pink; }
-        img#extracting   { filter: $tint-blue; }
-        img#extract-failed { filter: $tint-red; }
-        img#validating   { filter: $tint-blue; }
-        img#validated    { filter: $tint-green; }
-        img#corrupt      { filter: $tint-red; }
+        img.downloading  { filter: $tint-blue; }
+        img.downloaded   { filter: $tint-green; }
+        img.queued       { filter: $tint-amber; }
+        img.extracted    { filter: $tint-green; }
+        img.stopped      { filter: $tint-muted; }
+        img.default-remote { filter: $tint-subtle; }
+        img.deleted      { filter: $tint-pink; }
+        img.extracting   { filter: $tint-blue; }
+        img.extract-failed { filter: $tint-red; }
+        img.validating   { filter: $tint-blue; }
+        img.validated    { filter: $tint-green; }
+        img.corrupt      { filter: $tint-red; }
     }
 
     // ── Dim 0% progress rows ──
