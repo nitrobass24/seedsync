@@ -22,6 +22,10 @@
       </ng-container>
 
       <ng-container
+        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_VALIDATE">
+      </ng-container>
+
+      <ng-container
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_DISCOVERY">
       </ng-container>
     </div>

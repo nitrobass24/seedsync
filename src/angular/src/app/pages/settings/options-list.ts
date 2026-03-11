@@ -352,6 +352,31 @@ export const OPTIONS_CONTEXT_NOTIFICATIONS: IOptionsContext = {
   ],
 };
 
+export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
+  header: 'Integrity Check',
+  id: 'integrity-check',
+  options: [
+    {
+      type: OptionType.Checkbox,
+      label: 'Enable integrity checking',
+      valuePath: ['validate', 'enabled'],
+      description: 'Verify file checksums after download by comparing local and remote hashes',
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Auto-validate after download',
+      valuePath: ['validate', 'auto_validate'],
+      description: 'Automatically validate files when download completes',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Hash Algorithm',
+      valuePath: ['validate', 'algorithm'],
+      description: 'Checksum algorithm: md5, sha1, or sha256',
+    },
+  ],
+};
+
 export const OPTIONS_CONTEXT_EXTRACT: IOptionsContext = {
   header: 'Archive Extraction',
   id: 'extraction',

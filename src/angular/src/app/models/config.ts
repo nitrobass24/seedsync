@@ -67,6 +67,12 @@ export interface Notifications {
   notify_on_delete_complete: boolean | null;
 }
 
+export interface Validate {
+  enabled: boolean | null;
+  algorithm: string | null;
+  auto_validate: boolean | null;
+}
+
 export interface Config {
   general: General;
   lftp: Lftp;
@@ -75,6 +81,7 @@ export interface Config {
   autoqueue: AutoQueue;
   logging: Logging;
   notifications: Notifications;
+  validate: Validate;
 }
 
 export const DEFAULT_GENERAL: General = {
@@ -141,6 +148,12 @@ export const DEFAULT_NOTIFICATIONS: Notifications = {
   notify_on_delete_complete: null,
 };
 
+export const DEFAULT_VALIDATE: Validate = {
+  enabled: null,
+  algorithm: null,
+  auto_validate: null,
+};
+
 export const DEFAULT_CONFIG: Config = {
   general: { ...DEFAULT_GENERAL },
   lftp: { ...DEFAULT_LFTP },
@@ -149,4 +162,5 @@ export const DEFAULT_CONFIG: Config = {
   autoqueue: { ...DEFAULT_AUTOQUEUE },
   logging: { ...DEFAULT_LOGGING },
   notifications: { ...DEFAULT_NOTIFICATIONS },
+  validate: { ...DEFAULT_VALIDATE },
 };
