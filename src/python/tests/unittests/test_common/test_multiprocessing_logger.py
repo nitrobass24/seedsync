@@ -60,8 +60,9 @@ class TestMultiprocessingLogger(unittest.TestCase):
         with LogCapture("TestMultiprocessingLogger.MPLogger.process_1") as log_capture:
             p_1.start()
             mp_logger.start()
-            time.sleep(1)
             p_1.join()
+            # Brief wait for listener thread to drain remaining queue items
+            time.sleep(0.2)
             mp_logger.stop()
 
             log_capture.check(
@@ -81,8 +82,8 @@ class TestMultiprocessingLogger(unittest.TestCase):
         with LogCapture("TestMultiprocessingLogger.MPLogger.process_1") as log_capture:
             p_1.start()
             mp_logger.start()
-            time.sleep(1)
             p_1.join()
+            time.sleep(0.5)
             mp_logger.stop()
 
             log_capture.check(
@@ -102,8 +103,8 @@ class TestMultiprocessingLogger(unittest.TestCase):
                 args=(mp_logger.queue, mp_logger.log_level, "process_1"))
             p_1.start()
             mp_logger.start()
-            time.sleep(1)
             p_1.join()
+            time.sleep(0.5)
             mp_logger.stop()
 
             log_capture.check(
@@ -122,8 +123,8 @@ class TestMultiprocessingLogger(unittest.TestCase):
                 args=(mp_logger.queue, mp_logger.log_level, "process_1"))
             p_1.start()
             mp_logger.start()
-            time.sleep(1)
             p_1.join()
+            time.sleep(0.5)
             mp_logger.stop()
 
             log_capture.check(
@@ -141,8 +142,8 @@ class TestMultiprocessingLogger(unittest.TestCase):
                 args=(mp_logger.queue, mp_logger.log_level, "process_1"))
             p_1.start()
             mp_logger.start()
-            time.sleep(1)
             p_1.join()
+            time.sleep(0.5)
             mp_logger.stop()
 
             log_capture.check(
@@ -159,8 +160,8 @@ class TestMultiprocessingLogger(unittest.TestCase):
                 args=(mp_logger.queue, mp_logger.log_level, "process_1"))
             p_1.start()
             mp_logger.start()
-            time.sleep(1)
             p_1.join()
+            time.sleep(0.5)
             mp_logger.stop()
 
             log_capture.check(
