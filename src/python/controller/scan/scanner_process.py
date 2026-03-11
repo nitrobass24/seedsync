@@ -125,6 +125,12 @@ class ScannerProcess(AppProcess):
             pass
         return latest_scan
 
+    @overrides(AppProcess)
+    def close_queues(self):
+        self.__queue.close()
+        self.__queue.join_thread()
+        super().close_queues()
+
     def force_scan(self):
         """Force process to wake and do an immediate scan"""
         self.__wake_event.set()

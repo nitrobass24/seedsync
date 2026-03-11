@@ -113,6 +113,15 @@ class AppProcess(Process):
 
         super().terminate()
 
+    def close_queues(self):
+        """Close multiprocessing queues to prevent file descriptor leaks.
+
+        Must be called after the process has been joined. Subclasses should
+        override to close their own queues and call super().
+        """
+        self.__exception_queue.close()
+        self.__exception_queue.join_thread()
+
     def propagate_exception(self):
         """
         Raises any exception that was caught by the process

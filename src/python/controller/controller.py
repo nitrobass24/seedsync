@@ -432,12 +432,37 @@ class Controller:
                 pc.local_scan_process.terminate()
                 pc.remote_scan_process.terminate()
             self.__extract_process.terminate()
+            for cp in self.__active_command_processes:
+                cp.process.terminate()
+            for mp in self.__active_move_processes:
+                mp.terminate()
             for pc in self.__pair_contexts:
                 pc.active_scan_process.join()
                 pc.local_scan_process.join()
                 pc.remote_scan_process.join()
             self.__extract_process.join()
+            for cp in self.__active_command_processes:
+                cp.process.join()
+            for mp in self.__active_move_processes:
+                mp.join()
             self.__mp_logger.stop()
+
+            # Close multiprocessing queues to release file descriptors.
+            # Without this, each restart cycle leaks FDs until the OS limit
+            # is exhausted (OSError: [Errno 24] No file descriptors available).
+            for pc in self.__pair_contexts:
+                pc.active_scan_process.close_queues()
+                pc.local_scan_process.close_queues()
+                pc.remote_scan_process.close_queues()
+                pc.active_scanner.close()
+            self.__extract_process.close_queues()
+            for cp in self.__active_command_processes:
+                cp.process.close_queues()
+            for mp in self.__active_move_processes:
+                mp.close_queues()
+            self.__active_command_processes.clear()
+            self.__active_move_processes.clear()
+
             self.__started = False
             self.logger.info("Exited controller")
 
