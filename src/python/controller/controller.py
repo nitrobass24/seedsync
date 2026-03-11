@@ -3,7 +3,7 @@
 import os
 import fnmatch
 from abc import ABC, abstractmethod
-from typing import List, Callable, Optional, Set
+from typing import Dict, List, Callable, Optional, Set
 from threading import Lock
 from queue import Queue
 from enum import Enum
@@ -592,10 +592,33 @@ class Controller:
         if any_pair_has_changes:
             new_model = Model()
             new_model.set_base_logger(self.logger)
+
+            # When multiple pairs share the same local directory, a file that
+            # exists only locally (no remote counterpart) would appear in every
+            # pair's model.  Deduplicate by scoping per normalized local path:
+            #   1) adding all "managed" files first (have a remote, or non-DEFAULT state),
+            #   2) then adding local-only files only if no other pair with the
+            #      same local directory already claims a file with that name.
+            seen_names_by_path: Dict[str, Set[str]] = {}
+            deferred_local_only: list = []  # (file, normalized_local_path)
             for pc in self.__pair_contexts:
+                norm_path = os.path.normpath(os.path.abspath(pc.local_path))
+                if norm_path not in seen_names_by_path:
+                    seen_names_by_path[norm_path] = set()
                 pair_model = pc.model_builder.build_model()
                 for file in pair_model.get_all_files():
+                    is_local_only = (file.remote_size is None
+                                     and file.state == ModelFile.State.DEFAULT)
+                    if is_local_only:
+                        deferred_local_only.append((file, norm_path))
+                    else:
+                        new_model.add_file(file)
+                        seen_names_by_path[norm_path].add(file.name)
+
+            for file, norm_path in deferred_local_only:
+                if file.name not in seen_names_by_path[norm_path]:
                     new_model.add_file(file)
+                    seen_names_by_path[norm_path].add(file.name)
 
             self.__model_lock.acquire()
 
