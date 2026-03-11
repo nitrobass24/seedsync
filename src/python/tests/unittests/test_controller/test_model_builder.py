@@ -1684,6 +1684,109 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.set_extracted_files({"a", "c"})
         self.assertTrue(self.model_builder.has_changes())
 
+    def test_build_state_validated(self):
+        # Downloaded + validated → VALIDATED
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_validated_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.VALIDATED, model.get_file("a").state)
+
+        # Extracted + validated → VALIDATED (validated wins)
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_extracted_files({"a"})
+        self.model_builder.set_validated_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.VALIDATED, model.get_file("a").state)
+
+        # Local-only + validated → DEFAULT (validated requires Downloaded/Extracted base)
+        self.model_builder.clear()
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_validated_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DEFAULT, model.get_file("a").state)
+
+        # Downloading + validated → DOWNLOADING (active download overrides)
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 50, False)])
+        self.model_builder.set_lftp_statuses([
+            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
+        ])
+        self.model_builder.set_validated_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DOWNLOADING, model.get_file("a").state)
+
+    def test_build_state_corrupt(self):
+        # Downloaded + corrupt → CORRUPT
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_corrupt_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.CORRUPT, model.get_file("a").state)
+
+        # Extracted + corrupt → CORRUPT
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_extracted_files({"a"})
+        self.model_builder.set_corrupt_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.CORRUPT, model.get_file("a").state)
+
+        # Local-only + corrupt → DEFAULT
+        self.model_builder.clear()
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_corrupt_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DEFAULT, model.get_file("a").state)
+
+    def test_build_state_corrupt_overrides_validated(self):
+        # Both validated + corrupt → CORRUPT (corrupt wins since it's checked last)
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_validated_files({"a"})
+        self.model_builder.set_corrupt_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.CORRUPT, model.get_file("a").state)
+
+    def test_rebuild_on_validated_files(self):
+        self.assertTrue(self.model_builder.has_changes())
+
+        # Initial set
+        self.model_builder.set_validated_files({"a", "b"})
+        self.model_builder.build_model()
+        self.assertFalse(self.model_builder.has_changes())
+
+        # Does not invalidate on same
+        self.model_builder.set_validated_files({"a", "b"})
+        self.assertFalse(self.model_builder.has_changes())
+
+        # Invalidate on different
+        self.model_builder.set_validated_files({"a", "c"})
+        self.assertTrue(self.model_builder.has_changes())
+
+    def test_rebuild_on_corrupt_files(self):
+        self.assertTrue(self.model_builder.has_changes())
+
+        # Initial set
+        self.model_builder.set_corrupt_files({"a", "b"})
+        self.model_builder.build_model()
+        self.assertFalse(self.model_builder.has_changes())
+
+        # Does not invalidate on same
+        self.model_builder.set_corrupt_files({"a", "b"})
+        self.assertFalse(self.model_builder.has_changes())
+
+        # Invalidate on different
+        self.model_builder.set_corrupt_files({"a", "c"})
+        self.assertTrue(self.model_builder.has_changes())
+
 
 class TestSharedLocalDeduplication(unittest.TestCase):
     """

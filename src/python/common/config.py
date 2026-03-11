@@ -365,6 +365,17 @@ class Config(Persist):
             self.notify_on_extraction_failed = True
             self.notify_on_delete_complete = True
 
+    class Validate(IC):
+        enabled = PROP("enabled", Checkers.null, Converters.bool)
+        algorithm = PROP("algorithm", Checkers.string_nonempty, Converters.null)
+        auto_validate = PROP("auto_validate", Checkers.null, Converters.bool)
+
+        def __init__(self):
+            super().__init__()
+            self.enabled = False
+            self.algorithm = "md5"
+            self.auto_validate = True
+
     def __init__(self):
         self.general = Config.General()
         self.lftp = Config.Lftp()
@@ -373,6 +384,7 @@ class Config(Persist):
         self.autoqueue = Config.AutoQueue()
         self.logging = Config.Logging()
         self.notifications = Config.Notifications()
+        self.validate = Config.Validate()
 
     @staticmethod
     def _check_section(dct: OuterConfigType, name: str) -> InnerConfigType:
@@ -433,6 +445,7 @@ class Config(Persist):
         config.autoqueue = Config.AutoQueue.from_dict(config_dict.pop("AutoQueue", {}))
         config.logging = Config.Logging.from_dict(config_dict.pop("Logging", {}))
         config.notifications = Config.Notifications.from_dict(config_dict.pop("Notifications", {}))
+        config.validate = Config.Validate.from_dict(config_dict.pop("Validate", {}))
 
         Config._check_empty_outer_dict(config_dict)
         return config
@@ -448,6 +461,7 @@ class Config(Persist):
         config_dict["AutoQueue"] = self.autoqueue.as_dict()
         config_dict["Logging"] = self.logging.as_dict()
         config_dict["Notifications"] = self.notifications.as_dict()
+        config_dict["Validate"] = self.validate.as_dict()
         return config_dict
 
     def has_section(self, name: str) -> bool:

@@ -38,4 +38,7 @@ export enum ViewFileStatus {
   EXTRACTING      = 'extracting',
   EXTRACTED       = 'extracted',
   EXTRACT_FAILED  = 'extract_failed',
+  VALIDATING      = 'validating',
+  VALIDATED       = 'validated',
+  CORRUPT         = 'corrupt',
 }

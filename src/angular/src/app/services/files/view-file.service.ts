@@ -400,6 +400,15 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     case ModelFileState.EXTRACT_FAILED:
       status = ViewFileStatus.EXTRACT_FAILED;
       break;
+    case ModelFileState.VALIDATING:
+      status = ViewFileStatus.VALIDATING;
+      break;
+    case ModelFileState.VALIDATED:
+      status = ViewFileStatus.VALIDATED;
+      break;
+    case ModelFileState.CORRUPT:
+      status = ViewFileStatus.CORRUPT;
+      break;
     default:
       status = ViewFileStatus.DEFAULT;
   }
@@ -415,6 +424,8 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
       ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
     ].includes(status) && localSize > 0;
   const isLocallyDeletable =
     [
@@ -423,6 +434,8 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
       ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
     ].includes(status) && localSize > 0;
   const isRemotelyDeletable =
     [
@@ -431,6 +444,8 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
       ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
       ViewFileStatus.DELETED,
     ].includes(status) && remoteSize > 0;
 

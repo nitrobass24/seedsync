@@ -591,6 +591,11 @@ class TestConfig(unittest.TestCase):
         notify_on_extraction_complete = True
         notify_on_extraction_failed = True
         notify_on_delete_complete = True
+
+        [Validate]
+        enabled = False
+        algorithm = md5
+        auto_validate = True
         """
 
         golden_lines = [s.strip() for s in golden_str.splitlines()]

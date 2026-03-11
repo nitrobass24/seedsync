@@ -347,6 +347,8 @@ class Controller:
         model_builder.set_downloaded_files(set())
         model_builder.set_extracted_files(set())
         model_builder.set_extract_failed_files(set())
+        model_builder.set_validated_files(set())
+        model_builder.set_corrupt_files(set())
         model_builder.set_auto_delete_remote(
             bool(self.__context.config.autoqueue.auto_delete_remote)
         )
@@ -642,6 +644,8 @@ class Controller:
                     self.__persist.downloaded_file_names.discard(pkey)
                     self.__persist.extracted_file_names.discard(pkey)
                     self.__persist.extract_failed_file_names.discard(pkey)
+                    self.__persist.validated_file_names.discard(pkey)
+                    self.__persist.corrupt_file_names.discard(pkey)
                     self._sync_persist_to_all_builders()
 
                 downloaded = False
@@ -674,12 +678,16 @@ class Controller:
                             pc.pending_completion.discard(diff.new_file.name)
                         elif diff.new_file.state in (ModelFile.State.DELETED,
                                                       ModelFile.State.EXTRACTED,
-                                                      ModelFile.State.EXTRACT_FAILED):
+                                                      ModelFile.State.EXTRACT_FAILED,
+                                                      ModelFile.State.VALIDATED,
+                                                      ModelFile.State.CORRUPT):
                             pc.pending_completion.discard(diff.new_file.name)
                     else:
                         if diff.new_file.state in (ModelFile.State.DOWNLOADED,
                                                     ModelFile.State.EXTRACTED,
                                                     ModelFile.State.EXTRACT_FAILED,
+                                                    ModelFile.State.VALIDATED,
+                                                    ModelFile.State.CORRUPT,
                                                     ModelFile.State.DELETED):
                             pc.pending_completion.discard(diff.new_file.name)
 
@@ -721,6 +729,8 @@ class Controller:
                     self.__persist.downloaded_file_names.difference_update(absent_keys)
                     self.__persist.extracted_file_names.difference_update(absent_keys)
                     self.__persist.extract_failed_file_names.difference_update(absent_keys)
+                    self.__persist.validated_file_names.difference_update(absent_keys)
+                    self.__persist.corrupt_file_names.difference_update(absent_keys)
                     self._sync_persist_to_all_builders()
 
             self.__model_lock.release()
@@ -848,6 +858,8 @@ class Controller:
             downloaded = set()
             extracted = set()
             extract_failed = set()
+            validated = set()
+            corrupt = set()
             for key in self.__persist.downloaded_file_names:
                 if prefix and key.startswith(prefix):
                     downloaded.add(key[len(prefix):])
@@ -869,9 +881,25 @@ class Controller:
                     extract_failed.add(key[len(legacy_prefix):])
                 elif not prefix and not key.startswith(namespaced_prefixes):
                     extract_failed.add(key)
+            for key in self.__persist.validated_file_names:
+                if prefix and key.startswith(prefix):
+                    validated.add(key[len(prefix):])
+                elif prefix and legacy_prefix and key.startswith(legacy_prefix):
+                    validated.add(key[len(legacy_prefix):])
+                elif not prefix and not key.startswith(namespaced_prefixes):
+                    validated.add(key)
+            for key in self.__persist.corrupt_file_names:
+                if prefix and key.startswith(prefix):
+                    corrupt.add(key[len(prefix):])
+                elif prefix and legacy_prefix and key.startswith(legacy_prefix):
+                    corrupt.add(key[len(legacy_prefix):])
+                elif not prefix and not key.startswith(namespaced_prefixes):
+                    corrupt.add(key)
             pc.model_builder.set_downloaded_files(downloaded)
             pc.model_builder.set_extracted_files(extracted)
             pc.model_builder.set_extract_failed_files(extract_failed)
+            pc.model_builder.set_validated_files(validated)
+            pc.model_builder.set_corrupt_files(corrupt)
 
     def __process_commands(self):
         def _notify_failure(_command: Controller.Command, _msg: str):
@@ -919,7 +947,9 @@ class Controller:
                         ModelFile.State.DEFAULT,
                         ModelFile.State.DOWNLOADED,
                         ModelFile.State.EXTRACTED,
-                        ModelFile.State.EXTRACT_FAILED
+                        ModelFile.State.EXTRACT_FAILED,
+                        ModelFile.State.VALIDATED,
+                        ModelFile.State.CORRUPT
                 ):
                     _notify_failure(command, "File '{}' in state {} cannot be extracted".format(
                         command.filename, str(file.state)
@@ -940,7 +970,9 @@ class Controller:
                     ModelFile.State.DEFAULT,
                     ModelFile.State.DOWNLOADED,
                     ModelFile.State.EXTRACTED,
-                    ModelFile.State.EXTRACT_FAILED
+                    ModelFile.State.EXTRACT_FAILED,
+                    ModelFile.State.VALIDATED,
+                    ModelFile.State.CORRUPT
                 ):
                     _notify_failure(command, "Local file '{}' cannot be deleted in state {}".format(
                         command.filename, str(file.state)
@@ -981,6 +1013,8 @@ class Controller:
                     ModelFile.State.DOWNLOADED,
                     ModelFile.State.EXTRACTED,
                     ModelFile.State.EXTRACT_FAILED,
+                    ModelFile.State.VALIDATED,
+                    ModelFile.State.CORRUPT,
                     ModelFile.State.DELETED
                 ):
                     _notify_failure(command, "Remote file '{}' cannot be deleted in state {}".format(
