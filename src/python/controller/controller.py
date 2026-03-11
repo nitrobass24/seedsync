@@ -224,7 +224,7 @@ class Controller:
 
         # Setup extract process (global -- extraction is local-only)
         self.__extract_process = ExtractProcess()
-        self.__extract_process.set_multiprocessing_logger(self.__mp_logger)
+        self.__extract_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
         # Keep track of active command processes (shared)
         self.__active_command_processes = []
@@ -335,9 +335,9 @@ class Controller:
         )
 
         # Wire multiprocess logging
-        active_scan_process.set_multiprocessing_logger(self.__mp_logger)
-        local_scan_process.set_multiprocessing_logger(self.__mp_logger)
-        remote_scan_process.set_multiprocessing_logger(self.__mp_logger)
+        active_scan_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
+        local_scan_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
+        remote_scan_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
         # Model builder
         model_builder = ModelBuilder(pair_id=pair_id)
@@ -915,7 +915,7 @@ class Controller:
                         local_path=delete_path,
                         file_name=file.name
                     )
-                    process.set_multiprocessing_logger(self.__mp_logger)
+                    process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
                     def post_callback(delete_path=delete_path, _pc=pc):
                         _pc.local_scan_process.force_scan()
                         if delete_path != _pc.local_path:
@@ -951,7 +951,7 @@ class Controller:
                         remote_path=pc.remote_path,
                         file_name=file.name
                     )
-                    process.set_multiprocessing_logger(self.__mp_logger)
+                    process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
                     post_callback = pc.remote_scan_process.force_scan
                     command_wrapper = Controller.CommandProcessWrapper(
                         process=process,
@@ -1011,7 +1011,7 @@ class Controller:
             dest_path=dest_path,
             file_name=file_name
         )
-        process.set_multiprocessing_logger(self.__mp_logger)
+        process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
         self.__active_move_processes.append(process)
         process.start()
         self.logger.info("Spawned move process for {} (staging -> local)".format(file_name))

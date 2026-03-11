@@ -6,7 +6,6 @@ import queue
 import logging
 import time
 import sys
-from logging.handlers import QueueHandler
 
 
 class MultiprocessingLogger:
@@ -31,6 +30,14 @@ class MultiprocessingLogger:
         self.__listener_shutdown = threading.Event()
         self.__listener_exc_info = None
 
+    @property
+    def queue(self) -> multiprocessing.Queue:
+        return self.__queue
+
+    @property
+    def log_level(self) -> int:
+        return self.__logger_level
+
     def start(self):
         self.__listener.start()
 
@@ -48,26 +55,6 @@ class MultiprocessingLogger:
             exc_info = self.__listener_exc_info
             self.__listener_exc_info = None
             raise exc_info[1].with_traceback(exc_info[2])
-
-    def get_process_safe_logger(self) -> logging.Logger:
-        """
-        Returns a process-safe logger
-        This logger sends all records to the main process
-        :return:
-        """
-        queue_handler = QueueHandler(self.__queue)
-        root_logger = logging.getLogger()
-
-        # The fork may have happened after the root logger was setup by the main process
-        # Remove all handlers from the root logger for this process
-        handlers = root_logger.handlers[:]
-        for handler in handlers:
-            handler.close()
-            root_logger.removeHandler(handler)
-
-        root_logger.addHandler(queue_handler)
-        root_logger.setLevel(self.__logger_level)
-        return root_logger
 
     def __listener(self):
         self.logger.debug("Started listener thread")

@@ -11,7 +11,7 @@ from datetime import datetime
 
 import tblib.pickling_support
 
-from common import overrides, ServiceExit, MultiprocessingLogger
+from common import overrides, ServiceExit
 
 
 tblib.pickling_support.install()
@@ -46,28 +46,22 @@ class AppProcess(Process):
         self.__name = name
         super().__init__(name=self.__name)
 
-        self.mp_logger = None
+        self._mp_log_queue = None
+        self._mp_log_level = None
         self.logger = logging.getLogger(self.__name)
         self.__exception_queue = Queue()
         self._terminate = Event()
 
-    def set_multiprocessing_logger(self, mp_logger: MultiprocessingLogger):
-        self.mp_logger = mp_logger
+    def set_mp_log_queue(self, log_queue: Queue, log_level: int):
+        """Configure cross-process logging. Must be called before start()."""
+        self._mp_log_queue = log_queue
+        self._mp_log_level = log_level
 
     @overrides(Process)
     def run(self):
-        # Replace the signal handlers that may have been set by main process to
-        # default handlers. Having non-default handlers in subprocesses causes
-        # a deadlock when attempting to join the process
-        # Info: https://stackoverflow.com/a/631605
-
-        # NOTE: There is a minuscule chance of deadlock if a signal is received
-        #       between start of the method and these resets.
-        #       The ideal solution is to remove the signal before the process is
-        #       started. Unfortunately that's difficult to do here because the
-        #       subprocess is started from a job thread, and python doesn't
-        #       allow setting signals from outside the main thread.
-        #       So we accept this risk for the quick and easy solution here
+        # With spawn, child processes start with default signal handlers, so these
+        # resets are redundant. They are kept for safety in case the start method
+        # is changed back to fork.
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
@@ -75,8 +69,13 @@ class AppProcess(Process):
         threading.current_thread().name = self.__name
 
         # Configure the logger for this process
-        if self.mp_logger:
-            self.logger = self.mp_logger.get_process_safe_logger().getChild(self.__name)
+        if self._mp_log_queue is not None:
+            from logging.handlers import QueueHandler
+            root = logging.getLogger()
+            root.handlers.clear()
+            root.addHandler(QueueHandler(self._mp_log_queue))
+            root.setLevel(self._mp_log_level)
+            self.logger = root.getChild(self.__name)
 
         self.logger.debug("Started process")
 
