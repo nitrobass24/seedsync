@@ -184,14 +184,21 @@ class TestScannerProcessSpawned(unittest.TestCase):
         process.set_mp_log_queue(log_queue, logging.DEBUG)
 
         process.start()
-        # Give the child time to complete at least one scan loop
-        time.sleep(0.3)
+
+        # Poll the result queue until the child produces a scan result
+        result = None
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            result = process.pop_latest_result()
+            if result is not None:
+                break
+            time.sleep(0.05)
+
         process.terminate()
         process.join(timeout=5)
         self.assertFalse(process.is_alive(), "Child process did not exit after join")
 
-        result = process.pop_latest_result()
-        self.assertIsNotNone(result)
+        self.assertIsNotNone(result, "Child process did not produce a scan result within timeout")
         self.assertEqual(1, len(result.files))
         self.assertEqual("spawned.txt", result.files[0].name)
 
