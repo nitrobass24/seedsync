@@ -592,10 +592,30 @@ class Controller:
         if any_pair_has_changes:
             new_model = Model()
             new_model.set_base_logger(self.logger)
+
+            # When multiple pairs share the same local directory, a file that
+            # exists only locally (no remote counterpart) would appear in every
+            # pair's model.  Deduplicate by:
+            #   1) adding all "managed" files first (have a remote, or non-DEFAULT state),
+            #   2) then adding local-only files only if no other pair already claims
+            #      a file with that name.
+            seen_names: Set[str] = set()
+            deferred_local_only: list = []
             for pc in self.__pair_contexts:
                 pair_model = pc.model_builder.build_model()
                 for file in pair_model.get_all_files():
+                    is_local_only = (file.remote_size is None
+                                     and file.state == ModelFile.State.DEFAULT)
+                    if is_local_only:
+                        deferred_local_only.append(file)
+                    else:
+                        new_model.add_file(file)
+                        seen_names.add(file.name)
+
+            for file in deferred_local_only:
+                if file.name not in seen_names:
                     new_model.add_file(file)
+                    seen_names.add(file.name)
 
             self.__model_lock.acquire()
 

@@ -1682,3 +1682,102 @@ class TestModelBuilder(unittest.TestCase):
         # Invalidate on different
         self.model_builder.set_extracted_files({"a", "c"})
         self.assertTrue(self.model_builder.has_changes())
+
+
+class TestSharedLocalDeduplication(unittest.TestCase):
+    """
+    Tests the deduplication logic used in Controller.__update_model()
+    when multiple pairs share the same local directory.
+    """
+
+    @staticmethod
+    def _aggregate(builders):
+        """Simulate Controller.__update_model() aggregation with dedup."""
+        seen_names = set()
+        deferred_local_only = []
+        aggregate = Model()
+        aggregate.set_base_logger(logging.getLogger("test"))
+
+        for builder in builders:
+            pair_model = builder.build_model()
+            for file in pair_model.get_all_files():
+                is_local_only = (file.remote_size is None
+                                 and file.state == ModelFile.State.DEFAULT)
+                if is_local_only:
+                    deferred_local_only.append(file)
+                else:
+                    aggregate.add_file(file)
+                    seen_names.add(file.name)
+
+        for file in deferred_local_only:
+            if file.name not in seen_names:
+                aggregate.add_file(file)
+                seen_names.add(file.name)
+
+        return aggregate
+
+    def test_local_only_file_appears_once_across_pairs(self):
+        """A file that exists only locally should appear once, not once per pair."""
+        builder_a = ModelBuilder(pair_id="pairA")
+        builder_b = ModelBuilder(pair_id="pairB")
+
+        local_file = SystemFile("shared.txt", 100, False)
+        builder_a.set_local_files([local_file])
+        builder_b.set_local_files([local_file])
+
+        model = self._aggregate([builder_a, builder_b])
+        files = model.get_all_files()
+        self.assertEqual(1, len(files))
+        self.assertEqual("shared.txt", files[0].name)
+
+    def test_managed_file_not_duplicated_by_local_only(self):
+        """A file managed by pair A (has remote) should not be duplicated
+        by pair B's local-only version of the same file."""
+        builder_a = ModelBuilder(pair_id="pairA")
+        builder_b = ModelBuilder(pair_id="pairB")
+
+        remote_file = SystemFile("movie.mkv", 1000, False)
+        local_file = SystemFile("movie.mkv", 1000, False)
+
+        # Pair A has both remote and local (DOWNLOADED)
+        builder_a.set_remote_files([remote_file])
+        builder_a.set_local_files([local_file])
+
+        # Pair B only has local (shared directory)
+        builder_b.set_local_files([local_file])
+
+        model = self._aggregate([builder_a, builder_b])
+        files = model.get_all_files()
+        self.assertEqual(1, len(files))
+        self.assertEqual("pairA", files[0].pair_id)
+
+    def test_different_remote_files_both_kept(self):
+        """Files on different remotes should both appear even if they
+        share the same local directory."""
+        builder_a = ModelBuilder(pair_id="pairA")
+        builder_b = ModelBuilder(pair_id="pairB")
+
+        remote_a = SystemFile("file_a.mkv", 500, False)
+        remote_b = SystemFile("file_b.mkv", 600, False)
+
+        builder_a.set_remote_files([remote_a])
+        builder_b.set_remote_files([remote_b])
+
+        model = self._aggregate([builder_a, builder_b])
+        names = {f.name for f in model.get_all_files()}
+        self.assertEqual({"file_a.mkv", "file_b.mkv"}, names)
+
+    def test_same_file_on_both_remotes_both_kept(self):
+        """Same file name on both remotes (different pair_ids) should both appear."""
+        builder_a = ModelBuilder(pair_id="pairA")
+        builder_b = ModelBuilder(pair_id="pairB")
+
+        remote = SystemFile("same.mkv", 1000, False)
+        builder_a.set_remote_files([remote])
+        builder_b.set_remote_files([remote])
+
+        model = self._aggregate([builder_a, builder_b])
+        files = model.get_all_files()
+        self.assertEqual(2, len(files))
+        pair_ids = {f.pair_id for f in files}
+        self.assertEqual({"pairA", "pairB"}, pair_ids)
