@@ -4,8 +4,10 @@ import multiprocessing
 import datetime
 import time
 import hashlib
+import hmac
 import os
 import queue
+import shlex
 from enum import Enum
 from typing import Optional, List
 import logging
@@ -68,6 +70,9 @@ class ValidateFailedResult:
         self.is_dir = is_dir
         self.pair_id = pair_id
         self.error_message = error_message
+
+
+_ALLOWED_ALGORITHMS = frozenset({"md5", "sha1", "sha256", "sha-256"})
 
 
 class ValidateProcess(AppProcess):
@@ -147,12 +152,15 @@ class ValidateProcess(AppProcess):
         """Compare local and remote checksums for a single file or directory."""
         file_path = os.path.join(req.local_path, req.name)
 
+        if req.algorithm not in _ALLOWED_ALGORITHMS:
+            raise ValueError("Unsupported hash algorithm: {}".format(req.algorithm))
+
         if req.is_dir:
             self._validate_directory(req, file_path)
         else:
             local_hash = self._hash_local_file(file_path, req.algorithm)
             remote_hash = self._hash_remote_file(req, req.name, req.algorithm)
-            if local_hash != remote_hash:
+            if not hmac.compare_digest(local_hash, remote_hash):
                 raise ValueError(
                     "Checksum mismatch for {}: local={} remote={}".format(
                         req.name, local_hash, remote_hash
@@ -169,7 +177,7 @@ class ValidateProcess(AppProcess):
                 rel_path = os.path.relpath(local_file, req.local_path)
                 local_hash = self._hash_local_file(local_file, req.algorithm)
                 remote_hash = self._hash_remote_file(req, rel_path, req.algorithm)
-                if local_hash != remote_hash:
+                if not hmac.compare_digest(local_hash, remote_hash):
                     raise ValueError(
                         "Checksum mismatch for {}: local={} remote={}".format(
                             rel_path, local_hash, remote_hash
@@ -181,7 +189,9 @@ class ValidateProcess(AppProcess):
     @staticmethod
     def _hash_local_file(file_path: str, algorithm: str) -> str:
         """Compute hash of a local file using streaming reads."""
-        h = hashlib.new(algorithm)
+        # Normalize algorithm name for hashlib (e.g. sha-256 -> sha256)
+        hashlib_name = algorithm.replace("-", "")
+        h = hashlib.new(hashlib_name)
         with open(file_path, "rb") as f:
             while True:
                 chunk = f.read(8192)
@@ -195,16 +205,18 @@ class ValidateProcess(AppProcess):
         from ssh import Sshcp
 
         remote_file = os.path.join(req.remote_path, rel_path)
+        quoted_file = shlex.quote(remote_file)
 
-        # Map algorithm to remote command
+        # Map algorithm to remote command (algorithm already validated against allowlist)
         if algorithm == "md5":
-            cmd = 'md5sum "{}"'.format(remote_file)
+            cmd = 'md5sum {}'.format(quoted_file)
         elif algorithm in ("sha256", "sha-256"):
-            cmd = 'sha256sum "{}"'.format(remote_file)
+            cmd = 'sha256sum {}'.format(quoted_file)
         elif algorithm == "sha1":
-            cmd = 'sha1sum "{}"'.format(remote_file)
+            cmd = 'sha1sum {}'.format(quoted_file)
         else:
-            cmd = '{}sum "{}"'.format(algorithm, remote_file)
+            # Should never reach here due to allowlist check in _validate_file
+            raise ValueError("Unsupported algorithm: {}".format(algorithm))
 
         sshcp = Sshcp(
             host=req.remote_address,

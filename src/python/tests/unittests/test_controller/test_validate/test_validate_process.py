@@ -148,6 +148,30 @@ class TestValidateProcess(unittest.TestCase):
         completed = self.process.pop_completed()
         self.assertEqual(0, len(completed))
 
+    def test_unsupported_algorithm_reports_failure(self):
+        req = self._make_request(algorithm="invalid_algo")
+        self.process.validate(req)
+        time.sleep(0.1)
+        self.process.run_loop()
+
+        completed = self.process.pop_completed()
+        self.assertEqual(0, len(completed))
+
+        failed = self.process.pop_failed()
+        self.assertEqual(1, len(failed))
+        self.assertIn("Unsupported", failed[0].error_message)
+
+    @patch.object(ValidateProcess, '_hash_remote_file', return_value="abc123")
+    @patch.object(ValidateProcess, '_hash_local_file', return_value="abc123")
+    def test_sha256_algorithm_accepted(self, mock_local, mock_remote):
+        req = self._make_request(algorithm="sha256")
+        self.process.validate(req)
+        time.sleep(0.1)
+        self.process.run_loop()
+
+        completed = self.process.pop_completed()
+        self.assertEqual(1, len(completed))
+
     def test_close_queues_releases_resources(self):
         self.process.run_loop()
         self.process.close_queues()
