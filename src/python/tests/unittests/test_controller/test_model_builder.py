@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
+import os
 import sys
 import unittest
 from unittest.mock import patch
@@ -1691,33 +1692,46 @@ class TestSharedLocalDeduplication(unittest.TestCase):
     """
 
     @staticmethod
-    def _aggregate(builders):
-        """Simulate Controller.__update_model() aggregation with dedup."""
-        seen_names = set()
-        deferred_local_only = []
+    def _aggregate(builders, local_paths=None):
+        """Simulate Controller.__update_model() aggregation with per-path dedup.
+
+        Args:
+            builders: list of ModelBuilder instances
+            local_paths: optional list of local_path strings (one per builder).
+                         If None, all builders share the same default path.
+        """
+        if local_paths is None:
+            local_paths = ["/default"] * len(builders)
+
+        seen_names_by_path = {}
+        deferred_local_only = []  # (file, norm_path)
         aggregate = Model()
         aggregate.set_base_logger(logging.getLogger("test"))
 
-        for builder in builders:
+        for builder, lp in zip(builders, local_paths):
+            norm_path = os.path.normpath(os.path.abspath(lp))
+            if norm_path not in seen_names_by_path:
+                seen_names_by_path[norm_path] = set()
             pair_model = builder.build_model()
             for file in pair_model.get_all_files():
                 is_local_only = (file.remote_size is None
                                  and file.state == ModelFile.State.DEFAULT)
                 if is_local_only:
-                    deferred_local_only.append(file)
+                    deferred_local_only.append((file, norm_path))
                 else:
                     aggregate.add_file(file)
-                    seen_names.add(file.name)
+                    seen_names_by_path[norm_path].add(file.name)
 
-        for file in deferred_local_only:
-            if file.name not in seen_names:
+        for file, norm_path in deferred_local_only:
+            if file.name not in seen_names_by_path[norm_path]:
                 aggregate.add_file(file)
-                seen_names.add(file.name)
+                seen_names_by_path[norm_path].add(file.name)
 
         return aggregate
 
-    def test_local_only_file_appears_once_across_pairs(self):
-        """A file that exists only locally should appear once, not once per pair."""
+    def test_local_only_file_appears_once_across_pairs_same_dir(self):
+        """A file that exists only locally should appear once, not once per pair,
+        when both pairs share the same local directory."""
         builder_a = ModelBuilder(pair_id="pairA")
         builder_b = ModelBuilder(pair_id="pairB")
 
@@ -1725,10 +1739,29 @@ class TestSharedLocalDeduplication(unittest.TestCase):
         builder_a.set_local_files([local_file])
         builder_b.set_local_files([local_file])
 
-        model = self._aggregate([builder_a, builder_b])
+        shared_path = "/downloads/shared"
+        model = self._aggregate([builder_a, builder_b],
+                                local_paths=[shared_path, shared_path])
         files = model.get_all_files()
         self.assertEqual(1, len(files))
         self.assertEqual("shared.txt", files[0].name)
+
+    def test_local_only_file_appears_in_each_distinct_dir(self):
+        """A file that exists only locally should appear once per distinct
+        local directory — pairs with different local paths should not collide."""
+        builder_a = ModelBuilder(pair_id="pairA")
+        builder_b = ModelBuilder(pair_id="pairB")
+
+        local_file = SystemFile("shared.txt", 100, False)
+        builder_a.set_local_files([local_file])
+        builder_b.set_local_files([local_file])
+
+        model = self._aggregate([builder_a, builder_b],
+                                local_paths=["/downloads/dir_a", "/downloads/dir_b"])
+        files = model.get_all_files()
+        self.assertEqual(2, len(files))
+        pair_ids = {f.pair_id for f in files}
+        self.assertEqual({"pairA", "pairB"}, pair_ids)
 
     def test_managed_file_not_duplicated_by_local_only(self):
         """A file managed by pair A (has remote) should not be duplicated
@@ -1746,7 +1779,9 @@ class TestSharedLocalDeduplication(unittest.TestCase):
         # Pair B only has local (shared directory)
         builder_b.set_local_files([local_file])
 
-        model = self._aggregate([builder_a, builder_b])
+        shared_path = "/downloads/shared"
+        model = self._aggregate([builder_a, builder_b],
+                                local_paths=[shared_path, shared_path])
         files = model.get_all_files()
         self.assertEqual(1, len(files))
         self.assertEqual("pairA", files[0].pair_id)
