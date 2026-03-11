@@ -31,6 +31,15 @@
             @if (file().status === ViewFileStatus.EXTRACT_FAILED) {
                 <img src="assets/icons/extracting.svg" id="extract-failed" />
             }
+            @if (file().status === ViewFileStatus.VALIDATING) {
+                <img src="assets/icons/validating.svg" id="validating" />
+            }
+            @if (file().status === ViewFileStatus.VALIDATED) {
+                <img src="assets/icons/validated.svg" id="validated" />
+            }
+            @if (file().status === ViewFileStatus.CORRUPT) {
+                <img src="assets/icons/corrupt.svg" id="corrupt" />
+            }
             <!-- don't show text for default status -->
             @if (file().status !== ViewFileStatus.DEFAULT) {
                 <span class="text">{{file().status | capitalize}}</span>
@@ -98,11 +107,13 @@
                 <div class="progress-bar" role="progressbar"
                      [class.progress-bar-animated]="
                         file().status === ViewFileStatus.DOWNLOADING ||
-                        file().status === ViewFileStatus.EXTRACTING
+                        file().status === ViewFileStatus.EXTRACTING ||
+                        file().status === ViewFileStatus.VALIDATING
                      "
                      [class.progress-bar-striped]="
                         file().status === ViewFileStatus.DOWNLOADING ||
-                        file().status === ViewFileStatus.EXTRACTING
+                        file().status === ViewFileStatus.EXTRACTING ||
+                        file().status === ViewFileStatus.VALIDATING
                      "
                      [attr.aria-valuenow]="file().percentDownloaded" aria-valuemin="0" aria-valuemax="100"
                      [style.width]="
@@ -142,6 +153,14 @@
             <div class="loader"></div>
             <img src="assets/icons/extract.svg" />
             <div class="text"><span>Extract</span></div>
+        </div>
+        <div class="button" appClickStopPropagation
+             [attr.disabled]="isValidatable() ? null : true"
+             (click)="!isValidatable() || onValidate(file())"
+             [class.loading]="activeAction === FileAction.VALIDATE">
+            <div class="loader"></div>
+            <img src="assets/icons/validate.svg" />
+            <div class="text"><span>Validate</span></div>
         </div>
         <div class="button" appClickStopPropagation
              [attr.disabled]="isLocallyDeletable() ? null : true"

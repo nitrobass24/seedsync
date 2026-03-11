@@ -18,6 +18,7 @@ interface MockViewFileService {
   queue: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
   extract: ReturnType<typeof vi.fn>;
+  validate: ReturnType<typeof vi.fn>;
   deleteLocal: ReturnType<typeof vi.fn>;
   deleteRemote: ReturnType<typeof vi.fn>;
   toggleCheck: ReturnType<typeof vi.fn>;
@@ -88,6 +89,7 @@ describe('FileListComponent', () => {
       queue: vi.fn().mockReturnValue(EMPTY),
       stop: vi.fn().mockReturnValue(EMPTY),
       extract: vi.fn().mockReturnValue(EMPTY),
+      validate: vi.fn().mockReturnValue(EMPTY),
       deleteLocal: vi.fn().mockReturnValue(EMPTY),
       deleteRemote: vi.fn().mockReturnValue(EMPTY),
       toggleCheck: vi.fn(),
@@ -284,6 +286,15 @@ describe('FileListComponent', () => {
     component.onExtract(file);
 
     expect(mockViewFileService.extract).toHaveBeenCalledWith(file);
+  });
+
+  it('should call viewFileService.validate on onValidate', () => {
+    const file = makeViewFile({ name: 'validate-me.txt' });
+    mockViewFileService.validate.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
+
+    component.onValidate(file);
+
+    expect(mockViewFileService.validate).toHaveBeenCalledWith(file);
   });
 
   it('should call viewFileService.deleteLocal on onDeleteLocal', () => {
