@@ -90,6 +90,7 @@ class ControllerHandler(IHandler):
         web_app.add_handler("/server/command/extract/<file_name>", self.__handle_action_extract)
         web_app.add_handler("/server/command/delete_local/<file_name>", self.__handle_action_delete_local)
         web_app.add_handler("/server/command/delete_remote/<file_name>", self.__handle_action_delete_remote)
+        web_app.add_handler("/server/command/validate/<file_name>", self.__handle_action_validate)
 
     def __handle_action_queue(self, file_name: str):
         """
@@ -183,5 +184,23 @@ class ControllerHandler(IHandler):
         callback.wait()
         if callback.success:
             return HTTPResponse(body="Requested remote delete for file '{}'".format(file_name))
+        else:
+            return HTTPResponse(body=callback.error, status=400)
+
+    def __handle_action_validate(self, file_name: str):
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
+
+        pair_id = _validate_pair_id(request.params.get("pair_id"))
+        if pair_id == "":
+            return HTTPResponse(body="pair_id must not be blank", status=400)
+        command = Controller.Command(Controller.Command.Action.VALIDATE, file_name, pair_id=pair_id)
+        callback = WebResponseActionCallback()
+        command.add_callback(callback)
+        self.__controller.queue_command(command)
+        callback.wait()
+        if callback.success:
+            return HTTPResponse(body="Requested validation for file '{}'".format(file_name))
         else:
             return HTTPResponse(body=callback.error, status=400)

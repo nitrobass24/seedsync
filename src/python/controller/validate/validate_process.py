@@ -36,10 +36,11 @@ class ValidateStatus:
     class State(Enum):
         VALIDATING = 0
 
-    def __init__(self, name: str, is_dir: bool, state: "ValidateStatus.State"):
+    def __init__(self, name: str, is_dir: bool, state: "ValidateStatus.State", pair_id: str = None):
         self.name = name
         self.is_dir = is_dir
         self.state = state
+        self.pair_id = pair_id
 
 
 class ValidateStatusResult:
@@ -126,7 +127,8 @@ class ValidateProcess(AppProcess):
 
         # Publish current status
         statuses = [
-            ValidateStatus(name=name, is_dir=req.is_dir, state=ValidateStatus.State.VALIDATING)
+            ValidateStatus(name=name, is_dir=req.is_dir,
+                           state=ValidateStatus.State.VALIDATING, pair_id=req.pair_id)
             for name, req in self.__active_validations.items()
         ]
         status_result = ValidateStatusResult(

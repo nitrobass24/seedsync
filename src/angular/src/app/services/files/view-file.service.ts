@@ -129,6 +129,11 @@ export class ViewFileService {
     return this.createAction(file, (f) => this.modelFileService.deleteRemote(f));
   }
 
+  validate(file: ViewFile): Observable<WebReaction> {
+    this.logger.debug('Validate view file: ' + file.name);
+    return this.createAction(file, (f) => this.modelFileService.validate(f));
+  }
+
   toggleCheck(file: ViewFile): void {
     const key = viewFileKey(file);
     if (this.checkedSet.has(key)) {
@@ -448,6 +453,14 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
       ViewFileStatus.CORRUPT,
       ViewFileStatus.DELETED,
     ].includes(status) && remoteSize > 0;
+  const isValidatable =
+    [
+      ViewFileStatus.DOWNLOADED,
+      ViewFileStatus.EXTRACTED,
+      ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
+    ].includes(status) && localSize > 0 && remoteSize > 0;
 
   return {
     name: modelFile.name,
@@ -469,6 +482,7 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     isExtractable,
     isLocallyDeletable,
     isRemotelyDeletable,
+    isValidatable,
     localCreatedTimestamp: modelFile.local_created_timestamp,
     localModifiedTimestamp: modelFile.local_modified_timestamp,
     remoteCreatedTimestamp: modelFile.remote_created_timestamp,
