@@ -12,6 +12,7 @@ from controller.validate import (
     ValidateCompletedResult,
     ValidateFailedResult,
     ValidateStatus,
+    ChecksumMismatchError,
 )
 
 
@@ -230,6 +231,68 @@ class TestValidateProcess(unittest.TestCase):
         self.assertEqual(2, len(completed))
         pair_ids = {r.pair_id for r in completed}
         self.assertEqual({"pair-A", "pair-B"}, pair_ids)
+
+    @patch('controller.validate.validate_process.os.path.exists', return_value=True)
+    @patch('controller.validate.validate_process.os.path.isdir', return_value=True)
+    @patch('controller.validate.validate_process.os.walk')
+    @patch.object(ValidateProcess, '_create_ssh')
+    @patch.object(ValidateProcess, '_hash_remote_file', return_value="abc123")
+    @patch.object(ValidateProcess, '_hash_local_file', return_value="abc123")
+    def test_directory_validation_detects_symmetric_diff(
+            self, mock_local_hash, mock_remote_hash, mock_ssh,
+            mock_walk, mock_isdir, mock_exists):
+        """_validate_directory should detect local-only, remote-only, and hash-mismatch files."""
+        # Local has: mydir/a.txt, mydir/b.txt (b.txt is local-only)
+        mock_walk.return_value = [
+            ("/local/mydir", [], ["a.txt", "b.txt"]),
+        ]
+        # Remote has: mydir/a.txt, mydir/c.txt (c.txt is remote-only)
+        ssh_mock = MagicMock()
+        ssh_mock.shell.return_value = b"/remote/mydir/a.txt\n/remote/mydir/c.txt\n"
+        mock_ssh.return_value = ssh_mock
+
+        req = self._make_request(name="mydir", is_dir=True)
+        self.process.validate(req)
+        self.process.run_loop()
+
+        completed = self.process.pop_completed()
+        self.assertEqual(0, len(completed))
+
+        failed = self.process.pop_failed()
+        self.assertEqual(1, len(failed))
+        self.assertTrue(failed[0].is_checksum_mismatch)
+        self.assertIn("Local-only", failed[0].error_message)
+        self.assertIn("Remote-only", failed[0].error_message)
+        self.assertIn("mydir/b.txt", failed[0].error_message)
+        self.assertIn("mydir/c.txt", failed[0].error_message)
+
+    @patch('controller.validate.validate_process.os.path.exists', return_value=True)
+    @patch('controller.validate.validate_process.os.path.isdir', return_value=True)
+    @patch('controller.validate.validate_process.os.walk')
+    @patch.object(ValidateProcess, '_create_ssh')
+    @patch.object(ValidateProcess, '_hash_remote_file', return_value="abc123")
+    @patch.object(ValidateProcess, '_hash_local_file', return_value="abc123")
+    def test_directory_validation_succeeds_when_all_match(
+            self, mock_local_hash, mock_remote_hash, mock_ssh,
+            mock_walk, mock_isdir, mock_exists):
+        """_validate_directory should succeed when local and remote file sets match with equal hashes."""
+        mock_walk.return_value = [
+            ("/local/mydir", [], ["a.txt", "b.txt"]),
+        ]
+        ssh_mock = MagicMock()
+        ssh_mock.shell.return_value = b"/remote/mydir/a.txt\n/remote/mydir/b.txt\n"
+        mock_ssh.return_value = ssh_mock
+
+        req = self._make_request(name="mydir", is_dir=True)
+        self.process.validate(req)
+        self.process.run_loop()
+
+        completed = self.process.pop_completed()
+        self.assertEqual(1, len(completed))
+        self.assertEqual("mydir", completed[0].name)
+
+        failed = self.process.pop_failed()
+        self.assertEqual(0, len(failed))
 
     def test_close_queues_releases_resources(self):
         # close_queues is also called in tearDown; calling it twice should be safe
