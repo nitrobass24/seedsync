@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import multiprocessing
+import queue
 import time
 import unittest
 import logging
@@ -187,6 +188,7 @@ class TestScannerProcessSpawned(unittest.TestCase):
         time.sleep(0.3)
         process.terminate()
         process.join(timeout=5)
+        self.assertFalse(process.is_alive(), "Child process did not exit after join")
 
         result = process.pop_latest_result()
         self.assertIsNotNone(result)
@@ -195,7 +197,6 @@ class TestScannerProcessSpawned(unittest.TestCase):
 
         # Verify logs were forwarded via the log queue
         log_messages = []
-        import queue
         while True:
             try:
                 log_messages.append(log_queue.get(block=False))
@@ -213,6 +214,7 @@ class TestScannerProcessSpawned(unittest.TestCase):
 
         process.start()
         process.join(timeout=5)
+        self.assertFalse(process.is_alive(), "Child process did not exit after join")
 
         with self.assertRaises(ScannerError) as ctx:
             process.propagate_exception()
