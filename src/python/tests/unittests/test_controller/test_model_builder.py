@@ -12,6 +12,7 @@ from lftp import LftpJobStatus
 from model import ModelError, ModelFile, Model
 from controller import ModelBuilder
 from controller.extract import ExtractStatus
+from controller.validate import ValidateStatus
 
 
 class TestModelBuilder(unittest.TestCase):
@@ -1769,6 +1770,54 @@ class TestModelBuilder(unittest.TestCase):
 
         # Invalidate on different
         self.model_builder.set_validated_files({"a", "c"})
+        self.assertTrue(self.model_builder.has_changes())
+
+    def test_build_state_validating(self):
+        """Files with active validate statuses should be in VALIDATING state."""
+        r = [SystemFile("a", 100, False)]
+        l = [SystemFile("a", 100, False)]
+        self.model_builder.set_remote_files(r)
+        self.model_builder.set_local_files(l)
+        self.model_builder.set_validate_statuses([
+            ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
+        ])
+
+        model = self.model_builder.build_model()
+        a = model.get_file("a")
+        self.assertEqual(ModelFile.State.VALIDATING, a.state)
+
+    def test_build_state_validating_requires_local(self):
+        """VALIDATING state should not be set if file has no local copy."""
+        r = [SystemFile("a", 100, False)]
+        self.model_builder.set_remote_files(r)
+        self.model_builder.set_validate_statuses([
+            ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
+        ])
+
+        model = self.model_builder.build_model()
+        a = model.get_file("a")
+        self.assertEqual(ModelFile.State.DEFAULT, a.state)
+
+    def test_rebuild_on_validate_statuses(self):
+        self.assertTrue(self.model_builder.has_changes())
+
+        # Initial set
+        self.model_builder.set_validate_statuses([
+            ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
+        ])
+        self.model_builder.build_model()
+        self.assertFalse(self.model_builder.has_changes())
+
+        # Does not invalidate on same keys
+        self.model_builder.set_validate_statuses([
+            ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
+        ])
+        self.assertFalse(self.model_builder.has_changes())
+
+        # Invalidate on different keys
+        self.model_builder.set_validate_statuses([
+            ValidateStatus("b", False, ValidateStatus.State.VALIDATING),
+        ])
         self.assertTrue(self.model_builder.has_changes())
 
     def test_rebuild_on_corrupt_files(self):

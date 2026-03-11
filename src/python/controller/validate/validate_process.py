@@ -42,6 +42,9 @@ class ValidateStatus:
         self.state = state
         self.pair_id = pair_id
 
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
 
 class ValidateStatusResult:
     def __init__(self, timestamp: datetime.datetime, statuses: List[ValidateStatus]):
