@@ -685,7 +685,7 @@ class Controller:
                             name=diff.new_file.name,
                             is_dir=diff.new_file.is_dir,
                             pair_id=pc.pair_id,
-                            local_path=pc.local_path,
+                            local_path=pc.effective_local_path,
                             remote_path=pc.remote_path,
                             algorithm=self.__context.config.validate.algorithm,
                             remote_address=self.__context.config.lftp.remote_address,
@@ -785,14 +785,21 @@ class Controller:
             self.__persist.corrupt_file_names.discard(pkey)
             self._sync_persist_to_all_builders()
 
-        # Process validation failures — mark as corrupt
+        # Process validation failures
         for result in latest_failed_validations:
             self.logger.error("Validation failed for '{}': {}".format(
                 result.name, result.error_message))
             pkey = _persist_key(result.pair_id, result.name)
-            self.__persist.corrupt_file_names.add(pkey)
-            self.__persist.validated_file_names.discard(pkey)
-            self._sync_persist_to_all_builders()
+            if result.is_checksum_mismatch:
+                # Checksum mismatch — mark as corrupt
+                self.__persist.corrupt_file_names.add(pkey)
+                self.__persist.validated_file_names.discard(pkey)
+                self._sync_persist_to_all_builders()
+            else:
+                # Non-mismatch failure (SSH error, etc.) — don't mark corrupt,
+                # just log so the user can retry
+                self.logger.warning("Validation error for '{}' (not marking corrupt): {}".format(
+                    result.name, result.error_message))
 
         # Update the controller status (use most recent across all pairs)
         for pc in self.__pair_contexts:
@@ -1129,7 +1136,7 @@ class Controller:
                         name=file.name,
                         is_dir=file.is_dir,
                         pair_id=pc.pair_id,
-                        local_path=pc.local_path,
+                        local_path=pc.effective_local_path,
                         remote_path=pc.remote_path,
                         algorithm=self.__context.config.validate.algorithm,
                         remote_address=self.__context.config.lftp.remote_address,

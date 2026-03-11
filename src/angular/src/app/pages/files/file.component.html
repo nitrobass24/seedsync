@@ -32,13 +32,13 @@
                 <img src="assets/icons/extracting.svg" id="extract-failed" />
             }
             @if (file().status === ViewFileStatus.VALIDATING) {
-                <img src="assets/icons/validating.svg" id="validating" />
+                <img src="assets/icons/validating.svg" id="validating" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.VALIDATED) {
-                <img src="assets/icons/validated.svg" id="validated" />
+                <img src="assets/icons/validated.svg" id="validated" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.CORRUPT) {
-                <img src="assets/icons/corrupt.svg" id="corrupt" />
+                <img src="assets/icons/corrupt.svg" id="corrupt" alt="" aria-hidden="true" />
             }
             <!-- don't show text for default status -->
             @if (file().status !== ViewFileStatus.DEFAULT) {

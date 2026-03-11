@@ -419,7 +419,7 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
   }
 
   const isQueueable =
-    [ViewFileStatus.DEFAULT, ViewFileStatus.STOPPED, ViewFileStatus.DELETED].includes(status) &&
+    [ViewFileStatus.DEFAULT, ViewFileStatus.STOPPED, ViewFileStatus.DELETED, ViewFileStatus.CORRUPT].includes(status) &&
     remoteSize > 0;
   const isStoppable = [ViewFileStatus.QUEUED, ViewFileStatus.DOWNLOADING].includes(status);
   const isExtractable =
@@ -460,7 +460,7 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
       ViewFileStatus.EXTRACT_FAILED,
       ViewFileStatus.VALIDATED,
       ViewFileStatus.CORRUPT,
-    ].includes(status) && localSize > 0 && remoteSize > 0;
+    ].includes(status) && modelFile.local_size != null && remoteSize > 0;
 
   return {
     name: modelFile.name,

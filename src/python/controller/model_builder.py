@@ -441,16 +441,17 @@ class ModelBuilder:
                         model_file.name, str(model_file.state)))
 
             # next we check if root is Validated
-            # root is Validated if it is in Downloaded/Extracted state and in validated files list
+            # root is Validated if it is in Downloaded/Extracted/ExtractFailed state and in validated files list
             if model_file.name in self.__validated_files and model_file.state in (
-                    ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED):
+                    ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED, ModelFile.State.EXTRACT_FAILED):
                 model_file.state = ModelFile.State.VALIDATED
 
             # next we check if root is Corrupt
-            # root is Corrupt if it is in Downloaded/Extracted/Validated state and in corrupt files list
+            # root is Corrupt if it is in Downloaded/Extracted/ExtractFailed/Validated state and in corrupt files list
             # Corrupt overrides Validated because corruption is discovered after validation
             if model_file.name in self.__corrupt_files and model_file.state in (
-                    ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED, ModelFile.State.VALIDATED):
+                    ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED,
+                    ModelFile.State.EXTRACT_FAILED, ModelFile.State.VALIDATED):
                 model_file.state = ModelFile.State.CORRUPT
 
             model.add_file(model_file)

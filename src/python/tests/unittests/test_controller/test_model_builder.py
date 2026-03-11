@@ -1703,6 +1703,15 @@ class TestModelBuilder(unittest.TestCase):
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.VALIDATED, model.get_file("a").state)
 
+        # Extract failed + validated → VALIDATED
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_extract_failed_files({"a"})
+        self.model_builder.set_validated_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.VALIDATED, model.get_file("a").state)
+
         # Local-only + validated → DEFAULT (validated requires Downloaded/Extracted base)
         self.model_builder.clear()
         self.model_builder.set_local_files([SystemFile("a", 100, False)])
@@ -1735,6 +1744,15 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.set_remote_files([SystemFile("a", 100, False)])
         self.model_builder.set_local_files([SystemFile("a", 100, False)])
         self.model_builder.set_extracted_files({"a"})
+        self.model_builder.set_corrupt_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.CORRUPT, model.get_file("a").state)
+
+        # Extract failed + corrupt → CORRUPT
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_extract_failed_files({"a"})
         self.model_builder.set_corrupt_files({"a"})
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.CORRUPT, model.get_file("a").state)

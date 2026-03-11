@@ -81,6 +81,9 @@ export class FileComponent implements OnChanges, OnDestroy {
                    oldFile.isLocallyDeletable && !newFile.isLocallyDeletable) {
           this.activeAction = null;
           this.resetConfirmState();
+        } else if (this.activeAction === FileAction.VALIDATE &&
+                   oldFile.isValidatable && !newFile.isValidatable) {
+          this.activeAction = null;
         }
 
         if (!oldFile.isSelected && newFile.isSelected && this.fileElement &&
