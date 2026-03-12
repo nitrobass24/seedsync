@@ -307,5 +307,8 @@ describe("StreamDispatchService", () => {
     // Handler should NOT be notified because the stale EventSource is guarded
     expect(handler.onDisconnected).not.toHaveBeenCalled();
 
+    // Stale error should not schedule a reconnect
+    vi.advanceTimersByTime(3000);
+    expect(MockEventSource.instances.length).toBe(2);
   });
 });
