@@ -3,7 +3,7 @@ import { TestBed } from "@angular/core/testing";
 // Injector not needed — TestBed handles DI
 import { BehaviorSubject, of } from "rxjs";
 
-import { ConfigService } from "./config.service";
+import { ConfigService, EMPTY_VALUE_SENTINEL } from "./config.service";
 import { ConnectedService } from "../utils/connected.service";
 import { LoggerService } from "../utils/logger.service";
 import { RestService, WebReaction } from "../utils/rest.service";
@@ -286,7 +286,7 @@ describe("ConfigService", () => {
     service.set("web", "api_key", "");
 
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
-      "/server/config/set/web/api_key/__empty__",
+      `/server/config/set/web/api_key/${EMPTY_VALUE_SENTINEL}`,
     );
   });
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { TestBed } from "@angular/core/testing";
 import {
   provideHttpClient,
@@ -34,6 +34,10 @@ describe("RestService", () => {
     });
     service = TestBed.inject(RestService);
     httpTesting = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpTesting.verify();
   });
 
   // --- Successful GET ---
@@ -132,9 +136,4 @@ describe("RestService", () => {
     req.flush("");
   });
 
-  // --- Cleanup ---
-
-  it("should have no outstanding requests after each test", () => {
-    httpTesting.verify();
-  });
 });

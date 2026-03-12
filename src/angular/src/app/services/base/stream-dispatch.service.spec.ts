@@ -83,6 +83,7 @@ describe("StreamDispatchService", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     (globalThis as any).EventSource = originalEventSource;
   });
 
@@ -97,11 +98,14 @@ describe("StreamDispatchService", () => {
 
   // --- Registration ---
 
-  it("should accept handler registration", () => {
+  it("should dispatch events to a registered handler", () => {
     const handler = makeHandler(["model-init"]);
     service.registerHandler(handler);
-    // No error means registration was accepted
-    expect(true).toBe(true);
+
+    service.start();
+    latestEventSource().simulateEvent("model-init", '{"test": true}');
+
+    expect(handler.onEvent).toHaveBeenCalledWith("model-init", '{"test": true}');
   });
 
   // --- Connection ---
@@ -171,7 +175,6 @@ describe("StreamDispatchService", () => {
     latestEventSource().simulateError();
 
     expect(handler.onDisconnected).toHaveBeenCalled();
-    vi.useRealTimers();
   });
 
   it("should close EventSource on error", () => {
@@ -181,7 +184,6 @@ describe("StreamDispatchService", () => {
     es.simulateError();
 
     expect(es.closed).toBe(true);
-    vi.useRealTimers();
   });
 
   // --- Reconnection ---
@@ -197,7 +199,6 @@ describe("StreamDispatchService", () => {
     vi.advanceTimersByTime(3000);
     expect(MockEventSource.instances.length).toBe(2);
 
-    vi.useRealTimers();
   });
 
   it("should not reconnect before retry interval", () => {
@@ -208,7 +209,6 @@ describe("StreamDispatchService", () => {
     vi.advanceTimersByTime(2999);
     expect(MockEventSource.instances.length).toBe(1);
 
-    vi.useRealTimers();
   });
 
   // --- API key ---
@@ -273,7 +273,6 @@ describe("StreamDispatchService", () => {
       "/server/stream?api_key=retry-key",
     );
 
-    vi.useRealTimers();
   });
 
   it("should use URL without api_key param when key is null", () => {
@@ -305,6 +304,5 @@ describe("StreamDispatchService", () => {
     // Handler should NOT be notified because the stale EventSource is guarded
     expect(handler.onDisconnected).not.toHaveBeenCalled();
 
-    vi.useRealTimers();
   });
 });

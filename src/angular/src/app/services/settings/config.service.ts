@@ -7,6 +7,9 @@ import { RestService, WebReaction } from '../utils/rest.service';
 import { StreamDispatchService } from '../base/stream-dispatch.service';
 import { Config } from '../../models/config';
 
+/** Sentinel value sent to the backend when the user clears a text field. */
+export const EMPTY_VALUE_SENTINEL = '__empty__';
+
 @Injectable({ providedIn: 'root' })
 export class ConfigService {
   private readonly CONFIG_GET_URL = '/server/config/get';
@@ -50,7 +53,7 @@ export class ConfigService {
 
     // Double-encode the value, use sentinel for empty strings
     const valueEncoded =
-      valueStr.length === 0 ? '__empty__' : encodeURIComponent(encodeURIComponent(valueStr));
+      valueStr.length === 0 ? EMPTY_VALUE_SENTINEL : encodeURIComponent(encodeURIComponent(valueStr));
     const url = this.CONFIG_SET_URL(section, option, valueEncoded);
     const obs = this.restService.sendRequest(url);
     obs.subscribe({
