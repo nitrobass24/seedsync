@@ -468,7 +468,7 @@ class Lftp:
                 raise
         return statuses
 
-    def queue(self, name: str, is_dir: bool):
+    def queue(self, name: str, is_dir: bool, exclude_patterns: list = None):
         """
         Queues a job for download
         This method may cause an exception to be generated in a later method call:
@@ -476,23 +476,36 @@ class Lftp:
           * File/folder does not exist
         :param name: name of file or folder to download
         :param is_dir: true if folder, false if file
+        :param exclude_patterns: list of glob patterns to exclude (only applies to mirror/directory downloads)
         :return:
         """
         # Escape single and double quotes in any string used in queue command
         def escape(s: str) -> str:
             return s.replace("'", "\\'").replace("\"", "\\\"")
 
-        command = " ".join([
+        # Build --exclude flags for mirror commands
+        exclude_flags = ""
+        if is_dir and exclude_patterns:
+            exclude_flags = " ".join(
+                "--exclude \"{}\"".format(escape(p)) for p in exclude_patterns
+            )
+
+        parts = [
             "queue",
             "'",
             "pget" if not is_dir else "mirror",
             "-c",
+        ]
+        if exclude_flags:
+            parts.append(exclude_flags)
+        parts.extend([
             "\"{remote_dir}/{filename}\"".format(remote_dir=escape(self.__base_remote_dir_path),
                                                  filename=escape(name)),
             "-o" if not is_dir else "",
             "\"{local_dir}/\"".format(local_dir=escape(self.__base_local_dir_path)),
-            "'"
+            "'",
         ])
+        command = " ".join(parts)
         self.__run_command(command)
 
     def kill(self, name: str) -> bool:
