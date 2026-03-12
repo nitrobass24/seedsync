@@ -1638,6 +1638,43 @@ class TestLftpJobStatusParser(unittest.TestCase):
         statuses = parser.parse(output)
         self.assertEqual(0, len(statuses))
 
+    def test_partial_progress_fragment_skipped_after_job(self):
+        """Line-wrap fragments like '/s eta:25m [Receiving data]' should be skipped.
+        Regression test for issue #260: Unraid PTY wraps long progress lines,
+        producing a tail fragment that starts with '/s'.
+        """
+        output = (
+            "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\n"
+            "/s eta:25m [Receiving data]"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("show", statuses[0].name)
+
+    def test_bare_partial_progress_fragment_skipped(self):
+        """A bare partial progress fragment with no valid jobs should be skipped."""
+        output = "/s eta:25m [Receiving data]"
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(0, len(statuses))
+
+    def test_partial_progress_fragment_various_etas(self):
+        """Partial fragments with different eta formats should all be skipped."""
+        for fragment in [
+            "/s eta:5m [Receiving data]",
+            "/s eta:1h2m [Making data connection]",
+            "/s eta:3s [Receiving data]",
+            "/s eta:1d2h [Receiving data]",
+        ]:
+            output = (
+                "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\n"
+                + fragment
+            )
+            parser = LftpJobStatusParser()
+            statuses = parser.parse(output)
+            self.assertEqual(1, len(statuses), f"Failed on fragment: {fragment}")
+
     def test_truly_unrecognized_line_raises(self):
         """A truly unrecognized line (not an orphan progress line) should still raise."""
         output = (

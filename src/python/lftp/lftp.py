@@ -15,8 +15,11 @@ from common import AppError
 from .job_status_parser import LftpJobStatus, LftpJobStatusParser, LftpJobStatusParserError
 
 
-# How many status errors are allowed before error propagates out
-MAX_CONSECUTIVE_STATUS_ERRORS = 2
+# How many consecutive status parse errors before error propagates out.
+# Set high enough to ride out persistent lftp output quirks (e.g. Unraid
+# PTY line-wrapping) without crashing the app.  At 0.5 s poll interval,
+# 10 errors ≈ 5 seconds of degraded status before fatal.
+MAX_CONSECUTIVE_STATUS_ERRORS = 10
 
 # How many consecutive pexpect timeouts before we restart the lftp process
 MAX_CONSECUTIVE_TIMEOUTS = 3

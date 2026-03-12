@@ -225,6 +225,15 @@ class LftpJobStatusParser:
         )
         orphan_progress_m = re.compile(orphan_progress_pattern)
 
+        # Partial progress fragments from line-wrap (seen on Unraid), e.g.:
+        #   "/s eta:25m [Receiving data]"  (tail of "347.3K/s eta:25m ...")
+        partial_progress_pattern = (
+            r"^\/s\s+"
+            r"eta:({eta})\s+"
+            r"\[.*\]$"
+        ).format(eta=LftpJobStatusParser.__TIME_UNITS_REGEX)
+        partial_progress_m = re.compile(partial_progress_pattern)
+
         prev_job = None
         while lines:
             line = lines.pop(0)
@@ -238,7 +247,7 @@ class LftpJobStatusParser:
                 mirror_header_m.match(line) or
                 mirror_fl_header_m.match(line)
             ):
-                if orphan_progress_m.match(line):
+                if orphan_progress_m.match(line) or partial_progress_m.match(line):
                     self.logger.warning(
                         "Skipping orphan lftp progress line: '%s'", line
                     )
@@ -505,7 +514,7 @@ class LftpJobStatusParser:
                 continue
 
             # If we got here, check if it's a known orphan progress line
-            if orphan_progress_m.match(line):
+            if orphan_progress_m.match(line) or partial_progress_m.match(line):
                 self.logger.warning(
                     "Skipping orphan lftp progress line: '%s'", line
                 )
