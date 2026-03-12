@@ -79,9 +79,11 @@ class TestSerializeConfig(unittest.TestCase):
         config.validate.enabled = True
         config.validate.algorithm = "sha256"
         config.validate.auto_validate = False
+        config.validate.xfer_verify = True
         out = SerializeConfig.config(config)
         out_dict = json.loads(out)
         self.assertIn("validate", out_dict)
         self.assertEqual(True, out_dict["validate"]["enabled"])
         self.assertEqual("sha256", out_dict["validate"]["algorithm"])
         self.assertEqual(False, out_dict["validate"]["auto_validate"])
+        self.assertEqual(True, out_dict["validate"]["xfer_verify"])

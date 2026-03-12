@@ -53,6 +53,8 @@ class Lftp:
     __SET_NET_MAX_RETRIES = "net:max-retries"
     __SET_NET_RECONNECT_INTERVAL_BASE = "net:reconnect-interval-base"
     __SET_NET_RECONNECT_INTERVAL_MULTIPLIER = "net:reconnect-interval-multiplier"
+    __SET_XFER_VERIFY = "xfer:verify"
+    __SET_XFER_VERIFY_COMMAND = "xfer:verify-command"
 
     def __init__(self,
                  address: str,
@@ -431,6 +433,22 @@ class Lftp:
         if value < 0:
             raise ValueError("Reconnect interval multiplier must be zero or greater")
         self.__set(Lftp.__SET_NET_RECONNECT_INTERVAL_MULTIPLIER, str(value))
+
+    @property
+    def xfer_verify(self) -> bool:
+        return Lftp.__to_bool(self.__get(Lftp.__SET_XFER_VERIFY))
+
+    @xfer_verify.setter
+    def xfer_verify(self, value: bool):
+        self.__set(Lftp.__SET_XFER_VERIFY, str(int(value)))
+
+    @property
+    def xfer_verify_command(self) -> str:
+        return self.__get(Lftp.__SET_XFER_VERIFY_COMMAND)
+
+    @xfer_verify_command.setter
+    def xfer_verify_command(self, command: str):
+        self.__set(Lftp.__SET_XFER_VERIFY_COMMAND, command)
 
     def status(self) -> List[LftpJobStatus]:
         """

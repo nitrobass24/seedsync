@@ -381,12 +381,14 @@ class Config(Persist):
         enabled = PROP("enabled", Checkers.null, Converters.bool)
         algorithm = PROP("algorithm", Checkers.algorithm_allowed, Converters.null)
         auto_validate = PROP("auto_validate", Checkers.null, Converters.bool)
+        xfer_verify = PROP("xfer_verify", Checkers.null, Converters.bool)
 
         def __init__(self):
             super().__init__()
             self.enabled = False
             self.algorithm = "md5"
             self.auto_validate = True
+            self.xfer_verify = True
 
     def __init__(self):
         self.general = Config.General()
