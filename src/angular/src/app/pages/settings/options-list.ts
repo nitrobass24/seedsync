@@ -378,7 +378,7 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
     },
     {
       type: OptionType.Checkbox,
-      label: 'Verify transfers inline',
+      label: 'Verify transfers inline (recommended)',
       valuePath: ['validate', 'xfer_verify'],
       description:
         'Verify file checksums during transfer using lftp xfer:verify. ' +

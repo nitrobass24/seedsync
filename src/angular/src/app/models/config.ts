@@ -153,7 +153,7 @@ export const DEFAULT_VALIDATE: Validate = {
   enabled: null,
   algorithm: null,
   auto_validate: null,
-  xfer_verify: null,
+  xfer_verify: true,
 };
 
 export const DEFAULT_CONFIG: Config = {
