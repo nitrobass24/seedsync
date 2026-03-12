@@ -491,11 +491,12 @@ class Lftp:
         def escape(s: str) -> str:
             return s.replace("'", "\\'").replace("\"", "\\\"")
 
-        # Build --exclude flags for mirror commands
+        # Build --exclude-glob flags for mirror commands
+        # Note: LFTP's --exclude uses regex; --exclude-glob uses glob patterns
         exclude_flags = ""
         if is_dir and exclude_patterns:
             exclude_flags = " ".join(
-                "--exclude \"{}\"".format(escape(p)) for p in exclude_patterns
+                "--exclude-glob \"{}\"".format(escape(p)) for p in exclude_patterns
             )
 
         parts = [
@@ -514,7 +515,7 @@ class Lftp:
             "'",
         ])
         command = " ".join(parts)
-        self.logger.debug("queue command: %s", command)
+        self.logger.info("queue command: %s", command)
         self.__run_command(command)
 
     def kill(self, name: str) -> bool:
