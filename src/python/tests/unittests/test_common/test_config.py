@@ -407,6 +407,57 @@ class TestConfig(unittest.TestCase):
         self.check_bad_value_error(Config.AutoQueue, good_dict, "auto_delete_remote", "SomeString")
         self.check_bad_value_error(Config.AutoQueue, good_dict, "auto_delete_remote", "-1")
 
+    def test_validate(self):
+        good_dict = {
+            "enabled": "True",
+            "algorithm": "sha256",
+            "auto_validate": "False",
+            "xfer_verify": "True"
+        }
+        validate = Config.Validate.from_dict(good_dict)
+        self.assertEqual(True, validate.enabled)
+        self.assertEqual("sha256", validate.algorithm)
+        self.assertEqual(False, validate.auto_validate)
+        self.assertEqual(True, validate.xfer_verify)
+
+        self.check_common(Config.Validate,
+                          good_dict,
+                          {
+                              "enabled",
+                              "auto_validate",
+                              "xfer_verify"
+                          })
+
+        # bad values
+        self.check_bad_value_error(Config.Validate, good_dict, "enabled", "SomeString")
+        self.check_bad_value_error(Config.Validate, good_dict, "enabled", "-1")
+        self.check_bad_value_error(Config.Validate, good_dict, "auto_validate", "SomeString")
+        self.check_bad_value_error(Config.Validate, good_dict, "auto_validate", "-1")
+        self.check_bad_value_error(Config.Validate, good_dict, "xfer_verify", "SomeString")
+        self.check_bad_value_error(Config.Validate, good_dict, "xfer_verify", "-1")
+        self.check_bad_value_error(Config.Validate, good_dict, "algorithm", "invalid")
+        self.check_bad_value_error(Config.Validate, good_dict, "algorithm", "")
+
+    def test_validate_defaults(self):
+        """Validate section should have sensible defaults"""
+        validate = Config.Validate()
+        self.assertEqual(False, validate.enabled)
+        self.assertEqual("md5", validate.algorithm)
+        self.assertEqual(True, validate.auto_validate)
+        self.assertEqual(True, validate.xfer_verify)
+
+    def test_validate_missing_xfer_verify_uses_default(self):
+        """Missing xfer_verify key should use default True (backward compat)"""
+        good_dict = {
+            "enabled": "True",
+            "algorithm": "md5",
+            "auto_validate": "True"
+            # xfer_verify intentionally omitted
+        }
+        validate = Config.Validate.from_dict(good_dict)
+        self.assertEqual(True, validate.enabled)
+        self.assertEqual(True, validate.xfer_verify)
+
     def test_from_file(self):
         # Create empty config file
         fd, config_file_path = tempfile.mkstemp(suffix="test_config")
@@ -613,6 +664,7 @@ class TestConfig(unittest.TestCase):
         enabled = False
         algorithm = md5
         auto_validate = True
+        xfer_verify = True
         """
 
         golden_lines = [s.strip() for s in golden_str.splitlines()]

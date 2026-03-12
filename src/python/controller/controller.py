@@ -415,6 +415,13 @@ class Controller:
             lftp.net_reconnect_interval_base = cfg.net_reconnect_interval_base
         if cfg.net_reconnect_interval_multiplier is not None:
             lftp.net_reconnect_interval_multiplier = cfg.net_reconnect_interval_multiplier
+        # Configure inline transfer verification
+        validate_cfg = self.__context.config.validate
+        if validate_cfg.xfer_verify:
+            lftp.xfer_verify = True
+            lftp.xfer_verify_command = "{}sum".format(validate_cfg.algorithm)
+        else:
+            lftp.xfer_verify = False
         lftp.set_verbose_logging(self.__context.config.general.verbose)
 
     def start(self):

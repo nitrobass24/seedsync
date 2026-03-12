@@ -71,6 +71,7 @@ export interface Validate {
   enabled: boolean | null;
   algorithm: string | null;
   auto_validate: boolean | null;
+  xfer_verify: boolean | null;
 }
 
 export interface Config {
@@ -152,6 +153,7 @@ export const DEFAULT_VALIDATE: Validate = {
   enabled: null,
   algorithm: null,
   auto_validate: null,
+  xfer_verify: true,
 };
 
 export const DEFAULT_CONFIG: Config = {

@@ -376,6 +376,15 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
       description: 'Checksum algorithm used for integrity verification',
       choices: ['md5', 'sha1', 'sha256'],
     },
+    {
+      type: OptionType.Checkbox,
+      label: 'Verify transfers inline (recommended)',
+      valuePath: ['validate', 'xfer_verify'],
+      description:
+        'Verify file checksums during transfer using lftp xfer:verify. ' +
+        'Uses the selected hash algorithm above.\n' +
+        '(xfer:verify)',
+    },
   ],
 };
 
