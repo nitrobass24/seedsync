@@ -1,20 +1,20 @@
-# SeedSync Docker Image - Debian Build
+# SeedSync Docker Image
 
 # ==============================================================================
 # Stage 1: Build Angular Frontend
 # ==============================================================================
-FROM node:22-bookworm-slim AS angular-builder
+FROM node:22-alpine AS angular-builder
 
 WORKDIR /app
 COPY src/angular/package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY src/angular/ ./
 RUN npx ng build --configuration=production --output-path /build
 
 # ==============================================================================
-# Stage 2: Prepare Python runtime (install deps, strip unused stdlib)
+# Stage 2: Prepare Python runtime (install deps)
 # ==============================================================================
-FROM python:3.12-slim-bookworm AS python-deps
+FROM python:3.12-alpine AS python-deps
 
 COPY src/python/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt \
@@ -57,7 +57,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
 # ==============================================================================
 # Stage 3: Final Runtime Image
 # ==============================================================================
-FROM debian:bookworm-slim AS runtime
+FROM alpine:3.21 AS runtime
 
 LABEL maintainer="nitrobass24" \
       description="SeedSync - Seedbox file synchronization tool"
@@ -66,19 +66,19 @@ LABEL maintainer="nitrobass24" \
 COPY --from=python-deps /usr/local/ /usr/local/
 
 # Copy pre-built 7zz binary with RAR codec support (ghcr.io/nitrobass24/docker-7zip)
-COPY --from=ghcr.io/nitrobass24/docker-7zip:debian /7zz /usr/bin/7zz
+COPY --from=ghcr.io/nitrobass24/docker-7zip:alpine /7zz /usr/bin/7zz
 RUN ln -sf /usr/bin/7zz /usr/bin/7z
 
-# Install runtime deps in a single layer.
-# lftp, openssh-client, ca-certificates are intentionally unpinned
-# to receive security updates on each image rebuild.
-RUN ldconfig \
-    && apt-get update && apt-get install -y --no-install-recommends \
+# Install runtime dependencies.
+# setpriv (from util-linux) is used by entrypoint to drop privileges.
+# lftp, openssh-client, ca-certificates are intentionally
+# unpinned to receive security updates on each image rebuild.
+RUN apk add --no-cache \
         lftp \
         openssh-client \
         ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+        setpriv \
+        libstdc++
 
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8 \
@@ -107,7 +107,7 @@ EXPOSE 8800
 VOLUME ["/config", "/downloads", "/staging"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:{}/'.format(os.environ.get('WEB_PORT','8800')))" || exit 1
+  CMD wget -q --spider http://127.0.0.1:${WEB_PORT:-8800}/ || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["python", "/app/python/seedsync.py", "-c", "/config", "--html", "/app/html", "--scanfs", "/app/python/scan_fs.py"]

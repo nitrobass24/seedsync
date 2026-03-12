@@ -47,7 +47,7 @@ size:
 
 # Shell into running container
 shell:
-	docker exec -it seedsync-dev /bin/bash
+	docker exec -it seedsync-dev /bin/sh
 
 # Help
 help:
