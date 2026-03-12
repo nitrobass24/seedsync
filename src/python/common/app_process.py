@@ -121,6 +121,9 @@ class AppProcess(Process):
         """
         self.__exception_queue.close()
         self.__exception_queue.join_thread()
+        # Release multiprocessing primitives that hold semaphore FDs
+        self._terminate = None
+        self._mp_log_queue = None
 
     def propagate_exception(self):
         """
