@@ -21,12 +21,20 @@ from .delete import DeleteLocalProcess, DeleteRemoteProcess
 from .move import MoveProcess
 
 
-def _matches_exclude(name: str, patterns: List[str]) -> bool:
-    """Return True if *name* matches any of the exclude patterns (case-insensitive)."""
-    return any(fnmatch.fnmatch(name.lower(), p.lower()) for p in patterns)
+def _matches_exclude(name: str, is_dir: bool, patterns: list) -> bool:
+    """Return True if *name* matches any of the exclude patterns (case-insensitive).
+
+    Each pattern is a (glob, dir_only) tuple.  When dir_only is True the
+    pattern only matches directories.
+    """
+    name_lower = name.lower()
+    return any(
+        fnmatch.fnmatch(name_lower, p.lower()) and (not dir_only or is_dir)
+        for p, dir_only in patterns
+    )
 
 
-def _filter_children(file, patterns: List[str]):
+def _filter_children(file, patterns: list):
     """Return a copy of *file* with excluded children (and their subtrees) removed.
 
     If a directory child matches a pattern the entire subtree is dropped.
@@ -43,7 +51,7 @@ def _filter_children(file, patterns: List[str]):
         time_modified=file.timestamp_modified,
     )
     for child in file.children:
-        if _matches_exclude(child.name, patterns):
+        if _matches_exclude(child.name, child.is_dir, patterns):
             continue  # drop matched child (and its subtree)
         if child.is_dir:
             child = _filter_children(child, patterns)
@@ -54,12 +62,18 @@ def _filter_children(file, patterns: List[str]):
 def filter_excluded_files(files: List, exclude_patterns_str: str) -> List:
     if not exclude_patterns_str or not exclude_patterns_str.strip():
         return files
-    patterns = [p.strip().rstrip("/") for p in exclude_patterns_str.split(",") if p.strip()]
+    patterns = []
+    for p in exclude_patterns_str.split(","):
+        p = p.strip()
+        if not p:
+            continue
+        dir_only = p.endswith("/")
+        patterns.append((p.rstrip("/"), dir_only))
     if not patterns:
         return files
     result = []
     for f in files:
-        if _matches_exclude(f.name, patterns):
+        if _matches_exclude(f.name, f.is_dir, patterns):
             continue
         if f.is_dir:
             f = _filter_children(f, patterns)

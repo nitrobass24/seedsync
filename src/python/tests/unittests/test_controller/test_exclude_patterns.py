@@ -80,13 +80,15 @@ class TestFilterExcludedFiles(unittest.TestCase):
         self.assertEqual(["movie.mkv"], [f.name for f in result])
 
     def test_trailing_slash_with_wildcard(self):
+        """A trailing-slash wildcard pattern should only exclude directories, not files."""
         files = [
             SystemFile("Sample", 50, True),
             SystemFile("Extras", 30, True),
+            SystemFile("Sample.mkv", 40, False),
             SystemFile("movie.mkv", 100, False),
         ]
         result = filter_excluded_files(files, "Sam*/")
-        self.assertEqual(["Extras", "movie.mkv"], [f.name for f in result])
+        self.assertEqual(["Extras", "Sample.mkv", "movie.mkv"], [f.name for f in result])
 
     def test_wildcard_pattern(self):
         files = [
