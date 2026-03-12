@@ -51,7 +51,7 @@
                 [disabled]="disabled() || value() == null"
                 [ngModel]="value()"
                 (ngModelChange)="onChange($event)">
-          @for (option of choices(); track option) {
+          @for (option of effectiveChoices(); track option) {
             <option [value]="option">{{ option }}</option>
           }
         </select>
