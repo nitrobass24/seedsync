@@ -12,7 +12,7 @@ import { Config } from "../../models/config";
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
-    general: { debug: false, exclude_patterns: "" },
+    general: { debug: false, verbose: false, exclude_patterns: "" },
     lftp: {
       remote_address: "host",
       remote_username: "user",
