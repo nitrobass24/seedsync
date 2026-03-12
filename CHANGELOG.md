@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.13.4] - 2026-03-12
+
+### Fixed
+
+- **Exclude patterns not passed to LFTP** — Exclude patterns were only filtering the UI display model but were never passed to LFTP's `mirror` command, causing all files to be downloaded regardless of configured exclusions (#259)
+- **Parser crash on Unraid PTY line-wrap fragments** — Unraid's Docker PTY handling wraps long LFTP progress lines, producing tail fragments like `/s eta:25m [Receiving data]` that crashed the parser and stopped the container (#260)
+- **Parser error threshold too aggressive** — Bumped consecutive status error threshold from 2 to 10 so persistent parse issues don't crash the app within seconds
+- **PTY width override on Unraid** — Set `COLUMNS=10000` in pexpect spawn environment as belt-and-suspenders alongside `setwinsize` to prevent Unraid from overriding PTY dimensions
+
+### Changed
+
+- **CI: symmetric arch builds** — Split amd64 build job so both amd64 and arm64 publish builds use pre-built Angular artifact instead of building Angular twice
+- **Alpine-only Docker image** — Removed Debian Docker variant, consolidated to single Alpine image (#244)
+- **A11y action buttons** — Converted file action buttons to native `<button>` elements with proper ARIA attributes (#246)
+- **Test coverage** — Added Phase 1 high-priority service tests for StreamDispatch, Config, ApiKeyInterceptor, and REST services (#245)
+- **Settings UI** — Moved debug toggle to Logging section and converted log format to dropdown (#248)
+
 ## [0.13.3] - 2026-03-12
 
 ### Fixed
