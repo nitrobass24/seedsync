@@ -140,6 +140,12 @@
 .actions .button {
     @extend %button;
 
+    /* Reset native button appearance */
+    padding: 0;
+    font: inherit;
+    appearance: none;
+    outline: inherit;
+
     /* bottom margin for when buttons get wrapped to multiple rows */
     margin-bottom: 10px;
     margin-right: 10px;
