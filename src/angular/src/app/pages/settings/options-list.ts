@@ -179,12 +179,6 @@ export const OPTIONS_CONTEXT_OTHER: IOptionsContext = {
       valuePath: ['web', 'api_key'],
       description: 'Require this key for API access. Leave empty to disable.',
     },
-    {
-      type: OptionType.Checkbox,
-      label: 'Enable Debug',
-      valuePath: ['general', 'debug'],
-      description: 'Enables debug logging.',
-    },
   ],
 };
 
@@ -308,10 +302,17 @@ export const OPTIONS_CONTEXT_LOGGING: IOptionsContext = {
   id: 'logging',
   options: [
     {
-      type: OptionType.Text,
+      type: OptionType.Checkbox,
+      label: 'Enable Debug',
+      valuePath: ['general', 'debug'],
+      description: 'Enables debug logging',
+    },
+    {
+      type: OptionType.Select,
       label: 'Log Format',
       valuePath: ['logging', 'log_format'],
-      description: 'Log output format: "standard" or "json"',
+      description: 'Log output format',
+      choices: ['standard', 'json'],
     },
   ],
 };

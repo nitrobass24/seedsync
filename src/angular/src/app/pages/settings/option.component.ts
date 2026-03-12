@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, OnInit, OnDestroy, input, output } from '@angular/core';
+import { Component, ChangeDetectionStrategy, OnInit, OnDestroy, input, output, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
 
@@ -28,6 +28,16 @@ export class OptionComponent implements OnInit, OnDestroy {
   readonly changeEvent = output<any>();
 
   readonly OptionType = OptionType;
+
+  /** Effective choices list — includes the current value if it's not in the predefined choices. */
+  readonly effectiveChoices = computed(() => {
+    const c = this.choices();
+    const v = this.value();
+    if (v != null && typeof v === 'string' && v !== '' && !c.includes(v)) {
+      return [v, ...c];
+    }
+    return c;
+  });
 
   private readonly DEBOUNCE_TIME_MS = 1000;
   private readonly newValue = new Subject<any>();
