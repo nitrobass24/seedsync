@@ -273,6 +273,9 @@ describe("StreamDispatchService", () => {
       "/server/stream?api_key=retry-key",
     );
 
+    // The old pending retry should have been cancelled
+    vi.advanceTimersByTime(3000);
+    expect(MockEventSource.instances.length).toBe(2);
   });
 
   it("should use URL without api_key param when key is null", () => {

@@ -65,7 +65,6 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
       enabled: false,
       algorithm: "md5",
       auto_validate: false,
-      xfer_verify: true,
     },
     ...overrides,
   };
@@ -289,6 +288,8 @@ describe("ConfigService", () => {
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
       `/server/config/set/web/api_key/${EMPTY_VALUE_SENTINEL}`,
     );
+    // Empty api_key should propagate as null to StreamDispatchService
+    expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith(null);
   });
 
   it("should update BehaviorSubject on successful set", () => {
