@@ -514,6 +514,7 @@ class Lftp:
             "'",
         ])
         command = " ".join(parts)
+        self.logger.debug("queue command: %s", command)
         self.__run_command(command)
 
     def kill(self, name: str) -> bool:
