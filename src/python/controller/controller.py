@@ -77,17 +77,10 @@ def parse_exclude_patterns(exclude_patterns_str: str) -> List[str]:
 
 
 def filter_excluded_files(files: List, exclude_patterns_str: str) -> List:
-    if not exclude_patterns_str or not exclude_patterns_str.strip():
+    parsed = parse_exclude_patterns(exclude_patterns_str)
+    if not parsed:
         return files
-    patterns = []
-    for p in exclude_patterns_str.split(","):
-        p = p.strip()
-        if not p:
-            continue
-        dir_only = p.endswith("/")
-        patterns.append((p.rstrip("/"), dir_only))
-    if not patterns:
-        return files
+    patterns = [(p.rstrip("/"), p.endswith("/")) for p in parsed]
     result = []
     for f in files:
         if _matches_exclude(f.name, f.is_dir, patterns):
