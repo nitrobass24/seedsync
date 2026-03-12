@@ -58,6 +58,7 @@ class WebApp(bottle.Bottle):
     Web app implementation
     """
     _STREAM_POLL_INTERVAL_IN_MS = 250
+    _HEARTBEAT_INTERVAL_IN_SECS = 15
 
     def __init__(self, context: Context, controller: Controller):
         super().__init__()
@@ -141,21 +142,31 @@ class WebApp(bottle.Bottle):
             # Setup the response header
             bottle.response.content_type = "text/event-stream"
             bottle.response.cache_control = "no-cache"
+            bottle.response.set_header("X-Accel-Buffering", "no")
 
             # Call setup on all handlers
             for handler in handlers:
                 handler.setup()
 
             # Get streaming values until the connection closes
+            last_data_time = time.monotonic()
             while not self._stop_event.is_set():
+                had_data = False
                 for handler in handlers:
                     # Process all values from this handler
                     while True:
                         value = handler.get_value()
                         if value:
                             yield value
+                            had_data = True
                         else:
                             break
+
+                if had_data:
+                    last_data_time = time.monotonic()
+                elif (time.monotonic() - last_data_time) >= WebApp._HEARTBEAT_INTERVAL_IN_SECS:
+                    yield ": heartbeat\n\n"
+                    last_data_time = time.monotonic()
 
                 time.sleep(WebApp._STREAM_POLL_INTERVAL_IN_MS / 1000)
 
