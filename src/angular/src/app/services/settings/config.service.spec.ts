@@ -65,6 +65,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
       enabled: false,
       algorithm: "md5",
       auto_validate: false,
+      xfer_verify: true,
     },
     ...overrides,
   };
