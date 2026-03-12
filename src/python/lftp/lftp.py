@@ -493,6 +493,7 @@ class Lftp:
             "\"{local_dir}/\"".format(local_dir=escape(self.__base_local_dir_path)),
             "'"
         ])
+        self.logger.info("queue command: %s", command)
         self.__run_command(command)
 
     def kill(self, name: str) -> bool:
