@@ -1615,3 +1615,35 @@ class TestLftpJobStatusParser(unittest.TestCase):
         self.assertEqual("Terminator.2.Judgment.Day.1991.2160p.UHD.BluRay.x265-SURCODE", statuses[0].name)
         self.assertEqual(LftpJobStatus.Type.MIRROR, statuses[0].type)
         self.assertEqual(LftpJobStatus.State.RUNNING, statuses[0].state)
+
+    def test_orphan_progress_line_skipped_after_job(self):
+        """Orphan progress lines after a valid job should be skipped.
+        Regression test for issue #253: '3.0K/s eta:3m [Receiving data]' caused
+        a ValueError that propagated as LftpJobStatusParserError and killed the container.
+        """
+        output = (
+            "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\n"
+            "3.0K/s eta:3m [Receiving data]"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        # The valid mirror job should still be parsed
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("show", statuses[0].name)
+
+    def test_bare_orphan_progress_line_skipped(self):
+        """A bare orphan progress line with no valid jobs should be skipped."""
+        output = "3.0K/s eta:3m [Receiving data]"
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(0, len(statuses))
+
+    def test_truly_unrecognized_line_raises(self):
+        """A truly unrecognized line (not an orphan progress line) should still raise."""
+        output = (
+            "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\n"
+            "completely unexpected garbage"
+        )
+        parser = LftpJobStatusParser()
+        with self.assertRaises(LftpJobStatusParserError):
+            parser.parse(output)

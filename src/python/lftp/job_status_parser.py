@@ -115,8 +115,7 @@ class LftpJobStatusParser:
             raise LftpJobStatusParserError("Error parsing lftp job status")
         return statuses
 
-    @staticmethod
-    def __parse_jobs(lines: List[str]) -> List[LftpJobStatus]:
+    def __parse_jobs(self, lines: List[str]) -> List[LftpJobStatus]:
         jobs = []
 
         # Header patterns
@@ -213,17 +212,37 @@ class LftpJobStatusParser:
 
         queue_done_m = re.compile(LftpJobStatusParser.__QUEUE_DONE_REGEX)
 
+        # Orphan progress lines lftp can emit outside a job context, e.g.:
+        #   "3.0K/s eta:3m [Receiving data]"
+        #   "10M/s eta:1h2m [Making data connection]"
+        orphan_progress_pattern = (
+            r"^(?:\d+\.?\d*\s?({sz}))\/s\s+"
+            r"eta:({eta})\s+"
+            r"\[.*\]$"
+        ).format(
+            sz=LftpJobStatusParser.__SIZE_UNITS_REGEX,
+            eta=LftpJobStatusParser.__TIME_UNITS_REGEX,
+        )
+        orphan_progress_m = re.compile(orphan_progress_pattern)
+
         prev_job = None
         while lines:
             line = lines.pop(0)
 
-            # First line must be a valid job header
+            # First line must be a valid job header.
+            # Exception: skip known orphan progress lines that lftp emits
+            # outside a job context (e.g. "3.0K/s eta:3m [Receiving data]").
             if not (
                 prev_job or
                 pget_header_m.match(line) or
                 mirror_header_m.match(line) or
                 mirror_fl_header_m.match(line)
             ):
+                if orphan_progress_m.match(line):
+                    self.logger.warning(
+                        "Skipping orphan lftp progress line: '%s'", line
+                    )
+                    continue
                 raise ValueError("First line is not a matching header '{}'".format(line))
 
             # Search for pget header
@@ -485,7 +504,15 @@ class LftpJobStatusParser:
                 # Continue the outer loop
                 continue
 
-            # If we got here, then we don't know how to parse this line
+            # If we got here, check if it's a known orphan progress line
+            if orphan_progress_m.match(line):
+                self.logger.warning(
+                    "Skipping orphan lftp progress line: '%s'", line
+                )
+                continue
+
+            # Truly unrecognized line — raise so the caller can track
+            # consecutive errors and decide whether to propagate
             raise ValueError("Unable to parse line '{}'".format(line))
         return jobs
 
