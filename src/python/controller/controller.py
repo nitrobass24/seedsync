@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import logging
 import os
 import fnmatch
 from abc import ABC, abstractmethod
@@ -630,7 +631,7 @@ class Controller:
 
         if any_pair_has_changes:
             new_model = Model()
-            new_model.set_base_logger(self.logger)
+            new_model.set_base_logger(logging.getLogger("dummy"))  # silence logs for temp model
 
             # When multiple pairs share the same local directory, a file that
             # exists only locally (no remote counterpart) would appear in every
