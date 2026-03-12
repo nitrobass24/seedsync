@@ -140,6 +140,12 @@
 .actions .button {
     @extend %button;
 
+    /* Reset native button appearance */
+    padding: 0;
+    font: inherit;
+    appearance: none;
+    outline: inherit;
+
     /* bottom margin for when buttons get wrapped to multiple rows */
     margin-bottom: 10px;
     margin-right: 10px;
@@ -154,15 +160,11 @@
     .text {
         height: 25px;
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-
-        span {
-            font-size: 12px;
-            text-align: center;
-            line-height: 12px;
-        }
+        font-size: 12px;
+        text-align: center;
+        line-height: 12px;
     }
 
     img {
