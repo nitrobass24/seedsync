@@ -110,12 +110,11 @@ class TestWebStreamHeartbeat(unittest.TestCase):
             mock_response = MagicMock()
             mock_bottle.response = mock_response
 
-            # Stop immediately
+            # Stop immediately so the while loop never executes
             self.app._stop_event.set()
-
-            handler_instance.get_value.return_value = None
 
             gen = self.app._WebApp__web_stream()
             list(gen)
 
             mock_response.set_header.assert_called_with("X-Accel-Buffering", "no")
+
