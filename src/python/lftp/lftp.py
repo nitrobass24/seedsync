@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
+import os
 import re
 import warnings
 from functools import wraps
@@ -96,13 +97,17 @@ class Lftp:
             "-u", "{},{}".format(self.__user, self.__password if self.__password else ""),
             "sftp://{}".format(self.__address)
         ]
+        # Force a wide terminal so LFTP never wraps 'jobs -v' output.
+        # Belt-and-suspenders: set COLUMNS in the environment (which LFTP
+        # and libc may read) AND call setwinsize on the PTY fd.  Unraid's
+        # Docker layer can override PTY dimensions, so the env var covers
+        # that case.
+        spawn_env = os.environ.copy()
+        spawn_env["COLUMNS"] = "10000"
         # Suppress DeprecationWarning from pexpect.spawn's internal forkpty call.
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message=".*fork.*", category=DeprecationWarning)
-            self.__process = pexpect.spawn("/usr/bin/lftp", args)
-        # Set a very wide terminal to prevent LFTP from wrapping long lines
-        # in 'jobs -v' output. The default 80-column pty causes paths to wrap
-        # mid-word, producing fragments the parser can't handle.
+            self.__process = pexpect.spawn("/usr/bin/lftp", args, env=spawn_env)
         self.__process.setwinsize(24, 10000)
         self.__process.expect(self.__expect_pattern)
         self.__setup()
