@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.13.3] - 2026-03-12
+
+### Fixed
+
+- **lftp parser crash on orphan progress lines** — Parser no longer crashes when lftp emits bare progress lines like `3.0K/s eta:3m [Receiving data]` outside a job context, which caused the Docker container to stop (#253)
+
 ## [0.13.2] - 2026-03-10
 
 ### Fixed
