@@ -35,6 +35,11 @@ class ActiveScanner(IScanner):
         """
         self.__active_files_queue.put(file_names)
 
+    def close(self):
+        """Close multiprocessing resources."""
+        self.__active_files_queue.close()
+        self.__active_files_queue.join_thread()
+
     @overrides(IScanner)
     def scan(self) -> List[SystemFile]:
         # Grab the latest list of active files, if any

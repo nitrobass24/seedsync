@@ -6,6 +6,7 @@ export interface IOption {
   valuePath: [string, string];
   description: string | null;
   disabled?: boolean;
+  choices?: string[];
 }
 
 export interface IOptionsContext {
@@ -178,12 +179,6 @@ export const OPTIONS_CONTEXT_OTHER: IOptionsContext = {
       valuePath: ['web', 'api_key'],
       description: 'Require this key for API access. Leave empty to disable.',
     },
-    {
-      type: OptionType.Checkbox,
-      label: 'Enable Debug',
-      valuePath: ['general', 'debug'],
-      description: 'Enables debug logging.',
-    },
   ],
 };
 
@@ -307,10 +302,17 @@ export const OPTIONS_CONTEXT_LOGGING: IOptionsContext = {
   id: 'logging',
   options: [
     {
-      type: OptionType.Text,
+      type: OptionType.Checkbox,
+      label: 'Enable Debug',
+      valuePath: ['general', 'debug'],
+      description: 'Enables debug logging',
+    },
+    {
+      type: OptionType.Select,
       label: 'Log Format',
       valuePath: ['logging', 'log_format'],
-      description: 'Log output format: "standard" or "json"',
+      description: 'Log output format',
+      choices: ['standard', 'json'],
     },
   ],
 };
@@ -348,6 +350,41 @@ export const OPTIONS_CONTEXT_NOTIFICATIONS: IOptionsContext = {
       label: 'Notify on delete complete',
       valuePath: ['notifications', 'notify_on_delete_complete'],
       description: null,
+    },
+  ],
+};
+
+export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
+  header: 'Integrity Check',
+  id: 'integrity-check',
+  options: [
+    {
+      type: OptionType.Checkbox,
+      label: 'Enable integrity checking',
+      valuePath: ['validate', 'enabled'],
+      description: 'Verify file checksums after download by comparing local and remote hashes',
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Auto-validate after download',
+      valuePath: ['validate', 'auto_validate'],
+      description: 'Automatically validate files when download completes',
+    },
+    {
+      type: OptionType.Select,
+      label: 'Hash Algorithm',
+      valuePath: ['validate', 'algorithm'],
+      description: 'Checksum algorithm used for integrity verification',
+      choices: ['md5', 'sha1', 'sha256'],
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Verify transfers inline (recommended)',
+      valuePath: ['validate', 'xfer_verify'],
+      description:
+        'Verify file checksums during transfer using lftp xfer:verify. ' +
+        'Uses the selected hash algorithm above.\n' +
+        '(xfer:verify)',
     },
   ],
 };

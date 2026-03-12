@@ -3,6 +3,7 @@ import { BehaviorSubject, Observable, of, forkJoin } from 'rxjs';
 
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
+import { PathPairsService } from '../settings/path-pairs.service';
 import { RestService, WebReaction } from '../utils/rest.service';
 import { ModelFile, ModelFileState } from '../../models/model-file';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
@@ -22,7 +23,9 @@ export type ViewFileComparator = (a: ViewFile, b: ViewFile) => number;
 export class ViewFileService {
   private readonly logger = inject(LoggerService);
   private readonly modelFileService = inject(ModelFileService);
+  private readonly pathPairsService = inject(PathPairsService);
 
+  private pairNameMap = new Map<string, string>();
   private files: ViewFile[] = [];
   private readonly filesSubject = new BehaviorSubject<ViewFile[]>([]);
   private readonly filteredFilesSubject = new BehaviorSubject<ViewFile[]>([]);
@@ -42,6 +45,21 @@ export class ViewFileService {
   readonly checked$ = this.checkedSubject.asObservable();
 
   constructor() {
+    this.pathPairsService.pairs$.subscribe((pairs) => {
+      this.pairNameMap.clear();
+      for (const pair of pairs) {
+        this.pairNameMap.set(pair.id, pair.name);
+      }
+      // Rebuild pairName on existing view files immediately
+      if (this.files.length > 0) {
+        this.files = this.files.map(f => ({
+          ...f,
+          pairName: f.pairId ? (this.pairNameMap.get(f.pairId) ?? null) : null,
+        }));
+        this.pushViewFiles();
+      }
+    });
+
     this.modelFileService.files$.subscribe({
       next: (modelFiles) => {
         const t0 = performance.now();
@@ -109,6 +127,11 @@ export class ViewFileService {
   deleteRemote(file: ViewFile): Observable<WebReaction> {
     this.logger.debug('Remotely delete view file: ' + file.name);
     return this.createAction(file, (f) => this.modelFileService.deleteRemote(f));
+  }
+
+  validate(file: ViewFile): Observable<WebReaction> {
+    this.logger.debug('Validate view file: ' + file.name);
+    return this.createAction(file, (f) => this.modelFileService.validate(f));
   }
 
   toggleCheck(file: ViewFile): void {
@@ -249,7 +272,7 @@ export class ViewFileService {
     for (const key of updatedKeys) {
       const index = this.indices.get(key)!;
       const oldViewFile = newViewFiles[index];
-      const newViewFile = createViewFile(modelFiles.get(key)!, oldViewFile.isSelected);
+      const newViewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap, oldViewFile.isSelected);
       newViewFiles[index] = { ...newViewFile, isChecked: this.checkedSet.has(key) };
       if (this.sortComparator != null && this.sortComparator(oldViewFile, newViewFile) !== 0) {
         reSort = true;
@@ -259,7 +282,7 @@ export class ViewFileService {
     // Do the adds (requires re-sort)
     for (const key of addedKeys) {
       reSort = true;
-      const viewFile = createViewFile(modelFiles.get(key)!);
+      const viewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap);
       newViewFiles.push({ ...viewFile, isChecked: this.checkedSet.has(key) });
       this.indices.set(viewFileKey(viewFile), newViewFiles.length - 1);
     }
@@ -342,7 +365,7 @@ function modelFilesEqual(a: ModelFile, b: ModelFile): boolean {
   );
 }
 
-function createViewFile(modelFile: ModelFile, isSelected: boolean = false): ViewFile {
+function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, isSelected: boolean = false): ViewFile {
   const localSize = modelFile.local_size ?? 0;
   const remoteSize = modelFile.remote_size ?? 0;
   let percentDownloaded: number;
@@ -382,13 +405,22 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
     case ModelFileState.EXTRACT_FAILED:
       status = ViewFileStatus.EXTRACT_FAILED;
       break;
+    case ModelFileState.VALIDATING:
+      status = ViewFileStatus.VALIDATING;
+      break;
+    case ModelFileState.VALIDATED:
+      status = ViewFileStatus.VALIDATED;
+      break;
+    case ModelFileState.CORRUPT:
+      status = ViewFileStatus.CORRUPT;
+      break;
     default:
       status = ViewFileStatus.DEFAULT;
   }
 
   const isQueueable =
-    [ViewFileStatus.DEFAULT, ViewFileStatus.STOPPED, ViewFileStatus.DELETED].includes(status) &&
-    remoteSize > 0;
+    ([ViewFileStatus.DEFAULT, ViewFileStatus.STOPPED, ViewFileStatus.DELETED].includes(status) && remoteSize > 0) ||
+    status === ViewFileStatus.CORRUPT;
   const isStoppable = [ViewFileStatus.QUEUED, ViewFileStatus.DOWNLOADING].includes(status);
   const isExtractable =
     [
@@ -397,6 +429,8 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
       ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
     ].includes(status) && localSize > 0;
   const isLocallyDeletable =
     [
@@ -405,6 +439,8 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
       ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
     ].includes(status) && localSize > 0;
   const isRemotelyDeletable =
     [
@@ -413,12 +449,23 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
       ViewFileStatus.DOWNLOADED,
       ViewFileStatus.EXTRACTED,
       ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
       ViewFileStatus.DELETED,
     ].includes(status) && remoteSize > 0;
+  const isValidatable =
+    [
+      ViewFileStatus.DOWNLOADED,
+      ViewFileStatus.EXTRACTED,
+      ViewFileStatus.EXTRACT_FAILED,
+      ViewFileStatus.VALIDATED,
+      ViewFileStatus.CORRUPT,
+    ].includes(status) && modelFile.local_size != null && modelFile.remote_size != null;
 
   return {
     name: modelFile.name,
     pairId: modelFile.pair_id,
+    pairName: modelFile.pair_id ? (pairNameMap.get(modelFile.pair_id) ?? null) : null,
     isDir: modelFile.is_dir,
     localSize,
     remoteSize,
@@ -435,6 +482,7 @@ function createViewFile(modelFile: ModelFile, isSelected: boolean = false): View
     isExtractable,
     isLocallyDeletable,
     isRemotelyDeletable,
+    isValidatable,
     localCreatedTimestamp: modelFile.local_created_timestamp,
     localModifiedTimestamp: modelFile.local_modified_timestamp,
     remoteCreatedTimestamp: modelFile.remote_created_timestamp,

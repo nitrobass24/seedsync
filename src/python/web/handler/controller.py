@@ -90,98 +90,49 @@ class ControllerHandler(IHandler):
         web_app.add_handler("/server/command/extract/<file_name>", self.__handle_action_extract)
         web_app.add_handler("/server/command/delete_local/<file_name>", self.__handle_action_delete_local)
         web_app.add_handler("/server/command/delete_remote/<file_name>", self.__handle_action_delete_remote)
+        web_app.add_handler("/server/command/validate/<file_name>", self.__handle_action_validate)
+
+    def __dispatch_command(self, file_name: str,
+                           action: Controller.Command.Action,
+                           success_msg: str):
+        """Common handler: decode filename, validate pair_id, dispatch command."""
+        file_name = _decode_and_validate(file_name)
+        if isinstance(file_name, HTTPResponse):
+            return file_name
+
+        pair_id = _validate_pair_id(request.params.get("pair_id"))
+        if pair_id == "":
+            return HTTPResponse(body="pair_id must not be blank", status=400)
+        command = Controller.Command(action, file_name, pair_id=pair_id)
+        callback = WebResponseActionCallback()
+        command.add_callback(callback)
+        self.__controller.queue_command(command)
+        callback.wait()
+        if callback.success:
+            return HTTPResponse(body=success_msg.format(file_name))
+        else:
+            return HTTPResponse(body=callback.error, status=400)
 
     def __handle_action_queue(self, file_name: str):
-        """
-        Request a QUEUE action
-        :param file_name:
-        :return:
-        """
-        file_name = _decode_and_validate(file_name)
-        if isinstance(file_name, HTTPResponse):
-            return file_name
-
-        pair_id = _validate_pair_id(request.params.get("pair_id"))
-        if pair_id == "":
-            return HTTPResponse(body="pair_id must not be blank", status=400)
-        command = Controller.Command(Controller.Command.Action.QUEUE, file_name, pair_id=pair_id)
-        callback = WebResponseActionCallback()
-        command.add_callback(callback)
-        self.__controller.queue_command(command)
-        callback.wait()
-        if callback.success:
-            return HTTPResponse(body="Queued file '{}'".format(file_name))
-        else:
-            return HTTPResponse(body=callback.error, status=400)
+        return self.__dispatch_command(
+            file_name, Controller.Command.Action.QUEUE, "Queued file '{}'")
 
     def __handle_action_stop(self, file_name: str):
-        file_name = _decode_and_validate(file_name)
-        if isinstance(file_name, HTTPResponse):
-            return file_name
-
-        pair_id = _validate_pair_id(request.params.get("pair_id"))
-        if pair_id == "":
-            return HTTPResponse(body="pair_id must not be blank", status=400)
-        command = Controller.Command(Controller.Command.Action.STOP, file_name, pair_id=pair_id)
-        callback = WebResponseActionCallback()
-        command.add_callback(callback)
-        self.__controller.queue_command(command)
-        callback.wait()
-        if callback.success:
-            return HTTPResponse(body="Stopped file '{}'".format(file_name))
-        else:
-            return HTTPResponse(body=callback.error, status=400)
+        return self.__dispatch_command(
+            file_name, Controller.Command.Action.STOP, "Stopped file '{}'")
 
     def __handle_action_extract(self, file_name: str):
-        file_name = _decode_and_validate(file_name)
-        if isinstance(file_name, HTTPResponse):
-            return file_name
-
-        pair_id = _validate_pair_id(request.params.get("pair_id"))
-        if pair_id == "":
-            return HTTPResponse(body="pair_id must not be blank", status=400)
-        command = Controller.Command(Controller.Command.Action.EXTRACT, file_name, pair_id=pair_id)
-        callback = WebResponseActionCallback()
-        command.add_callback(callback)
-        self.__controller.queue_command(command)
-        callback.wait()
-        if callback.success:
-            return HTTPResponse(body="Requested extraction for file '{}'".format(file_name))
-        else:
-            return HTTPResponse(body=callback.error, status=400)
+        return self.__dispatch_command(
+            file_name, Controller.Command.Action.EXTRACT, "Requested extraction for file '{}'")
 
     def __handle_action_delete_local(self, file_name: str):
-        file_name = _decode_and_validate(file_name)
-        if isinstance(file_name, HTTPResponse):
-            return file_name
-
-        pair_id = _validate_pair_id(request.params.get("pair_id"))
-        if pair_id == "":
-            return HTTPResponse(body="pair_id must not be blank", status=400)
-        command = Controller.Command(Controller.Command.Action.DELETE_LOCAL, file_name, pair_id=pair_id)
-        callback = WebResponseActionCallback()
-        command.add_callback(callback)
-        self.__controller.queue_command(command)
-        callback.wait()
-        if callback.success:
-            return HTTPResponse(body="Requested local delete for file '{}'".format(file_name))
-        else:
-            return HTTPResponse(body=callback.error, status=400)
+        return self.__dispatch_command(
+            file_name, Controller.Command.Action.DELETE_LOCAL, "Requested local delete for file '{}'")
 
     def __handle_action_delete_remote(self, file_name: str):
-        file_name = _decode_and_validate(file_name)
-        if isinstance(file_name, HTTPResponse):
-            return file_name
+        return self.__dispatch_command(
+            file_name, Controller.Command.Action.DELETE_REMOTE, "Requested remote delete for file '{}'")
 
-        pair_id = _validate_pair_id(request.params.get("pair_id"))
-        if pair_id == "":
-            return HTTPResponse(body="pair_id must not be blank", status=400)
-        command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, file_name, pair_id=pair_id)
-        callback = WebResponseActionCallback()
-        command.add_callback(callback)
-        self.__controller.queue_command(command)
-        callback.wait()
-        if callback.success:
-            return HTTPResponse(body="Requested remote delete for file '{}'".format(file_name))
-        else:
-            return HTTPResponse(body=callback.error, status=400)
+    def __handle_action_validate(self, file_name: str):
+        return self.__dispatch_command(
+            file_name, Controller.Command.Action.VALIDATE, "Requested validation for file '{}'")

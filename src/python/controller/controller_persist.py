@@ -25,11 +25,15 @@ class ControllerPersist(Persist):
     __KEY_DOWNLOADED_FILE_NAMES = "downloaded"
     __KEY_EXTRACTED_FILE_NAMES = "extracted"
     __KEY_EXTRACT_FAILED_FILE_NAMES = "extract_failed"
+    __KEY_VALIDATED_FILE_NAMES = "validated"
+    __KEY_CORRUPT_FILE_NAMES = "corrupt"
 
     def __init__(self):
         self.downloaded_file_names = set()
         self.extracted_file_names = set()
         self.extract_failed_file_names = set()
+        self.validated_file_names = set()
+        self.corrupt_file_names = set()
 
     @staticmethod
     def _migrate_legacy_keys(keys: set) -> set:
@@ -52,6 +56,8 @@ class ControllerPersist(Persist):
             persist.downloaded_file_names = set(dct[ControllerPersist.__KEY_DOWNLOADED_FILE_NAMES])
             persist.extracted_file_names = set(dct[ControllerPersist.__KEY_EXTRACTED_FILE_NAMES])
             persist.extract_failed_file_names = set(dct.get(ControllerPersist.__KEY_EXTRACT_FAILED_FILE_NAMES, []))
+            persist.validated_file_names = set(dct.get(ControllerPersist.__KEY_VALIDATED_FILE_NAMES, []))
+            persist.corrupt_file_names = set(dct.get(ControllerPersist.__KEY_CORRUPT_FILE_NAMES, []))
             # Migrate any legacy colon-separated keys to unit-separator keys
             persist.downloaded_file_names = ControllerPersist._migrate_legacy_keys(
                 persist.downloaded_file_names)
@@ -59,6 +65,10 @@ class ControllerPersist(Persist):
                 persist.extracted_file_names)
             persist.extract_failed_file_names = ControllerPersist._migrate_legacy_keys(
                 persist.extract_failed_file_names)
+            persist.validated_file_names = ControllerPersist._migrate_legacy_keys(
+                persist.validated_file_names)
+            persist.corrupt_file_names = ControllerPersist._migrate_legacy_keys(
+                persist.corrupt_file_names)
             return persist
         except (json.decoder.JSONDecodeError, KeyError) as e:
             raise PersistError("Error parsing AutoQueuePersist - {}: {}".format(
@@ -71,4 +81,6 @@ class ControllerPersist(Persist):
         dct[ControllerPersist.__KEY_DOWNLOADED_FILE_NAMES] = list(self.downloaded_file_names)
         dct[ControllerPersist.__KEY_EXTRACTED_FILE_NAMES] = list(self.extracted_file_names)
         dct[ControllerPersist.__KEY_EXTRACT_FAILED_FILE_NAMES] = list(self.extract_failed_file_names)
+        dct[ControllerPersist.__KEY_VALIDATED_FILE_NAMES] = list(self.validated_file_names)
+        dct[ControllerPersist.__KEY_CORRUPT_FILE_NAMES] = list(self.corrupt_file_names)
         return json.dumps(dct, indent=Constants.JSON_PRETTY_PRINT_INDENT)

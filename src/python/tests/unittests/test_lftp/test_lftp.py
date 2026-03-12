@@ -197,6 +197,20 @@ class TestLftp(unittest.TestCase):
         self.lftp.sftp_connect_program = "\"abc -d\""
         self.assertEqual("\"abc -d\"", self.lftp.sftp_connect_program)
 
+    def test_xfer_verify(self):
+        self.lftp.xfer_verify = True
+        self.assertEqual(True, self.lftp.xfer_verify)
+        self.lftp.xfer_verify = False
+        self.assertEqual(False, self.lftp.xfer_verify)
+
+    def test_xfer_verify_command(self):
+        self.lftp.xfer_verify_command = "md5sum"
+        self.assertEqual("md5sum", self.lftp.xfer_verify_command)
+        self.lftp.xfer_verify_command = "sha1sum"
+        self.assertEqual("sha1sum", self.lftp.xfer_verify_command)
+        self.lftp.xfer_verify_command = "sha256sum"
+        self.assertEqual("sha256sum", self.lftp.xfer_verify_command)
+
     def test_status_empty(self):
         statuses = self.lftp.status()
         self.assertEqual(0, len(statuses))

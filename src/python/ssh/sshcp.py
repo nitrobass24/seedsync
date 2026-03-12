@@ -2,12 +2,14 @@
 
 import logging
 import time
+import warnings
 from typing import Optional, List
 
 import pexpect
 
 # my libs
 from common import AppError
+
 
 
 class SshcpError(AppError):
@@ -192,7 +194,11 @@ class Sshcp:
         command = " ".join(command_args)
         self.logger.debug("SFTP stat command: {}".format(command))
 
-        sp = pexpect.spawn(command)
+        # Suppress DeprecationWarning from pexpect.spawn's internal forkpty call.
+        # Scoped here so it doesn't affect the parent process.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*fork.*", category=DeprecationWarning)
+            sp = pexpect.spawn(command)
         try:
             if self.__password is not None:
                 i = sp.expect([
@@ -268,7 +274,10 @@ class Sshcp:
         self.logger.debug("Command: {}".format(command))
 
         start_time = time.time()
-        sp = pexpect.spawn(command)
+        # Suppress DeprecationWarning from pexpect.spawn's internal forkpty call.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*fork.*", category=DeprecationWarning)
+            sp = pexpect.spawn(command)
         try:
             if self.__password is not None:
                 i = sp.expect([

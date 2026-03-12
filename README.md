@@ -3,6 +3,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/nitrobass24/seedsync/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/nitrobass24/seedsync/ci.yml?branch=master&label=CI" alt="CI Status">
+  </a>
+  <a href="https://github.com/nitrobass24/seedsync/releases/latest">
+    <img src="https://img.shields.io/github/v/release/nitrobass24/seedsync" alt="Latest Release">
+  </a>
   <a href="https://github.com/nitrobass24/seedsync">
     <img src="https://img.shields.io/github/stars/nitrobass24/seedsync" alt="Stars">
   </a>
@@ -18,6 +24,9 @@
   <a href="https://nitrobass24.github.io/seedsync/">
     <img src="https://img.shields.io/badge/docs-website-blue" alt="Documentation">
   </a>
+  <img src="https://img.shields.io/badge/Angular-21-dd0031" alt="Angular 21">
+  <img src="https://img.shields.io/badge/Python-3.12-3776ab" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/platform-amd64%20%7C%20arm64-lightgrey" alt="Platform">
 </p>
 
 SeedSync is a tool to sync files from a remote Linux server (like your seedbox) to your local machine.

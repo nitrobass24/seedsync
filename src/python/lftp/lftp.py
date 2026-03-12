@@ -2,11 +2,13 @@
 
 import logging
 import re
+import warnings
 from functools import wraps
 from typing import Callable, Union, List, Optional
 
 # 3rd party libs
 import pexpect
+
 
 # my libs
 from common import AppError
@@ -51,6 +53,8 @@ class Lftp:
     __SET_NET_MAX_RETRIES = "net:max-retries"
     __SET_NET_RECONNECT_INTERVAL_BASE = "net:reconnect-interval-base"
     __SET_NET_RECONNECT_INTERVAL_MULTIPLIER = "net:reconnect-interval-multiplier"
+    __SET_XFER_VERIFY = "xfer:verify"
+    __SET_XFER_VERIFY_COMMAND = "xfer:verify-command"
 
     def __init__(self,
                  address: str,
@@ -89,7 +93,10 @@ class Lftp:
             "-u", "{},{}".format(self.__user, self.__password if self.__password else ""),
             "sftp://{}".format(self.__address)
         ]
-        self.__process = pexpect.spawn("/usr/bin/lftp", args)
+        # Suppress DeprecationWarning from pexpect.spawn's internal forkpty call.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*fork.*", category=DeprecationWarning)
+            self.__process = pexpect.spawn("/usr/bin/lftp", args)
         # Set a very wide terminal to prevent LFTP from wrapping long lines
         # in 'jobs -v' output. The default 80-column pty causes paths to wrap
         # mid-word, producing fragments the parser can't handle.
@@ -427,6 +434,22 @@ class Lftp:
             raise ValueError("Reconnect interval multiplier must be zero or greater")
         self.__set(Lftp.__SET_NET_RECONNECT_INTERVAL_MULTIPLIER, str(value))
 
+    @property
+    def xfer_verify(self) -> bool:
+        return Lftp.__to_bool(self.__get(Lftp.__SET_XFER_VERIFY))
+
+    @xfer_verify.setter
+    def xfer_verify(self, value: bool):
+        self.__set(Lftp.__SET_XFER_VERIFY, str(int(value)))
+
+    @property
+    def xfer_verify_command(self) -> str:
+        return self.__get(Lftp.__SET_XFER_VERIFY_COMMAND)
+
+    @xfer_verify_command.setter
+    def xfer_verify_command(self, command: str):
+        self.__set(Lftp.__SET_XFER_VERIFY_COMMAND, command)
+
     def status(self) -> List[LftpJobStatus]:
         """
         Return a status list of queued and running jobs
@@ -445,7 +468,7 @@ class Lftp:
                 raise
         return statuses
 
-    def queue(self, name: str, is_dir: bool):
+    def queue(self, name: str, is_dir: bool, exclude_patterns: list = None):
         """
         Queues a job for download
         This method may cause an exception to be generated in a later method call:
@@ -453,23 +476,36 @@ class Lftp:
           * File/folder does not exist
         :param name: name of file or folder to download
         :param is_dir: true if folder, false if file
+        :param exclude_patterns: list of glob patterns to exclude (only applies to mirror/directory downloads)
         :return:
         """
         # Escape single and double quotes in any string used in queue command
         def escape(s: str) -> str:
             return s.replace("'", "\\'").replace("\"", "\\\"")
 
-        command = " ".join([
+        # Build --exclude flags for mirror commands
+        exclude_flags = ""
+        if is_dir and exclude_patterns:
+            exclude_flags = " ".join(
+                "--exclude \"{}\"".format(escape(p)) for p in exclude_patterns
+            )
+
+        parts = [
             "queue",
             "'",
             "pget" if not is_dir else "mirror",
             "-c",
+        ]
+        if exclude_flags:
+            parts.append(exclude_flags)
+        parts.extend([
             "\"{remote_dir}/{filename}\"".format(remote_dir=escape(self.__base_remote_dir_path),
                                                  filename=escape(name)),
             "-o" if not is_dir else "",
             "\"{local_dir}/\"".format(local_dir=escape(self.__base_local_dir_path)),
-            "'"
+            "'",
         ])
+        command = " ".join(parts)
         self.__run_command(command)
 
     def kill(self, name: str) -> bool:

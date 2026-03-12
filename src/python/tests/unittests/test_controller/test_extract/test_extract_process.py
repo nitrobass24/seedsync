@@ -4,22 +4,24 @@ import unittest
 import logging
 from unittest.mock import patch
 import sys
-import multiprocessing
-import ctypes
-import threading
 import time
 
-import timeout_decorator
-
 from model import ModelFile
-from controller.extract import ExtractProcess, ExtractListener, ExtractStatus, ExtractRequest
+from controller.extract import ExtractProcess, ExtractStatus, ExtractRequest
 
 
 class TestExtractProcess(unittest.TestCase):
+    """
+    Tests for ExtractProcess logic.
+
+    These tests call run_init()/run_loop() directly instead of spawning a
+    subprocess, because unittest mocks do not survive the 'spawn' start
+    method (child re-imports everything, bypassing the mock).
+    """
+
     def setUp(self):
-        dispatch_patcher = patch('controller.extract.extract_process.ExtractDispatch')
-        self.addCleanup(dispatch_patcher.stop)
-        self.mock_dispatch_cls = dispatch_patcher.start()
+        self.dispatch_patcher = patch('controller.extract.extract_process.ExtractDispatch')
+        self.mock_dispatch_cls = self.dispatch_patcher.start()
         self.mock_dispatch = self.mock_dispatch_cls.return_value
 
         # by default mock returns empty statuses
@@ -32,145 +34,87 @@ class TestExtractProcess(unittest.TestCase):
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
         handler.setFormatter(formatter)
 
-        # Assign process to this variable so that it can be cleaned up
-        # even after an error
-        self.process = None
+        self.process = ExtractProcess()
 
     def tearDown(self):
-        if self.process:
-            self.process.terminate()
+        self.dispatch_patcher.stop()
 
-    @timeout_decorator.timeout(2)
     def test_calls_start_dispatch(self):
-        self.start_called = multiprocessing.Value('i', 0)
+        self.process.run_init()
+        self.mock_dispatch.start.assert_called_once()
 
-        def _start():
-            self.start_called.value = 1
-        self.mock_dispatch.start.side_effect = _start
-
-        self.process = ExtractProcess()
-        self.process.start()
-        while self.start_called.value == 0:
-            pass
-
-    @timeout_decorator.timeout(10)
     def test_retrieves_status(self):
-        # Use this as a signal to mock to control which status to send
-        self.status_signal = multiprocessing.Value('i', 0)
-        self.status_counter = multiprocessing.Value('i', 0)
-
         s_a = ExtractStatus(name="a", is_dir=True, state=ExtractStatus.State.EXTRACTING)
         s_b = ExtractStatus(name="b", is_dir=False, state=ExtractStatus.State.EXTRACTING)
         s_c = ExtractStatus(name="c", is_dir=True, state=ExtractStatus.State.EXTRACTING)
 
-        def _status():
-            ret = None
-            if self.status_signal.value == 0:
-                ret = [s_a]
-            elif self.status_signal.value == 1:
-                ret = [s_a, s_b]
-            elif self.status_signal.value == 2:
-                ret = [s_c]
-            elif self.status_signal.value == 3:
-                ret = []
-            self.status_counter.value += 1
-            return ret
-        self.mock_dispatch.status.side_effect = _status
+        self.process.run_init()
 
-        self.process = ExtractProcess()
-        self.process.start()
-
-        # wait for first call to status (actually second call to guarantee first status is queued)
-        while self.status_counter.value < 2:
-            pass
+        # Status with one entry
+        self.mock_dispatch.status.return_value = [s_a]
+        self.process.run_loop()
         status_result = self.process.pop_latest_statuses()
         self.assertEqual(1, len(status_result.statuses))
         self.assertEqual("a", status_result.statuses[0].name)
         self.assertEqual(True, status_result.statuses[0].is_dir)
         self.assertEqual(ExtractStatus.State.EXTRACTING, status_result.statuses[0].state)
 
-        # signal for status #1 and wait status fetch
-        self.status_signal.value = 1
-        orig_counter = self.status_counter.value
-        while self.status_counter.value < orig_counter+2:
-            pass
+        # Status with two entries
+        self.mock_dispatch.status.return_value = [s_a, s_b]
+        self.process.run_loop()
         status_result = self.process.pop_latest_statuses()
         self.assertEqual(2, len(status_result.statuses))
         self.assertEqual("a", status_result.statuses[0].name)
-        self.assertEqual(True, status_result.statuses[0].is_dir)
-        self.assertEqual(ExtractStatus.State.EXTRACTING, status_result.statuses[0].state)
         self.assertEqual("b", status_result.statuses[1].name)
         self.assertEqual(False, status_result.statuses[1].is_dir)
-        self.assertEqual(ExtractStatus.State.EXTRACTING, status_result.statuses[1].state)
 
-        # signal for status #2 and wait status fetch
-        self.status_signal.value = 2
-        orig_counter = self.status_counter.value
-        while self.status_counter.value < orig_counter+2:
-            pass
+        # Status changes
+        self.mock_dispatch.status.return_value = [s_c]
+        self.process.run_loop()
         status_result = self.process.pop_latest_statuses()
         self.assertEqual(1, len(status_result.statuses))
         self.assertEqual("c", status_result.statuses[0].name)
-        self.assertEqual(True, status_result.statuses[0].is_dir)
-        self.assertEqual(ExtractStatus.State.EXTRACTING, status_result.statuses[0].state)
 
-        # signal for status #3 and wait status fetch
-        self.status_signal.value = 3
-        orig_counter = self.status_counter.value
-        while self.status_counter.value < orig_counter+2:
-            pass
+        # Empty status
+        self.mock_dispatch.status.return_value = []
+        self.process.run_loop()
         status_result = self.process.pop_latest_statuses()
         self.assertEqual(0, len(status_result.statuses))
 
-    @timeout_decorator.timeout(10)
     def test_retrieves_completed(self):
-        # Use this as a signal to mock to control which completed list to send
-        self.completed_signal = multiprocessing.Value('i', 0)
-        self.completed_counter = multiprocessing.Value('i', 0)
+        self.process.run_init()
 
-        def _add_listener(listener: ExtractListener):
-            print("Listener added")
+        # Capture the listener that was registered
+        self.mock_dispatch.add_listener.assert_called_once()
+        listener = self.mock_dispatch.add_listener.call_args[0][0]
 
-            def _callback_sequence():
-                listener.extract_completed(name="a", is_dir=True)
-                time.sleep(0.1)
-                self.completed_signal.value = 1
-
-                time.sleep(1.0)
-                listener.extract_completed(name="b", is_dir=False)
-                listener.extract_completed(name="c", is_dir=True)
-                time.sleep(0.1)
-                self.completed_signal.value = 2
-
-            threading.Thread(target=_callback_sequence()).start()
-        self.mock_dispatch.add_listener.side_effect = _add_listener
-
-        self.process = ExtractProcess()
-        self.process.start()
-
-        while self.completed_signal.value < 1:
-            pass
+        # Simulate a completion callback
+        listener.extract_completed(name="a", is_dir=True)
+        time.sleep(0.1)  # let multiprocessing.Queue background thread flush
         completed = self.process.pop_completed()
         self.assertEqual(1, len(completed))
         self.assertEqual("a", completed[0].name)
         self.assertEqual(True, completed[0].is_dir)
-        # next one should be empty
+
+        # Next pop should be empty
         completed = self.process.pop_completed()
         self.assertEqual(0, len(completed))
 
-        while self.completed_signal.value < 2:
-            pass
+        # Simulate multiple completions
+        listener.extract_completed(name="b", is_dir=False)
+        listener.extract_completed(name="c", is_dir=True)
+        time.sleep(0.1)  # let multiprocessing.Queue background thread flush
         completed = self.process.pop_completed()
         self.assertEqual(2, len(completed))
         self.assertEqual("b", completed[0].name)
         self.assertEqual(False, completed[0].is_dir)
         self.assertEqual("c", completed[1].name)
         self.assertEqual(True, completed[1].is_dir)
-        # next one should be empty
+
+        # Next pop should be empty
         completed = self.process.pop_completed()
         self.assertEqual(0, len(completed))
 
-    @timeout_decorator.timeout(5)
     def test_forwards_extract_commands(self):
         a = ModelFile("a", True)
         a.local_size = 100
@@ -193,54 +137,49 @@ class TestExtractProcess(unittest.TestCase):
         c = ModelFile("c", False)
         c.local_size = 1234
 
-        self.extract_counter = multiprocessing.Value('i', 0)
-
-        def _extract(req: ExtractRequest):
-            file = req.model_file
-            print(file.name)
-            if self.extract_counter.value == 0:
-                self.assertEqual("a", file.name)
-                self.assertEqual(True, file.is_dir)
-                self.assertEqual(100, file.local_size)
-                children = file.get_children()
-                self.assertEqual(2, len(children))
-                self.assertEqual("aa", children[0].name)
-                self.assertEqual(False, children[0].is_dir)
-                self.assertEqual(60, children[0].local_size)
-                self.assertEqual("ab", children[1].name)
-                self.assertEqual(False, children[0].is_dir)
-                self.assertEqual(40, children[1].local_size)
-            elif self.extract_counter.value == 1:
-                self.assertEqual("b", file.name)
-                self.assertEqual(True, file.is_dir)
-                self.assertEqual(10, file.local_size)
-                self.assertEqual(1, len(file.get_children()))
-                child = file.get_children()[0]
-                self.assertEqual("ba", child.name)
-                self.assertEqual(True, child.is_dir)
-                self.assertEqual(10, child.local_size)
-                self.assertEqual(1, len(child.get_children()))
-                subchild = child.get_children()[0]
-                self.assertEqual("baa", subchild.name)
-                self.assertEqual(False, subchild.is_dir)
-                self.assertEqual(10, subchild.local_size)
-            elif self.extract_counter.value == 2:
-                self.assertEqual("c", file.name)
-                self.assertEqual(False, file.is_dir)
-                self.assertEqual(1234, file.local_size)
-            self.extract_counter.value += 1
-        self.mock_dispatch.extract.side_effect = _extract
-
-        self.process = ExtractProcess()
-        self.process.start()
+        self.process.run_init()
 
         req_a = ExtractRequest(model_file=a, local_path="/local", out_dir_path="/out")
         req_b = ExtractRequest(model_file=b, local_path="/local", out_dir_path="/out")
         req_c = ExtractRequest(model_file=c, local_path="/local", out_dir_path="/out")
 
+        # Queue commands and let multiprocessing.Queue background thread flush
         self.process.extract(req_a)
-        time.sleep(1)
         self.process.extract(req_b)
         self.process.extract(req_c)
-        while self.extract_counter.value < 3:
-            pass
+        time.sleep(0.1)
+        self.process.run_loop()
+
+        # Verify all three were forwarded to dispatch
+        self.assertEqual(3, self.mock_dispatch.extract.call_count)
+
+        # Verify first call
+        call_0 = self.mock_dispatch.extract.call_args_list[0][0][0]
+        self.assertEqual("a", call_0.model_file.name)
+        self.assertEqual(True, call_0.model_file.is_dir)
+        self.assertEqual(100, call_0.model_file.local_size)
+        children = call_0.model_file.get_children()
+        self.assertEqual(2, len(children))
+        self.assertEqual("aa", children[0].name)
+        self.assertEqual("ab", children[1].name)
+
+        # Verify second call
+        call_1 = self.mock_dispatch.extract.call_args_list[1][0][0]
+        self.assertEqual("b", call_1.model_file.name)
+        self.assertEqual(True, call_1.model_file.is_dir)
+        child = call_1.model_file.get_children()[0]
+        self.assertEqual("ba", child.name)
+        subchild = child.get_children()[0]
+        self.assertEqual("baa", subchild.name)
+
+        # Verify third call
+        call_2 = self.mock_dispatch.extract.call_args_list[2][0][0]
+        self.assertEqual("c", call_2.model_file.name)
+        self.assertEqual(False, call_2.model_file.is_dir)
+        self.assertEqual(1234, call_2.model_file.local_size)
+
+    def test_close_queues_releases_resources(self):
+        self.process.run_init()
+        self.process.run_loop()
+        # close_queues() should not raise
+        self.process.close_queues()

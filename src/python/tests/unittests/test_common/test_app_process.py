@@ -58,9 +58,9 @@ class LongRunningProcess(AppProcess):
 class LongRunningThreadProcess(AppProcess):
     def __init__(self):
         super().__init__(name=self.__class__.__name__)
-        self.thread = threading.Thread(target=self.long_task)
 
     def run_init(self):
+        self.thread = threading.Thread(target=self.long_task)
         self.thread.start()
 
     def run_loop(self):

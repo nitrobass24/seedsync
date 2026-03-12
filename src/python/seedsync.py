@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import multiprocessing
 import signal
 import sys
 import time
@@ -444,6 +445,8 @@ class Seedsync:
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method('spawn')
+
     # Apply UMASK env var before spawning any child processes (e.g. lftp via pexpect).
     # The shell umask set in entrypoint.sh is not reliably inherited through the
     # setpriv exec chain in all container environments, so we set it explicitly here.

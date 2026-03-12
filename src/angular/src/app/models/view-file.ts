@@ -4,6 +4,7 @@
 export interface ViewFile {
   name: string;
   pairId: string | null;
+  pairName: string | null;
   isDir: boolean;
   localSize: number;
   remoteSize: number;
@@ -21,6 +22,7 @@ export interface ViewFile {
   isExtractable: boolean;
   isLocallyDeletable: boolean;
   isRemotelyDeletable: boolean;
+  isValidatable: boolean;
   localCreatedTimestamp: Date | null;
   localModifiedTimestamp: Date | null;
   remoteCreatedTimestamp: Date | null;
@@ -37,4 +39,7 @@ export enum ViewFileStatus {
   EXTRACTING      = 'extracting',
   EXTRACTED       = 'extracted',
   EXTRACT_FAILED  = 'extract_failed',
+  VALIDATING      = 'validating',
+  VALIDATED       = 'validated',
+  CORRUPT         = 'corrupt',
 }

@@ -17,6 +17,10 @@ const StatusComparator: ViewFileComparator = (a: ViewFile, b: ViewFile): number 
       [ViewFileStatus.DELETED]: 4, // intermix deleted and default
       [ViewFileStatus.DOWNLOADED]: 5,
       [ViewFileStatus.EXTRACTED]: 5, // intermix with downloaded
+      [ViewFileStatus.EXTRACT_FAILED]: 5,
+      [ViewFileStatus.VALIDATING]: 0, // show with active operations
+      [ViewFileStatus.VALIDATED]: 5, // intermix with downloaded
+      [ViewFileStatus.CORRUPT]: 3, // show prominently like stopped
     };
     if (statusPriorities[a.status] !== statusPriorities[b.status]) {
       return statusPriorities[a.status] - statusPriorities[b.status];

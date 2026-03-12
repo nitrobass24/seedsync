@@ -3,7 +3,7 @@
 import unittest
 
 from system import SystemFile
-from controller import filter_excluded_files
+from controller import filter_excluded_files, parse_exclude_patterns
 
 
 class TestFilterExcludedFiles(unittest.TestCase):
@@ -69,6 +69,26 @@ class TestFilterExcludedFiles(unittest.TestCase):
         ]
         result = filter_excluded_files(files, "Sample")
         self.assertEqual(["movie.mkv"], [f.name for f in result])
+
+    def test_trailing_slash_stripped(self):
+        """A trailing slash in a pattern should be stripped so 'Sample/' matches 'Sample'."""
+        files = [
+            SystemFile("Sample", 50, True),
+            SystemFile("movie.mkv", 100, False),
+        ]
+        result = filter_excluded_files(files, "Sample/")
+        self.assertEqual(["movie.mkv"], [f.name for f in result])
+
+    def test_trailing_slash_with_wildcard(self):
+        """A trailing-slash wildcard pattern should only exclude directories, not files."""
+        files = [
+            SystemFile("Sample", 50, True),
+            SystemFile("Extras", 30, True),
+            SystemFile("Sample.mkv", 40, False),
+            SystemFile("movie.mkv", 100, False),
+        ]
+        result = filter_excluded_files(files, "Sam*/")
+        self.assertEqual(["Extras", "Sample.mkv", "movie.mkv"], [f.name for f in result])
 
     def test_wildcard_pattern(self):
         files = [
@@ -224,3 +244,33 @@ class TestFilterExcludedFilesRecursive(unittest.TestCase):
         deep = result[0].children[0].children[0].children[0]
         self.assertEqual("sub", deep.name)
         self.assertEqual(["deep.mkv"], [c.name for c in deep.children])
+
+
+class TestParseExcludePatterns(unittest.TestCase):
+    def test_empty_string(self):
+        self.assertEqual([], parse_exclude_patterns(""))
+
+    def test_none(self):
+        self.assertEqual([], parse_exclude_patterns(None))
+
+    def test_whitespace_only(self):
+        self.assertEqual([], parse_exclude_patterns("  ,  , "))
+
+    def test_single_pattern(self):
+        self.assertEqual(["*.nfo"], parse_exclude_patterns("*.nfo"))
+
+    def test_multiple_patterns(self):
+        self.assertEqual(["*.nfo", "*.txt", "Sample/"],
+                         parse_exclude_patterns("*.nfo,*.txt,Sample/"))
+
+    def test_whitespace_trimmed(self):
+        self.assertEqual(["*.nfo", "*.txt"],
+                         parse_exclude_patterns(" *.nfo , *.txt "))
+
+    def test_trailing_slash_preserved(self):
+        """Trailing slashes are kept so callers can distinguish dir-only patterns."""
+        self.assertEqual(["Sample/"], parse_exclude_patterns("Sample/"))
+
+    def test_empty_entries_skipped(self):
+        self.assertEqual(["*.nfo", "*.txt"],
+                         parse_exclude_patterns("*.nfo,,*.txt,"))
