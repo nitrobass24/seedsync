@@ -469,7 +469,7 @@ class Lftp:
             self.__consecutive_status_errors = 0
         except LftpJobStatusParserError:
             self.__consecutive_status_errors += 1
-            if self.__consecutive_status_errors <= MAX_CONSECUTIVE_STATUS_ERRORS:
+            if self.__consecutive_status_errors < MAX_CONSECUTIVE_STATUS_ERRORS:
                 self.logger.warning(f"Ignoring status error (count={self.__consecutive_status_errors})")
                 statuses = []
             else:
