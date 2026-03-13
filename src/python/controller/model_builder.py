@@ -155,7 +155,9 @@ class ModelBuilder:
             return self.__cached_model
 
         model = Model()
-        model.set_base_logger(logging.getLogger("dummy"))  # ignore the logs for this temp model
+        _dummy = logging.getLogger("dummy")
+        _dummy.propagate = False
+        model.set_base_logger(_dummy)  # ignore the logs for this temp model
         effective_local = {**self.__local_files, **self.__active_files}
         all_file_names = set().union(effective_local.keys(),
                                      self.__remote_files.keys(),
