@@ -73,6 +73,7 @@ jobs:
 
   build-test:
     name: Build and Test (amd64)
+    if: ${{ !fromJSON(env.SHOULD_PUBLISH) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -129,7 +130,29 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push amd64 image by digest
+      - name: Build amd64 image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: src/docker/build/docker-image/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: seedsync:test
+          build-contexts: |
+            angular-builder=/tmp/angular-output
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,scope=amd64,mode=max
+
+      - name: Test container starts
+        run: |
+          docker run -d --name test-container -p 8800:8800 seedsync:test
+          sleep 5
+          curl -f http://localhost:8800/ || exit 1
+          docker logs test-container
+          docker stop test-container
+
+      - name: Push amd64 image by digest
         id: push
         uses: docker/build-push-action@v7
         with:
@@ -226,10 +249,9 @@ jobs:
       always() && !cancelled()
       && (startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/develop' && github.event_name == 'push'))
       && needs.unit-test.result == 'success'
-      && needs.build-test.result == 'success'
       && needs.build-amd64.result == 'success'
       && needs.build-arm64.result == 'success'
-    needs: [unit-test, build-test, build-amd64, build-arm64]
+    needs: [unit-test, build-amd64, build-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: read
