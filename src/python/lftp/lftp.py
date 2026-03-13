@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
+import os
 import re
 import warnings
 from functools import wraps
@@ -15,8 +16,11 @@ from common import AppError
 from .job_status_parser import LftpJobStatus, LftpJobStatusParser, LftpJobStatusParserError
 
 
-# How many status errors are allowed before error propagates out
-MAX_CONSECUTIVE_STATUS_ERRORS = 2
+# How many consecutive status parse errors before error propagates out.
+# Set high enough to ride out persistent lftp output quirks (e.g. Unraid
+# PTY line-wrapping) without crashing the app.  At 0.5 s poll interval,
+# 10 errors ≈ 5 seconds of degraded status before fatal.
+MAX_CONSECUTIVE_STATUS_ERRORS = 10
 
 # How many consecutive pexpect timeouts before we restart the lftp process
 MAX_CONSECUTIVE_TIMEOUTS = 3
@@ -93,13 +97,17 @@ class Lftp:
             "-u", "{},{}".format(self.__user, self.__password if self.__password else ""),
             "sftp://{}".format(self.__address)
         ]
+        # Force a wide terminal so LFTP never wraps 'jobs -v' output.
+        # Belt-and-suspenders: set COLUMNS in the environment (which LFTP
+        # and libc may read) AND call setwinsize on the PTY fd.  Unraid's
+        # Docker layer can override PTY dimensions, so the env var covers
+        # that case.
+        spawn_env = os.environ.copy()
+        spawn_env["COLUMNS"] = "10000"
         # Suppress DeprecationWarning from pexpect.spawn's internal forkpty call.
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message=".*fork.*", category=DeprecationWarning)
-            self.__process = pexpect.spawn("/usr/bin/lftp", args)
-        # Set a very wide terminal to prevent LFTP from wrapping long lines
-        # in 'jobs -v' output. The default 80-column pty causes paths to wrap
-        # mid-word, producing fragments the parser can't handle.
+            self.__process = pexpect.spawn("/usr/bin/lftp", args, env=spawn_env)
         self.__process.setwinsize(24, 10000)
         self.__process.expect(self.__expect_pattern)
         self.__setup()
@@ -461,14 +469,14 @@ class Lftp:
             self.__consecutive_status_errors = 0
         except LftpJobStatusParserError:
             self.__consecutive_status_errors += 1
-            if self.__consecutive_status_errors <= MAX_CONSECUTIVE_STATUS_ERRORS:
+            if self.__consecutive_status_errors < MAX_CONSECUTIVE_STATUS_ERRORS:
                 self.logger.warning(f"Ignoring status error (count={self.__consecutive_status_errors})")
                 statuses = []
             else:
                 raise
         return statuses
 
-    def queue(self, name: str, is_dir: bool):
+    def queue(self, name: str, is_dir: bool, exclude_patterns: list = None):
         """
         Queues a job for download
         This method may cause an exception to be generated in a later method call:
@@ -476,23 +484,37 @@ class Lftp:
           * File/folder does not exist
         :param name: name of file or folder to download
         :param is_dir: true if folder, false if file
+        :param exclude_patterns: list of glob patterns to exclude (only applies to mirror/directory downloads)
         :return:
         """
         # Escape single and double quotes in any string used in queue command
         def escape(s: str) -> str:
             return s.replace("'", "\\'").replace("\"", "\\\"")
 
-        command = " ".join([
+        # Build --exclude-glob flags for mirror commands
+        # Note: LFTP's --exclude uses regex; --exclude-glob uses glob patterns
+        exclude_flags = ""
+        if is_dir and exclude_patterns:
+            exclude_flags = " ".join(
+                "--exclude-glob \"{}\"".format(escape(p)) for p in exclude_patterns
+            )
+
+        parts = [
             "queue",
             "'",
             "pget" if not is_dir else "mirror",
             "-c",
+        ]
+        if exclude_flags:
+            parts.append(exclude_flags)
+        parts.extend([
             "\"{remote_dir}/{filename}\"".format(remote_dir=escape(self.__base_remote_dir_path),
                                                  filename=escape(name)),
             "-o" if not is_dir else "",
             "\"{local_dir}/\"".format(local_dir=escape(self.__base_local_dir_path)),
-            "'"
+            "'",
         ])
+        command = " ".join(parts)
         self.logger.info("queue command: %s", command)
         self.__run_command(command)
 

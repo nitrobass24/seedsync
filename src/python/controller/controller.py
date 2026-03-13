@@ -60,18 +60,27 @@ def _filter_children(file, patterns: list):
     return filtered
 
 
-def filter_excluded_files(files: List, exclude_patterns_str: str) -> List:
+def parse_exclude_patterns(exclude_patterns_str: str) -> List[str]:
+    """Parse a comma-separated exclude pattern string into a list of individual patterns.
+
+    Trailing slashes are preserved so callers can distinguish directory-only
+    patterns from file patterns when needed.
+    """
     if not exclude_patterns_str or not exclude_patterns_str.strip():
-        return files
+        return []
     patterns = []
     for p in exclude_patterns_str.split(","):
         p = p.strip()
-        if not p:
-            continue
-        dir_only = p.endswith("/")
-        patterns.append((p.rstrip("/"), dir_only))
-    if not patterns:
+        if p:
+            patterns.append(p)
+    return patterns
+
+
+def filter_excluded_files(files: List, exclude_patterns_str: str) -> List:
+    parsed = parse_exclude_patterns(exclude_patterns_str)
+    if not parsed:
         return files
+    patterns = [(p.rstrip("/"), p.endswith("/")) for p in parsed]
     result = []
     for f in files:
         if _matches_exclude(f.name, f.is_dir, patterns):
@@ -1025,7 +1034,8 @@ class Controller:
                     _notify_failure(command, "File '{}' does not exist remotely".format(command.filename))
                     continue
                 try:
-                    pc.lftp.queue(file.name, file.is_dir)
+                    exclude = parse_exclude_patterns(self.__context.config.general.exclude_patterns)
+                    pc.lftp.queue(file.name, file.is_dir, exclude_patterns=exclude)
                 except LftpError as e:
                     _notify_failure(command, "Lftp error: {}".format(str(e)))
                     continue
