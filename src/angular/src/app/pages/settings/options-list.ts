@@ -366,31 +366,32 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
   options: [
     {
       type: OptionType.Checkbox,
-      label: 'Enable integrity checking',
+      label: 'Verify transfers inline (recommended)',
+      valuePath: ['validate', 'xfer_verify'],
+      description:
+        'Have LFTP verify checksums during transfer. Works independently of the settings below.\n' +
+        '(xfer:verify)',
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Enable post-download validation',
       valuePath: ['validate', 'enabled'],
-      description: 'Verify file checksums after download by comparing local and remote hashes',
+      description:
+        'Allow manual and automatic validation of downloaded files by comparing local and remote checksums via SSH. ' +
+        'Not available when auto-remote delete is enabled.',
     },
     {
       type: OptionType.Checkbox,
       label: 'Auto-validate after download',
       valuePath: ['validate', 'auto_validate'],
-      description: 'Automatically validate files when download completes',
+      description: 'Automatically validate files when download completes. Requires post-download validation above.',
     },
     {
       type: OptionType.Select,
       label: 'Hash Algorithm',
       valuePath: ['validate', 'algorithm'],
-      description: 'Checksum algorithm used for integrity verification',
+      description: 'Checksum algorithm used for post-download validation',
       choices: ['md5', 'sha1', 'sha256'],
-    },
-    {
-      type: OptionType.Checkbox,
-      label: 'Verify transfers inline (recommended)',
-      valuePath: ['validate', 'xfer_verify'],
-      description:
-        'Verify file checksums during transfer using lftp xfer:verify. ' +
-        'Uses the selected hash algorithm above.\n' +
-        '(xfer:verify)',
     },
   ],
 };

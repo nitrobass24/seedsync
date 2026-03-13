@@ -41,12 +41,12 @@ import {
 export class SettingsPageComponent implements OnInit {
   serverContext: IOptionsContext = OPTIONS_CONTEXT_SERVER;
   autoqueueContext: IOptionsContext = OPTIONS_CONTEXT_AUTOQUEUE;
+  validateContext: IOptionsContext = OPTIONS_CONTEXT_VALIDATE;
   readonly OPTIONS_CONTEXT_DISCOVERY = OPTIONS_CONTEXT_DISCOVERY;
   readonly OPTIONS_CONTEXT_CONNECTIONS = OPTIONS_CONTEXT_CONNECTIONS;
   readonly OPTIONS_CONTEXT_OTHER = OPTIONS_CONTEXT_OTHER;
   readonly OPTIONS_CONTEXT_STAGING = OPTIONS_CONTEXT_STAGING;
   readonly OPTIONS_CONTEXT_EXTRACT = OPTIONS_CONTEXT_EXTRACT;
-  readonly OPTIONS_CONTEXT_VALIDATE = OPTIONS_CONTEXT_VALIDATE;
   readonly OPTIONS_CONTEXT_ADVANCED_LFTP = OPTIONS_CONTEXT_ADVANCED_LFTP;
   readonly OPTIONS_CONTEXT_LOGGING = OPTIONS_CONTEXT_LOGGING;
   readonly OPTIONS_CONTEXT_NOTIFICATIONS = OPTIONS_CONTEXT_NOTIFICATIONS;
@@ -96,6 +96,15 @@ export class SettingsPageComponent implements OnInit {
       this.autoqueueContext = SettingsPageComponent.buildAutoqueueContext(hasEnabledPairs);
       this.cdr.markForCheck();
     });
+
+    this.configService.config$.pipe(
+      map((config) => config?.validate?.enabled ?? false),
+      distinctUntilChanged(),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((validateEnabled) => {
+      this.validateContext = SettingsPageComponent.buildValidateContext(validateEnabled);
+      this.cdr.markForCheck();
+    });
   }
 
   private static buildServerContext(hasEnabledPairs: boolean): IOptionsContext {
@@ -116,6 +125,18 @@ export class SettingsPageComponent implements OnInit {
       options: OPTIONS_CONTEXT_AUTOQUEUE.options.map((option) => {
         if (hasEnabledPairs && option.valuePath[1] === 'enabled') {
           return { ...option, description: SettingsPageComponent.OVERRIDE_NOTE, disabled: true };
+        }
+        return option;
+      }),
+    };
+  }
+
+  private static buildValidateContext(validateEnabled: boolean): IOptionsContext {
+    return {
+      ...OPTIONS_CONTEXT_VALIDATE,
+      options: OPTIONS_CONTEXT_VALIDATE.options.map((option) => {
+        if (!validateEnabled && (option.valuePath[1] === 'auto_validate' || option.valuePath[1] === 'algorithm')) {
+          return { ...option, disabled: true };
         }
         return option;
       }),
