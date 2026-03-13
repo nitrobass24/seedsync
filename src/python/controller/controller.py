@@ -731,7 +731,13 @@ class Controller:
                         diff.new_file.name in pc.pending_completion:
                     use_staging = self.__context.config.controller.use_staging and \
                                   self.__context.config.controller.staging_path
-                    if use_staging:
+                    # A file with no local presence and DEFAULT state means
+                    # it was deleted locally (e.g. stopped download whose files
+                    # were removed). Nothing left to track.
+                    if diff.new_file.state == ModelFile.State.DEFAULT and \
+                            diff.new_file.local_size is None:
+                        pc.pending_completion.discard(diff.new_file.name)
+                    elif use_staging:
                         move_key = _persist_key(diff.new_file.pair_id, diff.new_file.name)
                         if move_key in self.__moved_file_keys:
                             pc.pending_completion.discard(diff.new_file.name)
