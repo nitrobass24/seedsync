@@ -73,7 +73,7 @@ jobs:
 
   build-test:
     name: Build and Test (amd64)
-    if: ${{ !fromJSON(env.SHOULD_PUBLISH) }}
+    if: ${{ !(startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/develop' && github.event_name == 'push') || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
