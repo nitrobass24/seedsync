@@ -286,6 +286,60 @@ describe("ViewFileService", () => {
     expect(latestFiles()[0].isRemotelyDeletable).toBe(true);
   });
 
+  // --- isValidatable and validateTooltip ---
+
+  it("should set isValidatable when status allows and both sizes are non-null", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "valid",
+        local_size: 100,
+        remote_size: 100,
+        state: ModelFileState.DOWNLOADED,
+      }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(true);
+    expect(latestFiles()[0].validateTooltip).toBeNull();
+  });
+
+  it("should not set isValidatable when remote_size is null and show tooltip", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "no-remote",
+        local_size: 100,
+        remote_size: null,
+        state: ModelFileState.DOWNLOADED,
+      }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(false);
+    expect(latestFiles()[0].validateTooltip).toBe("Remote file not available for checksum comparison");
+  });
+
+  it("should not set isValidatable when local_size is null", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "no-local",
+        local_size: null,
+        remote_size: 100,
+        state: ModelFileState.DOWNLOADED,
+      }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(false);
+    expect(latestFiles()[0].validateTooltip).toBeNull();
+  });
+
+  it("should not set isValidatable for non-validatable status", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "queued",
+        local_size: 100,
+        remote_size: 100,
+        state: ModelFileState.QUEUED,
+      }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(false);
+    expect(latestFiles()[0].validateTooltip).toBeNull();
+  });
+
   // --- Filter criteria ---
 
   it("should apply filter criteria to filteredFiles$", () => {
