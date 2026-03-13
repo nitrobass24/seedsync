@@ -631,7 +631,9 @@ class Controller:
 
         if any_pair_has_changes:
             new_model = Model()
-            new_model.set_base_logger(logging.getLogger("dummy"))  # silence logs for temp model
+            _dummy = logging.getLogger("dummy")
+            _dummy.propagate = False
+            new_model.set_base_logger(_dummy)  # silence logs for temp model
 
             # When multiple pairs share the same local directory, a file that
             # exists only locally (no remote counterpart) would appear in every
