@@ -156,6 +156,7 @@
         </button>
         <button type="button" class="button" appClickStopPropagation
              [disabled]="!isValidatable()"
+             [title]="file().validateTooltip ?? ''"
              (click)="onValidate(file())"
              [class.loading]="activeAction === FileAction.VALIDATE">
             <span class="loader"></span>

@@ -23,6 +23,7 @@ export interface ViewFile {
   isLocallyDeletable: boolean;
   isRemotelyDeletable: boolean;
   isValidatable: boolean;
+  validateTooltip: string | null;
   localCreatedTimestamp: Date | null;
   localModifiedTimestamp: Date | null;
   remoteCreatedTimestamp: Date | null;
