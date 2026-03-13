@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.14.0] - 2026-03-13
+
+### Changed
+
+- **Alpine-only Docker image** — Removed Debian variant; all images are now Alpine-based (~45 MB) (#244)
+- **Verbose logging in web UI** — Verbose LFTP logging setting is now exposed in the Settings page under Logging (#266)
+- **LFTP queue command logging** — Log LFTP queue commands at INFO level for easier troubleshooting without enabling verbose/debug mode
+- **CI deduplication** — Eliminated redundant amd64 Docker build; publish triggers now build, test, and push in a single job (#274)
+
+### Fixed
+
+- **Stopped download delete stuck** — Deleting local files for a stopped download no longer leaves the UI spinner and ActiveScanner polling forever (#271, #272, #273)
+- **File descriptor leak on restart** — Multiprocessing Event/Queue references are now released in `close_queues()` to prevent FD exhaustion across restarts (#265)
+- **Model rebuild log noise** — Temporary model objects used during diff computation no longer emit "Adding file" log messages on every controller loop iteration (#267)
+- **Exclude patterns use wrong LFTP flag** — Changed `--exclude` (regex) to `--exclude-glob` (glob) so patterns like `*.nfo` work correctly (#271)
+
 ## [0.13.4] - 2026-03-12
 
 ### Fixed
