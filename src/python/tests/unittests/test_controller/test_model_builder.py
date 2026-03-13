@@ -557,9 +557,8 @@ class TestModelBuilder(unittest.TestCase):
         model = self.model_builder.build_model()
         self.assertEqual(99, model.get_file("a").local_size)
 
-    def test_build_downloading_state_is_retained(self):
-        # downloading files latest info should be retained even after
-        # they have stopped downloading
+    def test_build_downloading_falls_back_to_local_when_active_clears(self):
+        # When active files are present, they override local sizes
         self.model_builder.set_local_files([SystemFile("a", 42, False)])
         self.model_builder.set_active_files([SystemFile("a", 99, False)])
         s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
@@ -568,13 +567,13 @@ class TestModelBuilder(unittest.TestCase):
         model = self.model_builder.build_model()
         self.assertEqual(99, model.get_file("a").local_size)
 
-        # set active files to empty
+        # When active files clear, model falls back to local scan data
         self.model_builder.set_active_files([])
         s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
         s.total_transfer_state = LftpJobStatus.TransferState(12345, 1000, 0.25, None, None)
         self.model_builder.set_lftp_statuses([s])
         model = self.model_builder.build_model()
-        self.assertEqual(99, model.get_file("a").local_size)
+        self.assertEqual(42, model.get_file("a").local_size)
 
     def test_build_downloading_speed(self):
         s = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
@@ -1549,7 +1548,13 @@ class TestModelBuilder(unittest.TestCase):
         self.assertTrue(self.model_builder.has_changes())
         self.model_builder.build_model()
 
-        # Does not invalidate on empty active files
+        # Invalidates when active files go from non-empty to empty
+        # (e.g. stopped download deleted locally — active scan returns nothing)
+        self.model_builder.set_active_files([])
+        self.assertTrue(self.model_builder.has_changes())
+        self.model_builder.build_model()
+
+        # Does not invalidate on repeated empty active files
         self.model_builder.set_active_files([])
         self.assertFalse(self.model_builder.has_changes())
 

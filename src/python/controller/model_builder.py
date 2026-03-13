@@ -44,9 +44,12 @@ class ModelBuilder:
         self.logger = base_logger.getChild("ModelBuilder")
 
     def set_active_files(self, active_files: List[SystemFile]):
+        prev_active_files = self.__active_files
         self.__active_files = {file.name: file for file in active_files}
         # Always invalidate when active files present (sizes change rapidly)
-        if len(active_files) > 0:
+        # Also invalidate when active files change (e.g. files removed after
+        # a stopped download is deleted locally)
+        if len(active_files) > 0 or self.__active_files != prev_active_files:
             self.__cached_model = None
 
     def set_local_files(self, local_files: List[SystemFile]):
