@@ -97,8 +97,11 @@ jobs:
       - name: Test container starts
         run: |
           docker run -d --name test-container -p 8800:8800 seedsync:test
-          sleep 5
-          curl -f http://localhost:8800/ || exit 1
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8800/ && break
+            [ "$i" -eq 30 ] && { echo "Container failed to become ready"; docker logs test-container; exit 1; }
+            sleep 1
+          done
           docker logs test-container
           docker stop test-container
 
@@ -147,8 +150,11 @@ jobs:
       - name: Test container starts
         run: |
           docker run -d --name test-container -p 8800:8800 seedsync:test
-          sleep 5
-          curl -f http://localhost:8800/ || exit 1
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8800/ && break
+            [ "$i" -eq 30 ] && { echo "Container failed to become ready"; docker logs test-container; exit 1; }
+            sleep 1
+          done
           docker logs test-container
           docker stop test-container
 
