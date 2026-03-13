@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.13.5] - 2026-03-13
+
+### Fixed
+
+- **Exclude patterns use wrong LFTP flag** — Changed `--exclude` (regex) to `--exclude-glob` (glob) so patterns like `*.nfo` work correctly instead of being silently misinterpreted as regex (#271)
+
+### Changed
+
+- **LFTP queue command logging** — Log LFTP queue commands at INFO level (previously DEBUG) for easier troubleshooting without enabling verbose mode
+- **CI workflow_dispatch support** — Allow manual Docker image publishing via GitHub Actions workflow_dispatch trigger
+
 ## [0.13.4] - 2026-03-12
 
 ### Fixed
