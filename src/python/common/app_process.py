@@ -99,6 +99,9 @@ class AppProcess(Process):
     @overrides(Process)
     def terminate(self):
         # Send a terminate signal, and force terminate after a timeout
+        # Guard against None: close_queues() clears this reference
+        if self._terminate is None:
+            return
         self._terminate.set()
 
         def elapsed_ms(start):
@@ -121,6 +124,9 @@ class AppProcess(Process):
         """
         self.__exception_queue.close()
         self.__exception_queue.join_thread()
+        # Release multiprocessing primitives that hold semaphore FDs
+        self._terminate = None
+        self._mp_log_queue = None
 
     def propagate_exception(self):
         """
