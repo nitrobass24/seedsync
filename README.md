@@ -176,7 +176,7 @@ make logs
 
 | Path | Description |
 |------|-------------|
-| `/config` | Configuration and state files |
+| `/config` | Configuration, state files, and the generated `.encryption_key` used for encrypted secrets |
 | `/downloads` | Download destination directory |
 | `/home/seedsync/.ssh/id_rsa` | SSH private key (optional, for key-based auth) |
 
@@ -208,6 +208,11 @@ id  # Shows your UID and GID
 - Check that the SSH port is correct (default: 22)
 - Ensure your credentials are correct
 - If using SSH key auth, ensure the key is mounted at `/home/seedsync/.ssh/id_rsa` (read-only is fine)
+
+### Encrypted Settings
+
+SeedSync stores sensitive values such as `remote_password` and `api_key` encrypted at rest in `/config/settings.cfg`.
+The encryption key is stored separately in `/config/.encryption_key` and must be preserved alongside the config directory.
 
 ### Remote Shell Not Found
 

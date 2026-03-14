@@ -19,7 +19,7 @@ if sys.hexversion < 0x030C0000:
 # my libs
 from common import ServiceExit, Context, Constants, Config, Args, AppError
 from common import ServiceRestart
-from common import Localization, Status, ConfigError, Persist, PersistError
+from common import Localization, Status, ConfigError, ConfigSecretError, Persist, PersistError
 from common import PathPairsConfig
 from common.json_formatter import JsonFormatter
 from controller.notifier import WebhookNotifier
@@ -55,8 +55,10 @@ class Seedsync:
         if os.path.isfile(self.config_path):
             try:
                 config = Config.from_file(self.config_path)
-                if Seedsync._backfill_config_defaults(config):
+                if Seedsync._backfill_config_defaults(config) or config.needs_secret_migration:
                     config.to_file(self.config_path)
+            except ConfigSecretError:
+                raise
             except (ConfigError, PersistError) as e:
                 logging.warning("Failed to load config ({}), backing up and using defaults".format(str(e)))
                 Seedsync.__backup_file(self.config_path)

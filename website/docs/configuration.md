@@ -131,3 +131,4 @@ SeedSync can send HTTP POST notifications when file events occur (download compl
 ## Advanced config file
 
 SeedSync reads settings from `/config/settings.cfg`. You can edit it directly if needed, but the UI is preferred for most setups.
+Sensitive values such as `remote_password` and `api_key` are stored encrypted at rest. SeedSync also creates `/config/.encryption_key`, which must remain alongside `settings.cfg` for those values to be read after restart.

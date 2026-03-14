@@ -1,13 +1,16 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import configparser
+import os
 from typing import Dict
 from io import StringIO
 import collections
 from abc import ABC
 from typing import Type, TypeVar, Callable, Any
 
+from .config_secrets import ConfigSecretStore, ENCRYPTED_PREFIX
 from .error import AppError
+from .localization import Localization
 from .persist import Persist, PersistError
 from .types import overrides
 
@@ -131,20 +134,25 @@ class InnerConfig(ABC):
     """
     class PropMetadata:
         """Tracks property metadata"""
-        def __init__(self, checker: Callable, converter: Callable):
+        def __init__(self, checker: Callable, converter: Callable, sensitive: bool = False):
             self.checker = checker
             self.converter = converter
+            self.sensitive = sensitive
 
     # Global map to map a property to its metadata
     # Is there a way for each concrete class to do this separately?
     __prop_addon_map = collections.OrderedDict()
 
     @classmethod
-    def _create_property(cls, name: str, checker: Callable, converter: Callable) -> property:
+    def _create_property(cls,
+                         name: str,
+                         checker: Callable,
+                         converter: Callable,
+                         sensitive: bool = False) -> property:
         # noinspection PyProtectedMember
         prop = property(fget=lambda s: s._get_property(name),
                         fset=lambda s, v: s._set_property(name, v, checker))
-        prop_addon = InnerConfig.PropMetadata(checker=checker, converter=converter)
+        prop_addon = InnerConfig.PropMetadata(checker=checker, converter=converter, sensitive=sensitive)
         InnerConfig.__prop_addon_map[prop] = prop_addon
         return prop
 
@@ -219,6 +227,14 @@ class InnerConfig(ABC):
         except AttributeError:
             return False
 
+    @classmethod
+    def sensitive_property_names(cls) -> list:
+        property_map = {p: getattr(cls, p) for p in dir(cls) if isinstance(getattr(cls, p), property)}
+        return [
+            name for name, prop in property_map.items()
+            if InnerConfig.__prop_addon_map[prop].sensitive
+        ]
+
     def set_property(self, name: str, value: Any):
         """
         Set a property dynamically
@@ -260,7 +276,7 @@ class Config(Persist):
     class Lftp(IC):
         remote_address = PROP("remote_address", Checkers.string_nonempty, Converters.null)
         remote_username = PROP("remote_username", Checkers.string_nonempty, Converters.null)
-        remote_password = PROP("remote_password", Checkers.string_allow_empty, Converters.null)
+        remote_password = PROP("remote_password", Checkers.string_allow_empty, Converters.null, sensitive=True)
         remote_port = PROP("remote_port", Checkers.int_positive, Converters.int)
         remote_path = PROP("remote_path", Checkers.string_nonempty, Converters.null)
         local_path = PROP("local_path", Checkers.string_nonempty, Converters.null)
@@ -335,7 +351,7 @@ class Config(Persist):
 
     class Web(InnerConfig):
         port = PROP("port", Checkers.int_positive, Converters.int)
-        api_key = PROP("api_key", Checkers.string_allow_empty, Converters.null)
+        api_key = PROP("api_key", Checkers.string_allow_empty, Converters.null, sensitive=True)
 
         def __init__(self):
             super().__init__()
@@ -399,6 +415,27 @@ class Config(Persist):
         self.logging = Config.Logging()
         self.notifications = Config.Notifications()
         self.validate = Config.Validate()
+        self.needs_secret_migration = False
+
+    @staticmethod
+    def _section_types() -> Dict[str, Type[InnerConfig]]:
+        return {
+            "General": Config.General,
+            "Lftp": Config.Lftp,
+            "Controller": Config.Controller,
+            "Web": Config.Web,
+            "AutoQueue": Config.AutoQueue,
+            "Logging": Config.Logging,
+            "Notifications": Config.Notifications,
+            "Validate": Config.Validate,
+        }
+
+    @staticmethod
+    def is_sensitive(section_name: str, option_name: str) -> bool:
+        for known_section_name, section_cls in Config._section_types().items():
+            if known_section_name.lower() == section_name.lower():
+                return option_name in section_cls.sensitive_property_names()
+        return False
 
     @staticmethod
     def _check_section(dct: OuterConfigType, name: str) -> InnerConfigType:
@@ -414,8 +451,7 @@ class Config(Persist):
         pass
 
     @classmethod
-    @overrides(Persist)
-    def from_str(cls: "Config", content: str) -> "Config":
+    def _parse_str(cls, content: str) -> OuterConfigType:
         config_parser = configparser.ConfigParser()
         try:
             config_parser.read_string(content)
@@ -431,12 +467,11 @@ class Config(Persist):
             config_dict[section] = {}
             for option in config_parser.options(section):
                 config_dict[section][option] = config_parser.get(section, option)
-        return Config.from_dict(config_dict)
+        return config_dict
 
-    @overrides(Persist)
-    def to_str(self) -> str:
+    @staticmethod
+    def _format_dict(config_dict: OuterConfigType) -> str:
         config_parser = configparser.ConfigParser()
-        config_dict = self.as_dict()
         for section in config_dict:
             config_parser.add_section(section)
             section_dict = config_dict[section]
@@ -446,6 +481,69 @@ class Config(Persist):
         str_io = StringIO()
         config_parser.write(str_io)
         return str_io.getvalue()
+
+    @classmethod
+    @overrides(Persist)
+    def from_str(cls: "Config", content: str) -> "Config":
+        return Config.from_dict(cls._parse_str(content))
+
+    @overrides(Persist)
+    def to_str(self) -> str:
+        return self._format_dict(self.as_dict())
+
+    @classmethod
+    @overrides(Persist)
+    def from_file(cls: Type["Config"], file_path: str) -> "Config":
+        if not os.path.isfile(file_path):
+            raise AppError(Localization.Error.MISSING_FILE.format(file_path))
+
+        with open(file_path, "r") as f:
+            config_dict = cls._parse_str(f.read())
+
+        has_encrypted_values = any(
+            value.startswith(ENCRYPTED_PREFIX)
+            for section_name, section_dict in config_dict.items()
+            for option_name, value in section_dict.items()
+            if cls.is_sensitive(section_name, option_name) and value
+        )
+        secret_store = ConfigSecretStore.for_config_file(file_path) if has_encrypted_values else None
+
+        needs_secret_migration = False
+        for section_name, section_dict in config_dict.items():
+            for option_name, value in list(section_dict.items()):
+                if not cls.is_sensitive(section_name, option_name) or not value:
+                    continue
+
+                if secret_store is not None and value.startswith(ENCRYPTED_PREFIX):
+                    decrypted_value, _, _ = secret_store.decrypt_if_needed(value)
+                    section_dict[option_name] = decrypted_value
+                    continue
+
+                needs_secret_migration = True
+
+        config = Config.from_dict(config_dict)
+        config.needs_secret_migration = needs_secret_migration
+        return config
+
+    @overrides(Persist)
+    def to_file(self, file_path: str):
+        config_dict = self.as_dict()
+        has_sensitive_values = any(
+            value not in (None, "")
+            for section_name, section_dict in config_dict.items()
+            for option_name, value in section_dict.items()
+            if self.is_sensitive(section_name, option_name)
+        )
+        secret_store = ConfigSecretStore.for_config_file(file_path, create_if_missing=True) if has_sensitive_values else None
+
+        for section_name, section_dict in config_dict.items():
+            for option_name, value in list(section_dict.items()):
+                if not self.is_sensitive(section_name, option_name) or value in (None, ""):
+                    continue
+                section_dict[option_name] = secret_store.encrypt(value)
+
+        self._write_serialized_file(file_path, self._format_dict(config_dict))
+        self.needs_secret_migration = False
 
     @staticmethod
     def from_dict(config_dict: OuterConfigType) -> "Config":

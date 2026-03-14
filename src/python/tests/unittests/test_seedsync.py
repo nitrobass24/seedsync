@@ -3,12 +3,49 @@
 import unittest
 import sys
 import copy
+import logging
+import os
+import shutil
+import tempfile
+from argparse import Namespace
+from unittest.mock import MagicMock, patch
 
-from common import overrides, Config
+from common import overrides, Config, ConfigSecretError, ENCRYPTED_PREFIX, KEY_FILE_NAME, PathPairsConfig
 from seedsync import Seedsync
 
 
 class TestSeedsync(unittest.TestCase):
+    @overrides(unittest.TestCase)
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix="test_seedsync")
+
+    @overrides(unittest.TestCase)
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir)
+
+    def _make_args(self):
+        return Namespace(
+            config_dir=self.temp_dir,
+            html="/path/to/html",
+            scanfs="/path/to/scanfs",
+            logdir=None,
+            debug=False,
+            exit=False,
+        )
+
+    def _build_seedsync(self):
+        logger = logging.getLogger("test-seedsync-{}".format(id(self)))
+        logger.handlers = []
+        logger.addHandler(logging.NullHandler())
+        logger.propagate = False
+
+        with patch.object(Seedsync, "_parse_args", return_value=self._make_args()), \
+                patch.object(Seedsync, "_create_logger", return_value=logger), \
+                patch.object(Seedsync, "_load_path_pairs_config", return_value=PathPairsConfig()), \
+                patch.object(Seedsync, "_load_persist", return_value=MagicMock()), \
+                patch("signal.signal"):
+            return Seedsync()
+
     def test_args_config(self):
         argv = []
         argv.append("-c")
@@ -175,3 +212,81 @@ class TestSeedsync(unittest.TestCase):
         config.lftp.remote_path_to_scan_script = incomplete_value
         self.assertTrue(Seedsync._detect_incomplete_config(config))
         config.lftp.remote_path_to_scan_script = "value"
+
+    def test_startup_migrates_plaintext_sensitive_values_and_creates_key(self):
+        config = Seedsync._create_default_config()
+        config.lftp.remote_password = "plain-pass"
+        config.web.api_key = "plain-key"
+
+        settings_path = os.path.join(self.temp_dir, "settings.cfg")
+        with open(settings_path, "w") as f:
+            f.write(config.to_str())
+
+        seedsync = self._build_seedsync()
+
+        self.assertEqual("plain-pass", seedsync.context.config.lftp.remote_password)
+        self.assertEqual("plain-key", seedsync.context.config.web.api_key)
+        self.assertFalse(seedsync.context.config.needs_secret_migration)
+        self.assertTrue(os.path.isfile(os.path.join(self.temp_dir, KEY_FILE_NAME)))
+
+        with open(settings_path, "r") as f:
+            content = f.read()
+        self.assertIn("remote_password = {}".format(ENCRYPTED_PREFIX), content)
+        self.assertIn("api_key = {}".format(ENCRYPTED_PREFIX), content)
+        self.assertNotIn("plain-pass", content)
+        self.assertNotIn("plain-key", content)
+
+    def test_startup_loads_encrypted_config_with_matching_key(self):
+        config = Seedsync._create_default_config()
+        config.lftp.remote_password = "secret-pass"
+        config.web.api_key = "secret-key"
+        settings_path = os.path.join(self.temp_dir, "settings.cfg")
+        config.to_file(settings_path)
+
+        seedsync = self._build_seedsync()
+
+        self.assertEqual("secret-pass", seedsync.context.config.lftp.remote_password)
+        self.assertEqual("secret-key", seedsync.context.config.web.api_key)
+        self.assertFalse(seedsync.context.config.needs_secret_migration)
+
+    def test_startup_fails_fast_when_encryption_key_is_missing(self):
+        config = Seedsync._create_default_config()
+        config.lftp.remote_password = "secret-pass"
+        config.web.api_key = "secret-key"
+        settings_path = os.path.join(self.temp_dir, "settings.cfg")
+        config.to_file(settings_path)
+        os.remove(os.path.join(self.temp_dir, KEY_FILE_NAME))
+
+        with open(settings_path, "r") as f:
+            before = f.read()
+
+        with self.assertRaises(ConfigSecretError):
+            self._build_seedsync()
+
+        with open(settings_path, "r") as f:
+            after = f.read()
+        self.assertEqual(before, after)
+
+    def test_startup_fails_fast_when_encryption_key_is_invalid(self):
+        config = Seedsync._create_default_config()
+        config.lftp.remote_password = "secret-pass"
+        settings_path = os.path.join(self.temp_dir, "settings.cfg")
+        config.to_file(settings_path)
+
+        with open(os.path.join(self.temp_dir, KEY_FILE_NAME), "wb") as f:
+            f.write(b"invalid-key")
+
+        with self.assertRaises(ConfigSecretError):
+            self._build_seedsync()
+
+    def test_startup_recovers_from_malformed_non_secret_config(self):
+        settings_path = os.path.join(self.temp_dir, "settings.cfg")
+        with open(settings_path, "w") as f:
+            f.write("[Web\nport=88\n")
+
+        seedsync = self._build_seedsync()
+
+        self.assertTrue(os.path.isfile(settings_path))
+        self.assertTrue(os.path.isfile(settings_path + ".1.bak"))
+        self.assertTrue(os.path.isfile(os.path.join(self.temp_dir, KEY_FILE_NAME)))
+        self.assertEqual(8800, seedsync.context.config.web.port)
