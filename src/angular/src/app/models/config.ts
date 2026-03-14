@@ -5,6 +5,7 @@
 
 export interface General {
   debug: boolean | null;
+  verbose: boolean | null;
   exclude_patterns: string | null;
 }
 
@@ -87,6 +88,7 @@ export interface Config {
 
 export const DEFAULT_GENERAL: General = {
   debug: null,
+  verbose: null,
   exclude_patterns: null,
 };
 

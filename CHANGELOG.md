@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.14.0] - 2026-03-14
+
+### Changed
+
+- **Alpine-only Docker image** — Removed Debian variant; all images are now Alpine-based (~45 MB) (#244, #231)
+- **Integrity check settings clarity** — Renamed and reorganized validation settings for better UX; validate button shows tooltip when remote file is unavailable (#276)
+- **Verbose logging in web UI** — Verbose LFTP logging setting is now exposed in the Settings page under Logging (#266)
+- **CI deduplication** — Eliminated redundant amd64 Docker build; publish triggers now build, test, and push in a single job (#274)
+
+### Fixed
+
+- **Stopped download delete stuck** — Deleting local files for a stopped download no longer leaves the UI spinner and ActiveScanner polling forever (#271, #272, #273)
+- **File descriptor leak on restart** — Multiprocessing Event/Queue references are now released in `close_queues()` to prevent FD exhaustion across restarts (#265)
+- **Model rebuild log noise** — Temporary model objects used during diff computation no longer emit "Adding file" log messages on every controller loop iteration (#267)
+
 ## [0.13.5] - 2026-03-13
 
 ### Fixed

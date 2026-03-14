@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import logging
 import os
 import fnmatch
 from abc import ABC, abstractmethod
@@ -639,7 +640,9 @@ class Controller:
 
         if any_pair_has_changes:
             new_model = Model()
-            new_model.set_base_logger(self.logger)
+            _dummy = logging.getLogger("dummy")
+            _dummy.propagate = False
+            new_model.set_base_logger(_dummy)  # silence logs for temp model
 
             # When multiple pairs share the same local directory, a file that
             # exists only locally (no remote counterpart) would appear in every
@@ -740,7 +743,13 @@ class Controller:
                         diff.new_file.name in pc.pending_completion:
                     use_staging = self.__context.config.controller.use_staging and \
                                   self.__context.config.controller.staging_path
-                    if use_staging:
+                    # A file with no local presence and DEFAULT state means
+                    # it was deleted locally (e.g. stopped download whose files
+                    # were removed). Nothing left to track.
+                    if diff.new_file.state == ModelFile.State.DEFAULT and \
+                            diff.new_file.local_size is None:
+                        pc.pending_completion.discard(diff.new_file.name)
+                    elif use_staging:
                         move_key = _persist_key(diff.new_file.pair_id, diff.new_file.name)
                         if move_key in self.__moved_file_keys:
                             pc.pending_completion.discard(diff.new_file.name)

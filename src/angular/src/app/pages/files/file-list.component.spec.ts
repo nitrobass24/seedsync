@@ -53,6 +53,7 @@ function makeViewFile(overrides: Partial<ViewFile> = {}): ViewFile {
     isLocallyDeletable: false,
     isRemotelyDeletable: true,
     isValidatable: false,
+    validateTooltip: null,
     localCreatedTimestamp: null,
     localModifiedTimestamp: null,
     remoteCreatedTimestamp: null,

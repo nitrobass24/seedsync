@@ -453,14 +453,20 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
       ViewFileStatus.CORRUPT,
       ViewFileStatus.DELETED,
     ].includes(status) && remoteSize > 0;
+  const validatableStatuses = [
+    ViewFileStatus.DOWNLOADED,
+    ViewFileStatus.EXTRACTED,
+    ViewFileStatus.EXTRACT_FAILED,
+    ViewFileStatus.VALIDATED,
+    ViewFileStatus.CORRUPT,
+  ];
   const isValidatable =
-    [
-      ViewFileStatus.DOWNLOADED,
-      ViewFileStatus.EXTRACTED,
-      ViewFileStatus.EXTRACT_FAILED,
-      ViewFileStatus.VALIDATED,
-      ViewFileStatus.CORRUPT,
-    ].includes(status) && modelFile.local_size != null && modelFile.remote_size != null;
+    validatableStatuses.includes(status) && modelFile.local_size != null && modelFile.remote_size != null;
+
+  let validateTooltip: string | null = null;
+  if (!isValidatable && validatableStatuses.includes(status) && modelFile.remote_size == null) {
+    validateTooltip = 'Remote file not available for checksum comparison';
+  }
 
   return {
     name: modelFile.name,
@@ -483,6 +489,7 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     isLocallyDeletable,
     isRemotelyDeletable,
     isValidatable,
+    validateTooltip,
     localCreatedTimestamp: modelFile.local_created_timestamp,
     localModifiedTimestamp: modelFile.local_modified_timestamp,
     remoteCreatedTimestamp: modelFile.remote_created_timestamp,

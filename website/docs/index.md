@@ -21,7 +21,7 @@ This is the modernized fork of `ipsingh06/seedsync`, with updated dependencies a
 - **Webhook notifications** — HTTP POST on download/extract events
 - Manage local and remote deletes
 - Monitor transfer status from the web UI
-- **Alpine image** available for smaller deployments
+- **Lightweight Docker image** — ~45 MB Alpine-based, multi-arch (amd64/arm64)
 
 ## Quick start
 
