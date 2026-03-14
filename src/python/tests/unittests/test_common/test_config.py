@@ -3,8 +3,9 @@
 import unittest
 import os
 import tempfile
+import configparser
 
-from common import Config, ConfigError, PersistError
+from common import Config, ConfigError, ENCRYPTED_PREFIX, PersistError
 from common.config import InnerConfig, Checkers, Converters
 
 
@@ -592,89 +593,148 @@ class TestConfig(unittest.TestCase):
         config.controller.use_staging = False
         config.controller.staging_path = "/staging"
         config.web.port = 13
+        config.web.api_key = "my-api-key"
         config.autoqueue.enabled = True
         config.autoqueue.patterns_only = True
         config.autoqueue.auto_extract = False
         config.autoqueue.auto_delete_remote = True
         config.to_file(config_file_path)
+        parser = configparser.ConfigParser()
+        parser.read(config_file_path)
+
+        self.assertEqual("True", parser.get("General", "debug"))
+        self.assertEqual("server.remote.com", parser.get("Lftp", "remote_address"))
+        self.assertEqual("user-on-remote-server", parser.get("Lftp", "remote_username"))
+        self.assertEqual("3456", parser.get("Lftp", "remote_port"))
+        self.assertEqual("/remote/server/path", parser.get("Lftp", "remote_path"))
+        self.assertEqual("/local/server/path", parser.get("Lftp", "local_path"))
+        self.assertEqual("/remote/server/path/to/script", parser.get("Lftp", "remote_path_to_scan_script"))
+        self.assertEqual("13", parser.get("Web", "port"))
+        self.assertEqual("True", parser.get("AutoQueue", "enabled"))
+        self.assertTrue(parser.get("Lftp", "remote_password").startswith(ENCRYPTED_PREFIX))
+        self.assertTrue(parser.get("Web", "api_key").startswith(ENCRYPTED_PREFIX))
+        self.assertNotIn("pass-on-remote-server", parser.get("Lftp", "remote_password"))
+        self.assertNotIn("my-api-key", parser.get("Web", "api_key"))
+
+    def test_sensitive_property_metadata(self):
+        self.assertEqual(["remote_password"], Config.Lftp.sensitive_property_names())
+        self.assertEqual(["api_key"], Config.Web.sensitive_property_names())
+        self.assertTrue(Config.is_sensitive("Lftp", "remote_password"))
+        self.assertTrue(Config.is_sensitive("Web", "api_key"))
+        self.assertFalse(Config.is_sensitive("Notifications", "webhook_url"))
+
+    def test_to_str_and_from_str_remain_plaintext_for_sensitive_values(self):
+        config = Config()
+        config.lftp.remote_password = "plaintext-pass"
+        config.web.api_key = "plaintext-key"
+
+        config_str = config.to_str()
+
+        self.assertIn("remote_password = plaintext-pass", config_str)
+        self.assertIn("api_key = plaintext-key", config_str)
+
+        config2 = Config.from_str(config_str)
+        self.assertEqual("plaintext-pass", config2.lftp.remote_password)
+        self.assertEqual("plaintext-key", config2.web.api_key)
+
+    def test_from_file_marks_plaintext_sensitive_values_for_migration(self):
+        fd, config_file_path = tempfile.mkstemp(suffix="test_config")
+        os.close(fd)
+        with open(config_file_path, "w") as f:
+            f.write("""
+            [Lftp]
+            remote_address=addr
+            remote_username=user
+            remote_password=plain-pass
+            remote_port=22
+            remote_path=/remote
+            local_path=/local
+            remote_path_to_scan_script=/scan
+            use_ssh_key=False
+            num_max_parallel_downloads=1
+            num_max_parallel_files_per_download=1
+            num_max_connections_per_root_file=1
+            num_max_connections_per_dir_file=1
+            num_max_total_connections=0
+            use_temp_file=False
+
+            [Web]
+            port=8800
+            api_key=plain-key
+            """)
+
+        config = Config.from_file(config_file_path)
+
+        self.assertEqual("plain-pass", config.lftp.remote_password)
+        self.assertEqual("plain-key", config.web.api_key)
+        self.assertTrue(config.needs_secret_migration)
+
+    def test_to_file_encrypts_sensitive_values_and_round_trips(self):
+        fd, config_file_path = tempfile.mkstemp(suffix="test_config")
+        os.close(fd)
+
+        config = Config()
+        config.lftp.remote_address = "addr"
+        config.lftp.remote_username = "user"
+        config.lftp.remote_password = "secret-pass"
+        config.lftp.remote_port = 22
+        config.lftp.remote_path = "/remote"
+        config.lftp.local_path = "/local"
+        config.lftp.remote_path_to_scan_script = "/scan"
+        config.lftp.use_ssh_key = False
+        config.lftp.num_max_parallel_downloads = 1
+        config.lftp.num_max_parallel_files_per_download = 1
+        config.lftp.num_max_connections_per_root_file = 1
+        config.lftp.num_max_connections_per_dir_file = 1
+        config.lftp.num_max_total_connections = 0
+        config.lftp.use_temp_file = False
+        config.web.port = 8800
+        config.web.api_key = "secret-key"
+
+        config.to_file(config_file_path)
+
         with open(config_file_path, "r") as f:
-            actual_str = f.read()
-        print(actual_str)
+            file_content = f.read()
+        self.assertNotIn("secret-pass", file_content)
+        self.assertNotIn("secret-key", file_content)
+        self.assertIn("remote_password = {}".format(ENCRYPTED_PREFIX), file_content)
+        self.assertIn("api_key = {}".format(ENCRYPTED_PREFIX), file_content)
 
-        golden_str = """
-        [General]
-        debug = True
-        verbose = False
-        exclude_patterns =
+        config2 = Config.from_file(config_file_path)
+        self.assertEqual("secret-pass", config2.lftp.remote_password)
+        self.assertEqual("secret-key", config2.web.api_key)
+        self.assertFalse(config2.needs_secret_migration)
 
-        [Lftp]
-        remote_address = server.remote.com
-        remote_username = user-on-remote-server
-        remote_password = pass-on-remote-server
-        remote_port = 3456
-        remote_path = /remote/server/path
-        local_path = /local/server/path
-        remote_path_to_scan_script = /remote/server/path/to/script
-        use_ssh_key = True
-        num_max_parallel_downloads = 6
-        num_max_parallel_files_per_download = 7
-        num_max_connections_per_root_file = 2
-        num_max_connections_per_dir_file = 3
-        num_max_total_connections = 4
-        use_temp_file = True
-        net_limit_rate = 500K
-        net_socket_buffer = 8M
-        pget_min_chunk_size = 100M
-        mirror_parallel_directories = True
-        net_timeout = 20
-        net_max_retries = 2
-        net_reconnect_interval_base = 3
-        net_reconnect_interval_multiplier = 1
+    def test_repeated_file_saves_do_not_double_encrypt(self):
+        fd, config_file_path = tempfile.mkstemp(suffix="test_config")
+        os.close(fd)
 
-        [Controller]
-        interval_ms_remote_scan = 1234
-        interval_ms_local_scan = 5678
-        interval_ms_downloading_scan = 9012
-        extract_path = /path/extract/stuff
-        use_local_path_as_extract_path = True
-        use_staging = False
-        staging_path = /staging
+        config = Config()
+        config.lftp.remote_address = "addr"
+        config.lftp.remote_username = "user"
+        config.lftp.remote_password = "secret-pass"
+        config.lftp.remote_port = 22
+        config.lftp.remote_path = "/remote"
+        config.lftp.local_path = "/local"
+        config.lftp.remote_path_to_scan_script = "/scan"
+        config.lftp.use_ssh_key = False
+        config.lftp.num_max_parallel_downloads = 1
+        config.lftp.num_max_parallel_files_per_download = 1
+        config.lftp.num_max_connections_per_root_file = 1
+        config.lftp.num_max_connections_per_dir_file = 1
+        config.lftp.num_max_total_connections = 0
+        config.lftp.use_temp_file = False
+        config.to_file(config_file_path)
 
-        [Web]
-        port = 13
-        api_key =
+        config2 = Config.from_file(config_file_path)
+        config2.to_file(config_file_path)
 
-        [AutoQueue]
-        enabled = True
-        patterns_only = True
-        auto_extract = False
-        auto_delete_remote = True
-
-        [Logging]
-        log_format = standard
-
-        [Notifications]
-        webhook_url =
-        notify_on_download_complete = True
-        notify_on_extraction_complete = True
-        notify_on_extraction_failed = True
-        notify_on_delete_complete = True
-
-        [Validate]
-        enabled = False
-        algorithm = md5
-        auto_validate = True
-        xfer_verify = True
-        """
-
-        golden_lines = [s.strip() for s in golden_str.splitlines()]
-        golden_lines = list(filter(None, golden_lines))  # remove blank lines
-        actual_lines = [s.strip() for s in actual_str.splitlines()]
-        actual_lines = list(filter(None, actual_lines))  # remove blank lines
-
-        self.assertEqual(len(golden_lines), len(actual_lines))
-        for i, _ in enumerate(golden_lines):
-            self.assertEqual(golden_lines[i], actual_lines[i])
+        parser = configparser.ConfigParser()
+        parser.read(config_file_path)
+        stored_value = parser.get("Lftp", "remote_password")
+        self.assertTrue(stored_value.startswith(ENCRYPTED_PREFIX))
+        self.assertFalse(stored_value.startswith("{}{}".format(ENCRYPTED_PREFIX, ENCRYPTED_PREFIX)))
+        self.assertEqual("secret-pass", Config.from_file(config_file_path).lftp.remote_password)
 
     def test_persist_read_error(self):
         # bad section

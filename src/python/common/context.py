@@ -67,7 +67,7 @@ class Context:
         for section in config_dict.keys():
             for option in config_dict[section].keys():
                 value = config_dict[section][option]
-                if option == "remote_password":
+                if Config.is_sensitive(section, option):
                     value = "********" if value else ""
                 self.logger.debug("  {}.{}: {}".format(section, option, value))
 

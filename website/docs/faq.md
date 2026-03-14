@@ -115,3 +115,4 @@ This setup also solves the common problem of setting up SeedSync on a seedbox th
 ## Where are settings stored?
 
 Inside the container at `/config/settings.cfg`.
+Sensitive values are encrypted at rest, and the matching key is stored at `/config/.encryption_key`.
