@@ -2,10 +2,18 @@
 
 ## [0.14.0] - 2026-03-14
 
+### Added
+
+- **Inline transfer verification** — LFTP's `xfer:verify` checksums files during download, catching corruption in real-time; enabled by default (#242)
+- **Post-download integrity checking** — Optional validation step that compares local and remote checksums via SSH after download, with per-file Validate button and Validated/Corrupt status indicators (#125, #276)
+- **File list pair label column** — File list shows which path pair each file belongs to (#156)
+- **Accessibility** — All file action buttons converted to native `<button>` elements (#241)
+- **Comprehensive test coverage** — 287 unit tests across Angular (Vitest) and Python (pytest) (#225)
+
 ### Changed
 
-- **Alpine-only Docker image** — Removed Debian variant; all images are now Alpine-based (~45 MB) (#244, #231)
-- **Integrity check settings clarity** — Renamed and reorganized validation settings for better UX; validate button shows tooltip when remote file is unavailable (#276)
+- **Alpine-only Docker image** — Removed Debian variant; all images are now Alpine-based (~45 MB), multi-arch (amd64/arm64) (#231, #244)
+- **Multiprocessing fork to spawn** — Fixes Python 3.12 deprecation warnings (#228)
 - **Verbose logging in web UI** — Verbose LFTP logging setting is now exposed in the Settings page under Logging (#266)
 - **CI deduplication** — Eliminated redundant amd64 Docker build; publish triggers now build, test, and push in a single job (#274)
 
