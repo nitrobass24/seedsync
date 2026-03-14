@@ -60,19 +60,23 @@ class Persist(Serializable):
             return cls.from_str(f.read())
 
     def to_file(self, file_path: str):
+        self._write_serialized_file(file_path, self.to_str())
+
+    @classmethod
+    def _write_serialized_file(cls, file_path: str, content: str):
         dir_name = os.path.dirname(file_path) or '.'
 
         # Backup existing file before overwriting (best-effort; never abort the save)
         if os.path.isfile(file_path):
             try:
-                self._backup_file(file_path, dir_name)
+                cls._backup_file(file_path, dir_name)
             except OSError as e:
                 _logger.error("Failed to back up %s in %s: %s", file_path, dir_name, e)
 
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix='.tmp_persist_')
         try:
             with os.fdopen(fd, 'w') as f:
-                f.write(self.to_str())
+                f.write(content)
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(tmp_path, file_path)

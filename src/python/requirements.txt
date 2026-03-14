@@ -2,5 +2,6 @@
 # Minimal runtime dependencies
 
 bottle>=0.12,<1.0
+cryptography>=44.0
 pexpect>=4.8
 tblib>=3.0

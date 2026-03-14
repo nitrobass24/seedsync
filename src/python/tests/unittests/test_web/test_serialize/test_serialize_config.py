@@ -20,6 +20,7 @@ class TestSerializeConfig(unittest.TestCase):
         config = Config()
         config.lftp.remote_address = "server.remote.com"
         config.lftp.remote_username = "user-on-remote-server"
+        config.lftp.remote_password = "plain-pass"
         config.lftp.remote_port = 3456
         config.lftp.remote_path = "/remote/server/path"
         config.lftp.local_path = "/local/server/path"
@@ -34,6 +35,7 @@ class TestSerializeConfig(unittest.TestCase):
         self.assertIn("lftp", out_dict)
         self.assertEqual("server.remote.com", out_dict["lftp"]["remote_address"])
         self.assertEqual("user-on-remote-server", out_dict["lftp"]["remote_username"])
+        self.assertEqual("plain-pass", out_dict["lftp"]["remote_password"])
         self.assertEqual(3456, out_dict["lftp"]["remote_port"])
         self.assertEqual("/remote/server/path", out_dict["lftp"]["remote_path"])
         self.assertEqual("/local/server/path", out_dict["lftp"]["local_path"])
@@ -59,10 +61,12 @@ class TestSerializeConfig(unittest.TestCase):
     def test_section_web(self):
         config = Config()
         config.web.port = 8080
+        config.web.api_key = "plain-key"
         out = SerializeConfig.config(config)
         out_dict = json.loads(out)
         self.assertIn("web", out_dict)
         self.assertEqual(8080, out_dict["web"]["port"])
+        self.assertEqual("plain-key", out_dict["web"]["api_key"])
 
     def test_section_autoqueue(self):
         config = Config()
