@@ -390,7 +390,7 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
       type: OptionType.Select,
       label: 'Hash Algorithm',
       valuePath: ['validate', 'algorithm'],
-      description: 'Checksum algorithm used for post-download validation',
+      description: 'Checksum algorithm used for both inline transfer verification and post-download validation',
       choices: ['md5', 'sha1', 'sha256'],
     },
   ],

@@ -6,8 +6,8 @@ export interface ModelFile {
   name: string;
   pair_id: string | null;
   is_dir: boolean;
-  local_size: number;
-  remote_size: number;
+  local_size: number | null;
+  remote_size: number | null;
   state: ModelFileState;
   downloading_speed: number;
   eta: number;

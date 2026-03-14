@@ -574,6 +574,62 @@ describe("ViewFileService", () => {
     expect(latestFiles()[0].pairName).toBe("Seedbox");
   });
 
+  // --- Validation / isValidatable / validateTooltip ---
+
+  it("should set isValidatable true when downloaded file has both local and remote sizes", () => {
+    emitModelFiles([
+      makeModelFile({ name: "file1", state: ModelFileState.DOWNLOADED, local_size: 100, remote_size: 100 }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(true);
+    expect(latestFiles()[0].validateTooltip).toBeNull();
+  });
+
+  it("should set isValidatable false when remote_size is null", () => {
+    emitModelFiles([
+      makeModelFile({ name: "file1", state: ModelFileState.DOWNLOADED, local_size: 100, remote_size: null }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(false);
+    expect(latestFiles()[0].validateTooltip).toBe("Remote file not available for checksum comparison");
+  });
+
+  it("should set isValidatable false when local_size is null", () => {
+    emitModelFiles([
+      makeModelFile({ name: "file1", state: ModelFileState.DOWNLOADED, local_size: null, remote_size: 100 }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(false);
+    expect(latestFiles()[0].validateTooltip).toBeNull();
+  });
+
+  it("should set isValidatable false when both sizes are null", () => {
+    emitModelFiles([
+      makeModelFile({ name: "file1", state: ModelFileState.DOWNLOADED, local_size: null, remote_size: null }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(false);
+    expect(latestFiles()[0].validateTooltip).toBe("Remote file not available for checksum comparison");
+  });
+
+  it("should not set isValidatable for non-validatable states even with sizes present", () => {
+    emitModelFiles([
+      makeModelFile({ name: "file1", state: ModelFileState.DEFAULT, local_size: 100, remote_size: 100 }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(false);
+    expect(latestFiles()[0].validateTooltip).toBeNull();
+  });
+
+  it("should set isValidatable true for EXTRACTED state with sizes present", () => {
+    emitModelFiles([
+      makeModelFile({ name: "file1", state: ModelFileState.EXTRACTED, local_size: 100, remote_size: 100 }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(true);
+  });
+
+  it("should set isValidatable true for CORRUPT state allowing re-validation", () => {
+    emitModelFiles([
+      makeModelFile({ name: "file1", state: ModelFileState.CORRUPT, local_size: 100, remote_size: 100 }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(true);
+  });
+
   it("should update the correct file when same-name files have different pair_ids", () => {
     emitModelFiles([
       makeModelFile({ name: "movie.mkv", pair_id: "pair-a", remote_size: 100, state: ModelFileState.DEFAULT, local_size: 0 }),

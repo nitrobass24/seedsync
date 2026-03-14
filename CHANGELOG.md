@@ -7,7 +7,6 @@
 - **Alpine-only Docker image** — Removed Debian variant; all images are now Alpine-based (~45 MB) (#244, #231)
 - **Integrity check settings clarity** — Renamed and reorganized validation settings for better UX; validate button shows tooltip when remote file is unavailable (#276)
 - **Verbose logging in web UI** — Verbose LFTP logging setting is now exposed in the Settings page under Logging (#266)
-- **LFTP queue command logging** — Log LFTP queue commands at INFO level for easier troubleshooting without enabling verbose/debug mode
 - **CI deduplication** — Eliminated redundant amd64 Docker build; publish triggers now build, test, and push in a single job (#274)
 
 ### Fixed
