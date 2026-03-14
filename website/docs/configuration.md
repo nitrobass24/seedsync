@@ -58,6 +58,30 @@ Configure exclude patterns per path pair, or in the main settings when using a s
 - **Rename unfinished files**: Downloading files get a `.lftp` extension
 - **Bandwidth Limit**: Cap download speed with values like `500K`, `2M`, or raw bytes/sec. Set to `0` or leave empty for unlimited.
 
+## Integrity Check
+
+SeedSync can verify that downloaded files match their remote originals. There are two independent mechanisms:
+
+### Transfer verification (inline)
+
+- **Verify transfers inline (recommended)**: When enabled, LFTP compares checksums during the download itself, catching corruption in real-time. Enabled by default.
+
+### Post-download validation
+
+- **Enable post-download validation**: Enables a separate validation step after download completes, comparing local and remote checksums via SSH. Disabled by default.
+- **Auto-validate after download**: Automatically queue files for validation when their download finishes. Requires post-download validation to be enabled.
+- **Hash Algorithm**: Algorithm used for both inline verification and post-download validation. Options: `md5`, `sha1`, `sha256`.
+
+Once post-download validation is enabled, a **Validate** button appears next to downloaded files in the dashboard. Click it to manually verify a file at any time. Files show a status of **Validated** (checksum match) or **Corrupt** (mismatch).
+
+:::note
+Post-download validation is not available when **Delete from remote after download** is enabled, since the remote files are no longer available for comparison.
+:::
+
+## Logging
+
+- **Verbose LFTP Logging**: Enable detailed LFTP transfer logging for troubleshooting. Off by default.
+
 ## AutoQueue
 
 - **Enabled**: Automatically queue new remote files

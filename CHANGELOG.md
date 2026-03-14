@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.14.0] - 2026-03-14
+
+### Added
+
+- **Inline transfer verification** — LFTP's `xfer:verify` checksums files during download, catching corruption in real-time; enabled by default (#242)
+- **Post-download integrity checking** — Optional validation step that compares local and remote checksums via SSH after download, with per-file Validate button and Validated/Corrupt status indicators (#125, #276)
+- **File list pair label column** — File list shows which path pair each file belongs to (#156)
+- **Accessibility** — All file action buttons converted to native `<button>` elements (#241)
+- **Comprehensive test coverage** — 287 unit tests across Angular (Vitest) and Python (pytest) (#225)
+
+### Changed
+
+- **Alpine-only Docker image** — Removed Debian variant; all images are now Alpine-based (~45 MB), multi-arch (amd64/arm64) (#231, #244)
+- **Multiprocessing fork to spawn** — Fixes Python 3.12 deprecation warnings (#228)
+- **Verbose logging in web UI** — Verbose LFTP logging setting is now exposed in the Settings page under Logging (#266)
+- **CI deduplication** — Eliminated redundant amd64 Docker build; publish triggers now build, test, and push in a single job (#274)
+
+### Fixed
+
+- **Stopped download delete stuck** — Deleting local files for a stopped download no longer leaves the UI spinner and ActiveScanner polling forever (#271, #272, #273)
+- **File descriptor leak on restart** — Multiprocessing Event/Queue references are now released in `close_queues()` to prevent FD exhaustion across restarts (#265)
+- **Model rebuild log noise** — Temporary model objects used during diff computation no longer emit "Adding file" log messages on every controller loop iteration (#267)
+
 ## [0.13.5] - 2026-03-13
 
 ### Fixed
