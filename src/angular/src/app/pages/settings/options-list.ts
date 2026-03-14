@@ -369,7 +369,8 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
       label: 'Verify transfers inline (recommended)',
       valuePath: ['validate', 'xfer_verify'],
       description:
-        'Have LFTP verify checksums during transfer. Works independently of the settings below.\n' +
+        'Have LFTP verify checksums during transfer using the Hash Algorithm below. ' +
+        'Independent of the post-download validation settings.\n' +
         '(xfer:verify)',
     },
     {

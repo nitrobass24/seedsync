@@ -14,7 +14,6 @@
 - **Stopped download delete stuck** — Deleting local files for a stopped download no longer leaves the UI spinner and ActiveScanner polling forever (#271, #272, #273)
 - **File descriptor leak on restart** — Multiprocessing Event/Queue references are now released in `close_queues()` to prevent FD exhaustion across restarts (#265)
 - **Model rebuild log noise** — Temporary model objects used during diff computation no longer emit "Adding file" log messages on every controller loop iteration (#267)
-- **Exclude patterns use wrong LFTP flag** — Changed `--exclude` (regex) to `--exclude-glob` (glob) so patterns like `*.nfo` work correctly (#271)
 
 ## [0.13.5] - 2026-03-13
 

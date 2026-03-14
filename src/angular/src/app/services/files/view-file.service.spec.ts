@@ -623,6 +623,20 @@ describe("ViewFileService", () => {
     expect(latestFiles()[0].isValidatable).toBe(true);
   });
 
+  it("should set isValidatable true for EXTRACT_FAILED state with sizes present", () => {
+    emitModelFiles([
+      makeModelFile({ name: "file1", state: ModelFileState.EXTRACT_FAILED, local_size: 100, remote_size: 100 }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(true);
+  });
+
+  it("should set isValidatable true for VALIDATED state with sizes present", () => {
+    emitModelFiles([
+      makeModelFile({ name: "file1", state: ModelFileState.VALIDATED, local_size: 100, remote_size: 100 }),
+    ]);
+    expect(latestFiles()[0].isValidatable).toBe(true);
+  });
+
   it("should set isValidatable true for CORRUPT state allowing re-validation", () => {
     emitModelFiles([
       makeModelFile({ name: "file1", state: ModelFileState.CORRUPT, local_size: 100, remote_size: 100 }),
