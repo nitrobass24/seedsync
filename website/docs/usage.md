@@ -45,6 +45,17 @@ On first connection to a remote server, SeedSync automatically runs diagnostics 
 
 If you sync from multiple remote directories, configure **Path Pairs** in Settings. Each pair runs its own LFTP and scanner instance. See [Configuration](./configuration.md#path-pairs) for details.
 
+## Integrity Check
+
+SeedSync can verify downloaded files match their remote originals using checksums.
+
+- **Inline verification** runs automatically during transfer (enabled by default via LFTP's `xfer:verify`).
+- **Post-download validation** is an optional second check that compares checksums via SSH after the file is on disk. Enable it in Settings under **Integrity Check**.
+
+When post-download validation is enabled, a **Validate** button appears next to downloaded files. Click it to verify a file on demand. Files are marked **Validated** or **Corrupt** based on the result.
+
+See [Configuration](./configuration.md#integrity-check) for setup details.
+
 ## Settings
 
 All connection, path, and automation options live under Settings. Changes take effect after a restart.

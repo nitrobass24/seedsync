@@ -46,7 +46,7 @@ It uses LFTP to transfer files fast!
 * **Webhook notifications** — HTTP POST on download/extract events
 * Delete local and remote files easily
 * Dark mode, staging directory, bandwidth limiting, and more
-* **Alpine image** — lightweight 45 MB variant available
+* **Lightweight Docker image** — ~45 MB Alpine-based, multi-arch (amd64/arm64)
 * Fully open source!
 
 ## Documentation
