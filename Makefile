@@ -1,7 +1,7 @@
 # SeedSync Makefile - Docker Only
 # Simplified build system for containerized deployment
 
-.PHONY: all build build-fresh run stop logs clean test test-image size shell help
+.PHONY: all build build-fresh run run-backend stop logs clean test test-image size shell help
 
 # Default target
 all: build
@@ -17,6 +17,23 @@ build-fresh:
 # Run the container
 run:
 	docker compose -f docker-compose.dev.yml up -d
+
+# Run the SeedSync backend locally (no Docker)
+# Requires: Python 3.12+, pip install -r src/python/requirements.txt
+# Build frontend first: cd src/angular && npx ng build
+CONFIG_DIR ?= dev-config
+DOWNLOAD_DIR ?= dev-download
+HTML_DIR ?= src/angular/dist/seedsync/browser
+run-backend:
+	@mkdir -p $(CONFIG_DIR) $(DOWNLOAD_DIR)
+	@if [ ! -d "$(HTML_DIR)" ]; then \
+		echo "Frontend not built. Run: cd src/angular && npm run build"; \
+		exit 1; \
+	fi
+	PYTHONPATH=src/python python src/python/seedsync.py \
+		-c $(CONFIG_DIR) \
+		--html $(HTML_DIR) \
+		--scanfs src/python/scan_fs.py
 
 # Stop the container
 stop:
@@ -59,6 +76,7 @@ help:
 	@echo "  build       - Build Docker image"
 	@echo "  build-fresh - Build Docker image without cache"
 	@echo "  run         - Start container"
+	@echo "  run-backend - Run backend locally (no Docker; needs Angular built)"
 	@echo "  stop        - Stop container"
 	@echo "  logs        - View container logs"
 	@echo "  clean       - Remove containers and images"
