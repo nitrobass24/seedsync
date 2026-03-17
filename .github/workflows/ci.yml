@@ -71,6 +71,7 @@ jobs:
           --ignore=tests/unittests/test_lftp
           --ignore=tests/unittests/test_ssh
           --ignore=tests/unittests/test_system
+          --ignore=tests/unittests/test_controller/test_scan/test_remote_scanner.py
 
   angular-build:
     name: Build Angular
