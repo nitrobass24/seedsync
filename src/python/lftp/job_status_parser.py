@@ -244,6 +244,23 @@ class LftpJobStatusParser:
         ).format(eta=LftpJobStatusParser.__TIME_UNITS_REGEX)
         partial_progress_m = re.compile(partial_progress_pattern)
 
+        # Chunk line-wrap fragments: long filenames cause lftp chunk progress
+        # lines to wrap, producing a tail fragment like:
+        #   "tmos.7.1.DV.HDR.H.265-TheFarm.mkv' at 22283455338 (0%) 427.6K/s eta:28m [Receiving data]"
+        # These are the tail of a `filename' at <pos> (<pct>%) ... line where
+        # the leading backtick and start of the filename are on the previous line.
+        chunk_wrap_pattern = (
+            r"^(?:[^`\\].*)?'\s+at\s+\d+\s+"
+            r"(?:\(\d+%\)\s+)?"
+            r"(?:(?:\d+\.?\d*\s?({sz}))\/s\s+)?"
+            r"(?:eta:({eta})\s+)?"
+            r"\s*\[.*\]$"
+        ).format(
+            sz=LftpJobStatusParser.__SIZE_UNITS_REGEX,
+            eta=LftpJobStatusParser.__TIME_UNITS_REGEX,
+        )
+        chunk_wrap_m = re.compile(chunk_wrap_pattern)
+
         prev_job = None
         while lines:
             line = lines.pop(0)
@@ -254,7 +271,7 @@ class LftpJobStatusParser:
             if not (
                 prev_job or pget_header_m.match(line) or mirror_header_m.match(line) or mirror_fl_header_m.match(line)
             ):
-                if orphan_progress_m.match(line) or partial_progress_m.match(line):
+                if orphan_progress_m.match(line) or partial_progress_m.match(line) or chunk_wrap_m.match(line):
                     self.logger.warning("Skipping orphan lftp progress line: '%s'", line)
                     continue
                 raise ValueError("First line is not a matching header '{}'".format(line))
@@ -502,7 +519,7 @@ class LftpJobStatusParser:
                 continue
 
             # If we got here, check if it's a known orphan progress line
-            if orphan_progress_m.match(line) or partial_progress_m.match(line):
+            if orphan_progress_m.match(line) or partial_progress_m.match(line) or chunk_wrap_m.match(line):
                 self.logger.warning("Skipping orphan lftp progress line: '%s'", line)
                 continue
 

@@ -1546,6 +1546,46 @@ class TestLftpJobStatusParser(unittest.TestCase):
             statuses = parser.parse(output)
             self.assertEqual(1, len(statuses), f"Failed on fragment: {fragment}")
 
+    def test_chunk_line_wrap_fragment_skipped_after_job(self):
+        """Regression test: long filenames cause chunk progress lines to wrap,
+        producing a tail fragment like:
+            tmos.7.1.DV.HDR.H.265-TheFarm.mkv' at 22283455338 (0%) 427.6K/s eta:28m [Receiving data]
+        The parser should skip these instead of crashing."""
+        output = (
+            "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\n"
+            "tmos.7.1.DV.HDR.H.265-TheFarm.mkv' at 22283455338 (0%) 427.6K/s eta:28m [Receiving data]"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+
+    def test_bare_chunk_line_wrap_fragment_skipped(self):
+        """A bare chunk line-wrap fragment with no valid jobs should be skipped."""
+        output = "tmos.7.1.DV.HDR.H.265-TheFarm.mkv' at 22283455338 (0%) 427.6K/s eta:28m [Receiving data]"
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(0, len(statuses))
+
+    def test_chunk_line_wrap_fragment_connecting(self):
+        """Chunk line-wrap fragment with [Connecting...] status should also be skipped."""
+        output = (
+            "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\n"
+            "Some.Long.Name.mkv' at 2760950243 (0%) [Connecting...]"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+
+    def test_chunk_line_wrap_at_quote_boundary(self):
+        """Edge case: wrap lands exactly at the closing quote."""
+        output = (
+            "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\n"
+            "' at 12345 (0%) 100K/s eta:5m [Receiving data]"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+
     def test_truly_unrecognized_line_raises(self):
         """A truly unrecognized line (not an orphan progress line) should still raise."""
         output = "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\ncompletely unexpected garbage"
