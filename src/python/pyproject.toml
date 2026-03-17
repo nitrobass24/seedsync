@@ -1,21 +1,25 @@
-[tool.poetry]
+[project]
 name = "seedsync"
 version = "0.0.0"
 description = "File synchronization tool for seedboxes"
-authors = []
+requires-python = ">=3.12"
+dependencies = [
+    "bottle>=0.12,<1.0",
+    "pexpect>=4.8",
+    "tblib>=3.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.8"
-bottle = ">=0.12,<1.0"
-pexpect = ">=4.8"
-requests = ">=2.32.0"
-tblib = ">=3.0"
-timeout-decorator = ">=0.5"
-urllib3 = ">=2.2.0"
-certifi = ">=2024.7.4"
+[dependency-groups]
+test = [
+    "pytest>=7.0",
+    "parameterized",
+    "testfixtures",
+    "webtest",
+    "timeout-decorator>=0.5",
+]
+dev = [
+    # Future: ruff, pyright
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = ">=7.0"
-parameterized = "*"
-testfixtures = "*"
-webtest = "*"
+[tool.pytest.ini_options]
+testpaths = ["tests/unittests"]
