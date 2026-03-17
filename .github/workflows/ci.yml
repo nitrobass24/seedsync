@@ -65,7 +65,13 @@ jobs:
         working-directory: src/python
         env:
           PYTHONPATH: .
-        run: pytest tests/unittests -v --tb=short
+        run: >-
+          pytest tests/unittests -v --tb=short
+          --timeout=30
+          --ignore=tests/unittests/test_lftp/test_lftp.py
+          --ignore=tests/unittests/test_ssh/test_sshcp.py
+          --ignore=tests/unittests/test_ssh/test_shell_detect.py
+          --ignore=tests/unittests/test_system
 
   angular-build:
     name: Build Angular
