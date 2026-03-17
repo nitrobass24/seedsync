@@ -1,9 +1,8 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import time
 import unittest
 from unittest.mock import MagicMock
-import time
-
 
 from common import Job
 

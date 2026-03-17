@@ -1,21 +1,21 @@
 import json
 import os
 import re
-from typing import List, Optional
 
 from bottle import HTTPResponse, request
 
-from common import overrides, Constants
+from common import Constants, overrides
+
 from ..web_app import IHandler, WebApp
 
 # Pattern matching the standard log format:
 # "2024-01-15 10:30:45,123 - INFO - seedsync (MainProcess/MainThread) - message"
 _LOG_PATTERN = re.compile(
-    r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})'  # timestamp
-    r' - (\w+)'                                         # level
-    r' - ([\w.]+)'                                       # logger
-    r' \(([^/]+)/([^)]+)\)'                             # process/thread
-    r' - (.*)$'                                          # message
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})"  # timestamp
+    r" - (\w+)"  # level
+    r" - ([\w.]+)"  # logger
+    r" \(([^/]+)/([^)]+)\)"  # process/thread
+    r" - (.*)$"  # message
 )
 
 _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
@@ -23,7 +23,7 @@ _LEVEL_ORDER = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
 
 
 class LogsHandler(IHandler):
-    def __init__(self, logdir: Optional[str], service_name: str):
+    def __init__(self, logdir: str | None, service_name: str):
         self._logdir = logdir
         self._service_name = service_name
 
@@ -36,7 +36,7 @@ class LogsHandler(IHandler):
             return HTTPResponse(
                 body=json.dumps({"error": "Logging to file is not configured"}),
                 status=400,
-                content_type="application/json"
+                content_type="application/json",
             )
 
         # Parse query params
@@ -58,12 +58,9 @@ class LogsHandler(IHandler):
         # Collect log entries from rotated files
         entries = self._read_logs(search, min_level, limit, before)
 
-        return HTTPResponse(
-            body=json.dumps(entries),
-            content_type="application/json"
-        )
+        return HTTPResponse(body=json.dumps(entries), content_type="application/json")
 
-    def _read_logs(self, search: str, min_level: int, limit: int, before: int) -> List[dict]:
+    def _read_logs(self, search: str, min_level: int, limit: int, before: int) -> list[dict]:
         entries = []
         base_path = os.path.join(self._logdir, "{}.log".format(self._service_name))
 
@@ -79,7 +76,7 @@ class LogsHandler(IHandler):
         global_line_idx = 0
         for log_file in log_files:
             try:
-                with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+                with open(log_file, encoding="utf-8", errors="replace") as f:
                     lines = f.readlines()
             except OSError:
                 continue

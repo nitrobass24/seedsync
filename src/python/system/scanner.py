@@ -2,11 +2,11 @@
 
 import os
 import re
-from typing import List
 from datetime import datetime
 
 # my libs
 from common import AppError
+
 from .file import SystemFile
 
 
@@ -14,6 +14,7 @@ class SystemScannerError(AppError):
     """
     Exception indicating a bad config value
     """
+
     pass
 
 
@@ -36,6 +37,7 @@ class SystemScanner:
     Scans system to generate list of files and sizes
     Children are returned in alphabetical order
     """
+
     __LFTP_STATUS_FILE_SUFFIX = ".lftp-pget-status"
 
     def __init__(self, path_to_scan: str):
@@ -72,7 +74,7 @@ class SystemScanner:
         """
         self.__lftp_temp_file_suffix = suffix
 
-    def scan(self) -> List[SystemFile]:
+    def scan(self) -> list[SystemFile]:
         """
         Scan the path to generate list of system files
         :return:
@@ -102,12 +104,7 @@ class SystemScanner:
             raise SystemScannerError("Path does not exist: {}".format(path))
 
         return self.__create_system_file(
-            PseudoDirEntry(
-                name=name,
-                path=path,
-                is_dir=os.path.isdir(path),
-                stat=os.stat(path)
-            )
+            PseudoDirEntry(name=name, path=path, is_dir=os.path.isdir(path), stat=os.stat(path))
         )
 
     def __create_system_file(self, entry) -> SystemFile:
@@ -126,7 +123,7 @@ class SystemScanner:
         """
         if entry.is_dir():
             sub_children = self.__create_children(entry.path)
-            name = entry.name.encode('utf-8', 'surrogateescape').decode('utf-8', 'replace')
+            name = entry.name.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
             size = sum(sub_child.size for sub_child in sub_children)
             time_created = None
             try:
@@ -134,11 +131,7 @@ class SystemScanner:
             except AttributeError:
                 pass
             time_modified = datetime.fromtimestamp(entry.stat().st_mtime)
-            sys_file = SystemFile(name,
-                                  size,
-                                  True,
-                                  time_created=time_created,
-                                  time_modified=time_modified)
+            sys_file = SystemFile(name, size, True, time_created=time_created, time_modified=time_modified)
             for sub_child in sub_children:
                 sys_file.add_child(sub_child)
         else:
@@ -147,28 +140,26 @@ class SystemScanner:
             # status to get the real file size
             lftp_status_file_path = entry.path + SystemScanner.__LFTP_STATUS_FILE_SUFFIX
             if os.path.isfile(lftp_status_file_path):
-                with open(lftp_status_file_path, "r") as f:
+                with open(lftp_status_file_path) as f:
                     file_size = SystemScanner._lftp_status_file_size(f.read())
             # Check to see if this is a lftp temp file, and if so, use the real name
-            file_name = entry.name.encode('utf-8', 'surrogateescape').decode('utf-8', 'replace')
-            if self.__lftp_temp_file_suffix is not None and \
-                    file_name != self.__lftp_temp_file_suffix and \
-                    file_name.endswith(self.__lftp_temp_file_suffix):
-                file_name = file_name[:-len(self.__lftp_temp_file_suffix)]
+            file_name = entry.name.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
+            if (
+                self.__lftp_temp_file_suffix is not None
+                and file_name != self.__lftp_temp_file_suffix
+                and file_name.endswith(self.__lftp_temp_file_suffix)
+            ):
+                file_name = file_name[: -len(self.__lftp_temp_file_suffix)]
             time_created = None
             try:
                 time_created = datetime.fromtimestamp(entry.stat().st_birthtime)
             except AttributeError:
                 pass
             time_modified = datetime.fromtimestamp(entry.stat().st_mtime)
-            sys_file = SystemFile(file_name,
-                                  file_size,
-                                  False,
-                                  time_created=time_created,
-                                  time_modified=time_modified)
+            sys_file = SystemFile(file_name, file_size, False, time_created=time_created, time_modified=time_modified)
         return sys_file
 
-    def __create_children(self, path: str) -> List[SystemFile]:
+    def __create_children(self, path: str) -> list[SystemFile]:
         children = []
         # Files may get deleted while scanning, ignore the error
         for entry in os.scandir(path):
@@ -227,4 +218,4 @@ class SystemScanner:
             lines.pop(0)
             lines.pop(0)
 
-        return total_size-empty_size
+        return total_size - empty_size

@@ -1,18 +1,19 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import os
 import logging
-from typing import List
+import os
+
+from common import Constants, Localization, overrides
+from system import SystemFile, SystemScanner, SystemScannerError
 
 from .scanner_process import IScanner, ScannerError
-from common import overrides, Localization, Constants
-from system import SystemScanner, SystemFile, SystemScannerError
 
 
 class LocalScanner(IScanner):
     """
     Scanner implementation to scan the local filesystem
     """
+
     def __init__(self, local_path: str, use_temp_file: bool):
         self.__local_path = local_path
         self.__scanner = SystemScanner(local_path)
@@ -25,7 +26,7 @@ class LocalScanner(IScanner):
         self.logger = base_logger.getChild("LocalScanner")
 
     @overrides(IScanner)
-    def scan(self) -> List[SystemFile]:
+    def scan(self) -> list[SystemFile]:
         # If the scan path doesn't exist yet (e.g. staging directory not created),
         # return empty results instead of crashing the scanner process
         if not os.path.isdir(self.__local_path):

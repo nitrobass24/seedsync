@@ -1,7 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from unittest.mock import patch
 from threading import Timer
+from unittest.mock import patch
 
 from tests.integration.test_web.test_web_app import BaseTestWebApp
 
@@ -32,6 +32,7 @@ class TestStatusStreamHandler(BaseTestWebApp):
         def update_status():
             self.context.status.server.up = False
             self.context.status.server.error_msg = "Something bad happened"
+
         Timer(0.3, update_status).start()
 
         # Setup mock serialize instance

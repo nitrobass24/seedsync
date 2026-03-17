@@ -4,15 +4,15 @@ import logging
 import os
 import sys
 import unittest
-from unittest.mock import patch
 from datetime import datetime
+from unittest.mock import patch
 
-from system import SystemFile
-from lftp import LftpJobStatus
-from model import ModelError, ModelFile, Model
 from controller import ModelBuilder
 from controller.extract import ExtractStatus
 from controller.validate import ValidateStatus
+from lftp import LftpJobStatus
+from model import Model, ModelError, ModelFile
+from system import SystemFile
 
 
 class TestModelBuilder(unittest.TestCase):
@@ -82,8 +82,10 @@ class TestModelBuilder(unittest.TestCase):
     def test_build_file_names(self):
         remote_files = [SystemFile("a", 0, False), SystemFile("b", 0, False)]
         local_files = [SystemFile("b", 0, False), SystemFile("c", 0, False)]
-        statuses = [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "b", ""),
-                    LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "d", "")]
+        statuses = [
+            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "b", ""),
+            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "d", ""),
+        ]
         self.model_builder.set_remote_files(remote_files)
         self.model_builder.set_local_files(local_files)
         self.model_builder.set_lftp_statuses(statuses)
@@ -113,31 +115,31 @@ class TestModelBuilder(unittest.TestCase):
 
         # statuses
         self.model_builder.clear()
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         model = self.model_builder.build_model()
         self.assertEqual(False, model.get_file("a").is_dir)
         self.model_builder.clear()
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.MIRROR, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.MIRROR, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         model = self.model_builder.build_model()
         self.assertEqual(True, model.get_file("a").is_dir)
 
         # all three
         self.model_builder.set_remote_files([SystemFile("a", 0, False)])
         self.model_builder.set_local_files([SystemFile("a", 0, False)])
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         model = self.model_builder.build_model()
         self.assertEqual(False, model.get_file("a").is_dir)
         self.model_builder.set_remote_files([SystemFile("a", 0, True)])
         self.model_builder.set_local_files([SystemFile("a", 0, True)])
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.MIRROR, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.MIRROR, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         model = self.model_builder.build_model()
         self.assertEqual(True, model.get_file("a").is_dir)
 
@@ -147,9 +149,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 0, True)])
         self.model_builder.set_local_files([SystemFile("a", 0, False)])
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         with self.assertRaises(ModelError) as context:
             self.model_builder.build_model()
         self.assertTrue(str(context.exception).startswith("Mismatch in is_dir"))
@@ -158,9 +160,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 0, False)])
         self.model_builder.set_local_files([SystemFile("a", 0, True)])
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         with self.assertRaises(ModelError) as context:
             self.model_builder.build_model()
         self.assertTrue(str(context.exception).startswith("Mismatch in is_dir"))
@@ -169,9 +171,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 0, False)])
         self.model_builder.set_local_files([SystemFile("a", 0, False)])
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.MIRROR, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.MIRROR, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         with self.assertRaises(ModelError) as context:
             self.model_builder.build_model()
         self.assertTrue(str(context.exception).startswith("Mismatch in is_dir"))
@@ -190,9 +192,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 0, False)])
         self.model_builder.set_local_files([SystemFile("a", 0, False)])
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.QUEUED, model.get_file("a").state)
 
@@ -200,9 +202,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 0, False)])
         self.model_builder.set_local_files([SystemFile("a", 0, False)])
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")]
+        )
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.DOWNLOADING, model.get_file("a").state)
 
@@ -237,9 +239,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 100, False)])
         self.model_builder.set_downloaded_files({"a"})
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.QUEUED, model.get_file("a").state)
 
@@ -247,9 +249,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 100, False)])
         self.model_builder.set_downloaded_files({"a"})
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")]
+        )
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.DOWNLOADING, model.get_file("a").state)
 
@@ -288,9 +290,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 100, False)])
         self.model_builder.set_local_files([SystemFile("a", 50, False)])
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")]
+        )
         self.model_builder.set_extract_statuses([ExtractStatus("a", False, ExtractStatus.State.EXTRACTING)])
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.DOWNLOADING, model.get_file("a").state)
@@ -339,9 +341,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 100, False)])
         self.model_builder.set_local_files([SystemFile("a", 50, False)])
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")]
+        )
         self.model_builder.set_extracted_files({"a"})
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.DOWNLOADING, model.get_file("a").state)
@@ -378,9 +380,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.set_auto_delete_remote(False)
         self.model_builder.set_downloaded_files({"a"})
         # Need at least one source for 'a' to appear in model — use lftp status
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "b", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "b", "")]
+        )
         # 'a' won't appear in model at all if not in any source,
         # so this tests the case where file is only in persist
         # Actually, a file only in persist won't be in the model at all.
@@ -391,9 +393,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.set_downloaded_files({"a"})
         # File must exist in some source to appear in model
         # If remote_size=None and local_size=None but file in lftp status:
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         model = self.model_builder.build_model()
         # LFTP status sets it to QUEUED, which takes priority over persist
         self.assertEqual(ModelFile.State.QUEUED, model.get_file("a").state)
@@ -509,9 +511,9 @@ class TestModelBuilder(unittest.TestCase):
         self.assertEqual(None, model.get_file("a").remote_size)
 
         self.model_builder.clear()
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         model = self.model_builder.build_model()
         self.assertEqual(None, model.get_file("a").remote_size)
 
@@ -534,9 +536,9 @@ class TestModelBuilder(unittest.TestCase):
         self.assertEqual(None, model.get_file("a").local_size)
 
         self.model_builder.clear()
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "a", "")]
+        )
         model = self.model_builder.build_model()
         self.assertEqual(None, model.get_file("a").local_size)
 
@@ -1325,6 +1327,7 @@ class TestModelBuilder(unittest.TestCase):
 
         def _is_archive_fast(name: str):
             return name in is_archive_list
+
         mock_is_archive_fast.side_effect = _is_archive_fast
 
         # Root local file
@@ -1463,50 +1466,44 @@ class TestModelBuilder(unittest.TestCase):
         self.assertEqual(None, model.get_file("a").transferred_size)
 
     def test_build_local_created_timestamp(self):
-        self.model_builder.set_local_files([
-            SystemFile("a", 42, False, time_created=datetime(2018, 11, 9, 21, 40, 18)),
-            SystemFile("b", 42, False)
-        ])
+        self.model_builder.set_local_files(
+            [SystemFile("a", 42, False, time_created=datetime(2018, 11, 9, 21, 40, 18)), SystemFile("b", 42, False)]
+        )
         model = self.model_builder.build_model()
-        self.assertEqual(datetime(2018, 11, 9, 21, 40, 18),
-                         model.get_file("a").local_created_timestamp)
+        self.assertEqual(datetime(2018, 11, 9, 21, 40, 18), model.get_file("a").local_created_timestamp)
         self.assertIsNone(model.get_file("b").local_created_timestamp)
 
     def test_build_local_modified_timestamp(self):
-        self.model_builder.set_local_files([
-            SystemFile("a", 42, False, time_modified=datetime(2018, 11, 9, 21, 40, 18)),
-            SystemFile("b", 42, False)
-        ])
+        self.model_builder.set_local_files(
+            [SystemFile("a", 42, False, time_modified=datetime(2018, 11, 9, 21, 40, 18)), SystemFile("b", 42, False)]
+        )
         model = self.model_builder.build_model()
-        self.assertEqual(datetime(2018, 11, 9, 21, 40, 18),
-                         model.get_file("a").local_modified_timestamp)
+        self.assertEqual(datetime(2018, 11, 9, 21, 40, 18), model.get_file("a").local_modified_timestamp)
         self.assertIsNone(model.get_file("b").local_modified_timestamp)
 
     def test_build_remote_created_timestamp(self):
-        self.model_builder.set_remote_files([
-            SystemFile("a", 42, False, time_created=datetime(2018, 11, 9, 21, 40, 18)),
-            SystemFile("b", 42, False)
-        ])
+        self.model_builder.set_remote_files(
+            [SystemFile("a", 42, False, time_created=datetime(2018, 11, 9, 21, 40, 18)), SystemFile("b", 42, False)]
+        )
         model = self.model_builder.build_model()
-        self.assertEqual(datetime(2018, 11, 9, 21, 40, 18),
-                         model.get_file("a").remote_created_timestamp)
+        self.assertEqual(datetime(2018, 11, 9, 21, 40, 18), model.get_file("a").remote_created_timestamp)
         self.assertIsNone(model.get_file("b").remote_created_timestamp)
 
     def test_build_remote_modified_timestamp(self):
-        self.model_builder.set_remote_files([
-            SystemFile("a", 42, False, time_modified=datetime(2018, 11, 9, 21, 40, 18)),
-            SystemFile("b", 42, False)
-        ])
+        self.model_builder.set_remote_files(
+            [SystemFile("a", 42, False, time_modified=datetime(2018, 11, 9, 21, 40, 18)), SystemFile("b", 42, False)]
+        )
         model = self.model_builder.build_model()
-        self.assertEqual(datetime(2018, 11, 9, 21, 40, 18),
-                         model.get_file("a").remote_modified_timestamp)
+        self.assertEqual(datetime(2018, 11, 9, 21, 40, 18), model.get_file("a").remote_modified_timestamp)
         self.assertIsNone(model.get_file("b").remote_modified_timestamp)
 
     def test_rebuild(self):
         remote_files = [SystemFile("a", 0, False), SystemFile("b", 0, False)]
         local_files = [SystemFile("b", 0, False), SystemFile("c", 0, False)]
-        statuses = [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "b", ""),
-                    LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "d", "")]
+        statuses = [
+            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "b", ""),
+            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "d", ""),
+        ]
         self.model_builder.set_remote_files(remote_files)
         self.model_builder.set_local_files(local_files)
         self.model_builder.set_lftp_statuses(statuses)
@@ -1533,18 +1530,12 @@ class TestModelBuilder(unittest.TestCase):
         self.assertTrue(self.model_builder.has_changes())
 
         # Initial set
-        self.model_builder.set_active_files([
-            SystemFile("a", 10),
-            SystemFile("b", 20)
-        ])
+        self.model_builder.set_active_files([SystemFile("a", 10), SystemFile("b", 20)])
         self.model_builder.build_model()
         self.assertFalse(self.model_builder.has_changes())
 
         # Invalidates even on same active files
-        self.model_builder.set_active_files([
-            SystemFile("a", 10),
-            SystemFile("b", 20)
-        ])
+        self.model_builder.set_active_files([SystemFile("a", 10), SystemFile("b", 20)])
         self.assertTrue(self.model_builder.has_changes())
         self.model_builder.build_model()
 
@@ -1562,50 +1553,32 @@ class TestModelBuilder(unittest.TestCase):
         self.assertTrue(self.model_builder.has_changes())
 
         # Initial set
-        self.model_builder.set_local_files([
-            SystemFile("a", 10),
-            SystemFile("b", 20)
-        ])
+        self.model_builder.set_local_files([SystemFile("a", 10), SystemFile("b", 20)])
         self.model_builder.build_model()
         self.assertFalse(self.model_builder.has_changes())
 
         # Does not invalidate on same
-        self.model_builder.set_local_files([
-            SystemFile("a", 10),
-            SystemFile("b", 20)
-        ])
+        self.model_builder.set_local_files([SystemFile("a", 10), SystemFile("b", 20)])
         self.assertFalse(self.model_builder.has_changes())
 
         # Invalidate on different
-        self.model_builder.set_local_files([
-            SystemFile("a", 10),
-            SystemFile("b", 21)
-        ])
+        self.model_builder.set_local_files([SystemFile("a", 10), SystemFile("b", 21)])
         self.assertTrue(self.model_builder.has_changes())
 
     def test_rebuild_on_remote_files(self):
         self.assertTrue(self.model_builder.has_changes())
 
         # Initial set
-        self.model_builder.set_remote_files([
-            SystemFile("a", 10),
-            SystemFile("b", 20)
-        ])
+        self.model_builder.set_remote_files([SystemFile("a", 10), SystemFile("b", 20)])
         self.model_builder.build_model()
         self.assertFalse(self.model_builder.has_changes())
 
         # Does not invalidate on same
-        self.model_builder.set_remote_files([
-            SystemFile("a", 10),
-            SystemFile("b", 20)
-        ])
+        self.model_builder.set_remote_files([SystemFile("a", 10), SystemFile("b", 20)])
         self.assertFalse(self.model_builder.has_changes())
 
         # Invalidate on different
-        self.model_builder.set_remote_files([
-            SystemFile("a", 10),
-            SystemFile("b", 21)
-        ])
+        self.model_builder.set_remote_files([SystemFile("a", 10), SystemFile("b", 21)])
         self.assertTrue(self.model_builder.has_changes())
 
     def test_rebuild_on_lftp_statuses(self):
@@ -1653,25 +1626,31 @@ class TestModelBuilder(unittest.TestCase):
         self.assertTrue(self.model_builder.has_changes())
 
         # Initial set
-        self.model_builder.set_extract_statuses([
-            ExtractStatus("a", True, ExtractStatus.State.EXTRACTING),
-            ExtractStatus("a", True, ExtractStatus.State.EXTRACTING)
-        ])
+        self.model_builder.set_extract_statuses(
+            [
+                ExtractStatus("a", True, ExtractStatus.State.EXTRACTING),
+                ExtractStatus("a", True, ExtractStatus.State.EXTRACTING),
+            ]
+        )
         self.model_builder.build_model()
         self.assertFalse(self.model_builder.has_changes())
 
         # Does not invalidate on same
-        self.model_builder.set_extract_statuses([
-            ExtractStatus("a", True, ExtractStatus.State.EXTRACTING),
-            ExtractStatus("a", True, ExtractStatus.State.EXTRACTING)
-        ])
+        self.model_builder.set_extract_statuses(
+            [
+                ExtractStatus("a", True, ExtractStatus.State.EXTRACTING),
+                ExtractStatus("a", True, ExtractStatus.State.EXTRACTING),
+            ]
+        )
         self.assertFalse(self.model_builder.has_changes())
 
         # Invalidate on different
-        self.model_builder.set_extract_statuses([
-            ExtractStatus("a", True, ExtractStatus.State.EXTRACTING),
-            ExtractStatus("c", True, ExtractStatus.State.EXTRACTING)
-        ])
+        self.model_builder.set_extract_statuses(
+            [
+                ExtractStatus("a", True, ExtractStatus.State.EXTRACTING),
+                ExtractStatus("c", True, ExtractStatus.State.EXTRACTING),
+            ]
+        )
         self.assertTrue(self.model_builder.has_changes())
 
     def test_rebuild_on_extracted_files(self):
@@ -1728,9 +1707,9 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.clear()
         self.model_builder.set_remote_files([SystemFile("a", 100, False)])
         self.model_builder.set_local_files([SystemFile("a", 50, False)])
-        self.model_builder.set_lftp_statuses([
-            LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")
-        ])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")]
+        )
         self.model_builder.set_validated_files({"a"})
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.DOWNLOADING, model.get_file("a").state)
@@ -1801,9 +1780,11 @@ class TestModelBuilder(unittest.TestCase):
         l = [SystemFile("a", 100, False)]
         self.model_builder.set_remote_files(r)
         self.model_builder.set_local_files(l)
-        self.model_builder.set_validate_statuses([
-            ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
-        ])
+        self.model_builder.set_validate_statuses(
+            [
+                ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
+            ]
+        )
 
         model = self.model_builder.build_model()
         a = model.get_file("a")
@@ -1813,9 +1794,11 @@ class TestModelBuilder(unittest.TestCase):
         """VALIDATING state should not be set if file has no local copy."""
         r = [SystemFile("a", 100, False)]
         self.model_builder.set_remote_files(r)
-        self.model_builder.set_validate_statuses([
-            ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
-        ])
+        self.model_builder.set_validate_statuses(
+            [
+                ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
+            ]
+        )
 
         model = self.model_builder.build_model()
         a = model.get_file("a")
@@ -1825,22 +1808,28 @@ class TestModelBuilder(unittest.TestCase):
         self.assertTrue(self.model_builder.has_changes())
 
         # Initial set
-        self.model_builder.set_validate_statuses([
-            ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
-        ])
+        self.model_builder.set_validate_statuses(
+            [
+                ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
+            ]
+        )
         self.model_builder.build_model()
         self.assertFalse(self.model_builder.has_changes())
 
         # Does not invalidate on same keys
-        self.model_builder.set_validate_statuses([
-            ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
-        ])
+        self.model_builder.set_validate_statuses(
+            [
+                ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
+            ]
+        )
         self.assertFalse(self.model_builder.has_changes())
 
         # Invalidate on different keys
-        self.model_builder.set_validate_statuses([
-            ValidateStatus("b", False, ValidateStatus.State.VALIDATING),
-        ])
+        self.model_builder.set_validate_statuses(
+            [
+                ValidateStatus("b", False, ValidateStatus.State.VALIDATING),
+            ]
+        )
         self.assertTrue(self.model_builder.has_changes())
 
     def test_rebuild_on_corrupt_files(self):
@@ -1889,8 +1878,7 @@ class TestSharedLocalDeduplication(unittest.TestCase):
                 seen_names_by_path[norm_path] = set()
             pair_model = builder.build_model()
             for file in pair_model.get_all_files():
-                is_local_only = (file.remote_size is None
-                                 and file.state == ModelFile.State.DEFAULT)
+                is_local_only = file.remote_size is None and file.state == ModelFile.State.DEFAULT
                 if is_local_only:
                     deferred_local_only.append((file, norm_path))
                 else:
@@ -1915,8 +1903,7 @@ class TestSharedLocalDeduplication(unittest.TestCase):
         builder_b.set_local_files([local_file])
 
         shared_path = "/downloads/shared"
-        model = self._aggregate([builder_a, builder_b],
-                                local_paths=[shared_path, shared_path])
+        model = self._aggregate([builder_a, builder_b], local_paths=[shared_path, shared_path])
         files = model.get_all_files()
         self.assertEqual(1, len(files))
         self.assertEqual("shared.txt", files[0].name)
@@ -1931,8 +1918,7 @@ class TestSharedLocalDeduplication(unittest.TestCase):
         builder_a.set_local_files([local_file])
         builder_b.set_local_files([local_file])
 
-        model = self._aggregate([builder_a, builder_b],
-                                local_paths=["/downloads/dir_a", "/downloads/dir_b"])
+        model = self._aggregate([builder_a, builder_b], local_paths=["/downloads/dir_a", "/downloads/dir_b"])
         files = model.get_all_files()
         self.assertEqual(2, len(files))
         pair_ids = {f.pair_id for f in files}
@@ -1955,8 +1941,7 @@ class TestSharedLocalDeduplication(unittest.TestCase):
         builder_b.set_local_files([local_file])
 
         shared_path = "/downloads/shared"
-        model = self._aggregate([builder_a, builder_b],
-                                local_paths=[shared_path, shared_path])
+        model = self._aggregate([builder_a, builder_b], local_paths=[shared_path, shared_path])
         files = model.get_all_files()
         self.assertEqual(1, len(files))
         self.assertEqual("pairA", files[0].pair_id)

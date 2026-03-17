@@ -2,9 +2,10 @@
 
 
 # my libs
-from common import overrides, Job, Context
-from .controller import Controller
+from common import Context, Job, overrides
+
 from .auto_queue import AutoQueue
+from .controller import Controller
 
 
 class ControllerJob(Job):
@@ -12,10 +13,8 @@ class ControllerJob(Job):
     The controller service
     Handles querying and downloading of files
     """
-    def __init__(self,
-                 context: Context,
-                 controller: Controller,
-                 auto_queue: AutoQueue):
+
+    def __init__(self, context: Context, controller: Controller, auto_queue: AutoQueue):
         super().__init__(name=self.__class__.__name__, context=context)
         self.__controller = controller
         self.__auto_queue = auto_queue

@@ -2,10 +2,8 @@
 
 import os
 import shutil
-from typing import Optional
 
-from common import AppOneShotProcess
-from common import escape_remote_path_single, escape_remote_path_double
+from common import AppOneShotProcess, escape_remote_path_double, escape_remote_path_single
 from ssh import Sshcp
 
 
@@ -25,8 +23,7 @@ class DeleteLocalProcess(AppOneShotProcess):
         except ValueError:
             common = None
         if common != real_base or real_target == real_base:
-            self.logger.error("Path traversal blocked: {} escapes {}".format(
-                real_target, real_base))
+            self.logger.error("Path traversal blocked: {} escapes {}".format(real_target, real_base))
             return
         self.logger.debug("Deleting local file {}".format(self.__file_name))
         if not os.path.exists(file_path):
@@ -39,27 +36,31 @@ class DeleteLocalProcess(AppOneShotProcess):
 
 
 class DeleteRemoteProcess(AppOneShotProcess):
-    def __init__(self,
-                 remote_address: str,
-                 remote_username: str,
-                 remote_password: Optional[str],
-                 remote_port: int,
-                 remote_path: str,
-                 file_name: str):
+    def __init__(
+        self,
+        remote_address: str,
+        remote_username: str,
+        remote_password: str | None,
+        remote_port: int,
+        remote_path: str,
+        file_name: str,
+    ):
         super().__init__(name=self.__class__.__name__)
         self.__remote_path = remote_path
         self.__file_name = file_name
-        self.__ssh = Sshcp(host=remote_address,
-                           port=remote_port,
-                           user=remote_username,
-                           password=remote_password)
+        self.__ssh = Sshcp(host=remote_address, port=remote_port, user=remote_username, password=remote_password)
 
     def run_once(self):
         self.__ssh.set_base_logger(self.logger)
         # Reject path traversal in filename (defense-in-depth)
         normalized = os.path.normpath(self.__file_name)
-        if (not normalized or normalized == os.curdir or normalized == os.pardir
-                or normalized.startswith(".." + os.sep) or os.path.isabs(normalized)):
+        if (
+            not normalized
+            or normalized == os.curdir
+            or normalized == os.pardir
+            or normalized.startswith(".." + os.sep)
+            or os.path.isabs(normalized)
+        ):
             self.logger.error("Path traversal blocked in remote delete: {}".format(self.__file_name))
             return
         file_path = os.path.join(self.__remote_path, self.__file_name)

@@ -1,9 +1,9 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from typing import Type, Callable, Optional
-from abc import ABC, abstractmethod
 import threading
 import time
+from abc import ABC, abstractmethod
+from collections.abc import Callable
 
 import bottle
 from bottle import static_file
@@ -16,6 +16,7 @@ class IHandler(ABC):
     """
     Abstract class that defines a web handler
     """
+
     @abstractmethod
     def add_routes(self, web_app: "WebApp"):
         """
@@ -30,12 +31,13 @@ class IStreamHandler(ABC):
     """
     Abstract class that defines a streaming data provider
     """
+
     @abstractmethod
     def setup(self):
         pass
 
     @abstractmethod
-    def get_value(self) -> Optional[str]:
+    def get_value(self) -> str | None:
         pass
 
     @abstractmethod
@@ -57,6 +59,7 @@ class WebApp(bottle.Bottle):
     """
     Web app implementation
     """
+
     _STREAM_POLL_INTERVAL_IN_MS = 250
     _HEARTBEAT_INTERVAL_IN_SECS = 15
 
@@ -101,7 +104,7 @@ class WebApp(bottle.Bottle):
     def add_delete_handler(self, path: str, handler: Callable):
         self.delete(path)(handler)
 
-    def add_streaming_handler(self, handler: Type[IStreamHandler], **kwargs):
+    def add_streaming_handler(self, handler: type[IStreamHandler], **kwargs):
         self._streaming_handlers.append((handler, kwargs))
 
     def process(self):
@@ -171,9 +174,9 @@ class WebApp(bottle.Bottle):
                 time.sleep(WebApp._STREAM_POLL_INTERVAL_IN_MS / 1000)
 
         finally:
-            self.logger.debug("Stream connection stopped by {}".format(
-                "server" if self._stop_event.is_set() else "client"
-            ))
+            self.logger.debug(
+                "Stream connection stopped by {}".format("server" if self._stop_event.is_set() else "client")
+            )
 
             # Cleanup all handlers
             for handler in handlers:

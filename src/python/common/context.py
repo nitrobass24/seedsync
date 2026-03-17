@@ -1,13 +1,13 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import logging
-import copy
 import collections
+import copy
+import logging
 
 # my libs
 from .config import Config
-from .status import Status
 from .path_pairs_config import PathPairsConfig
+from .status import Status
 
 
 class Args:
@@ -16,6 +16,7 @@ class Args:
     These are settings that aren't part of config but still needed by
     sub-components
     """
+
     def __init__(self):
         self.local_path_to_scanfs = None
         self.html_path = None
@@ -37,13 +38,16 @@ class Context:
     """
     Stores contextual information for the entire application
     """
-    def __init__(self,
-                 logger: logging.Logger,
-                 web_access_logger: logging.Logger,
-                 config: Config,
-                 args: Args,
-                 status: Status,
-                 path_pairs_config: PathPairsConfig = None):
+
+    def __init__(
+        self,
+        logger: logging.Logger,
+        web_access_logger: logging.Logger,
+        config: Config,
+        args: Args,
+        status: Status,
+        path_pairs_config: PathPairsConfig = None,
+    ):
         """
         Primary constructor to construct the top-level context
         """
@@ -77,11 +81,11 @@ class Context:
             for pair in self.path_pairs_config.pairs:
                 status = "enabled" if pair.enabled else "disabled"
                 aq = "auto_queue=on" if pair.auto_queue else "auto_queue=off"
-                self.logger.debug("  [{}] {} ({}, {})".format(
-                    pair.name or pair.id[:8],
-                    pair.remote_path + " -> " + pair.local_path,
-                    status, aq
-                ))
+                self.logger.debug(
+                    "  [{}] {} ({}, {})".format(
+                        pair.name or pair.id[:8], pair.remote_path + " -> " + pair.local_path, status, aq
+                    )
+                )
         else:
             self.logger.debug("Path Pairs: (none)")
 

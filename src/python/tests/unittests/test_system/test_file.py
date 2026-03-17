@@ -56,27 +56,43 @@ class TestSystemFile(unittest.TestCase):
         self.assertTrue("Cannot add children to a file" in str(context.exception))
 
     def test_equality_operator(self):
-        a1 = SystemFile("a", 50, is_dir=True,
-                        time_created=datetime(2018, 11, 9, 21, 40, 18),
-                        time_modified=datetime(2018, 11, 9, 21, 40, 18))
+        a1 = SystemFile(
+            "a",
+            50,
+            is_dir=True,
+            time_created=datetime(2018, 11, 9, 21, 40, 18),
+            time_modified=datetime(2018, 11, 9, 21, 40, 18),
+        )
         a1.add_child(SystemFile("aa", 40, is_dir=False))
         a1.add_child(SystemFile("ab", 10, is_dir=False))
 
-        a2 = SystemFile("a", 50, is_dir=True,
-                        time_created=datetime(2018, 11, 9, 21, 40, 18),
-                        time_modified=datetime(2018, 11, 9, 21, 40, 18))
+        a2 = SystemFile(
+            "a",
+            50,
+            is_dir=True,
+            time_created=datetime(2018, 11, 9, 21, 40, 18),
+            time_modified=datetime(2018, 11, 9, 21, 40, 18),
+        )
         a2.add_child(SystemFile("aa", 40, is_dir=False))
         a2.add_child(SystemFile("ab", 10, is_dir=False))
 
-        a3 = SystemFile("a", 50, is_dir=True,
-                        time_created=datetime(2018, 11, 9, 21, 40, 18),
-                        time_modified=datetime(2018, 11, 9, 21, 40, 18))
+        a3 = SystemFile(
+            "a",
+            50,
+            is_dir=True,
+            time_created=datetime(2018, 11, 9, 21, 40, 18),
+            time_modified=datetime(2018, 11, 9, 21, 40, 18),
+        )
         a3.add_child(SystemFile("aa", 40, is_dir=False))
         a3.add_child(SystemFile("ab", 11, is_dir=False))  # different child size
 
-        a4 = SystemFile("a", 50, is_dir=True,
-                        time_created=datetime(2018, 11, 9, 21, 40, 19),  # different timestamp
-                        time_modified=datetime(2018, 11, 9, 21, 40, 18))
+        a4 = SystemFile(
+            "a",
+            50,
+            is_dir=True,
+            time_created=datetime(2018, 11, 9, 21, 40, 19),  # different timestamp
+            time_modified=datetime(2018, 11, 9, 21, 40, 18),
+        )
         a4.add_child(SystemFile("aa", 40, is_dir=False))
         a4.add_child(SystemFile("ab", 10, is_dir=False))
 

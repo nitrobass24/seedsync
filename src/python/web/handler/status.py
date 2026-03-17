@@ -3,8 +3,9 @@
 from bottle import HTTPResponse
 
 from common import Status, overrides
-from ..web_app import IHandler, WebApp
+
 from ..serialize import SerializeStatusJson
+from ..web_app import IHandler, WebApp
 
 
 class StatusHandler(IHandler):

@@ -1,11 +1,11 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
 import os
 import tempfile
+import unittest
 
 from common import Config, ConfigError, PersistError
-from common.config import InnerConfig, Checkers, Converters
+from common.config import Checkers, Converters, InnerConfig
 
 
 class TestConverters(unittest.TestCase):
@@ -181,12 +181,7 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(True, general.debug)
         self.assertEqual(False, general.verbose)
 
-        self.check_common(Config.General,
-                          good_dict,
-                          {
-                              "debug",
-                              "verbose"
-                          })
+        self.check_common(Config.General, good_dict, {"debug", "verbose"})
 
         # bad values
         self.check_bad_value_error(Config.General, good_dict, "debug", "SomeString")
@@ -217,7 +212,7 @@ class TestConfig(unittest.TestCase):
             "net_timeout": "20",
             "net_max_retries": "2",
             "net_reconnect_interval_base": "3",
-            "net_reconnect_interval_multiplier": "1"
+            "net_reconnect_interval_multiplier": "1",
         }
         lftp = Config.Lftp.from_dict(good_dict)
         self.assertEqual("remote.server.com", lftp.remote_address)
@@ -243,28 +238,30 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(3, lftp.net_reconnect_interval_base)
         self.assertEqual(1, lftp.net_reconnect_interval_multiplier)
 
-        self.check_common(Config.Lftp,
-                          good_dict,
-                          {
-                              "remote_address",
-                              "remote_username",
-                              "remote_port",
-                              "remote_path",
-                              "local_path",
-                              "remote_path_to_scan_script",
-                              "use_ssh_key",
-                              "num_max_parallel_downloads",
-                              "num_max_parallel_files_per_download",
-                              "num_max_connections_per_root_file",
-                              "num_max_connections_per_dir_file",
-                              "num_max_total_connections",
-                              "use_temp_file",
-                              "mirror_parallel_directories",
-                              "net_timeout",
-                              "net_max_retries",
-                              "net_reconnect_interval_base",
-                              "net_reconnect_interval_multiplier"
-                          })
+        self.check_common(
+            Config.Lftp,
+            good_dict,
+            {
+                "remote_address",
+                "remote_username",
+                "remote_port",
+                "remote_path",
+                "local_path",
+                "remote_path_to_scan_script",
+                "use_ssh_key",
+                "num_max_parallel_downloads",
+                "num_max_parallel_files_per_download",
+                "num_max_connections_per_root_file",
+                "num_max_connections_per_dir_file",
+                "num_max_total_connections",
+                "use_temp_file",
+                "mirror_parallel_directories",
+                "net_timeout",
+                "net_max_retries",
+                "net_reconnect_interval_base",
+                "net_reconnect_interval_multiplier",
+            },
+        )
 
         # remote_password allows empty values (for SSH key auth)
         # Note: from_dict treats "" as "missing" for None-default properties
@@ -323,7 +320,7 @@ class TestConfig(unittest.TestCase):
             "extract_path": "/extract/path",
             "use_local_path_as_extract_path": "True",
             "use_staging": "False",
-            "staging_path": "/staging/path"
+            "staging_path": "/staging/path",
         }
         controller = Config.Controller.from_dict(good_dict)
         self.assertEqual(30000, controller.interval_ms_remote_scan)
@@ -334,17 +331,19 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(False, controller.use_staging)
         self.assertEqual("/staging/path", controller.staging_path)
 
-        self.check_common(Config.Controller,
-                          good_dict,
-                          {
-                              "interval_ms_remote_scan",
-                              "interval_ms_local_scan",
-                              "interval_ms_downloading_scan",
-                              "extract_path",
-                              "use_local_path_as_extract_path",
-                              "use_staging",
-                              "staging_path"
-                          })
+        self.check_common(
+            Config.Controller,
+            good_dict,
+            {
+                "interval_ms_remote_scan",
+                "interval_ms_local_scan",
+                "interval_ms_downloading_scan",
+                "extract_path",
+                "use_local_path_as_extract_path",
+                "use_staging",
+                "staging_path",
+            },
+        )
 
         # bad values
         self.check_bad_value_error(Config.Controller, good_dict, "interval_ms_remote_scan", "-1")
@@ -365,37 +364,23 @@ class TestConfig(unittest.TestCase):
         web = Config.Web.from_dict(good_dict)
         self.assertEqual(1234, web.port)
 
-        self.check_common(Config.Web,
-                          good_dict,
-                          {
-                              "port"
-                          })
+        self.check_common(Config.Web, good_dict, {"port"})
 
         # bad values
         self.check_bad_value_error(Config.Web, good_dict, "port", "-1")
         self.check_bad_value_error(Config.Web, good_dict, "port", "0")
 
     def test_autoqueue(self):
-        good_dict = {
-            "enabled": "True",
-            "patterns_only": "False",
-            "auto_extract": "True",
-            "auto_delete_remote": "False"
-        }
+        good_dict = {"enabled": "True", "patterns_only": "False", "auto_extract": "True", "auto_delete_remote": "False"}
         autoqueue = Config.AutoQueue.from_dict(good_dict)
         self.assertEqual(True, autoqueue.enabled)
         self.assertEqual(False, autoqueue.patterns_only)
         self.assertEqual(True, autoqueue.auto_extract)
         self.assertEqual(False, autoqueue.auto_delete_remote)
 
-        self.check_common(Config.AutoQueue,
-                          good_dict,
-                          {
-                              "enabled",
-                              "patterns_only",
-                              "auto_extract",
-                              "auto_delete_remote"
-                          })
+        self.check_common(
+            Config.AutoQueue, good_dict, {"enabled", "patterns_only", "auto_extract", "auto_delete_remote"}
+        )
 
         # bad values
         self.check_bad_value_error(Config.AutoQueue, good_dict, "enabled", "SomeString")
@@ -408,25 +393,14 @@ class TestConfig(unittest.TestCase):
         self.check_bad_value_error(Config.AutoQueue, good_dict, "auto_delete_remote", "-1")
 
     def test_validate(self):
-        good_dict = {
-            "enabled": "True",
-            "algorithm": "sha256",
-            "auto_validate": "False",
-            "xfer_verify": "True"
-        }
+        good_dict = {"enabled": "True", "algorithm": "sha256", "auto_validate": "False", "xfer_verify": "True"}
         validate = Config.Validate.from_dict(good_dict)
         self.assertEqual(True, validate.enabled)
         self.assertEqual("sha256", validate.algorithm)
         self.assertEqual(False, validate.auto_validate)
         self.assertEqual(True, validate.xfer_verify)
 
-        self.check_common(Config.Validate,
-                          good_dict,
-                          {
-                              "enabled",
-                              "auto_validate",
-                              "xfer_verify"
-                          })
+        self.check_common(Config.Validate, good_dict, {"enabled", "auto_validate", "xfer_verify"})
 
         # bad values
         self.check_bad_value_error(Config.Validate, good_dict, "enabled", "SomeString")
@@ -451,7 +425,7 @@ class TestConfig(unittest.TestCase):
         good_dict = {
             "enabled": "True",
             "algorithm": "md5",
-            "auto_validate": "True"
+            "auto_validate": "True",
             # xfer_verify intentionally omitted
         }
         validate = Config.Validate.from_dict(good_dict)
@@ -597,7 +571,7 @@ class TestConfig(unittest.TestCase):
         config.autoqueue.auto_extract = False
         config.autoqueue.auto_delete_remote = True
         config.to_file(config_file_path)
-        with open(config_file_path, "r") as f:
+        with open(config_file_path) as f:
             actual_str = f.read()
         print(actual_str)
 
@@ -832,7 +806,7 @@ class TestConfig(unittest.TestCase):
             "interval_ms_local_scan": "10000",
             "interval_ms_downloading_scan": "2000",
             "extract_path": "/extract/path",
-            "use_local_path_as_extract_path": "True"
+            "use_local_path_as_extract_path": "True",
             # use_staging and staging_path intentionally omitted
         }
         controller = Config.Controller.from_dict(good_dict)
@@ -867,7 +841,7 @@ class TestConfig(unittest.TestCase):
             "net_timeout": "",
             "net_max_retries": "",
             "net_reconnect_interval_base": "",
-            "net_reconnect_interval_multiplier": ""
+            "net_reconnect_interval_multiplier": "",
         }
         lftp = Config.Lftp.from_dict(good_dict)
         # net_limit_rate has "" as __init__ default, so "" stays as ""
@@ -898,7 +872,7 @@ class TestConfig(unittest.TestCase):
             "num_max_connections_per_dir_file": "1",
             "num_max_total_connections": "0",
             "use_temp_file": "False",
-            "net_limit_rate": "500K"
+            "net_limit_rate": "500K",
             # All advanced keys intentionally omitted
         }
         lftp = Config.Lftp.from_dict(good_dict)

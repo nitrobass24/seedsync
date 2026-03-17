@@ -1,18 +1,17 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
-import sys
-from abc import abstractmethod
-from multiprocessing import Process, Queue, Event
 import queue
 import signal
+import sys
 import threading
+from abc import abstractmethod
 from datetime import datetime
+from multiprocessing import Event, Process, Queue
 
 import tblib.pickling_support
 
-from common import overrides, ServiceExit
-
+from common import ServiceExit, overrides
 
 tblib.pickling_support.install()
 
@@ -22,9 +21,10 @@ class ExceptionWrapper:
     An exception wrapper that works across processes
     Source: https://stackoverflow.com/a/26096355/8571324
     """
+
     def __init__(self, ee):
         self.ee = ee
-        __,  __, self.tb = sys.exc_info()
+        __, __, self.tb = sys.exc_info()
 
     def re_raise(self):
         raise self.ee.with_traceback(self.tb)
@@ -71,6 +71,7 @@ class AppProcess(Process):
         # Configure the logger for this process
         if self._mp_log_queue is not None:
             from logging.handlers import QueueHandler
+
             root = logging.getLogger()
             root.handlers.clear()
             root.addHandler(QueueHandler(self._mp_log_queue))
@@ -110,8 +111,7 @@ class AppProcess(Process):
             return delta_in_ms
 
         timestamp_start = datetime.now()
-        while self.is_alive() and \
-                elapsed_ms(timestamp_start) < AppProcess.__DEFAULT_TERMINATE_TIMEOUT_MS:
+        while self.is_alive() and elapsed_ms(timestamp_start) < AppProcess.__DEFAULT_TERMINATE_TIMEOUT_MS:
             pass
 
         super().terminate()
@@ -171,6 +171,7 @@ class AppOneShotProcess(AppProcess):
     """
     App process that runs only once and then exits
     """
+
     def run_loop(self):
         self.run_once()
         self._terminate.set()

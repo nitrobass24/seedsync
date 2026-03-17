@@ -3,7 +3,7 @@
 import unittest
 from datetime import datetime
 
-from model import Model, ModelFile, ModelDiff, ModelDiffUtil
+from model import Model, ModelDiff, ModelDiffUtil, ModelFile
 
 
 class TestModelDiff(unittest.TestCase):

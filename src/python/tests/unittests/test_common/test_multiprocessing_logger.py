@@ -1,14 +1,14 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
 import logging
+import multiprocessing
 import sys
 import time
-import multiprocessing
+import unittest
 from logging.handlers import QueueHandler
 
-from testfixtures import LogCapture
 import timeout_decorator
+from testfixtures import LogCapture
 
 from common import MultiprocessingLogger
 
@@ -53,9 +53,7 @@ class TestMultiprocessingLogger(unittest.TestCase):
     @timeout_decorator.timeout(5)
     def test_main_logger_receives_records(self):
         mp_logger = MultiprocessingLogger(self.logger)
-        p_1 = multiprocessing.Process(
-            target=_child_process,
-            args=(mp_logger.queue, mp_logger.log_level, "process_1"))
+        p_1 = multiprocessing.Process(target=_child_process, args=(mp_logger.queue, mp_logger.log_level, "process_1"))
 
         with LogCapture("TestMultiprocessingLogger.MPLogger.process_1") as log_capture:
             p_1.start()
@@ -69,15 +67,15 @@ class TestMultiprocessingLogger(unittest.TestCase):
                 ("process_1", "DEBUG", "Debug line"),
                 ("process_1", "INFO", "Info line"),
                 ("process_1", "WARNING", "Warning line"),
-                ("process_1", "ERROR", "Error line")
+                ("process_1", "ERROR", "Error line"),
             )
 
     @timeout_decorator.timeout(5)
     def test_children_names(self):
         mp_logger = MultiprocessingLogger(self.logger)
         p_1 = multiprocessing.Process(
-            target=_child_process_with_children,
-            args=(mp_logger.queue, mp_logger.log_level, "process_1"))
+            target=_child_process_with_children, args=(mp_logger.queue, mp_logger.log_level, "process_1")
+        )
 
         with LogCapture("TestMultiprocessingLogger.MPLogger.process_1") as log_capture:
             p_1.start()
@@ -99,8 +97,8 @@ class TestMultiprocessingLogger(unittest.TestCase):
         with LogCapture("TestMultiprocessingLogger.MPLogger.process_1") as log_capture:
             mp_logger = MultiprocessingLogger(self.logger)
             p_1 = multiprocessing.Process(
-                target=_child_process,
-                args=(mp_logger.queue, mp_logger.log_level, "process_1"))
+                target=_child_process, args=(mp_logger.queue, mp_logger.log_level, "process_1")
+            )
             p_1.start()
             mp_logger.start()
             p_1.join()
@@ -111,7 +109,7 @@ class TestMultiprocessingLogger(unittest.TestCase):
                 ("process_1", "DEBUG", "Debug line"),
                 ("process_1", "INFO", "Info line"),
                 ("process_1", "WARNING", "Warning line"),
-                ("process_1", "ERROR", "Error line")
+                ("process_1", "ERROR", "Error line"),
             )
 
         # Info level
@@ -119,8 +117,8 @@ class TestMultiprocessingLogger(unittest.TestCase):
         with LogCapture("TestMultiprocessingLogger.MPLogger.process_1") as log_capture:
             mp_logger = MultiprocessingLogger(self.logger)
             p_1 = multiprocessing.Process(
-                target=_child_process,
-                args=(mp_logger.queue, mp_logger.log_level, "process_1"))
+                target=_child_process, args=(mp_logger.queue, mp_logger.log_level, "process_1")
+            )
             p_1.start()
             mp_logger.start()
             p_1.join()
@@ -130,7 +128,7 @@ class TestMultiprocessingLogger(unittest.TestCase):
             log_capture.check(
                 ("process_1", "INFO", "Info line"),
                 ("process_1", "WARNING", "Warning line"),
-                ("process_1", "ERROR", "Error line")
+                ("process_1", "ERROR", "Error line"),
             )
 
         # Warning level
@@ -138,32 +136,27 @@ class TestMultiprocessingLogger(unittest.TestCase):
         with LogCapture("TestMultiprocessingLogger.MPLogger.process_1") as log_capture:
             mp_logger = MultiprocessingLogger(self.logger)
             p_1 = multiprocessing.Process(
-                target=_child_process,
-                args=(mp_logger.queue, mp_logger.log_level, "process_1"))
+                target=_child_process, args=(mp_logger.queue, mp_logger.log_level, "process_1")
+            )
             p_1.start()
             mp_logger.start()
             p_1.join()
             time.sleep(0.5)
             mp_logger.stop()
 
-            log_capture.check(
-                ("process_1", "WARNING", "Warning line"),
-                ("process_1", "ERROR", "Error line")
-            )
+            log_capture.check(("process_1", "WARNING", "Warning line"), ("process_1", "ERROR", "Error line"))
 
         # Error level
         self.logger.setLevel(logging.ERROR)
         with LogCapture("TestMultiprocessingLogger.MPLogger.process_1") as log_capture:
             mp_logger = MultiprocessingLogger(self.logger)
             p_1 = multiprocessing.Process(
-                target=_child_process,
-                args=(mp_logger.queue, mp_logger.log_level, "process_1"))
+                target=_child_process, args=(mp_logger.queue, mp_logger.log_level, "process_1")
+            )
             p_1.start()
             mp_logger.start()
             p_1.join()
             time.sleep(0.5)
             mp_logger.stop()
 
-            log_capture.check(
-                ("process_1", "ERROR", "Error line")
-            )
+            log_capture.check(("process_1", "ERROR", "Error line"))

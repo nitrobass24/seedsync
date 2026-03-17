@@ -14,6 +14,7 @@ class Job(threading.Thread, ABC):
     """
     Job thread that handles graceful shutdown
     """
+
     _DEFAULT_SLEEP_INTERVAL_IN_SECS = 0.5
 
     def __init__(self, name: str, context: Context):

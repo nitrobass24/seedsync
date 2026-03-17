@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from common import overrides
-from model import Model, ModelFile, IModelListener, ModelError
+from model import IModelListener, Model, ModelError, ModelFile
 
 
 class DummyModelListener(IModelListener):

@@ -1,10 +1,9 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from queue import Queue, Empty
-from typing import TypeVar, Generic, Optional
+from queue import Empty, Queue
+from typing import Generic, TypeVar
 
-
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class StreamQueue(Generic[T]):
@@ -14,13 +13,14 @@ class StreamQueue(Generic[T]):
     The producer thread calls put() to insert events. The consumer stream
     calls get_next_event() to receive event in its own thread.
     """
+
     def __init__(self):
         self.__queue = Queue()
 
     def put(self, event: T):
         self.__queue.put(event)
 
-    def get_next_event(self) -> Optional[T]:
+    def get_next_event(self) -> T | None:
         """
         Returns the next event if there is one, otherwise returns None
         :return:

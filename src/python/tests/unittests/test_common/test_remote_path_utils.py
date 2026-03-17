@@ -2,7 +2,7 @@
 
 import unittest
 
-from common import escape_remote_path_single, escape_remote_path_double
+from common import escape_remote_path_double, escape_remote_path_single
 
 
 class TestEscapeRemotePathSingle(unittest.TestCase):
@@ -19,8 +19,7 @@ class TestEscapeRemotePathSingle(unittest.TestCase):
         self.assertEqual("''", escape_remote_path_single(""))
 
     def test_handles_single_quote_in_path(self):
-        self.assertEqual("'/some/Don'\\''t Look Now'",
-                         escape_remote_path_single("/some/Don't Look Now"))
+        self.assertEqual("'/some/Don'\\''t Look Now'", escape_remote_path_single("/some/Don't Look Now"))
 
 
 class TestEscapeRemotePathDouble(unittest.TestCase):

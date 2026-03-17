@@ -4,7 +4,8 @@ import json
 
 from bottle import HTTPResponse, request
 
-from common import overrides, PathPairsConfig, PathPair
+from common import PathPair, PathPairsConfig, overrides
+
 from ..web_app import IHandler, WebApp
 
 
@@ -21,10 +22,7 @@ class PathPairsHandler(IHandler):
 
     def __handle_list(self):
         pairs = [p.to_dict() for p in self.__config.pairs]
-        return HTTPResponse(
-            body=json.dumps(pairs),
-            headers={"Content-Type": "application/json"}
-        )
+        return HTTPResponse(body=json.dumps(pairs), headers={"Content-Type": "application/json"})
 
     @staticmethod
     def __validate_pair_params(data: dict, defaults=None):
@@ -79,11 +77,7 @@ class PathPairsHandler(IHandler):
             if "name" in str(e) and "already exists" in str(e):
                 return HTTPResponse(body=str(e), status=409)
             raise
-        return HTTPResponse(
-            body=json.dumps(pair.to_dict()),
-            status=201,
-            headers={"Content-Type": "application/json"}
-        )
+        return HTTPResponse(body=json.dumps(pair.to_dict()), status=201, headers={"Content-Type": "application/json"})
 
     def __handle_update(self, pair_id: str):
         existing = self.__config.get_pair(pair_id)
@@ -116,10 +110,7 @@ class PathPairsHandler(IHandler):
             if "name" in str(e) and "already exists" in str(e):
                 return HTTPResponse(body=str(e), status=409)
             return HTTPResponse(body="Path pair not found", status=404)
-        return HTTPResponse(
-            body=json.dumps(updated.to_dict()),
-            headers={"Content-Type": "application/json"}
-        )
+        return HTTPResponse(body=json.dumps(updated.to_dict()), headers={"Content-Type": "application/json"})
 
     def __handle_delete(self, pair_id: str):
         try:

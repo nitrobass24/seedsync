@@ -3,7 +3,7 @@ import logging
 import threading
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from model import IModelListener, ModelFile
 
@@ -43,9 +43,7 @@ class WebhookNotifier(IModelListener):
                 event_type = "delete_complete"
 
         if event_type and self._config.notifications.webhook_url:
-            self._fire_webhook(event_type, new_file.name,
-                               pair_id=new_file.pair_id,
-                               full_path=new_file.full_path)
+            self._fire_webhook(event_type, new_file.name, pair_id=new_file.pair_id, full_path=new_file.full_path)
 
     def shutdown(self, timeout: float = 5):
         """Drain in-flight webhook threads and prevent new ones from being queued.
@@ -73,29 +71,25 @@ class WebhookNotifier(IModelListener):
         if still_alive:
             self._logger.warning(
                 "Webhook notifier shutdown: %d thread(s) did not complete within %.1fs timeout",
-                len(still_alive), timeout
+                len(still_alive),
+                timeout,
             )
         else:
             self._logger.info("Webhook notifier shutdown: all threads completed")
 
-    def _fire_webhook(self, event_type: str, filename: str,
-                       pair_id: str = None, full_path: str = None):
+    def _fire_webhook(self, event_type: str, filename: str, pair_id: str = None, full_path: str = None):
         """Fire-and-forget POST in a daemon thread."""
         url = self._config.notifications.webhook_url
         payload = {
             "event_type": event_type,
             "filename": filename,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         if pair_id:
             payload["pair_id"] = pair_id
         if full_path:
             payload["path"] = full_path
-        thread = threading.Thread(
-            target=self._thread_wrapper,
-            args=(url, payload),
-            daemon=True
-        )
+        thread = threading.Thread(target=self._thread_wrapper, args=(url, payload), daemon=True)
         with self._lock:
             if self._shutdown_flag:
                 self._logger.debug("Webhook suppressed during shutdown: %s %s", event_type, filename)
@@ -117,12 +111,7 @@ class WebhookNotifier(IModelListener):
             return
         try:
             data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(
-                url,
-                data=data,
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
+            req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
             urllib.request.urlopen(req, timeout=5)
             self._logger.debug("Webhook sent: %s %s", payload["event_type"], payload["filename"])
         except Exception as e:

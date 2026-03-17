@@ -5,7 +5,6 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from controller.notifier import WebhookNotifier
-from model import ModelFile
 
 
 class TestWebhookNotifierShutdown(unittest.TestCase):
@@ -36,7 +35,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
         notifier = self._make_notifier()
         notifier.shutdown(timeout=1)
 
-        with patch.object(notifier, '_send_post') as mock_send:
+        with patch.object(notifier, "_send_post") as mock_send:
             notifier._fire_webhook("download_complete", "test.txt")
             mock_send.assert_not_called()
 
@@ -50,7 +49,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
             started.set()
             barrier.wait(timeout=5)
 
-        with patch.object(notifier, '_send_post', side_effect=slow_send):
+        with patch.object(notifier, "_send_post", side_effect=slow_send):
             notifier._fire_webhook("download_complete", "test.txt")
             started.wait(timeout=5)
 
@@ -74,7 +73,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
             started.set()
             barrier.wait(timeout=10)
 
-        with patch.object(notifier, '_send_post', side_effect=stuck_send):
+        with patch.object(notifier, "_send_post", side_effect=stuck_send):
             notifier._fire_webhook("download_complete", "test.txt")
             started.wait(timeout=5)
 
@@ -97,7 +96,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
             started.set()
             raise RuntimeError("webhook failed")
 
-        with patch.object(notifier, '_send_post', side_effect=failing_send):
+        with patch.object(notifier, "_send_post", side_effect=failing_send):
             notifier._fire_webhook("download_complete", "test.txt")
             started.wait(timeout=5)
             # Give the thread a moment to complete the exception handling
@@ -115,7 +114,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
         notifier = self._make_notifier()
         notifier.shutdown(timeout=0)
 
-        with patch.object(notifier, '_send_post') as mock_send:
+        with patch.object(notifier, "_send_post") as mock_send:
             # Try to fire multiple webhooks after shutdown
             for i in range(10):
                 notifier._fire_webhook("download_complete", f"file{i}.txt")
@@ -142,7 +141,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
                     all_started.set()
             b.wait(timeout=10)
 
-        with patch.object(notifier, '_send_post', side_effect=slow_send):
+        with patch.object(notifier, "_send_post", side_effect=slow_send):
             # Fire 5 webhooks
             for i in range(5):
                 notifier._fire_webhook("download_complete", f"file{i}.txt")
@@ -161,5 +160,5 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
             b.set()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

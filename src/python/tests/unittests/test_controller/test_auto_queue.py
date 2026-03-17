@@ -1,14 +1,13 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
-from unittest.mock import MagicMock
+import json
 import logging
 import sys
-import json
+import unittest
+from unittest.mock import MagicMock
 
-from common import overrides, PersistError, Config
-from controller import AutoQueue, AutoQueuePersist, IAutoQueuePersistListener, AutoQueuePattern
-from controller import Controller
+from common import Config, PersistError, overrides
+from controller import AutoQueue, AutoQueuePattern, AutoQueuePersist, Controller, IAutoQueuePersistListener
 from model import IModelListener, ModelFile
 
 
@@ -27,57 +26,45 @@ class TestAutoQueuePattern(unittest.TestCase):
         self.assertNotEqual(aqp_1, aqp_2)
 
     def test_to_str(self):
-        self.assertEqual(
-            "{\"pattern\": \"file.one\"}",
-            AutoQueuePattern(pattern="file.one").to_str()
-        )
-        self.assertEqual(
-            "{\"pattern\": \"file'one\"}",
-            AutoQueuePattern(pattern="file'one").to_str()
-        )
-        self.assertEqual(
-            "{\"pattern\": \"file\\\"one\"}",
-            AutoQueuePattern(pattern="file\"one").to_str()
-        )
-        self.assertEqual(
-            "{\"pattern\": \"fil(eo)ne\"}",
-            AutoQueuePattern(pattern="fil(eo)ne").to_str()
-        )
+        self.assertEqual('{"pattern": "file.one"}', AutoQueuePattern(pattern="file.one").to_str())
+        self.assertEqual('{"pattern": "file\'one"}', AutoQueuePattern(pattern="file'one").to_str())
+        self.assertEqual('{"pattern": "file\\"one"}', AutoQueuePattern(pattern='file"one').to_str())
+        self.assertEqual('{"pattern": "fil(eo)ne"}', AutoQueuePattern(pattern="fil(eo)ne").to_str())
 
     def test_from_str(self):
         self.assertEqual(
             AutoQueuePattern(pattern="file.one"),
-            AutoQueuePattern.from_str("{\"pattern\": \"file.one\"}"),
+            AutoQueuePattern.from_str('{"pattern": "file.one"}'),
         )
         self.assertEqual(
             AutoQueuePattern(pattern="file'one"),
-            AutoQueuePattern.from_str("{\"pattern\": \"file'one\"}"),
+            AutoQueuePattern.from_str('{"pattern": "file\'one"}'),
         )
         self.assertEqual(
-            AutoQueuePattern(pattern="file\"one"),
-            AutoQueuePattern.from_str("{\"pattern\": \"file\\\"one\"}"),
+            AutoQueuePattern(pattern='file"one'),
+            AutoQueuePattern.from_str('{"pattern": "file\\"one"}'),
         )
         self.assertEqual(
             AutoQueuePattern(pattern="fil(eo)ne"),
-            AutoQueuePattern.from_str("{\"pattern\": \"fil(eo)ne\"}"),
+            AutoQueuePattern.from_str('{"pattern": "fil(eo)ne"}'),
         )
 
     def test_to_and_from_str(self):
         self.assertEqual(
             AutoQueuePattern(pattern="file.one"),
-            AutoQueuePattern.from_str(AutoQueuePattern(pattern="file.one").to_str())
+            AutoQueuePattern.from_str(AutoQueuePattern(pattern="file.one").to_str()),
         )
         self.assertEqual(
             AutoQueuePattern(pattern="file'one"),
-            AutoQueuePattern.from_str(AutoQueuePattern(pattern="file'one").to_str())
+            AutoQueuePattern.from_str(AutoQueuePattern(pattern="file'one").to_str()),
         )
         self.assertEqual(
-            AutoQueuePattern(pattern="file\"one"),
-            AutoQueuePattern.from_str(AutoQueuePattern(pattern="file\"one").to_str())
+            AutoQueuePattern(pattern='file"one'),
+            AutoQueuePattern.from_str(AutoQueuePattern(pattern='file"one').to_str()),
         )
         self.assertEqual(
             AutoQueuePattern(pattern="fil(eo)ne"),
-            AutoQueuePattern.from_str(AutoQueuePattern(pattern="fil(eo)ne").to_str())
+            AutoQueuePattern.from_str(AutoQueuePattern(pattern="fil(eo)ne").to_str()),
         )
 
 
@@ -96,17 +83,13 @@ class TestAutoQueuePersist(unittest.TestCase):
         persist = AutoQueuePersist()
         persist.add_pattern(AutoQueuePattern(pattern="one"))
         persist.add_pattern(AutoQueuePattern(pattern="two"))
-        self.assertEqual({
-            AutoQueuePattern(pattern="one"),
-            AutoQueuePattern(pattern="two")
-        }, persist.patterns)
+        self.assertEqual({AutoQueuePattern(pattern="one"), AutoQueuePattern(pattern="two")}, persist.patterns)
         persist.add_pattern(AutoQueuePattern(pattern="one"))
         persist.add_pattern(AutoQueuePattern(pattern="three"))
-        self.assertEqual({
-            AutoQueuePattern(pattern="one"),
-            AutoQueuePattern(pattern="two"),
-            AutoQueuePattern(pattern="three")
-        }, persist.patterns)
+        self.assertEqual(
+            {AutoQueuePattern(pattern="one"), AutoQueuePattern(pattern="two"), AutoQueuePattern(pattern="three")},
+            persist.patterns,
+        )
 
     def test_add_blank_pattern_fails(self):
         persist = AutoQueuePersist()
@@ -126,10 +109,7 @@ class TestAutoQueuePersist(unittest.TestCase):
         persist.add_pattern(AutoQueuePattern(pattern="one"))
         persist.add_pattern(AutoQueuePattern(pattern="three"))
         persist.remove_pattern(AutoQueuePattern(pattern="two"))
-        self.assertEqual({
-            AutoQueuePattern(pattern="one"),
-            AutoQueuePattern(pattern="three")
-        }, persist.patterns)
+        self.assertEqual({AutoQueuePattern(pattern="one"), AutoQueuePattern(pattern="three")}, persist.patterns)
 
     def test_listener_pattern_added(self):
         listener = TestAutoQueuePersistListener()
@@ -193,23 +173,23 @@ class TestAutoQueuePersist(unittest.TestCase):
             ]
         }}
         """.format(
-            AutoQueuePattern(pattern="one").to_str().replace("\\", "\\\\").replace("\"", "\\\""),
-            AutoQueuePattern(pattern="two").to_str().replace("\\", "\\\\").replace("\"", "\\\""),
-            AutoQueuePattern(pattern="th ree").to_str().replace("\\", "\\\\").replace("\"", "\\\""),
-            AutoQueuePattern(pattern="fo.ur").to_str().replace("\\", "\\\\").replace("\"", "\\\""),
-            AutoQueuePattern(pattern="fi\"ve").to_str().replace("\\", "\\\\").replace("\"", "\\\""),
-            AutoQueuePattern(pattern="si'x").to_str().replace("\\", "\\\\").replace("\"", "\\\"")
+            AutoQueuePattern(pattern="one").to_str().replace("\\", "\\\\").replace('"', '\\"'),
+            AutoQueuePattern(pattern="two").to_str().replace("\\", "\\\\").replace('"', '\\"'),
+            AutoQueuePattern(pattern="th ree").to_str().replace("\\", "\\\\").replace('"', '\\"'),
+            AutoQueuePattern(pattern="fo.ur").to_str().replace("\\", "\\\\").replace('"', '\\"'),
+            AutoQueuePattern(pattern='fi"ve').to_str().replace("\\", "\\\\").replace('"', '\\"'),
+            AutoQueuePattern(pattern="si'x").to_str().replace("\\", "\\\\").replace('"', '\\"'),
         )
         print(content)
-        print(AutoQueuePattern(pattern="fi\"ve").to_str())
+        print(AutoQueuePattern(pattern='fi"ve').to_str())
         persist = AutoQueuePersist.from_str(content)
         golden_patterns = {
             AutoQueuePattern(pattern="one"),
             AutoQueuePattern(pattern="two"),
             AutoQueuePattern(pattern="th ree"),
             AutoQueuePattern(pattern="fo.ur"),
-            AutoQueuePattern(pattern="fi\"ve"),
-            AutoQueuePattern(pattern="si'x")
+            AutoQueuePattern(pattern='fi"ve'),
+            AutoQueuePattern(pattern="si'x"),
         }
         self.assertEqual(golden_patterns, persist.patterns)
 
@@ -219,7 +199,7 @@ class TestAutoQueuePersist(unittest.TestCase):
         persist.add_pattern(AutoQueuePattern(pattern="two"))
         persist.add_pattern(AutoQueuePattern(pattern="th ree"))
         persist.add_pattern(AutoQueuePattern(pattern="fo.ur"))
-        persist.add_pattern(AutoQueuePattern(pattern="fi\"ve"))
+        persist.add_pattern(AutoQueuePattern(pattern='fi"ve'))
         persist.add_pattern(AutoQueuePattern(pattern="si'x"))
         print(persist.to_str())
         dct = json.loads(persist.to_str())
@@ -230,10 +210,10 @@ class TestAutoQueuePersist(unittest.TestCase):
                 AutoQueuePattern(pattern="two").to_str(),
                 AutoQueuePattern(pattern="th ree").to_str(),
                 AutoQueuePattern(pattern="fo.ur").to_str(),
-                AutoQueuePattern(pattern="fi\"ve").to_str(),
-                AutoQueuePattern(pattern="si'x").to_str()
+                AutoQueuePattern(pattern='fi"ve').to_str(),
+                AutoQueuePattern(pattern="si'x").to_str(),
             ],
-            dct["patterns"]
+            dct["patterns"],
         )
 
     def test_to_and_from_str(self):
@@ -242,14 +222,11 @@ class TestAutoQueuePersist(unittest.TestCase):
         persist.add_pattern(AutoQueuePattern(pattern="two"))
         persist.add_pattern(AutoQueuePattern(pattern="th ree"))
         persist.add_pattern(AutoQueuePattern(pattern="fo.ur"))
-        persist.add_pattern(AutoQueuePattern(pattern="fi\"ve"))
+        persist.add_pattern(AutoQueuePattern(pattern='fi"ve'))
         persist.add_pattern(AutoQueuePattern(pattern="si'x"))
 
         persist_actual = AutoQueuePersist.from_str(persist.to_str())
-        self.assertEqual(
-            persist.patterns,
-            persist_actual.patterns
-        )
+        self.assertEqual(persist.patterns, persist_actual.patterns)
 
     def test_persist_read_error(self):
         # bad pattern
@@ -352,7 +329,7 @@ class TestAutoQueue(unittest.TestCase):
         auto_queue.process()
         calls = self.controller.queue_command.call_args_list[-3:]
         commands = [calls[i][0][0] for i in range(3)]
-        self.assertEqual(set([Controller.Command.Action.QUEUE]*3), {c.action for c in commands})
+        self.assertEqual(set([Controller.Command.Action.QUEUE] * 3), {c.action for c in commands})
         self.assertEqual({"File.One", "File.Two", "File.Three"}, {c.filename for c in commands})
 
     def test_matching_initial_files_are_queued(self):
@@ -382,7 +359,7 @@ class TestAutoQueue(unittest.TestCase):
         calls = self.controller.queue_command.call_args_list
         self.assertEqual(3, len(calls))
         commands = [calls[i][0][0] for i in range(3)]
-        self.assertEqual(set([Controller.Command.Action.QUEUE]*3), {c.action for c in commands})
+        self.assertEqual(set([Controller.Command.Action.QUEUE] * 3), {c.action for c in commands})
         self.assertEqual({"File.One", "File.Two", "File.Three"}, {c.filename for c in commands})
 
     def test_non_matches(self):
@@ -931,9 +908,10 @@ class TestAutoQueue(unittest.TestCase):
         calls = self.controller.queue_command.call_args_list
         self.assertEqual(5, len(calls))
         commands = [calls[i][0][0] for i in range(5)]
-        self.assertEqual(set([Controller.Command.Action.QUEUE]*5), {c.action for c in commands})
-        self.assertEqual({"File.One", "File.Two", "File.Three", "File.Four", "File.Five"},
-                         {c.filename for c in commands})
+        self.assertEqual(set([Controller.Command.Action.QUEUE] * 5), {c.action for c in commands})
+        self.assertEqual(
+            {"File.One", "File.Two", "File.Three", "File.Four", "File.Five"}, {c.filename for c in commands}
+        )
 
     def test_all_files_are_queued_when_patterns_only_disabled_and_no_patterns_exist(self):
         self.context.config.autoqueue.patterns_only = False
@@ -959,9 +937,10 @@ class TestAutoQueue(unittest.TestCase):
         calls = self.controller.queue_command.call_args_list
         self.assertEqual(5, len(calls))
         commands = [calls[i][0][0] for i in range(5)]
-        self.assertEqual(set([Controller.Command.Action.QUEUE]*5), {c.action for c in commands})
-        self.assertEqual({"File.One", "File.Two", "File.Three", "File.Four", "File.Five"},
-                         {c.filename for c in commands})
+        self.assertEqual(set([Controller.Command.Action.QUEUE] * 5), {c.action for c in commands})
+        self.assertEqual(
+            {"File.One", "File.Two", "File.Three", "File.Four", "File.Five"}, {c.filename for c in commands}
+        )
 
     def test_matching_new_files_are_extracted(self):
         persist = AutoQueuePersist()
@@ -1010,7 +989,7 @@ class TestAutoQueue(unittest.TestCase):
         auto_queue.process()
         calls = self.controller.queue_command.call_args_list[-3:]
         commands = [calls[i][0][0] for i in range(3)]
-        self.assertEqual(set([Controller.Command.Action.EXTRACT]*3), {c.action for c in commands})
+        self.assertEqual(set([Controller.Command.Action.EXTRACT] * 3), {c.action for c in commands})
         self.assertEqual({"File.One", "File.Two", "File.Three"}, {c.filename for c in commands})
 
     def test_matching_initial_files_are_extracted(self):
@@ -1050,7 +1029,7 @@ class TestAutoQueue(unittest.TestCase):
         calls = self.controller.queue_command.call_args_list
         self.assertEqual(3, len(calls))
         commands = [calls[i][0][0] for i in range(3)]
-        self.assertEqual(set([Controller.Command.Action.EXTRACT]*3), {c.action for c in commands})
+        self.assertEqual(set([Controller.Command.Action.EXTRACT] * 3), {c.action for c in commands})
         self.assertEqual({"File.One", "File.Two", "File.Three"}, {c.filename for c in commands})
 
     def test_new_matching_pattern_extracts_existing_files(self):
@@ -1262,9 +1241,10 @@ class TestAutoQueue(unittest.TestCase):
         calls = self.controller.queue_command.call_args_list
         self.assertEqual(5, len(calls))
         commands = [calls[i][0][0] for i in range(5)]
-        self.assertEqual(set([Controller.Command.Action.EXTRACT]*5), {c.action for c in commands})
-        self.assertEqual({"File.One", "File.Two", "File.Three", "File.Four", "File.Five"},
-                         {c.filename for c in commands})
+        self.assertEqual(set([Controller.Command.Action.EXTRACT] * 5), {c.action for c in commands})
+        self.assertEqual(
+            {"File.One", "File.Two", "File.Three", "File.Four", "File.Five"}, {c.filename for c in commands}
+        )
 
     def test_all_files_are_extracted_when_patterns_only_disabled_and_no_patterns_exist(self):
         self.context.config.autoqueue.patterns_only = False
@@ -1300,9 +1280,10 @@ class TestAutoQueue(unittest.TestCase):
         calls = self.controller.queue_command.call_args_list
         self.assertEqual(5, len(calls))
         commands = [calls[i][0][0] for i in range(5)]
-        self.assertEqual(set([Controller.Command.Action.EXTRACT]*5), {c.action for c in commands})
-        self.assertEqual({"File.One", "File.Two", "File.Three", "File.Four", "File.Five"},
-                         {c.filename for c in commands})
+        self.assertEqual(set([Controller.Command.Action.EXTRACT] * 5), {c.action for c in commands})
+        self.assertEqual(
+            {"File.One", "File.Two", "File.Three", "File.Four", "File.Five"}, {c.filename for c in commands}
+        )
 
     def test_file_is_extracted_after_finishing_download(self):
         persist = AutoQueuePersist()
