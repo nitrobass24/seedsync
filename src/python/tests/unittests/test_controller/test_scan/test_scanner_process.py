@@ -1,15 +1,14 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import logging
 import multiprocessing
 import queue
+import sys
 import time
 import unittest
-import logging
-import sys
-
 from unittest.mock import MagicMock
 
-from controller import IScanner, ScannerProcess, ScannerError
+from controller import IScanner, ScannerError, ScannerProcess
 from system import SystemFile
 
 
@@ -23,6 +22,7 @@ class DummyScanner(IScanner):
 
 class PicklableScanner(IScanner):
     """A picklable scanner that returns a fixed file list (survives spawn)."""
+
     def __init__(self, files=None):
         self._files = files if files is not None else []
 
@@ -35,6 +35,7 @@ class PicklableScanner(IScanner):
 
 class FatalScanner(IScanner):
     """A picklable scanner that raises a non-recoverable ScannerError."""
+
     def scan(self):
         raise ScannerError("fatal-from-child", recoverable=False)
 
@@ -145,7 +146,6 @@ class TestScannerProcess(unittest.TestCase):
         process = ScannerProcess(scanner=mock_scanner, interval_in_ms=0)
         process.run_init()
         process.run_loop()
-
 
         result = process.pop_latest_result()
         self.assertIsNotNone(result)

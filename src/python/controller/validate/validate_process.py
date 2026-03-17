@@ -1,26 +1,34 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import multiprocessing
 import datetime
-import time
 import hashlib
 import hmac
+import multiprocessing
 import os
 import queue
 import shlex
+import time
 from enum import Enum
-from typing import Optional, List
-import logging
 
-from common import overrides, AppProcess
+from common import AppProcess, overrides
 
 
 class ValidateRequest:
     """Request to validate a file by comparing local and remote checksums."""
-    def __init__(self, name: str, is_dir: bool, pair_id: str,
-                 local_path: str, remote_path: str, algorithm: str,
-                 remote_address: str, remote_username: str,
-                 remote_password: Optional[str], remote_port: int):
+
+    def __init__(
+        self,
+        name: str,
+        is_dir: bool,
+        pair_id: str,
+        local_path: str,
+        remote_path: str,
+        algorithm: str,
+        remote_address: str,
+        remote_username: str,
+        remote_password: str | None,
+        remote_port: int,
+    ):
         self.name = name
         self.is_dir = is_dir
         self.pair_id = pair_id
@@ -35,6 +43,7 @@ class ValidateRequest:
 
 class ValidateStatus:
     """Status of an in-progress validation."""
+
     class State(Enum):
         VALIDATING = 0
 
@@ -49,7 +58,7 @@ class ValidateStatus:
 
 
 class ValidateStatusResult:
-    def __init__(self, timestamp: datetime.datetime, statuses: List[ValidateStatus]):
+    def __init__(self, timestamp: datetime.datetime, statuses: list[ValidateStatus]):
         self.timestamp = timestamp
         self.statuses = statuses
 
@@ -63,9 +72,15 @@ class ValidateCompletedResult:
 
 
 class ValidateFailedResult:
-    def __init__(self, timestamp: datetime.datetime, name: str, is_dir: bool,
-                 pair_id: str = None, error_message: str = None,
-                 is_checksum_mismatch: bool = False):
+    def __init__(
+        self,
+        timestamp: datetime.datetime,
+        name: str,
+        is_dir: bool,
+        pair_id: str = None,
+        error_message: str = None,
+        is_checksum_mismatch: bool = False,
+    ):
         self.timestamp = timestamp
         self.name = name
         self.is_dir = is_dir
@@ -76,6 +91,7 @@ class ValidateFailedResult:
 
 class ChecksumMismatchError(ValueError):
     """Raised when local and remote checksums don't match."""
+
     pass
 
 
@@ -84,6 +100,7 @@ _ALLOWED_ALGORITHMS = frozenset({"md5", "sha1", "sha256"})
 
 class ValidateProcess(AppProcess):
     """Process to validate file integrity by comparing local and remote checksums."""
+
     __DEFAULT_SLEEP_INTERVAL_IN_SECS = 0.5
 
     def __init__(self):
@@ -120,14 +137,17 @@ class ValidateProcess(AppProcess):
         # appears as VALIDATING to the UI.
         if self.__active_validations:
             statuses = [
-                ValidateStatus(name=req.name, is_dir=req.is_dir,
-                               state=ValidateStatus.State.VALIDATING, pair_id=req.pair_id)
+                ValidateStatus(
+                    name=req.name, is_dir=req.is_dir, state=ValidateStatus.State.VALIDATING, pair_id=req.pair_id
+                )
                 for req in self.__active_validations.values()
             ]
-            self.__status_result_queue.put(ValidateStatusResult(
-                timestamp=datetime.datetime.now(),
-                statuses=statuses,
-            ))
+            self.__status_result_queue.put(
+                ValidateStatusResult(
+                    timestamp=datetime.datetime.now(),
+                    statuses=statuses,
+                )
+            )
 
         # Process one validation at a time (blocking but in child process)
         if self.__active_validations:
@@ -168,14 +188,15 @@ class ValidateProcess(AppProcess):
 
             # Publish post-completion status (the completed item is now removed)
             statuses = [
-                ValidateStatus(name=r.name, is_dir=r.is_dir,
-                               state=ValidateStatus.State.VALIDATING, pair_id=r.pair_id)
+                ValidateStatus(name=r.name, is_dir=r.is_dir, state=ValidateStatus.State.VALIDATING, pair_id=r.pair_id)
                 for r in self.__active_validations.values()
             ]
-            self.__status_result_queue.put(ValidateStatusResult(
-                timestamp=datetime.datetime.now(),
-                statuses=statuses,
-            ))
+            self.__status_result_queue.put(
+                ValidateStatusResult(
+                    timestamp=datetime.datetime.now(),
+                    statuses=statuses,
+                )
+            )
         else:
             time.sleep(ValidateProcess.__DEFAULT_SLEEP_INTERVAL_IN_SECS)
 
@@ -200,9 +221,7 @@ class ValidateProcess(AppProcess):
             remote_hash = self._hash_remote_file(req, req.name, req.algorithm, sshcp)
             if not hmac.compare_digest(local_hash, remote_hash):
                 raise ChecksumMismatchError(
-                    "Checksum mismatch for {}: local={} remote={}".format(
-                        req.name, local_hash, remote_hash
-                    )
+                    "Checksum mismatch for {}: local={} remote={}".format(req.name, local_hash, remote_hash)
                 )
             self.logger.info("Validated {}: {}".format(req.name, local_hash))
 
@@ -224,10 +243,10 @@ class ValidateProcess(AppProcess):
         # Build remote file set via SSH find
         remote_dir = os.path.join(req.remote_path, req.name)
         quoted_dir = shlex.quote(remote_dir)
-        find_cmd = 'find {} -type f'.format(quoted_dir)
+        find_cmd = "find {} -type f".format(quoted_dir)
         try:
             find_output = sshcp.shell(find_cmd)
-            remote_abs_paths = find_output.decode().strip().split('\n')
+            remote_abs_paths = find_output.decode().strip().split("\n")
             remote_rel_paths = set()
             for abs_path in remote_abs_paths:
                 abs_path = abs_path.strip()
@@ -258,18 +277,14 @@ class ValidateProcess(AppProcess):
             remote_hash = self._hash_remote_file(req, rel_path, req.algorithm, sshcp)
             if not hmac.compare_digest(local_hash, remote_hash):
                 mismatches.append(
-                    "Checksum mismatch for {}: local={} remote={}".format(
-                        rel_path, local_hash, remote_hash
-                    )
+                    "Checksum mismatch for {}: local={} remote={}".format(rel_path, local_hash, remote_hash)
                 )
             else:
                 self.logger.debug("Validated file {}: {}".format(rel_path, local_hash))
 
         if mismatches:
             raise ChecksumMismatchError(
-                "Directory validation failed for {}: {}".format(
-                    req.name, "; ".join(mismatches)
-                )
+                "Directory validation failed for {}: {}".format(req.name, "; ".join(mismatches))
             )
         self.logger.info("Validated directory {}".format(req.name))
 
@@ -290,6 +305,7 @@ class ValidateProcess(AppProcess):
     def _create_ssh(self, req: ValidateRequest):
         """Create an SSH connection for use across multiple remote hash operations."""
         from ssh import Sshcp
+
         sshcp = Sshcp(
             host=req.remote_address,
             port=req.remote_port,
@@ -303,16 +319,15 @@ class ValidateProcess(AppProcess):
     def _build_hash_cmd(algorithm: str, quoted_file: str) -> str:
         """Build the remote hash command for the given algorithm."""
         if algorithm == "md5":
-            return 'md5sum {}'.format(quoted_file)
+            return "md5sum {}".format(quoted_file)
         elif algorithm == "sha256":
-            return 'sha256sum {}'.format(quoted_file)
+            return "sha256sum {}".format(quoted_file)
         elif algorithm == "sha1":
-            return 'sha1sum {}'.format(quoted_file)
+            return "sha1sum {}".format(quoted_file)
         else:
             raise ValueError("Unsupported algorithm: {}".format(algorithm))
 
-    def _hash_remote_file(self, req: ValidateRequest, rel_path: str,
-                          algorithm: str, sshcp) -> str:
+    def _hash_remote_file(self, req: ValidateRequest, rel_path: str, algorithm: str, sshcp) -> str:
         """Compute hash of a remote file via SSH."""
         remote_file = os.path.join(req.remote_path, rel_path)
         quoted_file = shlex.quote(remote_file)
@@ -324,9 +339,7 @@ class ValidateProcess(AppProcess):
         parts = decoded.split()
         if not parts:
             raise ValueError(
-                "Empty or unexpected output from remote hash command for {}: {!r}".format(
-                    rel_path, decoded
-                )
+                "Empty or unexpected output from remote hash command for {}: {!r}".format(rel_path, decoded)
             )
         return parts[0]
 
@@ -346,7 +359,7 @@ class ValidateProcess(AppProcess):
         """Process-safe method to queue a validation request."""
         self.__command_queue.put(req)
 
-    def pop_latest_statuses(self) -> Optional[ValidateStatusResult]:
+    def pop_latest_statuses(self) -> ValidateStatusResult | None:
         """Process-safe method to retrieve latest validation status."""
         latest_result = None
         try:
@@ -356,7 +369,7 @@ class ValidateProcess(AppProcess):
             pass
         return latest_result
 
-    def pop_completed(self) -> List[ValidateCompletedResult]:
+    def pop_completed(self) -> list[ValidateCompletedResult]:
         """Process-safe method to retrieve newly completed validations."""
         completed = []
         try:
@@ -367,7 +380,7 @@ class ValidateProcess(AppProcess):
             pass
         return completed
 
-    def pop_failed(self) -> List[ValidateFailedResult]:
+    def pop_failed(self) -> list[ValidateFailedResult]:
         """Process-safe method to retrieve newly failed validations."""
         failed = []
         try:

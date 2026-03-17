@@ -1,13 +1,13 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
-from unittest.mock import MagicMock
 import logging
 import sys
+import unittest
+from unittest.mock import MagicMock
 
 from webtest import TestApp
 
-from common import overrides, Status, Config
+from common import Config, Status, overrides
 from controller import AutoQueuePersist
 from web import WebAppBuilder
 
@@ -17,6 +17,7 @@ class BaseTestWebApp(unittest.TestCase):
     Base class for testing web app
     Sets up the web app with mocks
     """
+
     @overrides(unittest.TestCase)
     def setUp(self):
         self.context = MagicMock()
@@ -47,15 +48,14 @@ class BaseTestWebApp(unittest.TestCase):
         def capture_listener(listener):
             self.model_listener = listener
             return self.model_files
+
         self.model_listener = None
         self.controller.get_model_files_and_add_listener = MagicMock()
         self.controller.get_model_files_and_add_listener.side_effect = capture_listener
         self.controller.remove_model_listener = MagicMock()
 
         # noinspection PyTypeChecker
-        self.web_app_builder = WebAppBuilder(self.context,
-                                             self.controller,
-                                             self.auto_queue_persist)
+        self.web_app_builder = WebAppBuilder(self.context, self.controller, self.auto_queue_persist)
         self.web_app = self.web_app_builder.build()
         self.test_app = TestApp(self.web_app)
 

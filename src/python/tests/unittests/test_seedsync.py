@@ -1,10 +1,8 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import unittest
-import sys
-import copy
 
-from common import overrides, Config
+from common import Config
 from seedsync import Seedsync
 
 
@@ -127,8 +125,7 @@ class TestSeedsync(unittest.TestCase):
         config_dict = config.as_dict()
         for section, inner_config in config_dict.items():
             for key in inner_config:
-                self.assertIsNotNone(inner_config[key],
-                                     msg="{}.{} is uninitialized".format(section, key))
+                self.assertIsNotNone(inner_config[key], msg="{}.{} is uninitialized".format(section, key))
 
         # Test that default config is a valid config
         config_dict = config.as_dict()

@@ -1,18 +1,24 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
-import os
-from unittest.mock import patch, MagicMock, call
-import time
 import logging
+import os
 import sys
+import time
+import unittest
+from unittest.mock import MagicMock, call, patch
 
 import timeout_decorator
 
 from common import overrides
+from controller.extract import (
+    ExtractDispatch,
+    ExtractDispatchError,
+    ExtractError,
+    ExtractListener,
+    ExtractRequest,
+    ExtractStatus,
+)
 from model import ModelFile
-from controller.extract import ExtractDispatch, ExtractDispatchError, ExtractListener, \
-                                ExtractError, ExtractStatus, ExtractRequest
 
 
 class DummyExtractListener(ExtractListener):
@@ -27,7 +33,7 @@ class DummyExtractListener(ExtractListener):
 
 class TestExtractDispatch(unittest.TestCase):
     def setUp(self):
-        extract_patcher = patch('controller.extract.dispatch.Extract')
+        extract_patcher = patch("controller.extract.dispatch.Extract")
         self.addCleanup(extract_patcher.stop)
         mock_extract_module = extract_patcher.start()
         self.mock_is_archive = mock_extract_module.is_archive
@@ -51,11 +57,7 @@ class TestExtractDispatch(unittest.TestCase):
         self.dispatch.start()
 
     def _make_req(self, model_file):
-        return ExtractRequest(
-            model_file=model_file,
-            local_path=self.local_path,
-            out_dir_path=self.out_dir_path
-        )
+        return ExtractRequest(model_file=model_file, local_path=self.local_path, out_dir_path=self.out_dir_path)
 
     @timeout_decorator.timeout(2)
     def tearDown(self):
@@ -98,8 +100,7 @@ class TestExtractDispatch(unittest.TestCase):
         while self.mock_extract_archive.call_count < 1:
             pass
         self.mock_extract_archive.assert_called_once_with(
-            archive_path=os.path.join(self.local_path, "aaa"),
-            out_dir_path=self.out_dir_path
+            archive_path=os.path.join(self.local_path, "aaa"), out_dir_path=self.out_dir_path
         )
 
     @timeout_decorator.timeout(2)
@@ -121,20 +122,14 @@ class TestExtractDispatch(unittest.TestCase):
             pass
         self.assertEqual(3, self.mock_extract_archive.call_count)
         args_list = self.mock_extract_archive.call_args_list
-        self.assertEqual(args_list, [
-            call(
-                archive_path=os.path.join(self.local_path, "aaa"),
-                out_dir_path=self.out_dir_path
-            ),
-            call(
-                archive_path=os.path.join(self.local_path, "bbb"),
-                out_dir_path=self.out_dir_path
-            ),
-            call(
-                archive_path=os.path.join(self.local_path, "ccc"),
-                out_dir_path=self.out_dir_path
-            )
-        ])
+        self.assertEqual(
+            args_list,
+            [
+                call(archive_path=os.path.join(self.local_path, "aaa"), out_dir_path=self.out_dir_path),
+                call(archive_path=os.path.join(self.local_path, "bbb"), out_dir_path=self.out_dir_path),
+                call(archive_path=os.path.join(self.local_path, "ccc"), out_dir_path=self.out_dir_path),
+            ],
+        )
 
     @timeout_decorator.timeout(2)
     def test_extract_calls_listener_on_completed(self):
@@ -146,8 +141,7 @@ class TestExtractDispatch(unittest.TestCase):
         self.dispatch.add_listener(self.listener)
         self.dispatch.extract(self._make_req(mf1))
 
-        while self.mock_extract_archive.call_count < 1 \
-                or self.listener.extract_completed.call_count < 1:
+        while self.mock_extract_archive.call_count < 1 or self.listener.extract_completed.call_count < 1:
             pass
         self.assertEqual(1, self.mock_extract_archive.call_count)
         self.listener.extract_completed.assert_called_once_with("aaa", False, None)
@@ -160,6 +154,7 @@ class TestExtractDispatch(unittest.TestCase):
         # noinspection PyUnusedLocal
         def _extract_archive(**kwargs):
             raise ExtractError()
+
         self.mock_extract_archive.side_effect = _extract_archive
 
         mf1 = ModelFile("aaa", False)
@@ -168,8 +163,7 @@ class TestExtractDispatch(unittest.TestCase):
         self.dispatch.add_listener(self.listener)
         self.dispatch.extract(self._make_req(mf1))
 
-        while self.mock_extract_archive.call_count < 1 \
-                or self.listener.extract_failed.call_count < 1:
+        while self.mock_extract_archive.call_count < 1 or self.listener.extract_failed.call_count < 1:
             pass
         self.assertEqual(1, self.mock_extract_archive.call_count)
         self.listener.extract_completed.assert_not_called()
@@ -186,6 +180,7 @@ class TestExtractDispatch(unittest.TestCase):
             self.count += 1
             if self.count in (1, 3):
                 raise ExtractError()
+
         self.mock_extract_archive.side_effect = _extract_archive
 
         mf1 = ModelFile("aaa", False)
@@ -211,15 +206,14 @@ class TestExtractDispatch(unittest.TestCase):
         self.dispatch.extract(self._make_req(mf2))
         self.dispatch.extract(self._make_req(mf3))
 
-        while self.mock_extract_archive.call_count < 3 \
-                or self.listener.extract_failed.call_count < 2 \
-                or self.listener.extract_completed.call_count < 1:
+        while (
+            self.mock_extract_archive.call_count < 3
+            or self.listener.extract_failed.call_count < 2
+            or self.listener.extract_completed.call_count < 1
+        ):
             pass
         self.assertEqual(3, self.mock_extract_archive.call_count)
-        self.assertEqual(
-            [(False, "aaa", False), (True, "bbb", False), (False, "ccc", False)],
-            listener_calls
-        )
+        self.assertEqual([(False, "aaa", False), (True, "bbb", False), (False, "ccc", False)], listener_calls)
 
     @timeout_decorator.timeout(2)
     def test_extract_skips_remaining_on_shutdown(self):
@@ -250,8 +244,7 @@ class TestExtractDispatch(unittest.TestCase):
             pass
         self.dispatch.stop()
 
-        while self.mock_extract_archive.call_count < 1 \
-                or self.listener.extract_completed.call_count < 1:
+        while self.mock_extract_archive.call_count < 1 or self.listener.extract_completed.call_count < 1:
             pass
         self.assertEqual(1, self.mock_extract_archive.call_count)
         self.listener.extract_completed.assert_called_once_with("aaa", False, None)
@@ -304,6 +297,7 @@ class TestExtractDispatch(unittest.TestCase):
 
         def _extract(archive_path: str, out_dir_path: str):
             self.actual_calls.add((archive_path, out_dir_path))
+
         self.mock_extract_archive.side_effect = _extract
 
         a = ModelFile("a", True)
@@ -340,26 +334,14 @@ class TestExtractDispatch(unittest.TestCase):
         self.listener.extract_completed.assert_called_once_with("a", True, None)
 
         golden_calls = {
-            (
-                os.path.join(self.local_path, "a", "aa", "aaa"),
-                os.path.join(self.out_dir_path, "a", "aa")
-            ),
-            (
-                os.path.join(self.local_path, "a", "aa", "aab"),
-                os.path.join(self.out_dir_path, "a", "aa")
-            ),
+            (os.path.join(self.local_path, "a", "aa", "aaa"), os.path.join(self.out_dir_path, "a", "aa")),
+            (os.path.join(self.local_path, "a", "aa", "aab"), os.path.join(self.out_dir_path, "a", "aa")),
             (
                 os.path.join(self.local_path, "a", "aa", "aac", "aaca"),
-                os.path.join(self.out_dir_path, "a", "aa", "aac")
+                os.path.join(self.out_dir_path, "a", "aa", "aac"),
             ),
-            (
-                os.path.join(self.local_path, "a", "ab", "aba"),
-                os.path.join(self.out_dir_path, "a", "ab")
-            ),
-            (
-                os.path.join(self.local_path, "a", "ac"),
-                os.path.join(self.out_dir_path, "a")
-            ),
+            (os.path.join(self.local_path, "a", "ab", "aba"), os.path.join(self.out_dir_path, "a", "ab")),
+            (os.path.join(self.local_path, "a", "ac"), os.path.join(self.out_dir_path, "a")),
         }
         self.assertEqual(5, self.mock_extract_archive.call_count)
         self.assertEqual(golden_calls, self.actual_calls)
@@ -372,6 +354,7 @@ class TestExtractDispatch(unittest.TestCase):
 
         def _extract(archive_path: str, out_dir_path: str):
             self.actual_calls.add((archive_path, out_dir_path))
+
         self.mock_extract_archive.side_effect = _extract
 
         a = ModelFile("a", True)
@@ -408,18 +391,12 @@ class TestExtractDispatch(unittest.TestCase):
         self.listener.extract_completed.assert_called_once_with("a", True, None)
 
         golden_calls = {
-            (
-                os.path.join(self.local_path, "a", "aa", "aaa"),
-                os.path.join(self.out_dir_path, "a", "aa")
-            ),
+            (os.path.join(self.local_path, "a", "aa", "aaa"), os.path.join(self.out_dir_path, "a", "aa")),
             (
                 os.path.join(self.local_path, "a", "aa", "aac", "aaca"),
-                os.path.join(self.out_dir_path, "a", "aa", "aac")
+                os.path.join(self.out_dir_path, "a", "aa", "aac"),
             ),
-            (
-                os.path.join(self.local_path, "a", "ab", "aba"),
-                os.path.join(self.out_dir_path, "a", "ab")
-            ),
+            (os.path.join(self.local_path, "a", "ab", "aba"), os.path.join(self.out_dir_path, "a", "ab")),
         }
         self.assertEqual(3, self.mock_extract_archive.call_count)
         self.assertEqual(golden_calls, self.actual_calls)
@@ -432,13 +409,15 @@ class TestExtractDispatch(unittest.TestCase):
             return archive_path in (
                 os.path.join(self.local_path, "a", "aa", "aaa"),
                 os.path.join(self.local_path, "a", "aa", "aac", "aaca"),
-                os.path.join(self.local_path, "a", "ab", "aba")
+                os.path.join(self.local_path, "a", "ab", "aba"),
             )
+
         self.mock_is_archive.side_effect = _is_archive
         self.actual_calls = set()
 
         def _extract(archive_path: str, out_dir_path: str):
             self.actual_calls.add((archive_path, out_dir_path))
+
         self.mock_extract_archive.side_effect = _extract
 
         a = ModelFile("a", True)
@@ -475,18 +454,12 @@ class TestExtractDispatch(unittest.TestCase):
         self.listener.extract_completed.assert_called_once_with("a", True, None)
 
         golden_calls = {
-            (
-                os.path.join(self.local_path, "a", "aa", "aaa"),
-                os.path.join(self.out_dir_path, "a", "aa")
-            ),
+            (os.path.join(self.local_path, "a", "aa", "aaa"), os.path.join(self.out_dir_path, "a", "aa")),
             (
                 os.path.join(self.local_path, "a", "aa", "aac", "aaca"),
-                os.path.join(self.out_dir_path, "a", "aa", "aac")
+                os.path.join(self.out_dir_path, "a", "aa", "aac"),
             ),
-            (
-                os.path.join(self.local_path, "a", "ab", "aba"),
-                os.path.join(self.out_dir_path, "a", "ab")
-            ),
+            (os.path.join(self.local_path, "a", "ab", "aba"), os.path.join(self.out_dir_path, "a", "ab")),
         }
         self.assertEqual(3, self.mock_extract_archive.call_count)
         self.assertEqual(golden_calls, self.actual_calls)
@@ -499,6 +472,7 @@ class TestExtractDispatch(unittest.TestCase):
 
         def _extract(archive_path: str, out_dir_path: str):
             self.actual_calls.add((archive_path, out_dir_path))
+
         self.mock_extract_archive.side_effect = _extract
 
         a = ModelFile("a", True)
@@ -547,17 +521,11 @@ class TestExtractDispatch(unittest.TestCase):
         self.listener.extract_completed.assert_called_once_with("a", True, None)
 
         golden_calls = {
-            (
-                os.path.join(self.local_path, "a", "aa.rar"),
-                os.path.join(self.out_dir_path, "a")
-            ),
-            (
-                os.path.join(self.local_path, "a", "ab.rar"),
-                os.path.join(self.out_dir_path, "a")
-            ),
+            (os.path.join(self.local_path, "a", "aa.rar"), os.path.join(self.out_dir_path, "a")),
+            (os.path.join(self.local_path, "a", "ab.rar"), os.path.join(self.out_dir_path, "a")),
             (
                 os.path.join(self.local_path, "a", "ac", "aca", "acaa.rar"),
-                os.path.join(self.out_dir_path, "a", "ac", "aca")
+                os.path.join(self.out_dir_path, "a", "ac", "aca"),
             ),
         }
         self.assertEqual(3, self.mock_extract_archive.call_count)
@@ -595,8 +563,7 @@ class TestExtractDispatch(unittest.TestCase):
             pass
         self.dispatch.stop()
 
-        while self.mock_extract_archive.call_count < 1 \
-                or self.listener.extract_failed.call_count < 1:
+        while self.mock_extract_archive.call_count < 1 or self.listener.extract_failed.call_count < 1:
             pass
         self.listener.extract_completed.assert_not_called()
         self.listener.extract_failed.assert_called_once_with("a", True, None)
@@ -614,6 +581,7 @@ class TestExtractDispatch(unittest.TestCase):
             while self.send_count <= self.rx_count:
                 pass
             self.rx_count += 1
+
         self.mock_extract_archive.side_effect = _extract
 
         a = ModelFile("a", True)
@@ -733,8 +701,7 @@ class TestExtractDispatch(unittest.TestCase):
 
         time.sleep(0.1)
 
-        while self.mock_extract_archive.call_count < 1 and \
-                self.listener.extract_completed.call_count < 1:
+        while self.mock_extract_archive.call_count < 1 and self.listener.extract_completed.call_count < 1:
             pass
         time.sleep(0.1)
         self.listener.extract_completed.assert_called_once_with("a", False, None)

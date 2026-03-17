@@ -1,8 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 from enum import Enum
-from typing import List, Optional
-import copy
 
 # my libs
 from .file import ModelFile
@@ -13,12 +11,13 @@ class ModelDiff:
     """
     Represents a single change in the model
     """
+
     class Change(Enum):
         ADDED = 0
         REMOVED = 1
         UPDATED = 2
 
-    def __init__(self, change: Change, old_file: Optional[ModelFile], new_file: Optional[ModelFile]):
+    def __init__(self, change: Change, old_file: ModelFile | None, new_file: ModelFile | None):
         self.__change = change
         self.__old_file = old_file
         self.__new_file = new_file
@@ -34,17 +33,17 @@ class ModelDiff:
         return self.__change
 
     @property
-    def old_file(self) -> Optional[ModelFile]:
+    def old_file(self) -> ModelFile | None:
         return self.__old_file
 
     @property
-    def new_file(self) -> Optional[ModelFile]:
+    def new_file(self) -> ModelFile | None:
         return self.__new_file
 
 
 class ModelDiffUtil:
     @staticmethod
-    def diff_models(model_before: Model, model_after: Model) -> List[ModelDiff]:
+    def diff_models(model_before: Model, model_after: Model) -> list[ModelDiff]:
         """
         Compare two models and generate their diff.
         Uses composite keys (pair_id:name) for correct multi-pair comparison.

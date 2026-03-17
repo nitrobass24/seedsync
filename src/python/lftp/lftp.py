@@ -4,17 +4,16 @@ import logging
 import os
 import re
 import warnings
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Union, List, Optional
 
 # 3rd party libs
 import pexpect
 
-
 # my libs
 from common import AppError
-from .job_status_parser import LftpJobStatus, LftpJobStatusParser, LftpJobStatusParserError
 
+from .job_status_parser import LftpJobStatus, LftpJobStatusParser, LftpJobStatusParserError
 
 # How many consecutive status parse errors before error propagates out.
 # Set high enough to ride out persistent lftp output quirks (e.g. Unraid
@@ -30,6 +29,7 @@ class LftpError(AppError):
     """
     Custom exception that describes the failure of the lftp command
     """
+
     pass
 
 
@@ -37,6 +37,7 @@ class Lftp:
     """
     Lftp command utility
     """
+
     __SET_NUM_PARALLEL_FILES = "mirror:parallel-transfer-count"
     __SET_NUM_CONNECTIONS_PGET = "pget:default-n"
     __SET_NUM_CONNECTIONS_MIRROR = "mirror:use-pget-n"
@@ -60,11 +61,7 @@ class Lftp:
     __SET_XFER_VERIFY = "xfer:verify"
     __SET_XFER_VERIFY_COMMAND = "xfer:verify-command"
 
-    def __init__(self,
-                 address: str,
-                 port: int,
-                 user: str,
-                 password: Optional[str]):
+    def __init__(self, address: str, port: int, user: str, password: str | None):
         self.__user = user
         self.__password = password
         self.__address = address
@@ -93,9 +90,11 @@ class Lftp:
         Spawn a new lftp pexpect process and run initial setup
         """
         args = [
-            "-p", str(self.__port),
-            "-u", "{},{}".format(self.__user, self.__password if self.__password else ""),
-            "sftp://{}".format(self.__address)
+            "-p",
+            str(self.__port),
+            "-u",
+            "{},{}".format(self.__user, self.__password if self.__password else ""),
+            "sftp://{}".format(self.__address),
         ]
         # Force a wide terminal so LFTP never wraps 'jobs -v' output.
         # Belt-and-suspenders: set COLUMNS in the environment (which LFTP
@@ -132,7 +131,7 @@ class Lftp:
         :return:
         """
         # Set to kill on exit to prevent a zombie process
-        self.__set(Lftp.__SET_COMMAND_AT_EXIT, "\"kill all\"")
+        self.__set(Lftp.__SET_COMMAND_AT_EXIT, '"kill all"')
         # Auto-add server to known host file
         self.sftp_auto_confirm = True
         # Do not copy remote file permissions — let the local umask determine
@@ -147,6 +146,7 @@ class Lftp:
         :param method:
         :return:
         """
+
         @wraps(method)
         def wrapper(inst: "Lftp", *args, **kwargs):
             if inst.__process is None or not inst.__process.isalive():
@@ -155,6 +155,7 @@ class Lftp:
                 except Exception:
                     raise LftpError("lftp process is not running and restart failed")
             return method(inst, *args, **kwargs)
+
         return wrapper
 
     def set_base_logger(self, base_logger: logging.Logger):
@@ -182,7 +183,7 @@ class Lftp:
     @with_check_process
     def __run_command(self, command: str):
         if self.__log_command_output:
-            self.logger.debug("command: {}".format(command.encode('utf8', 'surrogateescape')))
+            self.logger.debug("command: {}".format(command.encode("utf8", "surrogateescape")))
         self.__process.sendline(command)
         timed_out = False
         try:
@@ -192,24 +193,27 @@ class Lftp:
 
         if timed_out:
             self.__consecutive_timeouts += 1
-            self.logger.warning("Lftp timeout on command (consecutive timeouts: {})".format(
-                self.__consecutive_timeouts))
+            self.logger.warning(
+                "Lftp timeout on command (consecutive timeouts: {})".format(self.__consecutive_timeouts)
+            )
             if self.__consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS:
                 self.__restart_process()
-                raise LftpError("lftp process restarted after {} consecutive timeouts".format(
-                    MAX_CONSECUTIVE_TIMEOUTS))
+                raise LftpError("lftp process restarted after {} consecutive timeouts".format(MAX_CONSECUTIVE_TIMEOUTS))
             # Return empty string to prevent parsing corrupted buffer output
             return ""
 
         # Success — reset consecutive timeout counter
         self.__consecutive_timeouts = 0
-        out = self.__process.before.decode('utf8', 'replace')
+        out = self.__process.before.decode("utf8", "replace")
         out = out.strip()  # remove any CRs
 
         if self.__log_command_output:
             self.logger.debug("out ({} bytes):\n {}".format(len(out), out))
-            after = self.__process.after.decode('utf8', 'replace').strip() \
-                if self.__process.after != pexpect.TIMEOUT else ""
+            after = (
+                self.__process.after.decode("utf8", "replace").strip()
+                if self.__process.after != pexpect.TIMEOUT
+                else ""
+            )
             self.logger.debug("after: {}".format(after))
 
         # let's try and detect some errors
@@ -223,12 +227,15 @@ class Lftp:
                 self.logger.warning("Lftp timeout while consuming error output")
                 self.__pending_error = error_out
                 return ""
-            out = self.__process.before.decode('utf8', 'replace')
+            out = self.__process.before.decode("utf8", "replace")
             out = out.strip()  # remove any CRs
             if self.__log_command_output:
                 self.logger.debug("retry out ({} bytes):\n {}".format(len(out), out))
-                after = self.__process.after.decode('utf8', 'replace').strip() \
-                    if self.__process.after != pexpect.TIMEOUT else ""
+                after = (
+                    self.__process.after.decode("utf8", "replace").strip()
+                    if self.__process.after != pexpect.TIMEOUT
+                    else ""
+                )
                 self.logger.debug("retry after: {}".format(after))
             self.logger.error("Lftp detected error: {}".format(error_out))
             # save pending error
@@ -241,7 +248,7 @@ class Lftp:
             "pget: Access failed",
             "pget-chunk: Access failed",
             "mirror: Access failed",
-            "Login failed: Login incorrect"
+            "Login failed: Login incorrect",
         ]
         for error in errors:
             if error in out:
@@ -275,7 +282,7 @@ class Lftp:
         # sets are taken from LFTP manual
         if value.lower() in {"true", "on", "yes", "1", "+"}:
             return True
-        elif value.lower() in {"false",  "off", "no", "0", "-"}:
+        elif value.lower() in {"false", "off", "no", "0", "-"}:
             return False
         else:
             raise LftpError("Cannot convert value '{}' to boolean".format(value))
@@ -325,7 +332,7 @@ class Lftp:
         return self.__get(Lftp.__SET_RATE_LIMIT)
 
     @rate_limit.setter
-    def rate_limit(self, rate_limit: Union[int, str]):
+    def rate_limit(self, rate_limit: int | str):
         self.__set(Lftp.__SET_RATE_LIMIT, str(rate_limit))
 
     @property
@@ -333,7 +340,7 @@ class Lftp:
         return self.__get(Lftp.__SET_MIN_CHUNK_SIZE)
 
     @min_chunk_size.setter
-    def min_chunk_size(self, min_chunk_size: Union[int, str]):
+    def min_chunk_size(self, min_chunk_size: int | str):
         self.__set(Lftp.__SET_MIN_CHUNK_SIZE, str(min_chunk_size))
 
     @property
@@ -458,7 +465,7 @@ class Lftp:
     def xfer_verify_command(self, command: str):
         self.__set(Lftp.__SET_XFER_VERIFY_COMMAND, command)
 
-    def status(self) -> List[LftpJobStatus]:
+    def status(self) -> list[LftpJobStatus]:
         """
         Return a status list of queued and running jobs
         :return:
@@ -487,17 +494,16 @@ class Lftp:
         :param exclude_patterns: list of glob patterns to exclude (only applies to mirror/directory downloads)
         :return:
         """
+
         # Escape single and double quotes in any string used in queue command
         def escape(s: str) -> str:
-            return s.replace("'", "\\'").replace("\"", "\\\"")
+            return s.replace("'", "\\'").replace('"', '\\"')
 
         # Build --exclude-glob flags for mirror commands
         # Note: LFTP's --exclude uses regex; --exclude-glob uses glob patterns
         exclude_flags = ""
         if is_dir and exclude_patterns:
-            exclude_flags = " ".join(
-                "--exclude-glob \"{}\"".format(escape(p)) for p in exclude_patterns
-            )
+            exclude_flags = " ".join('--exclude-glob "{}"'.format(escape(p)) for p in exclude_patterns)
 
         parts = [
             "queue",
@@ -507,13 +513,16 @@ class Lftp:
         ]
         if exclude_flags:
             parts.append(exclude_flags)
-        parts.extend([
-            "\"{remote_dir}/{filename}\"".format(remote_dir=escape(self.__base_remote_dir_path),
-                                                 filename=escape(name)),
-            "-o" if not is_dir else "",
-            "\"{local_dir}/\"".format(local_dir=escape(self.__base_local_dir_path)),
-            "'",
-        ])
+        parts.extend(
+            [
+                '"{remote_dir}/{filename}"'.format(
+                    remote_dir=escape(self.__base_remote_dir_path), filename=escape(name)
+                ),
+                "-o" if not is_dir else "",
+                '"{local_dir}/"'.format(local_dir=escape(self.__base_local_dir_path)),
+                "'",
+            ]
+        )
         command = " ".join(parts)
         self.logger.info("queue command: %s", command)
         self.__run_command(command)

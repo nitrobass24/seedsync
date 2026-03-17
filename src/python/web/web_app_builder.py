@@ -1,29 +1,28 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from common import Context, Constants
-from controller import Controller, AutoQueuePersist
-from .web_app import WebApp
-from .handler.stream_model import ModelStreamHandler
-from .handler.stream_status import StatusStreamHandler
-from .handler.controller import ControllerHandler
-from .handler.server import ServerHandler
-from .handler.config import ConfigHandler
+from common import Constants, Context
+from controller import AutoQueuePersist, Controller
+
 from .handler.auto_queue import AutoQueueHandler
-from .handler.stream_log import LogStreamHandler
-from .handler.status import StatusHandler
+from .handler.config import ConfigHandler
+from .handler.controller import ControllerHandler
 from .handler.logs import LogsHandler
 from .handler.path_pairs import PathPairsHandler
+from .handler.server import ServerHandler
+from .handler.status import StatusHandler
+from .handler.stream_log import LogStreamHandler
+from .handler.stream_model import ModelStreamHandler
+from .handler.stream_status import StatusStreamHandler
 from .security import install_security_middleware
+from .web_app import WebApp
 
 
 class WebAppBuilder:
     """
     Helper class to build WebApp with all the extensions
     """
-    def __init__(self,
-                 context: Context,
-                 controller: Controller,
-                 auto_queue_persist: AutoQueuePersist):
+
+    def __init__(self, context: Context, controller: Controller, auto_queue_persist: AutoQueuePersist):
         self.__context = context
         self.__controller = controller
 
@@ -32,30 +31,20 @@ class WebAppBuilder:
         self.config_handler = ConfigHandler(context.config)
         self.auto_queue_handler = AutoQueueHandler(auto_queue_persist)
         self.status_handler = StatusHandler(context.status)
-        self.logs_handler = LogsHandler(
-            logdir=context.args.logdir,
-            service_name=Constants.SERVICE_NAME
-        )
+        self.logs_handler = LogsHandler(logdir=context.args.logdir, service_name=Constants.SERVICE_NAME)
         self.path_pairs_handler = PathPairsHandler(context.path_pairs_config)
 
     def build(self) -> WebApp:
-        web_app = WebApp(context=self.__context,
-                         controller=self.__controller)
+        web_app = WebApp(context=self.__context, controller=self.__controller)
 
         # Install security middleware (headers, CSRF, rate limiting, API key auth)
-        install_security_middleware(
-            web_app,
-            get_api_key=lambda: self.__context.config.web.api_key
-        )
+        install_security_middleware(web_app, get_api_key=lambda: self.__context.config.web.api_key)
 
-        StatusStreamHandler.register(web_app=web_app,
-                                     status=self.__context.status)
+        StatusStreamHandler.register(web_app=web_app, status=self.__context.status)
 
-        LogStreamHandler.register(web_app=web_app,
-                                  logger=self.__context.logger)
+        LogStreamHandler.register(web_app=web_app, logger=self.__context.logger)
 
-        ModelStreamHandler.register(web_app=web_app,
-                                    controller=self.__controller)
+        ModelStreamHandler.register(web_app=web_app, controller=self.__controller)
 
         self.controller_handler.add_routes(web_app)
         self.server_handler.add_routes(web_app)

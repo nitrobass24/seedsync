@@ -2,10 +2,10 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Set, Optional, List
 
 # my libs
 from common import AppError
+
 from .file import ModelFile
 
 
@@ -13,6 +13,7 @@ class ModelError(AppError):
     """
     Exception indicating a model error
     """
+
     pass
 
 
@@ -20,6 +21,7 @@ class IModelListener(ABC):
     """
     Interface to listen to model events
     """
+
     @abstractmethod
     def file_added(self, file: ModelFile):
         """
@@ -62,14 +64,14 @@ class Model:
         return file.name
 
     @staticmethod
-    def make_key(name: str, pair_id: Optional[str] = None) -> str:
+    def make_key(name: str, pair_id: str | None = None) -> str:
         """Build a key from name and optional pair_id."""
         if pair_id:
             return "{}:{}".format(pair_id, name)
         return name
 
     @staticmethod
-    def _log_name(name: str, pair_id: Optional[str] = None) -> str:
+    def _log_name(name: str, pair_id: str | None = None) -> str:
         """Human-readable name for log messages: 'name [ab12cd34]' or just 'name'."""
         if pair_id:
             return "{} [{}]".format(name, pair_id[:8])
@@ -119,7 +121,7 @@ class Model:
         for listener in self.__listeners:
             listener.file_added(self.__files[key])
 
-    def remove_file(self, filename: str, pair_id: Optional[str] = None):
+    def remove_file(self, filename: str, pair_id: str | None = None):
         """
         Remove the file from the model
         :param filename:
@@ -151,7 +153,7 @@ class Model:
         for listener in self.__listeners:
             listener.file_updated(old_file, new_file)
 
-    def get_file(self, name: str, pair_id: Optional[str] = None) -> ModelFile:
+    def get_file(self, name: str, pair_id: str | None = None) -> ModelFile:
         """
         Returns the file of the given name (and optional pair_id)
         :param name:
@@ -163,14 +165,14 @@ class Model:
             raise ModelError("File does not exist in the model")
         return self.__files[key]
 
-    def get_file_keys(self) -> Set[str]:
+    def get_file_keys(self) -> set[str]:
         """Return the set of composite keys (pair_id:name or name)."""
         return set(self.__files.keys())
 
-    def get_file_names(self) -> Set[str]:
+    def get_file_names(self) -> set[str]:
         """Return all file names (without pair_id prefix) for backward compat."""
         return {f.name for f in self.__files.values()}
 
-    def get_all_files(self) -> List[ModelFile]:
+    def get_all_files(self) -> list[ModelFile]:
         """Return all files in the model."""
         return list(self.__files.values())

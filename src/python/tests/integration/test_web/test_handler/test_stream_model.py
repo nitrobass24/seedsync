@@ -1,12 +1,12 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import unittest
-from unittest.mock import MagicMock, patch
 from threading import Timer
+from unittest.mock import patch
 
+from model import ModelFile
 from tests.integration.test_web.test_web_app import BaseTestWebApp
 from web.serialize import SerializeModel
-from model import ModelFile
 
 
 class TestModelStreamHandler(BaseTestWebApp):
@@ -64,6 +64,7 @@ class TestModelStreamHandler(BaseTestWebApp):
             self.model_listener.file_added(added_file)
             self.model_listener.file_removed(removed_file)
             self.model_listener.file_updated(old_file, new_file)
+
         Timer(0.5, send_updates).start()
 
         self.test_app.get("/server/stream")

@@ -1,11 +1,12 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
 import json
 import logging
+import unittest
+
+from web.serialize import SerializeLogRecord
 
 from .test_serialize import parse_stream
-from web.serialize import SerializeLogRecord
 
 
 class TestSerializeLogRecord(unittest.TestCase):
@@ -13,15 +14,7 @@ class TestSerializeLogRecord(unittest.TestCase):
         serialize = SerializeLogRecord()
         logger = logging.getLogger()
         record = logger.makeRecord(
-            name=None,
-            level=None,
-            fn=None,
-            lno=None,
-            msg=None,
-            args=None,
-            exc_info=None,
-            func=None,
-            sinfo=None
+            name=None, level=None, fn=None, lno=None, msg=None, args=None, exc_info=None, func=None, sinfo=None
         )
         out = parse_stream(serialize.record(record))
         self.assertEqual("log-record", out["event"])
@@ -30,15 +23,7 @@ class TestSerializeLogRecord(unittest.TestCase):
         serialize = SerializeLogRecord()
         logger = logging.getLogger()
         record = logger.makeRecord(
-            name=None,
-            level=None,
-            fn=None,
-            lno=None,
-            msg=None,
-            args=None,
-            exc_info=None,
-            func=None,
-            sinfo=None
+            name=None, level=None, fn=None, lno=None, msg=None, args=None, exc_info=None, func=None, sinfo=None
         )
         out = parse_stream(serialize.record(record))
         data = json.loads(out["data"])
@@ -49,30 +34,14 @@ class TestSerializeLogRecord(unittest.TestCase):
         logger = logging.getLogger()
 
         record = logger.makeRecord(
-            name=None,
-            level=logging.DEBUG,
-            fn=None,
-            lno=None,
-            msg=None,
-            args=None,
-            exc_info=None,
-            func=None,
-            sinfo=None
+            name=None, level=logging.DEBUG, fn=None, lno=None, msg=None, args=None, exc_info=None, func=None, sinfo=None
         )
         out = parse_stream(serialize.record(record))
         data = json.loads(out["data"])
         self.assertEqual("DEBUG", data["level_name"])
 
         record = logger.makeRecord(
-            name=None,
-            level=logging.INFO,
-            fn=None,
-            lno=None,
-            msg=None,
-            args=None,
-            exc_info=None,
-            func=None,
-            sinfo=None
+            name=None, level=logging.INFO, fn=None, lno=None, msg=None, args=None, exc_info=None, func=None, sinfo=None
         )
         out = parse_stream(serialize.record(record))
         data = json.loads(out["data"])
@@ -87,22 +56,14 @@ class TestSerializeLogRecord(unittest.TestCase):
             args=None,
             exc_info=None,
             func=None,
-            sinfo=None
+            sinfo=None,
         )
         out = parse_stream(serialize.record(record))
         data = json.loads(out["data"])
         self.assertEqual("WARNING", data["level_name"])
 
         record = logger.makeRecord(
-            name=None,
-            level=logging.ERROR,
-            fn=None,
-            lno=None,
-            msg=None,
-            args=None,
-            exc_info=None,
-            func=None,
-            sinfo=None
+            name=None, level=logging.ERROR, fn=None, lno=None, msg=None, args=None, exc_info=None, func=None, sinfo=None
         )
         out = parse_stream(serialize.record(record))
         data = json.loads(out["data"])
@@ -117,7 +78,7 @@ class TestSerializeLogRecord(unittest.TestCase):
             args=None,
             exc_info=None,
             func=None,
-            sinfo=None
+            sinfo=None,
         )
         out = parse_stream(serialize.record(record))
         data = json.loads(out["data"])
@@ -135,7 +96,7 @@ class TestSerializeLogRecord(unittest.TestCase):
             args=None,
             exc_info=None,
             func=None,
-            sinfo=None
+            sinfo=None,
         )
         out = parse_stream(serialize.record(record))
         data = json.loads(out["data"])
@@ -153,7 +114,7 @@ class TestSerializeLogRecord(unittest.TestCase):
             args=None,
             exc_info=None,
             func=None,
-            sinfo=None
+            sinfo=None,
         )
         out = parse_stream(serialize.record(record))
         data = json.loads(out["data"])
@@ -165,15 +126,7 @@ class TestSerializeLogRecord(unittest.TestCase):
 
         # When there's exc_text already there
         record = logger.makeRecord(
-            name=None,
-            level=None,
-            fn=None,
-            lno=None,
-            msg=None,
-            args=None,
-            exc_info=None,
-            func=None,
-            sinfo=None
+            name=None, level=None, fn=None, lno=None, msg=None, args=None, exc_info=None, func=None, sinfo=None
         )
         record.exc_text = "My traceback"
         out = parse_stream(serialize.record(record))
@@ -190,7 +143,7 @@ class TestSerializeLogRecord(unittest.TestCase):
             args=None,
             exc_info=(None, ValueError(), None),
             func=None,
-            sinfo=None
+            sinfo=None,
         )
         out = parse_stream(serialize.record(record))
         data = json.loads(out["data"])
@@ -198,15 +151,7 @@ class TestSerializeLogRecord(unittest.TestCase):
 
         # When there's neither
         record = logger.makeRecord(
-            name=None,
-            level=None,
-            fn=None,
-            lno=None,
-            msg=None,
-            args=None,
-            exc_info=None,
-            func=None,
-            sinfo=None
+            name=None, level=None, fn=None, lno=None, msg=None, args=None, exc_info=None, func=None, sinfo=None
         )
         out = parse_stream(serialize.record(record))
         data = json.loads(out["data"])

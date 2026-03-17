@@ -7,20 +7,20 @@ import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Type, TypeVar
-
-_logger = logging.getLogger(__name__)
+from typing import TypeVar
 
 from .error import AppError
 from .localization import Localization
+
+_logger = logging.getLogger(__name__)
 
 _BACKUP_DIR_NAME = "backups"
 _MAX_BACKUPS = 10
 
 
 # Source: https://stackoverflow.com/a/39205612/8571324
-T_Persist = TypeVar('T_Persist', bound='Persist')
-T_Serializable = TypeVar('T_Serializable', bound='Serializable')
+T_Persist = TypeVar("T_Persist", bound="Persist")
+T_Serializable = TypeVar("T_Serializable", bound="Serializable")
 
 
 class Serializable(ABC):
@@ -28,9 +28,10 @@ class Serializable(ABC):
     Defines a class that is serializable to string.
     The string representation must be human readable (i.e. not pickle)
     """
+
     @classmethod
     @abstractmethod
-    def from_str(cls: Type[T_Serializable], content: str) -> T_Serializable:
+    def from_str(cls: type[T_Serializable], content: str) -> T_Serializable:
         pass
 
     @abstractmethod
@@ -42,6 +43,7 @@ class PersistError(AppError):
     """
     Exception indicating persist loading/saving error
     """
+
     pass
 
 
@@ -52,15 +54,16 @@ class Persist(Serializable):
     Concrete implementations need to implement the from_str() and
     to_str() functionality
     """
+
     @classmethod
-    def from_file(cls: Type[T_Persist], file_path: str) -> T_Persist:
+    def from_file(cls: type[T_Persist], file_path: str) -> T_Persist:
         if not os.path.isfile(file_path):
             raise AppError(Localization.Error.MISSING_FILE.format(file_path))
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             return cls.from_str(f.read())
 
     def to_file(self, file_path: str):
-        dir_name = os.path.dirname(file_path) or '.'
+        dir_name = os.path.dirname(file_path) or "."
 
         # Backup existing file before overwriting (best-effort; never abort the save)
         if os.path.isfile(file_path):
@@ -69,9 +72,9 @@ class Persist(Serializable):
             except OSError as e:
                 _logger.error("Failed to back up %s in %s: %s", file_path, dir_name, e)
 
-        fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix='.tmp_persist_')
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".tmp_persist_")
         try:
-            with os.fdopen(fd, 'w') as f:
+            with os.fdopen(fd, "w") as f:
                 f.write(self.to_str())
                 f.flush()
                 os.fsync(f.fileno())
@@ -98,8 +101,9 @@ class Persist(Serializable):
         shutil.copy2(file_path, backup_path)
 
         # Prune old backups, keeping only the most recent _MAX_BACKUPS
-        pattern = os.path.join(backup_dir, "{}-????-??-??T??-??-??-??????{}".format(
-            glob.escape(name), glob.escape(ext)))
+        pattern = os.path.join(
+            backup_dir, "{}-????-??-??T??-??-??-??????{}".format(glob.escape(name), glob.escape(ext))
+        )
         backups = sorted(glob.glob(pattern))
         for old_backup in backups[:-_MAX_BACKUPS]:
             try:
@@ -109,7 +113,7 @@ class Persist(Serializable):
 
     @classmethod
     @abstractmethod
-    def from_str(cls: Type[T_Persist], content: str) -> T_Persist:
+    def from_str(cls: type[T_Persist], content: str) -> T_Persist:
         pass
 
     @abstractmethod

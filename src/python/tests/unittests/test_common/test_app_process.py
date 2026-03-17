@@ -1,15 +1,15 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
 import logging
 import sys
-import time
-from multiprocessing import Value
 import threading
+import time
+import unittest
+from multiprocessing import Value
 
 import timeout_decorator
 
-from common import AppProcess, AppOneShotProcess
+from common import AppOneShotProcess, AppProcess
 
 
 class DummyException(Exception):
@@ -20,10 +20,10 @@ class DummyProcess(AppProcess):
     def __init__(self, fail: bool):
         super().__init__(name=self.__class__.__name__)
         self.fail = fail
-        self.time = Value('i', 0)
-        self.last_loop_time = Value('i', -1)
-        self.last_init_time = Value('i', -1)
-        self.last_cleanup_time = Value('i', -1)
+        self.time = Value("i", 0)
+        self.last_loop_time = Value("i", -1)
+        self.last_init_time = Value("i", -1)
+        self.last_cleanup_time = Value("i", -1)
 
     def run_loop(self):
         self.last_loop_time.value = self.time.value
@@ -79,7 +79,7 @@ class LongRunningThreadProcess(AppProcess):
 class DummyOneShotProcess(AppOneShotProcess):
     def __init__(self):
         super().__init__(name=self.__class__.__name__)
-        self.time = Value('i', 0)
+        self.time = Value("i", 0)
 
     def run_once(self):
         self.time.value += 1

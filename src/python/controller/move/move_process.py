@@ -1,8 +1,8 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import errno
 import os
 import shutil
-import errno
 
 from common import AppOneShotProcess
 
@@ -14,6 +14,7 @@ class MoveProcess(AppOneShotProcess):
     shutil.copytree()/shutil.copy2() + size verification + source removal
     for cross-device moves.
     """
+
     def __init__(self, source_path: str, dest_path: str, file_name: str):
         super().__init__(name=self.__class__.__name__)
         self.__source_path = source_path
@@ -26,7 +27,7 @@ class MoveProcess(AppOneShotProcess):
         if os.path.isfile(path):
             return os.path.getsize(path)
         total = 0
-        for dirpath, dirnames, filenames in os.walk(path):
+        for dirpath, _dirnames, filenames in os.walk(path):
             for f in filenames:
                 fp = os.path.join(dirpath, f)
                 if os.path.exists(fp):
@@ -69,8 +70,9 @@ class MoveProcess(AppOneShotProcess):
 
         if source_size != dest_size:
             self.logger.error(
-                "Move size verification failed for {}: source={} dest={}. "
-                "Source NOT deleted.".format(self.__file_name, source_size, dest_size)
+                "Move size verification failed for {}: source={} dest={}. Source NOT deleted.".format(
+                    self.__file_name, source_size, dest_size
+                )
             )
             return
 

@@ -1,13 +1,13 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
 import logging
-from unittest.mock import patch
 import sys
 import time
+import unittest
+from unittest.mock import patch
 
+from controller.extract import ExtractProcess, ExtractRequest, ExtractStatus
 from model import ModelFile
-from controller.extract import ExtractProcess, ExtractStatus, ExtractRequest
 
 
 class TestExtractProcess(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestExtractProcess(unittest.TestCase):
     """
 
     def setUp(self):
-        self.dispatch_patcher = patch('controller.extract.extract_process.ExtractDispatch')
+        self.dispatch_patcher = patch("controller.extract.extract_process.ExtractDispatch")
         self.mock_dispatch_cls = self.dispatch_patcher.start()
         self.mock_dispatch = self.mock_dispatch_cls.return_value
 

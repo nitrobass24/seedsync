@@ -1,33 +1,43 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import argparse
+import logging
 import multiprocessing
+import os
+import platform
+import shutil
 import signal
 import sys
 import time
-import argparse
-import os
-import logging
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
-from typing import Optional, Type, TypeVar
-import shutil
-import platform
+from typing import TypeVar
 
 if sys.hexversion < 0x030C0000:
     sys.exit("Python 3.12 or newer is required to run this program.")
 
 # my libs
-from common import ServiceExit, Context, Constants, Config, Args, AppError
-from common import ServiceRestart
-from common import Localization, Status, ConfigError, Persist, PersistError
-from common import PathPairsConfig
+from common import (
+    AppError,
+    Args,
+    Config,
+    ConfigError,
+    Constants,
+    Context,
+    Localization,
+    PathPairsConfig,
+    Persist,
+    PersistError,
+    ServiceExit,
+    ServiceRestart,
+    Status,
+)
 from common.json_formatter import JsonFormatter
+from controller import AutoQueue, AutoQueuePersist, Controller, ControllerJob, ControllerPersist
 from controller.notifier import WebhookNotifier
-from controller import Controller, ControllerJob, ControllerPersist, AutoQueue, AutoQueuePersist
-from web import WebAppJob, WebAppBuilder
+from web import WebAppBuilder, WebAppJob
 
-
-T_Persist = TypeVar('T_Persist', bound=Persist)
+T_Persist = TypeVar("T_Persist", bound=Persist)
 
 
 class Seedsync:
@@ -35,6 +45,7 @@ class Seedsync:
     Implements the service for seedsync
     It is run in the main thread (no daemonization)
     """
+
     __FILE_CONFIG = "settings.cfg"
     __FILE_PATH_PAIRS = "path_pairs.json"
     __FILE_AUTO_QUEUE_PERSIST = "autoqueue.persist"
@@ -83,15 +94,13 @@ class Seedsync:
         # Logger setup
         # We separate the main log from the web-access log
         log_format = config.logging.log_format or "standard"
-        logger = self._create_logger(name=Constants.SERVICE_NAME,
-                                     debug=is_debug,
-                                     logdir=args.logdir,
-                                     log_format=log_format)
+        logger = self._create_logger(
+            name=Constants.SERVICE_NAME, debug=is_debug, logdir=args.logdir, log_format=log_format
+        )
         Seedsync.logger = logger
-        web_access_logger = self._create_logger(name=Constants.WEB_ACCESS_LOG_NAME,
-                                                debug=is_debug,
-                                                logdir=args.logdir,
-                                                log_format=log_format)
+        web_access_logger = self._create_logger(
+            name=Constants.WEB_ACCESS_LOG_NAME, debug=is_debug, logdir=args.logdir, log_format=log_format
+        )
         logger.info("Debug mode is {}.".format("enabled" if is_debug else "disabled"))
 
         # Create status
@@ -102,12 +111,14 @@ class Seedsync:
         path_pairs_config = self._load_path_pairs_config(self.path_pairs_path, config)
 
         # Create context
-        self.context = Context(logger=logger,
-                               web_access_logger=web_access_logger,
-                               config=config,
-                               args=ctx_args,
-                               status=status,
-                               path_pairs_config=path_pairs_config)
+        self.context = Context(
+            logger=logger,
+            web_access_logger=web_access_logger,
+            config=config,
+            args=ctx_args,
+            status=status,
+            path_pairs_config=path_pairs_config,
+        )
 
         # Register the signal handlers
         signal.signal(signal.SIGTERM, self.signal)
@@ -145,12 +156,9 @@ class Seedsync:
         controller_job = ControllerJob(
             context=self.context.create_child_context(ControllerJob.__name__),
             controller=controller,
-            auto_queue=auto_queue
+            auto_queue=auto_queue,
         )
-        webapp_job = WebAppJob(
-            context=self.context.create_child_context(WebAppJob.__name__),
-            web_app=web_app
-        )
+        webapp_job = WebAppJob(context=self.context.create_child_context(WebAppJob.__name__), web_app=web_app)
 
         do_start_controller = True
 
@@ -245,26 +253,26 @@ class Seedsync:
         parser.add_argument("--exit", action="store_true", help="Exit on error")
 
         # Whether package is frozen
-        is_frozen = getattr(sys, 'frozen', False)
+        is_frozen = getattr(sys, "frozen", False)
 
         # Html path is only required if not running a frozen package
         # For a frozen package, set default to root/html
         # noinspection PyUnresolvedReferences
         # noinspection PyProtectedMember
         default_html_path = os.path.join(sys._MEIPASS, "html") if is_frozen else None
-        parser.add_argument("--html",
-                            required=not is_frozen,
-                            default=default_html_path,
-                            help="Path to directory containing html resources")
+        parser.add_argument(
+            "--html",
+            required=not is_frozen,
+            default=default_html_path,
+            help="Path to directory containing html resources",
+        )
 
-        parser.add_argument("--scanfs",
-                            required=True,
-                            help="Path to scan_fs.py script")
+        parser.add_argument("--scanfs", required=True, help="Path to scan_fs.py script")
 
         return parser.parse_args(args)
 
     @staticmethod
-    def _create_logger(name: str, debug: bool, logdir: Optional[str], log_format: str = "standard") -> logging.Logger:
+    def _create_logger(name: str, debug: bool, logdir: str | None, log_format: str = "standard") -> logging.Logger:
         logger = logging.getLogger(name)
 
         # Remove any existing handlers (needed when restarting)
@@ -277,10 +285,10 @@ class Seedsync:
         if logdir is not None:
             # Output logs to a file in the given directory
             handler = RotatingFileHandler(
-                        "{}/{}.log".format(logdir, name),
-                        maxBytes=Constants.MAX_LOG_SIZE_IN_BYTES,
-                        backupCount=Constants.LOG_BACKUP_COUNT
-                      )
+                "{}/{}.log".format(logdir, name),
+                maxBytes=Constants.MAX_LOG_SIZE_IN_BYTES,
+                backupCount=Constants.LOG_BACKUP_COUNT,
+            )
         else:
             handler = logging.StreamHandler(sys.stdout)
         if log_format == "json":
@@ -362,7 +370,7 @@ class Seedsync:
         """
         defaults = Seedsync._create_default_config()
         changed = False
-        for section_attr in ['general', 'lftp', 'controller', 'web', 'autoqueue', 'logging', 'notifications']:
+        for section_attr in ["general", "lftp", "controller", "web", "autoqueue", "logging", "notifications"]:
             section = getattr(config, section_attr)
             default_section = getattr(defaults, section_attr)
             for key in section.as_dict():
@@ -402,7 +410,7 @@ class Seedsync:
         return False
 
     @staticmethod
-    def _load_persist(cls: Type[T_Persist], file_path: str) -> T_Persist:
+    def _load_persist(cls: type[T_Persist], file_path: str) -> T_Persist:
         """
         Loads a persist from file.
         Backs up existing persist if it's corrupted. Returns a new blank
@@ -433,9 +441,7 @@ class Seedsync:
         file_dir = os.path.dirname(file_path)
         i = 1
         while True:
-            backup_path = os.path.join(
-                file_dir, "{}.{}.bak".format(file_name, i)
-            )
+            backup_path = os.path.join(file_dir, "{}.{}.bak".format(file_name, i))
             if not os.path.exists(backup_path):
                 break
             i += 1
@@ -445,14 +451,14 @@ class Seedsync:
 
 
 if __name__ == "__main__":
-    multiprocessing.set_start_method('spawn')
+    multiprocessing.set_start_method("spawn")
 
     # Apply UMASK env var before spawning any child processes (e.g. lftp via pexpect).
     # The shell umask set in entrypoint.sh is not reliably inherited through the
     # setpriv exec chain in all container environments, so we set it explicitly here.
     # Note: regular files are created with base mode 0666, so umask 000 → 0666 (rw-rw-rw-).
     # Directories use base mode 0777, so umask 000 → 0777 (rwxrwxrwx).
-    _umask_str = os.environ.get('UMASK', '').strip()
+    _umask_str = os.environ.get("UMASK", "").strip()
     if _umask_str:
         try:
             _prev_umask = os.umask(int(_umask_str, 8))
@@ -469,7 +475,7 @@ if __name__ == "__main__":
         except ServiceRestart:
             Seedsync.logger.info("Restarting...")
             continue
-        except Exception as e:
+        except Exception:
             Seedsync.logger.exception("Caught exception")
             raise
 

@@ -2,8 +2,9 @@
 
 import json
 
-from .serialize import Serialize
 from common import Status
+
+from .serialize import Serialize
 
 
 class SerializeStatusJson:
@@ -23,24 +24,33 @@ class SerializeStatusJson:
         json_dict = dict()
 
         json_dict[SerializeStatusJson.__KEY_SERVER] = dict()
-        json_dict[SerializeStatusJson.__KEY_SERVER][SerializeStatusJson.__KEY_SERVER_UP] = \
-            status.server.up
-        json_dict[SerializeStatusJson.__KEY_SERVER][SerializeStatusJson.__KEY_SERVER_ERROR_MSG] = \
+        json_dict[SerializeStatusJson.__KEY_SERVER][SerializeStatusJson.__KEY_SERVER_UP] = status.server.up
+        json_dict[SerializeStatusJson.__KEY_SERVER][SerializeStatusJson.__KEY_SERVER_ERROR_MSG] = (
             status.server.error_msg
+        )
 
         json_dict[SerializeStatusJson.__KEY_CONTROLLER] = dict()
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_LATEST_LOCAL_SCAN_TIME] = \
-            str(status.controller.latest_local_scan_time.timestamp()) \
-                if status.controller.latest_local_scan_time else None
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_LATEST_REMOTE_SCAN_TIME] = \
-            str(status.controller.latest_remote_scan_time.timestamp()) \
-                if status.controller.latest_remote_scan_time else None
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_LATEST_REMOTE_SCAN_FAILED] = \
-            status.controller.latest_remote_scan_failed
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_LATEST_REMOTE_SCAN_ERROR] = \
-            status.controller.latest_remote_scan_error
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_NO_ENABLED_PAIRS] = \
+        json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_LATEST_LOCAL_SCAN_TIME] = (
+            str(status.controller.latest_local_scan_time.timestamp())
+            if status.controller.latest_local_scan_time
+            else None
+        )
+        json_dict[SerializeStatusJson.__KEY_CONTROLLER][
+            SerializeStatusJson.__KEY_CONTROLLER_LATEST_REMOTE_SCAN_TIME
+        ] = (
+            str(status.controller.latest_remote_scan_time.timestamp())
+            if status.controller.latest_remote_scan_time
+            else None
+        )
+        json_dict[SerializeStatusJson.__KEY_CONTROLLER][
+            SerializeStatusJson.__KEY_CONTROLLER_LATEST_REMOTE_SCAN_FAILED
+        ] = status.controller.latest_remote_scan_failed
+        json_dict[SerializeStatusJson.__KEY_CONTROLLER][
+            SerializeStatusJson.__KEY_CONTROLLER_LATEST_REMOTE_SCAN_ERROR
+        ] = status.controller.latest_remote_scan_error
+        json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_NO_ENABLED_PAIRS] = (
             status.controller.no_enabled_pairs
+        )
 
         status_json = json.dumps(json_dict)
         return status_json

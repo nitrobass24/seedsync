@@ -1,10 +1,10 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import unittest
-from unittest.mock import MagicMock
 from datetime import datetime
+from unittest.mock import MagicMock
 
-from common import overrides, Status, IStatusListener, StatusComponent, IStatusComponentListener
+from common import IStatusComponentListener, IStatusListener, Status, StatusComponent, overrides
 
 
 class DummyStatusComponent(StatusComponent):

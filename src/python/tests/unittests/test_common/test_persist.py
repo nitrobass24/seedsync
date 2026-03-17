@@ -1,12 +1,12 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
-import tempfile
-import shutil
 import os
+import shutil
+import tempfile
+import unittest
 from unittest.mock import patch
 
-from common import overrides, Persist, AppError, Localization
+from common import AppError, Localization, Persist, overrides
 from common.persist import _BACKUP_DIR_NAME, _MAX_BACKUPS
 
 
@@ -56,7 +56,7 @@ class TestPersist(unittest.TestCase):
         persist.my_content = "write out some content"
         persist.to_file(file_path)
         self.assertTrue(os.path.isfile(file_path))
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             self.assertEqual("write out some content", f.read())
 
     def test_to_file_overwrite(self):
@@ -68,7 +68,7 @@ class TestPersist(unittest.TestCase):
         persist.my_content = "write out some new content"
         persist.to_file(file_path)
         self.assertTrue(os.path.isfile(file_path))
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             self.assertEqual("write out some new content", f.read())
 
     def test_to_file_atomic_preserves_content_on_write_error(self):
@@ -86,7 +86,7 @@ class TestPersist(unittest.TestCase):
                 persist.to_file(file_path)
 
         # Original file should be untouched
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             self.assertEqual("original content", f.read())
 
         # No temp files should be left behind
@@ -141,7 +141,7 @@ class TestPersistBackup(unittest.TestCase):
         self.assertTrue(backups[0].endswith(".cfg"))
 
         # Backup should contain the old content
-        with open(os.path.join(backup_dir, backups[0]), "r") as f:
+        with open(os.path.join(backup_dir, backups[0])) as f:
             self.assertEqual("original content", f.read())
 
     def test_backup_uses_iso_timestamp(self):

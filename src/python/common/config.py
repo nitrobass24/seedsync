@@ -1,11 +1,11 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import configparser
-from typing import Dict
-from io import StringIO
 import collections
+import configparser
 from abc import ABC
-from typing import Type, TypeVar, Callable, Any
+from collections.abc import Callable
+from io import StringIO
+from typing import Any, TypeVar
 
 from .error import AppError
 from .persist import Persist, PersistError
@@ -14,9 +14,9 @@ from .types import overrides
 
 def _strtobool(val: str) -> bool:
     val = val.strip().lower()
-    if val in ('y', 'yes', 't', 'true', 'on', '1'):
+    if val in ("y", "yes", "t", "true", "on", "1"):
         return True
-    elif val in ('n', 'no', 'f', 'false', 'off', '0'):
+    elif val in ("n", "no", "f", "false", "off", "0"):
         return False
     else:
         raise ValueError("invalid truth value %r" % (val,))
@@ -26,15 +26,16 @@ class ConfigError(AppError):
     """
     Exception indicating a bad config value
     """
+
     pass
 
 
-InnerConfigType = Dict[str, str]
-OuterConfigType = Dict[str, InnerConfigType]
+InnerConfigType = dict[str, str]
+OuterConfigType = dict[str, InnerConfigType]
 
 
 # Source: https://stackoverflow.com/a/39205612/8571324
-T = TypeVar('T', bound='InnerConfig')
+T = TypeVar("T", bound="InnerConfig")
 
 
 class Converters:
@@ -45,29 +46,21 @@ class Converters:
     @staticmethod
     def int(cls: T, name: str, value: str) -> int:
         if not value:
-            raise ConfigError("Bad config: {}.{} is empty".format(
-                cls.__name__, name
-            ))
+            raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
         try:
             val = int(value)
         except ValueError:
-            raise ConfigError("Bad config: {}.{} ({}) must be an integer value".format(
-                cls.__name__, name, value
-            ))
+            raise ConfigError("Bad config: {}.{} ({}) must be an integer value".format(cls.__name__, name, value))
         return val
 
     @staticmethod
     def bool(cls: T, name: str, value: str) -> bool:
         if not value:
-            raise ConfigError("Bad config: {}.{} is empty".format(
-                cls.__name__, name
-            ))
+            raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
         try:
             val = bool(_strtobool(value))
         except ValueError:
-            raise ConfigError("Bad config: {}.{} ({}) must be a boolean value".format(
-                cls.__name__, name, value
-            ))
+            raise ConfigError("Bad config: {}.{} ({}) must be a boolean value".format(cls.__name__, name, value))
         return val
 
 
@@ -79,9 +72,7 @@ class Checkers:
     @staticmethod
     def string_nonempty(cls: T, name: str, value: str) -> str:
         if not value or not value.strip():
-            raise ConfigError("Bad config: {}.{} is empty".format(
-                cls.__name__, name
-            ))
+            raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
         return value
 
     @staticmethod
@@ -91,17 +82,13 @@ class Checkers:
     @staticmethod
     def int_non_negative(cls: T, name: str, value: int) -> int:
         if value < 0:
-            raise ConfigError("Bad config: {}.{} ({}) must be zero or greater".format(
-                cls.__name__, name, value
-            ))
+            raise ConfigError("Bad config: {}.{} ({}) must be zero or greater".format(cls.__name__, name, value))
         return value
 
     @staticmethod
     def int_positive(cls: T, name: str, value: int) -> int:
         if value < 1:
-            raise ConfigError("Bad config: {}.{} ({}) must be greater than 0".format(
-                cls.__name__, name, value
-            ))
+            raise ConfigError("Bad config: {}.{} ({}) must be greater than 0".format(cls.__name__, name, value))
         return value
 
     @staticmethod
@@ -129,8 +116,10 @@ class InnerConfig(ABC):
     The checker function performs boundary check on the native type value.
     The converter function converts the string representation into the native type.
     """
+
     class PropMetadata:
         """Tracks property metadata"""
+
         def __init__(self, checker: Callable, converter: Callable):
             self.checker = checker
             self.converter = converter
@@ -142,8 +131,7 @@ class InnerConfig(ABC):
     @classmethod
     def _create_property(cls, name: str, checker: Callable, converter: Callable) -> property:
         # noinspection PyProtectedMember
-        prop = property(fget=lambda s: s._get_property(name),
-                        fset=lambda s, v: s._set_property(name, v, checker))
+        prop = property(fget=lambda s: s._get_property(name), fset=lambda s, v: s._set_property(name, v, checker))
         prop_addon = InnerConfig.PropMetadata(checker=checker, converter=converter)
         InnerConfig.__prop_addon_map[prop] = prop_addon
         return prop
@@ -159,7 +147,7 @@ class InnerConfig(ABC):
             setattr(self, "__" + name, checker(self.__class__, name, value))
 
     @classmethod
-    def from_dict(cls: Type[T], config_dict: InnerConfigType) -> T:
+    def from_dict(cls: type[T], config_dict: InnerConfigType) -> T:
         """
         Construct and return inner config from a dict
         Dict values can be either native types, or str representations
@@ -174,7 +162,7 @@ class InnerConfig(ABC):
         # noinspection PyCallingNonCallable
         inner_config = cls()
         property_map = {p: getattr(cls, p) for p in dir(cls) if isinstance(getattr(cls, p), property)}
-        for name, prop in property_map.items():
+        for name, _prop in property_map.items():
             if name in config_dict:
                 value = config_dict[name]
                 # to_str() serializes None as "". When reading back, treat
@@ -246,6 +234,7 @@ class Config(Persist):
     """
     Configuration registry
     """
+
     class General(IC):
         debug = PROP("debug", Checkers.null, Converters.bool)
         verbose = PROP("verbose", Checkers.null, Converters.bool)
@@ -267,15 +256,15 @@ class Config(Persist):
         remote_path_to_scan_script = PROP("remote_path_to_scan_script", Checkers.string_nonempty, Converters.null)
         use_ssh_key = PROP("use_ssh_key", Checkers.null, Converters.bool)
         num_max_parallel_downloads = PROP("num_max_parallel_downloads", Checkers.int_positive, Converters.int)
-        num_max_parallel_files_per_download = PROP("num_max_parallel_files_per_download",
-                                                   Checkers.int_positive,
-                                                   Converters.int)
-        num_max_connections_per_root_file = PROP("num_max_connections_per_root_file",
-                                                 Checkers.int_positive,
-                                                 Converters.int)
-        num_max_connections_per_dir_file = PROP("num_max_connections_per_dir_file",
-                                                Checkers.int_positive,
-                                                Converters.int)
+        num_max_parallel_files_per_download = PROP(
+            "num_max_parallel_files_per_download", Checkers.int_positive, Converters.int
+        )
+        num_max_connections_per_root_file = PROP(
+            "num_max_connections_per_root_file", Checkers.int_positive, Converters.int
+        )
+        num_max_connections_per_dir_file = PROP(
+            "num_max_connections_per_dir_file", Checkers.int_positive, Converters.int
+        )
         num_max_total_connections = PROP("num_max_total_connections", Checkers.int_non_negative, Converters.int)
         use_temp_file = PROP("use_temp_file", Checkers.null, Converters.bool)
         net_limit_rate = PROP("net_limit_rate", Checkers.string_allow_empty, Converters.null)
@@ -285,9 +274,9 @@ class Config(Persist):
         net_timeout = PROP("net_timeout", Checkers.int_non_negative, Converters.int)
         net_max_retries = PROP("net_max_retries", Checkers.int_non_negative, Converters.int)
         net_reconnect_interval_base = PROP("net_reconnect_interval_base", Checkers.int_non_negative, Converters.int)
-        net_reconnect_interval_multiplier = PROP("net_reconnect_interval_multiplier",
-                                                  Checkers.int_non_negative,
-                                                  Converters.int)
+        net_reconnect_interval_multiplier = PROP(
+            "net_reconnect_interval_multiplier", Checkers.int_non_negative, Converters.int
+        )
 
         def __init__(self):
             super().__init__()
@@ -419,13 +408,8 @@ class Config(Persist):
         config_parser = configparser.ConfigParser()
         try:
             config_parser.read_string(content)
-        except (
-                configparser.MissingSectionHeaderError,
-                configparser.ParsingError
-        ) as e:
-            raise PersistError("Error parsing Config - {}: {}".format(
-                type(e).__name__, str(e))
-            )
+        except (configparser.MissingSectionHeaderError, configparser.ParsingError) as e:
+            raise PersistError("Error parsing Config - {}: {}".format(type(e).__name__, str(e)))
         config_dict = {}
         for section in config_parser.sections():
             config_dict[section] = {}

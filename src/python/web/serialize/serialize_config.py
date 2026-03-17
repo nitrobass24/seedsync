@@ -1,7 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import json
 import collections
+import json
 
 from common import Config
 

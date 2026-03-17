@@ -1,17 +1,18 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from typing import Optional
 
-from ..web_app import IStreamHandler
+from common import IStatusListener, Status, overrides
+
 from ..serialize import SerializeStatus
 from ..utils import StreamQueue
-from common import overrides, Status, IStatusListener
+from ..web_app import IStreamHandler
 
 
 class StatusListener(IStatusListener, StreamQueue[Status]):
     """
     Status listener used by status streams to listen to status updates
     """
+
     def __init__(self, status: Status):
         super().__init__()
         self.__status = status
@@ -33,7 +34,7 @@ class StatusStreamHandler(IStreamHandler):
         self.status.add_listener(self.status_listener)
 
     @overrides(IStreamHandler)
-    def get_value(self) -> Optional[str]:
+    def get_value(self) -> str | None:
         if self.first_run:
             self.first_run = False
             status = self.status.copy()

@@ -3,7 +3,7 @@
 import json
 import re
 
-from common import overrides, Constants, Persist, PersistError
+from common import Constants, Persist, PersistError, overrides
 
 # Matches a UUID-style pair_id followed by the legacy ':' separator.
 # Used to migrate old persist keys from 'pair_id:name' to 'pair_id\x1fname'.
@@ -59,21 +59,16 @@ class ControllerPersist(Persist):
             persist.validated_file_names = set(dct.get(ControllerPersist.__KEY_VALIDATED_FILE_NAMES, []))
             persist.corrupt_file_names = set(dct.get(ControllerPersist.__KEY_CORRUPT_FILE_NAMES, []))
             # Migrate any legacy colon-separated keys to unit-separator keys
-            persist.downloaded_file_names = ControllerPersist._migrate_legacy_keys(
-                persist.downloaded_file_names)
-            persist.extracted_file_names = ControllerPersist._migrate_legacy_keys(
-                persist.extracted_file_names)
+            persist.downloaded_file_names = ControllerPersist._migrate_legacy_keys(persist.downloaded_file_names)
+            persist.extracted_file_names = ControllerPersist._migrate_legacy_keys(persist.extracted_file_names)
             persist.extract_failed_file_names = ControllerPersist._migrate_legacy_keys(
-                persist.extract_failed_file_names)
-            persist.validated_file_names = ControllerPersist._migrate_legacy_keys(
-                persist.validated_file_names)
-            persist.corrupt_file_names = ControllerPersist._migrate_legacy_keys(
-                persist.corrupt_file_names)
+                persist.extract_failed_file_names
+            )
+            persist.validated_file_names = ControllerPersist._migrate_legacy_keys(persist.validated_file_names)
+            persist.corrupt_file_names = ControllerPersist._migrate_legacy_keys(persist.corrupt_file_names)
             return persist
         except (json.decoder.JSONDecodeError, KeyError) as e:
-            raise PersistError("Error parsing AutoQueuePersist - {}: {}".format(
-                type(e).__name__, str(e))
-            )
+            raise PersistError("Error parsing ControllerPersist - {}: {}".format(type(e).__name__, str(e)))
 
     @overrides(Persist)
     def to_str(self) -> str:

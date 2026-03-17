@@ -11,20 +11,21 @@ class ExtractError(AppError):
     """
     Indicates an extraction error
     """
+
     pass
 
 
 # Magic byte signatures for archive formats.
 # All formats are extracted via 7z; signatures are used for fast detection only.
 _ARCHIVE_SIGNATURES = [
-    (b'\x52\x61\x72\x21\x1A\x07\x01\x00', 'RAR5'),   # RAR5 (8 bytes, check before RAR4)
-    (b'\x52\x61\x72\x21\x1A\x07\x00', 'RAR4'),        # RAR4 (7 bytes)
-    (b'\x50\x4B\x03\x04', 'ZIP'),                      # ZIP (4 bytes; also covers .zipx variant)
-    (b'\x37\x7A\xBC\xAF\x27\x1C', '7Z'),              # 7Z (6 bytes)
-    (b'\xFD\x37\x7A\x58\x5A\x00', 'XZ'),              # XZ (6 bytes)
-    (b'\x42\x5A\x68', 'BZIP2'),                        # BZIP2 (3 bytes)
-    (b'\x1F\x8B', 'GZIP'),                             # GZIP (2 bytes)
-    (b'\x4C\x5A\x49\x50\x01', 'LZIP'),                  # LZIP (5 bytes: "LZIP" + version 1)
+    (b"\x52\x61\x72\x21\x1a\x07\x01\x00", "RAR5"),  # RAR5 (8 bytes, check before RAR4)
+    (b"\x52\x61\x72\x21\x1a\x07\x00", "RAR4"),  # RAR4 (7 bytes)
+    (b"\x50\x4b\x03\x04", "ZIP"),  # ZIP (4 bytes; also covers .zipx variant)
+    (b"\x37\x7a\xbc\xaf\x27\x1c", "7Z"),  # 7Z (6 bytes)
+    (b"\xfd\x37\x7a\x58\x5a\x00", "XZ"),  # XZ (6 bytes)
+    (b"\x42\x5a\x68", "BZIP2"),  # BZIP2 (3 bytes)
+    (b"\x1f\x8b", "GZIP"),  # GZIP (2 bytes)
+    (b"\x4c\x5a\x49\x50\x01", "LZIP"),  # LZIP (5 bytes: "LZIP" + version 1)
 ]
 
 
@@ -61,8 +62,7 @@ class Extract:
 
         try:
             result = subprocess.run(
-                ["7z", "t", "--", archive_path],
-                capture_output=True, text=True, timeout=Extract._7Z_TIMEOUT_SECS
+                ["7z", "t", "--", archive_path], capture_output=True, text=True, timeout=Extract._7Z_TIMEOUT_SECS
             )
         except subprocess.TimeoutExpired:
             raise ExtractError(
@@ -81,17 +81,17 @@ class Extract:
         Returns format name or None if unrecognized.
         """
         try:
-            with open(archive_path, 'rb') as f:
+            with open(archive_path, "rb") as f:
                 header = f.read(8)
             for signature, name in _ARCHIVE_SIGNATURES:
-                if header[:len(signature)] == signature:
+                if header[: len(signature)] == signature:
                     return name
         except OSError:
             return None
         # Also check if it's a plain tar (no magic bytes in _ARCHIVE_SIGNATURES)
         try:
             with tarfile.open(archive_path):
-                return 'TAR'
+                return "TAR"
         except (tarfile.TarError, OSError):
             pass
         return None
@@ -112,16 +112,7 @@ class Extract:
         if file_ext:
             file_ext = file_ext[1:]  # remove the dot
             # noinspection SpellCheckingInspection
-            return file_ext in [
-                "7z",
-                "bz2",
-                "gz",
-                "lz",
-                "xz",
-                "rar",
-                "tar", "tgz", "tbz2",
-                "zip", "zipx"
-            ]
+            return file_ext in ["7z", "bz2", "gz", "lz", "xz", "rar", "tar", "tgz", "tbz2", "zip", "zipx"]
         else:
             return False
 
@@ -145,7 +136,7 @@ class Extract:
             # For .tar.gz, .tar.bz2, .tar.xz — 7z extracts the outer compression
             # to get the .tar, then we need a second pass to extract the tar contents.
             # Detect this by checking if the inner content is a tar.
-            if fmt in ('GZIP', 'BZIP2', 'XZ', 'LZIP'):
+            if fmt in ("GZIP", "BZIP2", "XZ", "LZIP"):
                 # Two-pass extraction: decompress → extract tar (if applicable)
                 Extract._extract_compressed_archive(archive_path, out_dir_path)
             else:
@@ -181,12 +172,12 @@ class Extract:
         try:
             result = subprocess.run(
                 ["7z", "x", "-o" + out_dir_path, "-y", "-aoa", "--", archive_path],
-                capture_output=True, text=True, timeout=Extract._7Z_TIMEOUT_SECS
+                capture_output=True,
+                text=True,
+                timeout=Extract._7Z_TIMEOUT_SECS,
             )
         except subprocess.TimeoutExpired:
-            raise ExtractError(
-                "7z timed out after {}s: {}".format(Extract._7Z_TIMEOUT_SECS, archive_path)
-            )
+            raise ExtractError("7z timed out after {}s: {}".format(Extract._7Z_TIMEOUT_SECS, archive_path))
         except FileNotFoundError:
             raise ExtractError("7z binary not found; cannot extract archive")
 
@@ -200,8 +191,8 @@ class Extract:
         First pass decompresses to a temp location; if the result is a tar,
         second pass extracts the tar. Otherwise moves the decompressed file.
         """
-        import tempfile
         import shutil
+        import tempfile
 
         # Decompress to a temp directory first
         with tempfile.TemporaryDirectory(prefix="seedsync_extract_", dir=out_dir_path) as tmp_dir:
@@ -212,7 +203,7 @@ class Extract:
             if len(extracted) == 1:
                 inner_path = os.path.join(tmp_dir, extracted[0])
                 # If the inner file is a tar, extract it
-                if os.path.isfile(inner_path) and Extract._detect_format(inner_path) == 'TAR':
+                if os.path.isfile(inner_path) and Extract._detect_format(inner_path) == "TAR":
                     Extract._run_7z(inner_path, out_dir_path)
                     return
 

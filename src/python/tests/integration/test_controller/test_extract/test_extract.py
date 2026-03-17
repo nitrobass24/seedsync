@@ -1,10 +1,10 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
-import shutil
-import tempfile
 import os
+import shutil
 import subprocess
+import tempfile
+import unittest
 import zipfile
 
 from common import overrides
@@ -21,7 +21,7 @@ class TestExtract(unittest.TestCase):
     ar_rar_split_p2 = None
     ar_tar_gz = None
 
-    __FILE_CONTENT = "12345678"*10*1024  # 80 KB
+    __FILE_CONTENT = "12345678" * 10 * 1024  # 80 KB
 
     # For debugging
     __KEEP_TMP_FILES = False
@@ -46,32 +46,22 @@ class TestExtract(unittest.TestCase):
         zf.close()
 
         # rar
-        fnull = open(os.devnull, 'w')
+        fnull = open(os.devnull, "w")
         TestExtract.ar_rar = os.path.join(archive_dir, "file.rar")
-        subprocess.Popen(["rar",
-                          "a",
-                          "-ep",
-                          TestExtract.ar_rar,
-                          temp_file],
-                         stdout=fnull)
+        subprocess.Popen(["rar", "a", "-ep", TestExtract.ar_rar, temp_file], stdout=fnull)
 
         # rar split
-        subprocess.Popen(["rar",
-                          "a",
-                          "-ep", "-m0", "-v50k",
-                          os.path.join(archive_dir, "file.split.rar"),
-                          temp_file],
-                         stdout=fnull)
+        subprocess.Popen(
+            ["rar", "a", "-ep", "-m0", "-v50k", os.path.join(archive_dir, "file.split.rar"), temp_file], stdout=fnull
+        )
         TestExtract.ar_rar_split_p1 = os.path.join(archive_dir, "file.split.part1.rar")
         TestExtract.ar_rar_split_p2 = os.path.join(archive_dir, "file.split.part2.rar")
 
         # tar.gz
         TestExtract.ar_tar_gz = os.path.join(archive_dir, "file.tar.gz")
-        subprocess.Popen(["tar",
-                          "czvf",
-                          TestExtract.ar_tar_gz,
-                          "-C", os.path.dirname(temp_file),
-                          os.path.basename(temp_file)])
+        subprocess.Popen(
+            ["tar", "czvf", TestExtract.ar_tar_gz, "-C", os.path.dirname(temp_file), os.path.basename(temp_file)]
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -92,7 +82,7 @@ class TestExtract(unittest.TestCase):
     def _assert_extracted_files(self, dir_path):
         path = os.path.join(dir_path, "file")
         self.assertTrue(os.path.isfile(path))
-        with open(path, "r") as f:
+        with open(path) as f:
             self.assertEqual(TestExtract.__FILE_CONTENT, f.read())
 
     def test_is_archive_fast(self):
@@ -128,7 +118,7 @@ class TestExtract(unittest.TestCase):
 
     def test_is_archive_false_on_bad_archive(self):
         path = os.path.join(TestExtract.temp_dir, "bad_file")
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             f.write(bytearray(os.urandom(100)))
         self.assertTrue(os.path.isfile(path))
         self.assertFalse(Extract.is_archive(path))
@@ -147,8 +137,8 @@ class TestExtract(unittest.TestCase):
         """is_archive detects Lzip files via LZIP magic bytes."""
         path = os.path.join(TestExtract.temp_dir, "file.lz")
         # LZIP magic bytes: 0x4C 0x5A 0x49 0x50 followed by version byte
-        with open(path, 'wb') as f:
-            f.write(b'\x4C\x5A\x49\x50\x01' + os.urandom(64))
+        with open(path, "wb") as f:
+            f.write(b"\x4c\x5a\x49\x50\x01" + os.urandom(64))
         self.assertTrue(Extract.is_archive(path))
 
     def test_is_archive_zipx_uses_zip_magic_bytes(self):
@@ -162,56 +152,49 @@ class TestExtract(unittest.TestCase):
 
     def test_extract_archive_fails_on_nonexisting_file(self):
         with self.assertRaises(ExtractError) as ctx:
-            Extract.extract_archive(archive_path=os.path.join(TestExtract.temp_dir, "no_file"),
-                                    out_dir_path=TestExtract.temp_dir)
+            Extract.extract_archive(
+                archive_path=os.path.join(TestExtract.temp_dir, "no_file"), out_dir_path=TestExtract.temp_dir
+            )
         self.assertTrue(str(ctx.exception).startswith("Path is not a valid archive"))
 
     def test_extract_archive_fails_on_dir(self):
         with self.assertRaises(ExtractError) as ctx:
-            Extract.extract_archive(archive_path=TestExtract.temp_dir,
-                                    out_dir_path=TestExtract.temp_dir)
+            Extract.extract_archive(archive_path=TestExtract.temp_dir, out_dir_path=TestExtract.temp_dir)
         self.assertTrue(str(ctx.exception).startswith("Path is not a valid archive"))
 
     def test_extract_archive_fails_on_bad_file(self):
         path = os.path.join(TestExtract.temp_dir, "bad_file")
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             f.write(bytearray(os.urandom(100)))
         self.assertTrue(os.path.isfile(path))
         with self.assertRaises(ExtractError) as ctx:
-            Extract.extract_archive(archive_path=path,
-                                    out_dir_path=TestExtract.temp_dir)
+            Extract.extract_archive(archive_path=path, out_dir_path=TestExtract.temp_dir)
         self.assertTrue(str(ctx.exception).startswith("Path is not a valid archive"))
 
     def test_extract_archive_creates_sub_directories(self):
         out_path = os.path.join(TestExtract.temp_dir, "bunch", "of", "sub", "dir")
-        Extract.extract_archive(archive_path=TestExtract.ar_rar,
-                                out_dir_path=out_path)
+        Extract.extract_archive(archive_path=TestExtract.ar_rar, out_dir_path=out_path)
         self._assert_extracted_files(out_path)
 
     def test_extract_archive_zip(self):
-        Extract.extract_archive(archive_path=TestExtract.ar_zip,
-                                out_dir_path=TestExtract.temp_dir)
+        Extract.extract_archive(archive_path=TestExtract.ar_zip, out_dir_path=TestExtract.temp_dir)
         self._assert_extracted_files(TestExtract.temp_dir)
 
     def test_extract_archive_overwrites_existing(self):
         path = os.path.join(TestExtract.temp_dir, "file")
         with open(path, "w") as f:
             f.write("Dummy file")
-        Extract.extract_archive(archive_path=TestExtract.ar_zip,
-                                out_dir_path=TestExtract.temp_dir)
+        Extract.extract_archive(archive_path=TestExtract.ar_zip, out_dir_path=TestExtract.temp_dir)
         self._assert_extracted_files(TestExtract.temp_dir)
 
     def test_extract_archive_rar(self):
-        Extract.extract_archive(archive_path=TestExtract.ar_rar,
-                                out_dir_path=TestExtract.temp_dir)
+        Extract.extract_archive(archive_path=TestExtract.ar_rar, out_dir_path=TestExtract.temp_dir)
         self._assert_extracted_files(TestExtract.temp_dir)
 
     def test_extract_archive_rar_split(self):
-        Extract.extract_archive(archive_path=TestExtract.ar_rar_split_p1,
-                                out_dir_path=TestExtract.temp_dir)
+        Extract.extract_archive(archive_path=TestExtract.ar_rar_split_p1, out_dir_path=TestExtract.temp_dir)
         self._assert_extracted_files(TestExtract.temp_dir)
 
     def test_extract_archive_tar_gz(self):
-        Extract.extract_archive(archive_path=TestExtract.ar_tar_gz,
-                                out_dir_path=TestExtract.temp_dir)
+        Extract.extract_archive(archive_path=TestExtract.ar_tar_gz, out_dir_path=TestExtract.temp_dir)
         self._assert_extracted_files(TestExtract.temp_dir)

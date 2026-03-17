@@ -1,8 +1,8 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
-from unittest.mock import patch
 from threading import Timer
+from unittest.mock import patch
 
 from tests.integration.test_web.test_web_app import BaseTestWebApp
 
@@ -19,6 +19,7 @@ class TestLogStreamHandler(BaseTestWebApp):
             self.context.logger.info("Info msg")
             self.context.logger.warning("Warning msg")
             self.context.logger.error("Error msg")
+
         Timer(0.3, issue_logs).start()
 
         # Setup mock serialize instance
