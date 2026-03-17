@@ -1,0 +1,10 @@
+# SeedSync Test Dependencies
+# Source of truth: pyproject.toml [dependency-groups].test
+# Keep in sync when editing pyproject.toml
+
+pytest>=7.0
+parameterized>=0.9
+testfixtures>=8.0
+webtest>=3.0
+timeout-decorator>=0.5
+pytest-timeout>=2.0

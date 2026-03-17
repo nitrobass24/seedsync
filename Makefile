@@ -62,7 +62,7 @@ help:
 	@echo "  stop        - Stop container"
 	@echo "  logs        - View container logs"
 	@echo "  clean       - Remove containers and images"
-	@echo "  test        - Run Python unit tests"
+	@echo "  test        - Run Python unit tests (in Docker)"
 	@echo "  test-image  - Build cached test image"
 	@echo "  size        - Show image size"
 	@echo "  shell       - Open shell in running container"
