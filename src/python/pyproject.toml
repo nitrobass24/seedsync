@@ -12,9 +12,9 @@ dependencies = [
 [dependency-groups]
 test = [
     "pytest>=7.0",
-    "parameterized",
-    "testfixtures",
-    "webtest",
+    "parameterized>=0.9",
+    "testfixtures>=8.0",
+    "webtest>=3.0",
     "timeout-decorator>=0.5",
 ]
 dev = [
