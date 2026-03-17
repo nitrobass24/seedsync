@@ -204,7 +204,7 @@ class ModelFile:
         self.__is_extractable = is_extractable
 
     @property
-    def local_created_timestamp(self) -> datetime:
+    def local_created_timestamp(self) -> datetime | None:
         return self.__local_created_timestamp
 
     @local_created_timestamp.setter
@@ -214,7 +214,7 @@ class ModelFile:
         self.__local_created_timestamp = local_created_timestamp
 
     @property
-    def local_modified_timestamp(self) -> datetime:
+    def local_modified_timestamp(self) -> datetime | None:
         return self.__local_modified_timestamp
 
     @local_modified_timestamp.setter
@@ -224,7 +224,7 @@ class ModelFile:
         self.__local_modified_timestamp = local_modified_timestamp
 
     @property
-    def remote_created_timestamp(self) -> datetime:
+    def remote_created_timestamp(self) -> datetime | None:
         return self.__remote_created_timestamp
 
     @remote_created_timestamp.setter
@@ -234,7 +234,7 @@ class ModelFile:
         self.__remote_created_timestamp = remote_created_timestamp
 
     @property
-    def remote_modified_timestamp(self) -> datetime:
+    def remote_modified_timestamp(self) -> datetime | None:
         return self.__remote_modified_timestamp
 
     @remote_modified_timestamp.setter

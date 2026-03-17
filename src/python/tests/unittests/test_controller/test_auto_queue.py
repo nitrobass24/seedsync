@@ -180,8 +180,6 @@ class TestAutoQueuePersist(unittest.TestCase):
             AutoQueuePattern(pattern='fi"ve').to_str().replace("\\", "\\\\").replace('"', '\\"'),
             AutoQueuePattern(pattern="si'x").to_str().replace("\\", "\\\\").replace('"', '\\"'),
         )
-        print(content)
-        print(AutoQueuePattern(pattern='fi"ve').to_str())
         persist = AutoQueuePersist.from_str(content)
         golden_patterns = {
             AutoQueuePattern(pattern="one"),
@@ -201,7 +199,6 @@ class TestAutoQueuePersist(unittest.TestCase):
         persist.add_pattern(AutoQueuePattern(pattern="fo.ur"))
         persist.add_pattern(AutoQueuePattern(pattern='fi"ve'))
         persist.add_pattern(AutoQueuePattern(pattern="si'x"))
-        print(persist.to_str())
         dct = json.loads(persist.to_str())
         self.assertTrue("patterns" in dct)
         self.assertEqual(
