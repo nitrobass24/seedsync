@@ -63,6 +63,8 @@ jobs:
 
       - name: Run unit tests
         working-directory: src/python
+        env:
+          PYTHONPATH: .
         run: pytest tests/unittests -v --tb=short
 
   angular-build:
