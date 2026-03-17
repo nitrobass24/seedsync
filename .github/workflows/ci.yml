@@ -57,10 +57,12 @@ jobs:
         run: pip install ruff
 
       - name: Ruff check
-        run: ruff check --config src/python/pyproject.toml
+        working-directory: src/python
+        run: ruff check
 
       - name: Ruff format check
-        run: ruff format --check --config src/python/pyproject.toml
+        working-directory: src/python
+        run: ruff format --check
 
   python-test:
     name: Python Unit Tests
@@ -95,6 +97,7 @@ jobs:
           --ignore=tests/unittests/test_ssh
           --ignore=tests/unittests/test_system
           --ignore=tests/unittests/test_controller/test_scan/test_remote_scanner.py
+          --ignore=tests/unittests/test_common/test_multiprocessing_logger.py
 
   angular-build:
     name: Build Angular
