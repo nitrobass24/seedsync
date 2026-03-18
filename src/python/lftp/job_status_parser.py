@@ -518,13 +518,21 @@ class LftpJobStatusParser:
                 # Continue the outer loop
                 continue
 
-            # If we got here, check if it's a known orphan progress line
+            # If we're inside a job context, skip any unrecognized line.
+            # PTY line-wrapping can produce arbitrary fragments (filename tails,
+            # partial speed/eta strings like "eta:4m [Receiving data]" or
+            # "ta:4m [Receiving data]") that no fixed regex can anticipate.
+            if prev_job is not None:
+                self.logger.warning("Skipping unrecognized line inside job context: '%s'", line)
+                continue
+
+            # Outside a job context, check for known orphan progress lines
             if orphan_progress_m.match(line) or partial_progress_m.match(line) or chunk_wrap_m.match(line):
                 self.logger.warning("Skipping orphan lftp progress line: '%s'", line)
                 continue
 
-            # Truly unrecognized line — raise so the caller can track
-            # consecutive errors and decide whether to propagate
+            # Truly unrecognized line outside any job — raise so the caller
+            # can track consecutive errors and decide whether to propagate
             raise ValueError("Unable to parse line '{}'".format(line))
         return jobs
 

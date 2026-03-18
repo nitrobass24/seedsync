@@ -1586,9 +1586,36 @@ class TestLftpJobStatusParser(unittest.TestCase):
         statuses = parser.parse(output)
         self.assertEqual(1, len(statuses))
 
-    def test_truly_unrecognized_line_raises(self):
-        """A truly unrecognized line (not an orphan progress line) should still raise."""
+    def test_unrecognized_line_inside_job_is_skipped(self):
+        """Unrecognized lines inside a job context are skipped (PTY wrap fragments)."""
         output = "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\ncompletely unexpected garbage"
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+
+    def test_eta_fragment_inside_job_is_skipped(self):
+        """Regression: 'eta:4m [Receiving data]' fragment from PTY wrap."""
+        output = (
+            "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\n"
+            "eta:4m [Receiving data]"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+
+    def test_partial_eta_fragment_inside_job_is_skipped(self):
+        """Regression: 'ta:4m [Receiving data]' fragment (mid-word wrap)."""
+        output = (
+            "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\n"
+            "ta:4m [Receiving data]"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+
+    def test_truly_unrecognized_line_outside_job_raises(self):
+        """A truly unrecognized line with no job context should still raise."""
+        output = "completely unexpected garbage"
         parser = LftpJobStatusParser()
         with self.assertRaises(LftpJobStatusParserError):
             parser.parse(output)
