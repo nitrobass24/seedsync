@@ -49,8 +49,8 @@ class ControllerPersist(Persist):
 
     @classmethod
     @overrides(Persist)
-    def from_str(cls: "ControllerPersist", content: str) -> "ControllerPersist":
-        persist = ControllerPersist()
+    def from_str(cls: type["ControllerPersist"], content: str) -> "ControllerPersist":
+        persist = cls()
         try:
             dct = json.loads(content)
             persist.downloaded_file_names = set(dct[ControllerPersist.__KEY_DOWNLOADED_FILE_NAMES])

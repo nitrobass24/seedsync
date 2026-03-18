@@ -56,6 +56,7 @@ class ModelStreamHandler(IStreamHandler):
     def get_value(self) -> str | None:
         if self.first_run:
             self.first_run = False
+            assert self.initial_model_files is not None
             return self.serialize.model(self.initial_model_files)
         else:
             event = self.model_listener.get_next_event()

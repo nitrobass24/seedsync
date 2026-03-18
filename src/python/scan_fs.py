@@ -19,7 +19,12 @@ class SystemFile:
     """
 
     def __init__(
-        self, name: str, size: int, is_dir: bool = False, time_created: datetime = None, time_modified: datetime = None
+        self,
+        name: str,
+        size: int,
+        is_dir: bool = False,
+        time_created: datetime | None = None,
+        time_modified: datetime | None = None,
     ):
         if size < 0:
             raise ValueError("File size must be non-negative")

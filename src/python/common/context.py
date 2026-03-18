@@ -18,11 +18,11 @@ class Args:
     """
 
     def __init__(self):
-        self.local_path_to_scanfs = None
-        self.html_path = None
-        self.debug = None
-        self.exit = None
-        self.logdir = None
+        self.local_path_to_scanfs: str | None = None
+        self.html_path: str | None = None
+        self.debug: bool | None = None
+        self.exit: bool | None = None
+        self.logdir: str | None = None
 
     def as_dict(self) -> dict:
         dct = collections.OrderedDict()
@@ -46,7 +46,7 @@ class Context:
         config: Config,
         args: Args,
         status: Status,
-        path_pairs_config: PathPairsConfig = None,
+        path_pairs_config: PathPairsConfig | None = None,
     ):
         """
         Primary constructor to construct the top-level context

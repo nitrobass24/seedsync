@@ -43,7 +43,9 @@ class WebAppJob(Job):
     @overrides(Job)
     def cleanup(self):
         self.__app.stop()
+        assert self.__server is not None
         self.__server.stop()
+        assert self.__server_thread is not None
         self.__server_thread.join()
 
 

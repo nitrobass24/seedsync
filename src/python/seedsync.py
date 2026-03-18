@@ -81,7 +81,8 @@ class Seedsync:
             config.to_file(self.config_path)
 
         # Determine the true value of debug
-        is_debug = args.debug or config.general.debug
+        assert config is not None
+        is_debug = bool(args.debug or config.general.debug)
 
         # Create context args
         ctx_args = Args()
@@ -259,7 +260,7 @@ class Seedsync:
         # For a frozen package, set default to root/html
         # noinspection PyUnresolvedReferences
         # noinspection PyProtectedMember
-        default_html_path = os.path.join(sys._MEIPASS, "html") if is_frozen else None
+        default_html_path = os.path.join(sys._MEIPASS, "html") if is_frozen else None  # type: ignore[attr-defined]
         parser.add_argument(
             "--html",
             required=not is_frozen,
@@ -410,18 +411,18 @@ class Seedsync:
         return False
 
     @staticmethod
-    def _load_persist(cls: type[T_Persist], file_path: str) -> T_Persist:
+    def _load_persist(persist_cls: type[T_Persist], file_path: str) -> T_Persist:
         """
         Loads a persist from file.
         Backs up existing persist if it's corrupted. Returns a new blank
         persist in its place.
-        :param cls:
+        :param persist_cls:
         :param file_path:
         :return:
         """
         if os.path.isfile(file_path):
             try:
-                return cls.from_file(file_path)
+                return persist_cls.from_file(file_path)
             except PersistError:
                 if Seedsync.logger:
                     Seedsync.logger.exception("Caught exception")
@@ -430,10 +431,10 @@ class Seedsync:
                 Seedsync.__backup_file(file_path)
 
                 # noinspection PyCallingNonCallable
-                return cls()
+                return persist_cls()
         else:
             # noinspection PyCallingNonCallable
-            return cls()
+            return persist_cls()
 
     @staticmethod
     def __backup_file(file_path: str):
@@ -473,10 +474,13 @@ if __name__ == "__main__":
         except ServiceExit:
             break
         except ServiceRestart:
-            Seedsync.logger.info("Restarting...")
+            if Seedsync.logger:
+                Seedsync.logger.info("Restarting...")
             continue
         except Exception:
-            Seedsync.logger.exception("Caught exception")
+            if Seedsync.logger:
+                Seedsync.logger.exception("Caught exception")
             raise
 
-        Seedsync.logger.info("Exited successfully")
+        if Seedsync.logger:
+            Seedsync.logger.info("Exited successfully")

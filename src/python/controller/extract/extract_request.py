@@ -11,9 +11,9 @@ class ExtractRequest:
         model_file: ModelFile,
         local_path: str,
         out_dir_path: str,
-        pair_id: str = None,
-        local_path_fallback: str = None,
-        out_dir_path_fallback: str = None,
+        pair_id: str | None = None,
+        local_path_fallback: str | None = None,
+        out_dir_path_fallback: str | None = None,
     ):
         self.model_file = model_file
         self.pair_id = pair_id

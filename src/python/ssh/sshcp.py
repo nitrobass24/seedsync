@@ -28,7 +28,7 @@ class Sshcp:
     # Common shell paths to check, in order of preference
     SHELL_CANDIDATES = ["/bin/bash", "/usr/bin/bash", "/bin/sh", "/usr/bin/sh"]
 
-    def __init__(self, host: str, port: int, user: str = None, password: str = None):
+    def __init__(self, host: str, port: int, user: str | None = None, password: str | None = None):
         if host is None:
             raise ValueError("Hostname not specified.")
         self.__host = host
@@ -53,6 +53,7 @@ class Sshcp:
         :raises SshcpError: if no working shell can be found
         """
         if self.__shell_detected:
+            assert self.__detected_shell is not None
             return self.__detected_shell
 
         self.logger.debug("Detecting remote shell...")

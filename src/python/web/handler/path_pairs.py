@@ -53,7 +53,7 @@ class PathPairsHandler(IHandler):
 
     def __handle_create(self):
         try:
-            data = json.loads(request.body.read().decode("utf-8"))
+            data = json.loads(request.body.read().decode("utf-8"))  # type: ignore[attr-defined]
         except (json.JSONDecodeError, UnicodeDecodeError):
             return HTTPResponse(body="Invalid JSON", status=400)
         if not isinstance(data, dict):
@@ -85,7 +85,7 @@ class PathPairsHandler(IHandler):
             return HTTPResponse(body="Path pair not found", status=404)
 
         try:
-            data = json.loads(request.body.read().decode("utf-8"))
+            data = json.loads(request.body.read().decode("utf-8"))  # type: ignore[attr-defined]
         except (json.JSONDecodeError, UnicodeDecodeError):
             return HTTPResponse(body="Invalid JSON", status=400)
         if not isinstance(data, dict):

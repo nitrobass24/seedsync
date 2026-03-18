@@ -40,16 +40,16 @@ class LogsHandler(IHandler):
             )
 
         # Parse query params
-        search = request.query.get("search", "").strip()
-        level = request.query.get("level", "").strip().upper()
+        search = request.query.get("search", "").strip()  # type: ignore[attr-defined]
+        level = request.query.get("level", "").strip().upper()  # type: ignore[attr-defined]
         try:
-            limit = int(request.query.get("limit", "500"))
+            limit = int(request.query.get("limit", "500"))  # type: ignore[attr-defined]
         except ValueError:
             limit = 500
         limit = max(1, min(limit, 2000))
 
         try:
-            before = int(request.query.get("before", "0"))
+            before = int(request.query.get("before", "0"))  # type: ignore[attr-defined]
         except ValueError:
             before = 0
 
@@ -62,6 +62,7 @@ class LogsHandler(IHandler):
 
     def _read_logs(self, search: str, min_level: int, limit: int, before: int) -> list[dict]:
         entries = []
+        assert self._logdir is not None
         base_path = os.path.join(self._logdir, "{}.log".format(self._service_name))
 
         # Gather log file paths: .log, .log.1, .log.2, ... up to backup count

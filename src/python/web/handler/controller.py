@@ -94,22 +94,22 @@ class ControllerHandler(IHandler):
 
     def __dispatch_command(self, file_name: str, action: Controller.Command.Action, success_msg: str):
         """Common handler: decode filename, validate pair_id, dispatch command."""
-        file_name = _decode_and_validate(file_name)
-        if isinstance(file_name, HTTPResponse):
-            return file_name
+        decoded = _decode_and_validate(file_name)
+        if isinstance(decoded, HTTPResponse):
+            return decoded
 
-        pair_id = _validate_pair_id(request.params.get("pair_id"))
+        pair_id = _validate_pair_id(request.params.get("pair_id"))  # type: ignore[attr-defined]
         if pair_id == "":
             return HTTPResponse(body="pair_id must not be blank", status=400)
-        command = Controller.Command(action, file_name, pair_id=pair_id)
+        command = Controller.Command(action, decoded, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)
         self.__controller.queue_command(command)
         callback.wait()
         if callback.success:
-            return HTTPResponse(body=success_msg.format(file_name))
+            return HTTPResponse(body=success_msg.format(decoded))
         else:
-            return HTTPResponse(body=callback.error, status=400)
+            return HTTPResponse(body=callback.error or "Unknown error", status=400)
 
     def __handle_action_queue(self, file_name: str):
         return self.__dispatch_command(file_name, Controller.Command.Action.QUEUE, "Queued file '{}'")

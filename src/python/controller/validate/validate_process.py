@@ -47,7 +47,7 @@ class ValidateStatus:
     class State(Enum):
         VALIDATING = 0
 
-    def __init__(self, name: str, is_dir: bool, state: "ValidateStatus.State", pair_id: str = None):
+    def __init__(self, name: str, is_dir: bool, state: "ValidateStatus.State", pair_id: str | None = None):
         self.name = name
         self.is_dir = is_dir
         self.state = state
@@ -64,7 +64,7 @@ class ValidateStatusResult:
 
 
 class ValidateCompletedResult:
-    def __init__(self, timestamp: datetime.datetime, name: str, is_dir: bool, pair_id: str = None):
+    def __init__(self, timestamp: datetime.datetime, name: str, is_dir: bool, pair_id: str | None = None):
         self.timestamp = timestamp
         self.name = name
         self.is_dir = is_dir
@@ -77,8 +77,8 @@ class ValidateFailedResult:
         timestamp: datetime.datetime,
         name: str,
         is_dir: bool,
-        pair_id: str = None,
-        error_message: str = None,
+        pair_id: str | None = None,
+        error_message: str | None = None,
         is_checksum_mismatch: bool = False,
     ):
         self.timestamp = timestamp

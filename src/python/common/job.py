@@ -75,7 +75,8 @@ class Job(threading.Thread, ABC):
         if self.exc_info:
             exc_info = self.exc_info
             self.exc_info = None
-            raise exc_info[1].with_traceback(exc_info[2])
+            if exc_info[1] is not None:
+                raise exc_info[1].with_traceback(exc_info[2])
 
     @abstractmethod
     def setup(self):

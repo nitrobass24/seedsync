@@ -10,7 +10,12 @@ class SystemFile:
     """
 
     def __init__(
-        self, name: str, size: int, is_dir: bool = False, time_created: datetime = None, time_modified: datetime = None
+        self,
+        name: str,
+        size: int,
+        is_dir: bool = False,
+        time_created: datetime | None = None,
+        time_modified: datetime | None = None,
     ):
         if size < 0:
             raise ValueError("File size must be non-negative")
@@ -40,11 +45,11 @@ class SystemFile:
         return self.__is_dir
 
     @property
-    def timestamp_created(self) -> datetime:
+    def timestamp_created(self) -> datetime | None:
         return self.__timestamp_created
 
     @property
-    def timestamp_modified(self) -> datetime:
+    def timestamp_modified(self) -> datetime | None:
         return self.__timestamp_modified
 
     @property
