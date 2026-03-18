@@ -106,7 +106,7 @@ class Lftp:
         # Suppress DeprecationWarning from pexpect.spawn's internal forkpty call.
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message=".*fork.*", category=DeprecationWarning)
-            self.__process = pexpect.spawn("/usr/bin/lftp", args, env=spawn_env)
+            self.__process = pexpect.spawn("/usr/bin/lftp", args, env=spawn_env)  # type: ignore[arg-type]
         self.__process.setwinsize(24, 10000)
         self.__process.expect(self.__expect_pattern)
         self.__setup()
@@ -122,7 +122,7 @@ class Lftp:
         self.__spawn_process()
         # Replay cached settings
         for setting, value in self.__settings_cache.items():
-            self.__run_command("set {} {}".format(setting, value))
+            self.__run_command("set {} {}".format(setting, value))  # type: ignore[arg-type]
         self.__consecutive_timeouts = 0
 
     def __setup(self):
@@ -139,7 +139,7 @@ class Lftp:
         # permission bits (e.g. 664 → remote) which would override our umask setting
         self.__set(Lftp.__SET_SFTP_SET_PERMISSIONS, "false")
 
-    def with_check_process(method: Callable):
+    def with_check_process(method: Callable):  # type: ignore[override]
         """
         Decorator that checks for a valid process before executing
         the decorated method. Attempts restart if process is dead.
@@ -181,7 +181,8 @@ class Lftp:
             raise LftpError(error)
 
     @with_check_process
-    def __run_command(self, command: str):
+    def __run_command(self, command: str):  # type: ignore[arg-type]
+        assert self.__process is not None
         if self.__log_command_output:
             self.logger.debug("command: {}".format(command.encode("utf8", "surrogateescape")))
         self.__process.sendline(command)
@@ -204,14 +205,17 @@ class Lftp:
 
         # Success — reset consecutive timeout counter
         self.__consecutive_timeouts = 0
-        out = self.__process.before.decode("utf8", "replace")
+        before = self.__process.before
+        assert isinstance(before, bytes)
+        out = before.decode("utf8", "replace")
         out = out.strip()  # remove any CRs
 
         if self.__log_command_output:
             self.logger.debug("out ({} bytes):\n {}".format(len(out), out))
+            after_val = self.__process.after
             after = (
-                self.__process.after.decode("utf8", "replace").strip()
-                if self.__process.after != pexpect.TIMEOUT
+                after_val.decode("utf8", "replace").strip()  # type: ignore[union-attr]
+                if after_val != pexpect.TIMEOUT
                 else ""
             )
             self.logger.debug("after: {}".format(after))
@@ -227,13 +231,16 @@ class Lftp:
                 self.logger.warning("Lftp timeout while consuming error output")
                 self.__pending_error = error_out
                 return ""
-            out = self.__process.before.decode("utf8", "replace")
+            before = self.__process.before
+            assert isinstance(before, bytes)
+            out = before.decode("utf8", "replace")
             out = out.strip()  # remove any CRs
             if self.__log_command_output:
                 self.logger.debug("retry out ({} bytes):\n {}".format(len(out), out))
+                after_val = self.__process.after
                 after = (
-                    self.__process.after.decode("utf8", "replace").strip()
-                    if self.__process.after != pexpect.TIMEOUT
+                    after_val.decode("utf8", "replace").strip()  # type: ignore[union-attr]
+                    if after_val != pexpect.TIMEOUT
                     else ""
                 )
                 self.logger.debug("retry after: {}".format(after))
@@ -263,7 +270,7 @@ class Lftp:
         :return:
         """
         self.__settings_cache[setting] = value
-        self.__run_command("set {} {}".format(setting, value))
+        self.__run_command("set {} {}".format(setting, value))  # type: ignore[arg-type]
 
     def __get(self, setting: str) -> str:
         """
@@ -271,7 +278,7 @@ class Lftp:
         :param setting:
         :return:
         """
-        out = self.__run_command("set -a | grep {}".format(setting))
+        out = self.__run_command("set -a | grep {}".format(setting))  # type: ignore[arg-type]
         m = re.search("set {} (.*)".format(setting), out)
         if not m or not m.group or not m.group(1):
             raise LftpError("Failed to get setting '{}'. Output: '{}'".format(setting, out))
@@ -473,7 +480,7 @@ class Lftp:
         completion signals.
         :return:
         """
-        out = self.__run_command("jobs -v")
+        out = self.__run_command("jobs -v")  # type: ignore[arg-type]
         try:
             statuses = self.__job_status_parser.parse(out)
             self.__consecutive_status_errors = 0
@@ -486,7 +493,7 @@ class Lftp:
                 raise
         return statuses
 
-    def queue(self, name: str, is_dir: bool, exclude_patterns: list = None):
+    def queue(self, name: str, is_dir: bool, exclude_patterns: list | None = None):
         """
         Queues a job for download
         This method may cause an exception to be generated in a later method call:
@@ -528,7 +535,7 @@ class Lftp:
         )
         command = " ".join(parts)
         self.logger.info("queue command: %s", command)
-        self.__run_command(command)
+        self.__run_command(command)  # type: ignore[arg-type]
 
     def kill(self, name: str) -> bool:
         """
@@ -538,7 +545,11 @@ class Lftp:
         """
         # look for this name in the status list
         job_to_kill = None
-        for status in self.status():
+        statuses = self.status()
+        if statuses is None:
+            self.logger.debug("Kill failed - status unavailable for job '{}'".format(name))
+            return False
+        for status in statuses:
             if status.name == name:
                 job_to_kill = status
                 break
@@ -550,10 +561,10 @@ class Lftp:
         #       in this case the wrong job may be killed, there's nothing we can do about it
         if job_to_kill.state == LftpJobStatus.State.RUNNING:
             self.logger.debug("Killing running job '{}'...".format(name))
-            self.__run_command("kill {}".format(job_to_kill.id))
+            self.__run_command("kill {}".format(job_to_kill.id))  # type: ignore[arg-type]
         elif job_to_kill.state == LftpJobStatus.State.QUEUED:
             self.logger.debug("Killing queued job '{}'...".format(name))
-            self.__run_command("queue --delete {}".format(job_to_kill.id))
+            self.__run_command("queue --delete {}".format(job_to_kill.id))  # type: ignore[arg-type]
         else:
             raise NotImplementedError("Unsupported state {}".format(str(job_to_kill.state)))
         return True
@@ -564,8 +575,8 @@ class Lftp:
         :return:
         """
         # empty the queue and kill running jobs
-        self.__run_command("queue -d *")
-        self.__run_command("kill all")
+        self.__run_command("queue -d *")  # type: ignore[arg-type]
+        self.__run_command("kill all")  # type: ignore[arg-type]
 
     def exit(self):
         """
@@ -573,9 +584,10 @@ class Lftp:
         :return:
         """
         self.kill_all()
+        assert self.__process is not None
         self.__process.sendline("exit")
         self.__process.close(force=True)
 
     # Mark decorators as static (must be at end of class)
     # Source: https://stackoverflow.com/a/3422823
-    with_check_process = staticmethod(with_check_process)
+    with_check_process = staticmethod(with_check_process)  # type: ignore[arg-type]

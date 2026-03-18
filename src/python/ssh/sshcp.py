@@ -293,20 +293,24 @@ class Sshcp:
                     ]
                 )
                 if i > 0:
-                    before = sp.before.decode(errors="replace").strip() if sp.before != pexpect.EOF else ""
-                    after = sp.after.decode(errors="replace").strip() if sp.after != pexpect.EOF else ""
+                    before_val = sp.before
+                    after_val = sp.after
+                    before = before_val.decode(errors="replace").strip() if isinstance(before_val, bytes) else ""
+                    after = after_val.decode(errors="replace").strip() if isinstance(after_val, bytes) else ""
                     self.logger.warning("Command failed: '{} - {}'".format(before, after))
                 if i == 1:
                     error_msg = "Unknown error"
-                    if sp.before.decode(errors="replace").strip():
-                        error_msg += " - " + sp.before.decode(errors="replace").strip()
+                    before_val = sp.before
+                    if isinstance(before_val, bytes) and before_val.decode(errors="replace").strip():
+                        error_msg += " - " + before_val.decode(errors="replace").strip()
                     raise SshcpError(error_msg)
                 elif i == 3:
                     raise SshcpError("Bad hostname: {}".format(self.__host))
                 elif i in {2, 4}:
                     error_msg = "Connection refused by server"
-                    if sp.before.decode(errors="replace").strip():
-                        error_msg += " - " + sp.before.decode(errors="replace").strip()
+                    before_val = sp.before
+                    if isinstance(before_val, bytes) and before_val.decode(errors="replace").strip():
+                        error_msg += " - " + before_val.decode(errors="replace").strip()
                     raise SshcpError(error_msg)
                 sp.sendline(self.__password)
 
@@ -321,8 +325,10 @@ class Sshcp:
                 timeout=self.__TIMEOUT_SECS,
             )
             if i > 0:
-                before = sp.before.decode(errors="replace").strip() if sp.before != pexpect.EOF else ""
-                after = sp.after.decode(errors="replace").strip() if sp.after != pexpect.EOF else ""
+                before_val = sp.before
+                after_val = sp.after
+                before = before_val.decode(errors="replace").strip() if isinstance(before_val, bytes) else ""
+                after = after_val.decode(errors="replace").strip() if isinstance(after_val, bytes) else ""
                 self.logger.warning("Command failed: '{} - {}'".format(before, after))
             if i == 1:
                 raise SshcpError("Incorrect password")
@@ -330,14 +336,18 @@ class Sshcp:
                 raise SshcpError("Bad hostname: {}".format(self.__host))
             elif i in {2, 4}:
                 error_msg = "Connection refused by server"
-                if sp.before.decode(errors="replace").strip():
-                    error_msg += " - " + sp.before.decode(errors="replace").strip()
+                before_val = sp.before
+                if isinstance(before_val, bytes) and before_val.decode(errors="replace").strip():
+                    error_msg += " - " + before_val.decode(errors="replace").strip()
                 raise SshcpError(error_msg)
 
             # Capture output attributes while sp is still open (close can clear them)
-            out_before = sp.before.decode(errors="replace").strip() if sp.before != pexpect.EOF else ""
-            out_after = sp.after.decode(errors="replace").strip() if sp.after != pexpect.EOF else ""
-            out_raw = sp.before.replace(b"\r\n", b"\n").strip()
+            before_val = sp.before
+            after_val = sp.after
+            out_before = before_val.decode(errors="replace").strip() if isinstance(before_val, bytes) else ""
+            out_after = after_val.decode(errors="replace").strip() if isinstance(after_val, bytes) else ""
+            assert isinstance(before_val, bytes)
+            out_raw = before_val.replace(b"\r\n", b"\n").strip()
 
         except pexpect.exceptions.TIMEOUT:
             elapsed = time.time() - start_time

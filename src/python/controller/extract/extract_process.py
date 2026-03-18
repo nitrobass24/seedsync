@@ -1,10 +1,10 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import datetime
 import logging
 import multiprocessing
 import queue
 import time
+from datetime import datetime
 
 from common import AppProcess, overrides
 
@@ -19,7 +19,7 @@ class ExtractStatusResult:
 
 
 class ExtractCompletedResult:
-    def __init__(self, timestamp: datetime, name: str, is_dir: bool, pair_id: str = None):
+    def __init__(self, timestamp: datetime, name: str, is_dir: bool, pair_id: str | None = None):
         self.timestamp = timestamp
         self.name = name
         self.is_dir = is_dir
@@ -27,7 +27,7 @@ class ExtractCompletedResult:
 
 
 class ExtractFailedResult:
-    def __init__(self, timestamp: datetime, name: str, is_dir: bool, pair_id: str = None):
+    def __init__(self, timestamp: datetime, name: str, is_dir: bool, pair_id: str | None = None):
         self.timestamp = timestamp
         self.name = name
         self.is_dir = is_dir
@@ -45,18 +45,16 @@ class ExtractProcess(AppProcess):
             self.completed_queue = completed_queue
             self.failed_queue = failed_queue
 
-        def extract_completed(self, name: str, is_dir: bool, pair_id: str = None):
+        def extract_completed(self, name: str, is_dir: bool, pair_id: str | None = None):
             self.logger.info("Extraction completed for {}".format(name))
             completed_result = ExtractCompletedResult(
-                timestamp=datetime.datetime.now(), name=name, is_dir=is_dir, pair_id=pair_id
+                timestamp=datetime.now(), name=name, is_dir=is_dir, pair_id=pair_id
             )
             self.completed_queue.put(completed_result)
 
-        def extract_failed(self, name: str, is_dir: bool, pair_id: str = None):
+        def extract_failed(self, name: str, is_dir: bool, pair_id: str | None = None):
             self.logger.error("Extraction failed for {}".format(name))
-            failed_result = ExtractFailedResult(
-                timestamp=datetime.datetime.now(), name=name, is_dir=is_dir, pair_id=pair_id
-            )
+            failed_result = ExtractFailedResult(timestamp=datetime.now(), name=name, is_dir=is_dir, pair_id=pair_id)
             self.failed_queue.put(failed_result)
 
     def __init__(self):
@@ -83,10 +81,12 @@ class ExtractProcess(AppProcess):
 
     @overrides(AppProcess)
     def run_cleanup(self):
+        assert self.__dispatch is not None
         self.__dispatch.stop()
 
     @overrides(AppProcess)
     def run_loop(self):
+        assert self.__dispatch is not None
         # Forward all the extract commands
         try:
             while True:
@@ -98,7 +98,7 @@ class ExtractProcess(AppProcess):
                     # Report dispatch errors as failures so the controller
                     # can transition the file to EXTRACT_FAILED state
                     failed_result = ExtractFailedResult(
-                        timestamp=datetime.datetime.now(),
+                        timestamp=datetime.now(),
                         name=req.model_file.name,
                         is_dir=req.model_file.is_dir,
                         pair_id=req.pair_id,
@@ -109,7 +109,7 @@ class ExtractProcess(AppProcess):
 
         # Queue the latest status
         statuses = self.__dispatch.status()
-        status_result = ExtractStatusResult(timestamp=datetime.datetime.now(), statuses=statuses)
+        status_result = ExtractStatusResult(timestamp=datetime.now(), statuses=statuses)
         self.__status_result_queue.put(status_result)
 
         time.sleep(ExtractProcess.__DEFAULT_SLEEP_INTERVAL_IN_SECS)
