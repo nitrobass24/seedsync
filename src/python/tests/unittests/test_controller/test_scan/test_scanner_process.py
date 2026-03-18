@@ -60,6 +60,18 @@ class TestScannerProcess(unittest.TestCase):
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
         handler.setFormatter(formatter)
 
+    def _pop_result(self, process: ScannerProcess, timeout: float = 2.0):
+        """Pop latest result with retry. multiprocessing.Queue.put() uses a
+        background feeder thread, so the item may not be immediately available
+        for get(block=False) after run_loop() returns."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            result = process.pop_latest_result()
+            if result is not None:
+                return result
+            time.sleep(0.01)
+        return None
+
     def test_retrieves_scan_results(self):
         a = SystemFile("a", 100, True)
         aa = SystemFile("aa", 60, False)
@@ -85,7 +97,7 @@ class TestScannerProcess(unittest.TestCase):
         mock_scanner.scan.return_value = [a]
         process.run_loop()
 
-        result = process.pop_latest_result()
+        result = self._pop_result(process)
         self.assertIsNotNone(result)
         self.assertEqual(1, len(result.files))
         self.assertEqual("a", result.files[0].name)
@@ -103,7 +115,7 @@ class TestScannerProcess(unittest.TestCase):
         mock_scanner.scan.return_value = [a, b]
         process.run_loop()
 
-        result = process.pop_latest_result()
+        result = self._pop_result(process)
         self.assertIsNotNone(result)
         self.assertEqual(2, len(result.files))
         self.assertEqual("a", result.files[0].name)
@@ -123,7 +135,7 @@ class TestScannerProcess(unittest.TestCase):
         mock_scanner.scan.return_value = [c]
         process.run_loop()
 
-        result = process.pop_latest_result()
+        result = self._pop_result(process)
         self.assertIsNotNone(result)
         self.assertEqual(1, len(result.files))
         self.assertEqual("c", result.files[0].name)
@@ -134,7 +146,7 @@ class TestScannerProcess(unittest.TestCase):
         mock_scanner.scan.return_value = []
         process.run_loop()
 
-        result = process.pop_latest_result()
+        result = self._pop_result(process)
         self.assertIsNotNone(result)
         self.assertEqual(0, len(result.files))
 
@@ -147,7 +159,7 @@ class TestScannerProcess(unittest.TestCase):
         process.run_init()
         process.run_loop()
 
-        result = process.pop_latest_result()
+        result = self._pop_result(process)
         self.assertIsNotNone(result)
         self.assertEqual(0, len(result.files))
         self.assertTrue(result.failed)
@@ -174,6 +186,16 @@ class TestScannerProcessSpawned(unittest.TestCase):
     Uses picklable scanners (no MagicMock) so fixtures survive the spawn boundary.
     """
 
+    def _pop_result(self, process: ScannerProcess, timeout: float = 2.0):
+        """Pop latest result with retry for cross-process queue delivery."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            result = process.pop_latest_result()
+            if result is not None:
+                return result
+            time.sleep(0.01)
+        return None
+
     def test_spawned_process_produces_scan_result(self):
         """Spawn a ScannerProcess, let it run one scan, then terminate and read the result."""
         files = [SystemFile("spawned.txt", 42, False)]
@@ -189,7 +211,7 @@ class TestScannerProcessSpawned(unittest.TestCase):
         result = None
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
-            result = process.pop_latest_result()
+            result = self._pop_result(process)
             if result is not None:
                 break
             time.sleep(0.05)
@@ -241,7 +263,7 @@ class TestScannerProcessSpawned(unittest.TestCase):
         # Wait for at least one result
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
-            if process.pop_latest_result() is not None:
+            if self._pop_result(process) is not None:
                 break
             time.sleep(0.05)
 
