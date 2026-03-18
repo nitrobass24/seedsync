@@ -77,7 +77,7 @@ class WebhookNotifier(IModelListener):
         else:
             self._logger.info("Webhook notifier shutdown: all threads completed")
 
-    def _fire_webhook(self, event_type: str, filename: str, pair_id: str = None, full_path: str = None):
+    def _fire_webhook(self, event_type: str, filename: str, pair_id: str | None = None, full_path: str | None = None):
         """Fire-and-forget POST in a daemon thread."""
         url = self._config.notifications.webhook_url
         payload = {

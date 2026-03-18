@@ -44,7 +44,9 @@ class ScannerResult:
     Results of a system scan
     """
 
-    def __init__(self, timestamp: datetime, files: list[SystemFile], failed: bool = False, error_message: str = None):
+    def __init__(
+        self, timestamp: datetime, files: list[SystemFile], failed: bool = False, error_message: str | None = None
+    ):
         self.timestamp = timestamp
         self.files = files
         self.failed = failed

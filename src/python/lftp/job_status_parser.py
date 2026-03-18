@@ -429,6 +429,7 @@ class LftpJobStatusParser:
                     if result_at.group("eta"):
                         eta = LftpJobStatusParser._eta_to_seconds(result_at.group("eta"))
                     file_status = LftpJobStatus.TransferState(size_local, None, percent_local, speed, eta)
+                    assert prev_job is not None
                     prev_job.add_active_file_transfer_state(name, file_status)
                 elif result_at2:
                     # filename is full path, but chunk name is only normpath
@@ -437,6 +438,7 @@ class LftpJobStatusParser:
                             "Mismatch: filename '{}' but chunk data for '{}'".format(name, result_at2.group("name"))
                         )
                     file_status = LftpJobStatus.TransferState(None, None, None, None, None)
+                    assert prev_job is not None
                     prev_job.add_active_file_transfer_state(name, file_status)
                 elif result_got:
                     if result_got.group("name") != os.path.basename(os.path.normpath(name)):
@@ -453,6 +455,7 @@ class LftpJobStatusParser:
                     if result_got.group("eta"):
                         eta = LftpJobStatusParser._eta_to_seconds(result_got.group("eta"))
                     file_status = LftpJobStatus.TransferState(size_local, size_remote, percent_local, speed, eta)
+                    assert prev_job is not None
                     prev_job.add_active_file_transfer_state(name, file_status)
                 else:
                     raise ValueError("Missing chunk data for filename '{}'".format(name))

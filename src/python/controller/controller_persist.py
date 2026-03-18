@@ -47,9 +47,9 @@ class ControllerPersist(Persist):
                 migrated.add(key)
         return migrated
 
-    @classmethod
+    @classmethod  # type: ignore[override]
     @overrides(Persist)
-    def from_str(cls: "ControllerPersist", content: str) -> "ControllerPersist":
+    def from_str(cls: "ControllerPersist", content: str) -> "ControllerPersist":  # type: ignore[override]
         persist = ControllerPersist()
         try:
             dct = json.loads(content)

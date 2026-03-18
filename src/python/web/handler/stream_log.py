@@ -108,6 +108,7 @@ class LogStreamHandler(IStreamHandler):
     @overrides(IStreamHandler)
     def setup(self):
         # Send out all the cached records first
+        assert LogStreamHandler._cache is not None
         for record in LogStreamHandler._cache.get_cached_records():
             self.handler.emit(record)
         # Then subscribe the live stream

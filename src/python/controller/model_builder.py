@@ -172,7 +172,13 @@ class ModelBuilder:
                 raise ModelError("Zero sources have a file object")
 
             # sanity check between the sources
-            is_dir = remote.is_dir if remote else local.is_dir if local else status.type == LftpJobStatus.Type.MIRROR
+            is_dir = (
+                remote.is_dir
+                if remote
+                else local.is_dir
+                if local
+                else (status is not None and status.type == LftpJobStatus.Type.MIRROR)
+            )
             if (
                 (remote and is_dir != remote.is_dir)
                 or (local and is_dir != local.is_dir)
@@ -211,7 +217,8 @@ class ModelBuilder:
                         # also update all parent directories
                         _parent_file = _model_file.parent
                         while _parent_file is not None:
-                            _parent_file.transferred_size += _model_file.transferred_size
+                            if _parent_file.transferred_size is not None and _model_file.transferred_size is not None:
+                                _parent_file.transferred_size += _model_file.transferred_size
                             _parent_file = _parent_file.parent
 
                 # set the is_extractable flag
@@ -271,7 +278,9 @@ class ModelBuilder:
                 for _child_name in _all_children_names:
                     _remote_child = _remote_children.get(_child_name, None)
                     _local_child = _local_children.get(_child_name, None)
-                    _is_dir = _remote_child.is_dir if _remote_child else _local_child.is_dir
+                    _is_dir = (
+                        _remote_child.is_dir if _remote_child else (_local_child.is_dir if _local_child else False)
+                    )
                     # sanity check is_dir
                     if (_remote_child and _is_dir != _remote_child.is_dir) or (
                         _local_child and _is_dir != _local_child.is_dir
@@ -338,7 +347,7 @@ class ModelBuilder:
                 ):
                     remaining = max(status.total_transfer_state.size_remote - status.total_transfer_state.size_local, 0)
                     raw_eta = remaining / model_file.downloading_speed
-                elif model_file.transferred_size is not None:
+                elif model_file.transferred_size is not None and model_file.remote_size is not None:
                     remaining = max(model_file.remote_size - model_file.transferred_size, 0)
                     raw_eta = remaining / model_file.downloading_speed
 

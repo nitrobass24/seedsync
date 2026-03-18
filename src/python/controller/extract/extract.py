@@ -75,7 +75,7 @@ class Extract:
             raise ExtractError(Extract._format_7z_error(result, "Archive verification failed"))
 
     @staticmethod
-    def _detect_format(archive_path: str) -> str:
+    def _detect_format(archive_path: str) -> str | None:
         """
         Detect archive format using magic bytes.
         Returns format name or None if unrecognized.

@@ -21,11 +21,11 @@ class ExtractDispatchError(AppError):
 
 class ExtractListener(ABC):
     @abstractmethod
-    def extract_completed(self, name: str, is_dir: bool, pair_id: str = None):
+    def extract_completed(self, name: str, is_dir: bool, pair_id: str | None = None):
         pass
 
     @abstractmethod
-    def extract_failed(self, name: str, is_dir: bool, pair_id: str = None):
+    def extract_failed(self, name: str, is_dir: bool, pair_id: str | None = None):
         pass
 
 
@@ -37,7 +37,7 @@ class ExtractStatus:
     class State(Enum):
         EXTRACTING = 0
 
-    def __init__(self, name: str, is_dir: bool, state: State, pair_id: str = None):
+    def __init__(self, name: str, is_dir: bool, state: State, pair_id: str | None = None):
         self.__name = name
         self.__is_dir = is_dir
         self.__state = state
@@ -67,7 +67,7 @@ class ExtractDispatch:
     __WORKER_SLEEP_INTERVAL_IN_SECS = 0.5
 
     class _Task:
-        def __init__(self, root_name: str, root_is_dir: bool, pair_id: str = None):
+        def __init__(self, root_name: str, root_is_dir: bool, pair_id: str | None = None):
             self.root_name = root_name
             self.root_is_dir = root_is_dir
             self.pair_id = pair_id
@@ -78,7 +78,7 @@ class ExtractDispatch:
 
     def __init__(self):
         self.__task_queue = queue.Queue()
-        self.__worker = threading.Thread(name="ExtractWorker", target=self.__worker)
+        self.__worker_thread: threading.Thread = threading.Thread(name="ExtractWorker", target=self.__worker)
         self.__worker_shutdown = threading.Event()
 
         self.__listeners = []
@@ -90,11 +90,11 @@ class ExtractDispatch:
         self.logger = base_logger.getChild(self.__class__.__name__)
 
     def start(self):
-        self.__worker.start()
+        self.__worker_thread.start()
 
     def stop(self):
         self.__worker_shutdown.set()
-        self.__worker.join()
+        self.__worker_thread.join()
 
     def add_listener(self, listener: ExtractListener):
         self.__listeners_lock.acquire()
@@ -112,7 +112,7 @@ class ExtractDispatch:
         return statuses
 
     @staticmethod
-    def __resolve_archive_path(relative_path: str, local_path: str, local_path_fallback: str = None):
+    def __resolve_archive_path(relative_path: str, local_path: str, local_path_fallback: str | None = None):
         """
         Find an archive file, checking primary local_path then fallback.
         Returns (absolute_path, is_fallback) or (None, False).

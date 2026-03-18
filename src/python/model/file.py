@@ -30,7 +30,7 @@ class ModelFile:
         VALIDATED = 9
         CORRUPT = 10
 
-    def __init__(self, name: str, is_dir: bool, pair_id: str = None):
+    def __init__(self, name: str, is_dir: bool, pair_id: str | None = None):
         self.__name = name  # file or folder name
         self.__is_dir = is_dir  # True if this is a dir, False if file
         self.__pair_id = pair_id  # which path pair this file belongs to

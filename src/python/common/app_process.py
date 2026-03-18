@@ -75,7 +75,8 @@ class AppProcess(Process):
             root = logging.getLogger()
             root.handlers.clear()
             root.addHandler(QueueHandler(self._mp_log_queue))
-            root.setLevel(self._mp_log_level)
+            if self._mp_log_level is not None:
+                root.setLevel(self._mp_log_level)
             self.logger = root.getChild(self.__name)
 
         self.logger.debug("Started process")
@@ -83,6 +84,7 @@ class AppProcess(Process):
         self.run_init()
 
         try:
+            assert self._terminate is not None
             while not self._terminate.is_set():
                 self.run_loop()
             self.logger.debug("Process received terminate flag")
@@ -174,6 +176,7 @@ class AppOneShotProcess(AppProcess):
 
     def run_loop(self):
         self.run_once()
+        assert self._terminate is not None
         self._terminate.set()
 
     def run_cleanup(self):

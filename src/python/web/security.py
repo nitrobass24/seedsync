@@ -230,7 +230,7 @@ def install_api_key_auth(app: bottle.Bottle, get_api_key):
 
         # SSE stream also accepts query parameter
         if not provided and path == _SSE_STREAM_PATH:
-            provided = bottle.request.params.get("api_key")
+            provided = bottle.request.params.get("api_key")  # type: ignore[attr-defined]
 
         if not provided:
             raise bottle.HTTPError(401, "API key required")
