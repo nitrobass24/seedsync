@@ -1595,20 +1595,14 @@ class TestLftpJobStatusParser(unittest.TestCase):
 
     def test_eta_fragment_inside_job_is_skipped(self):
         """Regression: 'eta:4m [Receiving data]' fragment from PTY wrap."""
-        output = (
-            "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\n"
-            "eta:4m [Receiving data]"
-        )
+        output = "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\neta:4m [Receiving data]"
         parser = LftpJobStatusParser()
         statuses = parser.parse(output)
         self.assertEqual(1, len(statuses))
 
     def test_partial_eta_fragment_inside_job_is_skipped(self):
         """Regression: 'ta:4m [Receiving data]' fragment (mid-word wrap)."""
-        output = (
-            "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\n"
-            "ta:4m [Receiving data]"
-        )
+        output = "[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s\nta:4m [Receiving data]"
         parser = LftpJobStatusParser()
         statuses = parser.parse(output)
         self.assertEqual(1, len(statuses))
