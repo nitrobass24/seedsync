@@ -53,8 +53,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Ruff
-        run: pip install ruff
+      - name: Install tools
+        run: pip install ruff pyright
 
       - name: Ruff check
         working-directory: src/python
@@ -63,6 +63,11 @@ jobs:
       - name: Ruff format check
         working-directory: src/python
         run: ruff format --check
+
+      - name: Pyright type check (informational)
+        working-directory: src/python
+        continue-on-error: true
+        run: pyright
 
   python-test:
     name: Python Unit Tests
