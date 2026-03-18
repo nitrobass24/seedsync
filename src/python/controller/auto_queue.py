@@ -88,8 +88,8 @@ class AutoQueuePersist(Persist):
 
     @classmethod
     @overrides(Persist)
-    def from_str(cls: "AutoQueuePersist", content: str) -> "AutoQueuePersist":
-        persist = AutoQueuePersist()
+    def from_str(cls: type["AutoQueuePersist"], content: str) -> "AutoQueuePersist":
+        persist = cls()
         try:
             dct = json.loads(content)
             pattern_list = dct[AutoQueuePersist.__KEY_PATTERNS]
@@ -356,6 +356,8 @@ class AutoQueue:
         caller (process()) already gates on the global __enabled flag.
         """
         if self.__pair_auto_queue:
+            if file.pair_id is None:
+                return False
             return self.__pair_auto_queue.get(file.pair_id, False)
         return True
 
@@ -405,8 +407,8 @@ class AutoQueue:
         :return:
         """
         # make the search case insensitive
-        pattern = pattern.pattern.lower()
+        pattern_str = pattern.pattern.lower()
         filename = file.name.lower()
         # 1. pattern match
         # 2. wildcard match
-        return pattern in filename or fnmatch.fnmatch(filename, pattern)
+        return pattern_str in filename or fnmatch.fnmatch(filename, pattern_str)
