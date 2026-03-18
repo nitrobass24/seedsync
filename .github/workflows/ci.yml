@@ -53,8 +53,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install tools
-        run: pip install ruff pyright
+      - name: Install Ruff
+        run: pip install ruff
 
       - name: Ruff check
         working-directory: src/python
@@ -64,9 +64,24 @@ jobs:
         working-directory: src/python
         run: ruff format --check
 
-      - name: Pyright type check (informational)
+  python-typecheck:
+    name: Python Type Check
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Pyright
+        run: pip install pyright
+
+      - name: Pyright
         working-directory: src/python
-        continue-on-error: true
         run: pyright
 
   python-test:
