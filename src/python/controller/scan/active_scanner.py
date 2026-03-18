@@ -18,8 +18,10 @@ class ActiveScanner(IScanner):
     methods are called by different processes.
     """
 
-    def __init__(self, local_path: str):
+    def __init__(self, local_path: str, lftp_temp_suffix: str | None = None):
         self.__scanner = SystemScanner(local_path)
+        if lftp_temp_suffix:
+            self.__scanner.set_lftp_temp_suffix(lftp_temp_suffix)
         self.__active_files_queue = multiprocessing.Queue()
         self.__active_files = []  # latest state
         self.logger = logging.getLogger(self.__class__.__name__)
