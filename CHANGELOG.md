@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.14.1] - 2026-03-18
+
+### Fixed
+
+- **Parser crash on long filenames** — Chunk progress lines that wrap across PTY boundaries no longer crash the controller; unrecognized lines inside a job context are skipped with a warning (#290, #293)
+- **False download completion on parser error** — Parser failures no longer trigger false "download completed" signals that left files stuck in staging at partial progress (#296)
+- **Progress tracking with .lftp temp naming** — ActiveScanner now recognizes `.lftp`-suffixed temp files in staging, fixing 0% progress display for single-file downloads when temp naming is enabled (#298)
+
+### Changed
+
+- **PEP 621 pyproject.toml** — Consolidated Python dependencies from Poetry format to PEP 621 with proper dependency groups (runtime, test, dev); removed dead dependencies (#287)
+- **Ruff linting and formatting** — Added Ruff as Python linter/formatter with CI enforcement; applied auto-fixes across 99 files (#288)
+- **Pyright type checking** — Added Pyright in basic mode with CI reporting; fixed 91 type errors across 26 modules (#292, #295)
+- **Python unit tests in CI** — Python tests now run in CI alongside Angular tests (#287)
+- **Angular dependency updates** — Bumped Angular group to 21.2.4, vitest to 4.1.0, jsdom to 29.0.0 (#282, #283, #284)
+
 ## [0.14.0] - 2026-03-14
 
 ### Added
