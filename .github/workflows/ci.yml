@@ -67,7 +67,6 @@ jobs:
   python-typecheck:
     name: Python Type Check
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -77,8 +76,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Pyright
-        run: pip install pyright
+      - name: Install dependencies
+        working-directory: src/python
+        run: pip install -r requirements.txt pyright
 
       - name: Pyright
         working-directory: src/python
@@ -334,10 +334,11 @@ jobs:
       && (startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/develop' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
       && needs.unit-test.result == 'success'
       && needs.python-lint.result == 'success'
+      && needs.python-typecheck.result == 'success'
       && needs.python-test.result == 'success'
       && needs.build-amd64.result == 'success'
       && needs.build-arm64.result == 'success'
-    needs: [unit-test, python-lint, python-test, build-amd64, build-arm64]
+    needs: [unit-test, python-lint, python-typecheck, python-test, build-amd64, build-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: read

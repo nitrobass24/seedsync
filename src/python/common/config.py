@@ -40,11 +40,11 @@ T = TypeVar("T", bound="InnerConfig")
 
 class Converters:
     @staticmethod
-    def null(_: T, __: str, value: str) -> str:
+    def null(_: T, __: str, value: str) -> str:  # type: ignore[reportInvalidTypeVarUse]
         return value
 
     @staticmethod
-    def int(cls: T, name: str, value: str) -> int:
+    def int(cls: T, name: str, value: str) -> int:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if not value:
             raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
         try:
@@ -54,7 +54,7 @@ class Converters:
         return val
 
     @staticmethod
-    def bool(cls: T, name: str, value: str) -> bool:
+    def bool(cls: T, name: str, value: str) -> bool:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if not value:
             raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
         try:
@@ -66,33 +66,33 @@ class Converters:
 
 class Checkers:
     @staticmethod
-    def null(_: T, __: str, value: Any) -> Any:
+    def null(_: T, __: str, value: Any) -> Any:  # type: ignore[reportInvalidTypeVarUse]
         return value
 
     @staticmethod
-    def string_nonempty(cls: T, name: str, value: str) -> str:
+    def string_nonempty(cls: T, name: str, value: str) -> str:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if not value or not value.strip():
             raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
         return value
 
     @staticmethod
-    def string_allow_empty(cls: T, name: str, value: str) -> str:
+    def string_allow_empty(cls: T, name: str, value: str) -> str:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         return value
 
     @staticmethod
-    def int_non_negative(cls: T, name: str, value: int) -> int:
+    def int_non_negative(cls: T, name: str, value: int) -> int:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if value < 0:
             raise ConfigError("Bad config: {}.{} ({}) must be zero or greater".format(cls.__name__, name, value))
         return value
 
     @staticmethod
-    def int_positive(cls: T, name: str, value: int) -> int:
+    def int_positive(cls: T, name: str, value: int) -> int:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if value < 1:
             raise ConfigError("Bad config: {}.{} ({}) must be greater than 0".format(cls.__name__, name, value))
         return value
 
     @staticmethod
-    def algorithm_allowed(cls: T, name: str, value: str) -> str:
+    def algorithm_allowed(cls: T, name: str, value: str) -> str:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         allowed = {"md5", "sha1", "sha256"}
         normalized = value.strip().lower() if value else ""
         if normalized not in allowed:
@@ -404,7 +404,7 @@ class Config(Persist):
 
     @classmethod
     @overrides(Persist)
-    def from_str(cls: "Config", content: str) -> "Config":
+    def from_str(cls: type["Config"], content: str) -> "Config":
         config_parser = configparser.ConfigParser()
         try:
             config_parser.read_string(content)
@@ -415,7 +415,7 @@ class Config(Persist):
             config_dict[section] = {}
             for option in config_parser.options(section):
                 config_dict[section][option] = config_parser.get(section, option)
-        return Config.from_dict(config_dict)
+        return cls.from_dict(config_dict)
 
     @overrides(Persist)
     def to_str(self) -> str:

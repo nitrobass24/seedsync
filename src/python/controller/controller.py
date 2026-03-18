@@ -21,7 +21,7 @@ from .model_builder import ModelBuilder
 from .move import MoveProcess
 
 # my libs
-from .scan import ActiveScanner, LocalScanner, RemoteScanner, ScannerProcess
+from .scan import ActiveScanner, LocalScanner, RemoteScanner, ScannerProcess, ScannerResult
 from .validate import ValidateProcess, ValidateRequest
 
 
@@ -169,8 +169,8 @@ class _PairContext:
         self.local_scan_received: bool = False
 
         # Temporary storage for latest scan results (set during _update_pair_model_state)
-        self._latest_remote_scan = None
-        self._latest_local_scan = None
+        self._latest_remote_scan: ScannerResult | None = None
+        self._latest_local_scan: ScannerResult | None = None
 
 
 class Controller:
@@ -292,8 +292,8 @@ class Controller:
                 self._create_pair_context(
                     pair_id=None,
                     name="Default",
-                    remote_path=self.__context.config.lftp.remote_path,
-                    local_path=self.__context.config.lftp.local_path,
+                    remote_path=self.__context.config.lftp.remote_path,  # type: ignore[arg-type]
+                    local_path=self.__context.config.lftp.local_path,  # type: ignore[arg-type]
                 )
             ]
 
@@ -318,18 +318,18 @@ class Controller:
         # Each pair gets its own staging subdirectory to prevent cross-pair collisions
         if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
             if pair_id:
-                effective_local_path = os.path.join(self.__context.config.controller.staging_path, pair_id)
+                effective_local_path = os.path.join(self.__context.config.controller.staging_path, pair_id)  # type: ignore[arg-type]
             else:
-                effective_local_path = self.__context.config.controller.staging_path
+                effective_local_path = self.__context.config.controller.staging_path  # type: ignore[arg-type]
             os.makedirs(effective_local_path, exist_ok=True)
         else:
             effective_local_path = local_path
 
         # LFTP instance
         lftp = Lftp(
-            address=self.__context.config.lftp.remote_address,
-            port=self.__context.config.lftp.remote_port,
-            user=self.__context.config.lftp.remote_username,
+            address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
+            port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
+            user=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
             password=self.__password,
         )
         lftp.set_base_logger(pair_logger)
@@ -342,30 +342,30 @@ class Controller:
             effective_local_path,
             lftp_temp_suffix=Constants.LFTP_TEMP_FILE_SUFFIX if self.__context.config.lftp.use_temp_file else None,
         )
-        local_scanner = LocalScanner(local_path=local_path, use_temp_file=self.__context.config.lftp.use_temp_file)
+        local_scanner = LocalScanner(local_path=local_path, use_temp_file=self.__context.config.lftp.use_temp_file)  # type: ignore[arg-type]
         remote_scanner = RemoteScanner(
-            remote_address=self.__context.config.lftp.remote_address,
-            remote_username=self.__context.config.lftp.remote_username,
+            remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
+            remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
             remote_password=self.__password,
-            remote_port=self.__context.config.lftp.remote_port,
+            remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
             remote_path_to_scan=remote_path,
-            local_path_to_scan_script=self.__context.args.local_path_to_scanfs,
-            remote_path_to_scan_script=self.__context.config.lftp.remote_path_to_scan_script,
+            local_path_to_scan_script=self.__context.args.local_path_to_scanfs,  # type: ignore[arg-type]
+            remote_path_to_scan_script=self.__context.config.lftp.remote_path_to_scan_script,  # type: ignore[arg-type]
         )
 
         # Scanner processes
         active_scan_process = ScannerProcess(
             scanner=active_scanner,
-            interval_in_ms=self.__context.config.controller.interval_ms_downloading_scan,
+            interval_in_ms=self.__context.config.controller.interval_ms_downloading_scan,  # type: ignore[arg-type]
             verbose=False,
         )
         local_scan_process = ScannerProcess(
             scanner=local_scanner,
-            interval_in_ms=self.__context.config.controller.interval_ms_local_scan,
+            interval_in_ms=self.__context.config.controller.interval_ms_local_scan,  # type: ignore[arg-type]
         )
         remote_scan_process = ScannerProcess(
             scanner=remote_scanner,
-            interval_in_ms=self.__context.config.controller.interval_ms_remote_scan,
+            interval_in_ms=self.__context.config.controller.interval_ms_remote_scan,  # type: ignore[arg-type]
         )
 
         # Wire multiprocess logging
@@ -383,7 +383,7 @@ class Controller:
         model_builder.set_extract_failed_files(set())
         model_builder.set_validated_files(set())
         model_builder.set_corrupt_files(set())
-        model_builder.set_auto_delete_remote(bool(self.__context.config.autoqueue.auto_delete_remote))
+        model_builder.set_auto_delete_remote(bool(self.__context.config.autoqueue.auto_delete_remote))  # type: ignore[arg-type]
 
         return _PairContext(
             pair_id=pair_id,
@@ -404,12 +404,12 @@ class Controller:
     def _configure_lftp(self, lftp: Lftp):
         """Apply shared LFTP configuration settings."""
         cfg = self.__context.config.lftp
-        lftp.num_parallel_jobs = cfg.num_max_parallel_downloads
-        lftp.num_parallel_files = cfg.num_max_parallel_files_per_download
-        lftp.num_connections_per_root_file = cfg.num_max_connections_per_root_file
-        lftp.num_connections_per_dir_file = cfg.num_max_connections_per_dir_file
-        lftp.num_max_total_connections = cfg.num_max_total_connections
-        lftp.use_temp_file = cfg.use_temp_file
+        lftp.num_parallel_jobs = cfg.num_max_parallel_downloads  # type: ignore[assignment]
+        lftp.num_parallel_files = cfg.num_max_parallel_files_per_download  # type: ignore[assignment]
+        lftp.num_connections_per_root_file = cfg.num_max_connections_per_root_file  # type: ignore[assignment]
+        lftp.num_connections_per_dir_file = cfg.num_max_connections_per_dir_file  # type: ignore[assignment]
+        lftp.num_max_total_connections = cfg.num_max_total_connections  # type: ignore[assignment]
+        lftp.use_temp_file = cfg.use_temp_file  # type: ignore[assignment]
         lftp.temp_file_name = "*" + Constants.LFTP_TEMP_FILE_SUFFIX
         if cfg.net_limit_rate:
             lftp.rate_limit = cfg.net_limit_rate
@@ -434,7 +434,7 @@ class Controller:
             lftp.xfer_verify_command = "{}sum".format(validate_cfg.algorithm)
         else:
             lftp.xfer_verify = False
-        lftp.set_verbose_logging(self.__context.config.general.verbose)
+        lftp.set_verbose_logging(self.__context.config.general.verbose)  # type: ignore[arg-type]
 
     def start(self):
         """
@@ -578,7 +578,7 @@ class Controller:
                 return pc
         return None
 
-    def _find_pair_by_id(self, pair_id: str) -> _PairContext | None:
+    def _find_pair_by_id(self, pair_id: str | None) -> _PairContext | None:
         """Find the pair context by pair_id.
         Returns default (first) pair when pair_id is None.
         Returns None when pair_id is provided but not found.
@@ -596,14 +596,14 @@ class Controller:
         if self.__context.config.controller.use_local_path_as_extract_path:
             extract_out_dir = pc.local_path
         else:
-            extract_out_dir = self.__context.config.controller.extract_path
+            extract_out_dir = self.__context.config.controller.extract_path  # type: ignore[assignment]
 
         # When staging is enabled, archives live in the staging subdir
         if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
             pair_staging = (
-                os.path.join(self.__context.config.controller.staging_path, pc.pair_id)
+                os.path.join(self.__context.config.controller.staging_path, pc.pair_id)  # type: ignore[arg-type]
                 if pc.pair_id
-                else self.__context.config.controller.staging_path
+                else self.__context.config.controller.staging_path  # type: ignore[arg-type]
             )
             out_dir_path = pair_staging
             out_dir_path_fallback = extract_out_dir
@@ -618,7 +618,7 @@ class Controller:
         return ExtractRequest(
             model_file=file,
             local_path=pc.effective_local_path,
-            out_dir_path=out_dir_path,
+            out_dir_path=out_dir_path,  # type: ignore[arg-type]
             pair_id=pc.pair_id,
             local_path_fallback=local_path_fallback,
             out_dir_path_fallback=out_dir_path_fallback,
@@ -682,13 +682,17 @@ class Controller:
 
             for diff in model_diff:
                 if diff.change == ModelDiff.Change.ADDED:
+                    assert diff.new_file is not None
                     self.__model.add_file(diff.new_file)
                 elif diff.change == ModelDiff.Change.REMOVED:
+                    assert diff.old_file is not None
                     self.__model.remove_file(diff.old_file.name, pair_id=diff.old_file.pair_id)
                 elif diff.change == ModelDiff.Change.UPDATED:
+                    assert diff.new_file is not None
                     self.__model.update_file(diff.new_file)
 
                 diff_file = diff.new_file or diff.old_file
+                assert diff_file is not None
                 pc = self._get_pair_context_for_file(diff_file)
 
                 if diff.new_file is not None and diff.new_file.state in (
@@ -705,15 +709,23 @@ class Controller:
                     self._sync_persist_to_all_builders()
 
                 downloaded = False
-                if diff.change == ModelDiff.Change.ADDED and diff.new_file.state == ModelFile.State.DOWNLOADED:
+                if (
+                    diff.change == ModelDiff.Change.ADDED
+                    and diff.new_file is not None
+                    and diff.new_file.state == ModelFile.State.DOWNLOADED
+                ):
                     downloaded = True
                 elif (
                     diff.change == ModelDiff.Change.UPDATED
+                    and diff.new_file is not None
                     and diff.new_file.state == ModelFile.State.DOWNLOADED
+                    and diff.old_file is not None
                     and diff.old_file.state != ModelFile.State.DOWNLOADED
                 ):
                     downloaded = True
                 if downloaded:
+                    assert diff.new_file is not None
+                    assert pc is not None
                     pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
                     self.__persist.downloaded_file_names.add(pkey)
                     self._sync_persist_to_all_builders()
@@ -727,14 +739,14 @@ class Controller:
                         req = ValidateRequest(
                             name=diff.new_file.name,
                             is_dir=diff.new_file.is_dir,
-                            pair_id=pc.pair_id,
+                            pair_id=pc.pair_id,  # type: ignore[arg-type]
                             local_path=pc.effective_local_path,
                             remote_path=pc.remote_path,
-                            algorithm=self.__context.config.validate.algorithm,
-                            remote_address=self.__context.config.lftp.remote_address,
-                            remote_username=self.__context.config.lftp.remote_username,
+                            algorithm=self.__context.config.validate.algorithm,  # type: ignore[arg-type]
+                            remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
+                            remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
                             remote_password=self.__password,
-                            remote_port=self.__context.config.lftp.remote_port,
+                            remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
                         )
                         self.__validate_process.validate(req)
                         self.logger.info("Auto-queued validation for '{}'".format(diff.new_file.name))
@@ -1104,11 +1116,11 @@ class Controller:
                     delete_path = pc.local_path
                     if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
                         pair_staging = (
-                            os.path.join(self.__context.config.controller.staging_path, pc.pair_id)
+                            os.path.join(self.__context.config.controller.staging_path, pc.pair_id)  # type: ignore[arg-type]
                             if pc.pair_id
-                            else self.__context.config.controller.staging_path
+                            else self.__context.config.controller.staging_path  # type: ignore[arg-type]
                         )
-                        staging_file = os.path.join(pair_staging, file.name)
+                        staging_file = os.path.join(pair_staging, file.name)  # type: ignore[arg-type]
                         if os.path.exists(staging_file):
                             delete_path = pair_staging
                     process = DeleteLocalProcess(local_path=delete_path, file_name=file.name)
@@ -1143,15 +1155,15 @@ class Controller:
                     continue
                 else:
                     process = DeleteRemoteProcess(
-                        remote_address=self.__context.config.lftp.remote_address,
-                        remote_username=self.__context.config.lftp.remote_username,
+                        remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
+                        remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
                         remote_password=self.__password,
-                        remote_port=self.__context.config.lftp.remote_port,
+                        remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
                         remote_path=pc.remote_path,
                         file_name=file.name,
                     )
                     process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
-                    post_callback = pc.remote_scan_process.force_scan
+                    post_callback = pc.remote_scan_process.force_scan  # type: ignore[assignment]
                     command_wrapper = Controller.CommandProcessWrapper(process=process, post_callback=post_callback)
                     self.__active_command_processes.append(command_wrapper)
                     command_wrapper.process.start()
@@ -1185,14 +1197,14 @@ class Controller:
                     req = ValidateRequest(
                         name=file.name,
                         is_dir=file.is_dir,
-                        pair_id=pc.pair_id,
+                        pair_id=pc.pair_id,  # type: ignore[arg-type]
                         local_path=pc.effective_local_path,
                         remote_path=pc.remote_path,
-                        algorithm=self.__context.config.validate.algorithm,
-                        remote_address=self.__context.config.lftp.remote_address,
-                        remote_username=self.__context.config.lftp.remote_username,
+                        algorithm=self.__context.config.validate.algorithm,  # type: ignore[arg-type]
+                        remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
+                        remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
                         remote_password=self.__password,
-                        remote_port=self.__context.config.lftp.remote_port,
+                        remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
                     )
                     self.__validate_process.validate(req)
 
@@ -1246,20 +1258,20 @@ class Controller:
         dest_path = pc.local_path if pc else self.__pair_contexts[0].local_path
         # Use per-pair staging subdirectory
         staging_source = (
-            os.path.join(self.__context.config.controller.staging_path, pair_id)
+            os.path.join(self.__context.config.controller.staging_path, pair_id)  # type: ignore[arg-type]
             if pair_id
-            else self.__context.config.controller.staging_path
+            else self.__context.config.controller.staging_path  # type: ignore[arg-type]
         )
 
         # Skip if the file doesn't exist in staging (e.g. already moved in a prior session)
-        staging_file = os.path.join(staging_source, file_name)
+        staging_file = os.path.join(staging_source, file_name)  # type: ignore[arg-type]
         if not os.path.exists(staging_file):
             self.logger.debug("Skipping move for {} - not found in staging".format(file_name))
             self.__moved_file_keys.add(move_key)
             return
 
         self.__moved_file_keys.add(move_key)
-        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name)
+        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name)  # type: ignore[arg-type]
         process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
         self.__active_move_processes.append(process)
         process.start()
