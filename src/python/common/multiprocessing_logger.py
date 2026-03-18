@@ -1,11 +1,11 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import multiprocessing
-import threading
-import queue
 import logging
-import time
+import multiprocessing
+import queue
 import sys
+import threading
+import time
 
 
 class MultiprocessingLogger:
@@ -25,8 +25,7 @@ class MultiprocessingLogger:
         self.logger = base_logger.getChild("MPLogger")
         self.__queue = multiprocessing.Queue(-1)
         self.__logger_level = base_logger.getEffectiveLevel()
-        self.__listener = threading.Thread(name="MPLoggerListener",
-                                           target=self.__listener)
+        self.__listener_thread: threading.Thread = threading.Thread(name="MPLoggerListener", target=self.__listener)
         self.__listener_shutdown = threading.Event()
         self.__listener_exc_info = None
 
@@ -39,11 +38,11 @@ class MultiprocessingLogger:
         return self.__logger_level
 
     def start(self):
-        self.__listener.start()
+        self.__listener_thread.start()
 
     def stop(self):
         self.__listener_shutdown.set()
-        self.__listener.join()
+        self.__listener_thread.join()
         self.__queue.close()
         self.__queue.join_thread()
 
@@ -56,7 +55,8 @@ class MultiprocessingLogger:
         if self.__listener_exc_info:
             exc_info = self.__listener_exc_info
             self.__listener_exc_info = None
-            raise exc_info[1].with_traceback(exc_info[2])
+            if exc_info[1] is not None:
+                raise exc_info[1].with_traceback(exc_info[2])
 
     def __listener(self):
         self.logger.debug("Started listener thread")

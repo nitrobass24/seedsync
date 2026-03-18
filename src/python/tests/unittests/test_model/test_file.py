@@ -179,9 +179,9 @@ class TestModelFile(unittest.TestCase):
 
     def test_child_equality(self):
         l_a = ModelFile("a", True)
-        l_a.remote_size = 3+1+2
+        l_a.remote_size = 3 + 1 + 2
         l_aa = ModelFile("aa", True)
-        l_aa.remote_size = 3+1
+        l_aa.remote_size = 3 + 1
         l_a.add_child(l_aa)
         l_aaa = ModelFile("aaa", False)
         l_aaa.remote_size = 1
@@ -194,9 +194,9 @@ class TestModelFile(unittest.TestCase):
         l_a.add_child(l_ab)
 
         r_a = ModelFile("a", True)
-        r_a.remote_size = 3+1+2
+        r_a.remote_size = 3 + 1 + 2
         r_aa = ModelFile("aa", True)
-        r_aa.remote_size = 3+1
+        r_aa.remote_size = 3 + 1
         r_a.add_child(r_aa)
         r_aaa = ModelFile("aaa", False)
         r_aaa.remote_size = 1

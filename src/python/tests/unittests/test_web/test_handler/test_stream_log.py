@@ -1,22 +1,14 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import unittest
-from unittest.mock import patch
 from logging import LogRecord
+from unittest.mock import patch
 
 from web.handler.stream_log import CachedQueueLogHandler
 
 
 def create_log_record(created: float, msg: str) -> LogRecord:
-    record = LogRecord(
-        name=None,
-        level=None,
-        pathname=None,
-        lineno=None,
-        msg=msg,
-        args=None,
-        exc_info=None
-    )
+    record = LogRecord(name=None, level=None, pathname=None, lineno=None, msg=msg, args=None, exc_info=None)
     record.created = created
     return record
 

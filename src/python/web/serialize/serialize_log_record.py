@@ -11,6 +11,7 @@ class SerializeLogRecord(Serialize):
     This class defines the serialization interface between python backend
     and the EventSource client frontend for the log stream.
     """
+
     # Event keys
     __EVENT_RECORD = "log-record"
 

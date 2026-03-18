@@ -1,18 +1,17 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
-import sys
-from abc import abstractmethod
-from multiprocessing import Process, Queue, Event
 import queue
 import signal
+import sys
 import threading
+from abc import abstractmethod
 from datetime import datetime
+from multiprocessing import Event, Process, Queue
 
 import tblib.pickling_support
 
-from common import overrides, ServiceExit
-
+from common import ServiceExit, overrides
 
 tblib.pickling_support.install()
 
@@ -22,9 +21,10 @@ class ExceptionWrapper:
     An exception wrapper that works across processes
     Source: https://stackoverflow.com/a/26096355/8571324
     """
+
     def __init__(self, ee):
         self.ee = ee
-        __,  __, self.tb = sys.exc_info()
+        __, __, self.tb = sys.exc_info()
 
     def re_raise(self):
         raise self.ee.with_traceback(self.tb)
@@ -71,10 +71,12 @@ class AppProcess(Process):
         # Configure the logger for this process
         if self._mp_log_queue is not None:
             from logging.handlers import QueueHandler
+
             root = logging.getLogger()
             root.handlers.clear()
             root.addHandler(QueueHandler(self._mp_log_queue))
-            root.setLevel(self._mp_log_level)
+            if self._mp_log_level is not None:
+                root.setLevel(self._mp_log_level)
             self.logger = root.getChild(self.__name)
 
         self.logger.debug("Started process")
@@ -82,6 +84,7 @@ class AppProcess(Process):
         self.run_init()
 
         try:
+            assert self._terminate is not None
             while not self._terminate.is_set():
                 self.run_loop()
             self.logger.debug("Process received terminate flag")
@@ -110,8 +113,7 @@ class AppProcess(Process):
             return delta_in_ms
 
         timestamp_start = datetime.now()
-        while self.is_alive() and \
-                elapsed_ms(timestamp_start) < AppProcess.__DEFAULT_TERMINATE_TIMEOUT_MS:
+        while self.is_alive() and elapsed_ms(timestamp_start) < AppProcess.__DEFAULT_TERMINATE_TIMEOUT_MS:
             pass
 
         super().terminate()
@@ -171,8 +173,10 @@ class AppOneShotProcess(AppProcess):
     """
     App process that runs only once and then exits
     """
+
     def run_loop(self):
         self.run_once()
+        assert self._terminate is not None
         self._terminate.set()
 
     def run_cleanup(self):

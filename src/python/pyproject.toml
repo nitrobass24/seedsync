@@ -1,21 +1,63 @@
-[tool.poetry]
+[project]
 name = "seedsync"
 version = "0.0.0"
 description = "File synchronization tool for seedboxes"
-authors = []
+requires-python = ">=3.12"
+dependencies = [
+    "bottle>=0.12,<1.0",
+    "pexpect>=4.8",
+    "tblib>=3.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.8"
-bottle = ">=0.12,<1.0"
-pexpect = ">=4.8"
-requests = ">=2.32.0"
-tblib = ">=3.0"
-timeout-decorator = ">=0.5"
-urllib3 = ">=2.2.0"
-certifi = ">=2024.7.4"
+[dependency-groups]
+test = [
+    "pytest>=7.0",
+    "parameterized>=0.9",
+    "testfixtures>=8.0",
+    "webtest>=3.0",
+    "timeout-decorator>=0.5",
+    "pytest-timeout>=2.0",
+]
+dev = [
+    "ruff>=0.11",
+    "pyright>=1.1",
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = ">=7.0"
-parameterized = "*"
-testfixtures = "*"
-webtest = "*"
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long — defer to PR 2
+    "E721",  # type comparison — existing pattern uses type() intentionally
+    "E722",  # bare except — one instance in legacy e2e script
+    "E741",  # ambiguous variable name — single-letter vars in context
+    "UP032", # f-string — too much churn for auto-fix PR, defer to PR 2
+    "UP046", # non-pep695-generic-class — requires Python 3.12+ syntax migration
+    "B904",  # raise-without-from — defer to PR 2
+    "B905",  # zip-without-explicit-strict — defer to PR 2
+    "B024",  # abstract-base-class-without-abstract-method — existing pattern
+    "UP031", # printf-string-formatting — defer to PR 2
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "I001"]  # re-exports, import order is load-order sensitive
+"tests/**" = ["W291"]  # trailing whitespace in test string literals (lftp output data)
+
+[tool.ruff.lint.isort]
+known-first-party = ["common", "controller", "model", "lftp", "ssh", "web", "system"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unittests"]

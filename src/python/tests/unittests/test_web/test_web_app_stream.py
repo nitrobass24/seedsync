@@ -38,7 +38,7 @@ class TestWebStreamHeartbeat(unittest.TestCase):
 
             # Call the stream method directly
             # We need to mock bottle.response to avoid errors
-            with patch('web.web_app.bottle') as mock_bottle:
+            with patch("web.web_app.bottle") as mock_bottle:
                 mock_bottle.response = MagicMock()
 
                 # After the first get_value returns None and heartbeat fires,
@@ -75,7 +75,7 @@ class TestWebStreamHeartbeat(unittest.TestCase):
             WebApp._HEARTBEAT_INTERVAL_IN_SECS = 0  # would fire immediately if idle
             WebApp._STREAM_POLL_INTERVAL_IN_MS = 0
 
-            with patch('web.web_app.bottle') as mock_bottle:
+            with patch("web.web_app.bottle") as mock_bottle:
                 mock_bottle.response = MagicMock()
 
                 # Return data on every call, then stop
@@ -106,7 +106,7 @@ class TestWebStreamHeartbeat(unittest.TestCase):
         handler_cls, handler_instance = self._make_handler([])
         self.app.add_streaming_handler(handler_cls)
 
-        with patch('web.web_app.bottle') as mock_bottle:
+        with patch("web.web_app.bottle") as mock_bottle:
             mock_response = MagicMock()
             mock_bottle.response = mock_response
 
@@ -117,4 +117,3 @@ class TestWebStreamHeartbeat(unittest.TestCase):
             list(gen)
 
             mock_response.set_header.assert_called_with("X-Accel-Buffering", "no")
-

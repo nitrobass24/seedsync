@@ -1,12 +1,13 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
 import json
-from datetime import datetime, timezone
+import unittest
+from datetime import UTC, datetime
+
+from model import ModelFile
+from web.serialize import SerializeModel
 
 from .test_serialize import parse_stream
-from web.serialize import SerializeModel
-from model import ModelFile
 
 
 class TestSerializeModel(unittest.TestCase):
@@ -15,21 +16,15 @@ class TestSerializeModel(unittest.TestCase):
         out = parse_stream(serialize.model([]))
         self.assertEqual("model-init", out["event"])
         out = parse_stream(
-            serialize.update_event(SerializeModel.UpdateEvent(
-                SerializeModel.UpdateEvent.Change.ADDED, None, None
-            ))
+            serialize.update_event(SerializeModel.UpdateEvent(SerializeModel.UpdateEvent.Change.ADDED, None, None))
         )
         self.assertEqual("model-added", out["event"])
         out = parse_stream(
-            serialize.update_event(SerializeModel.UpdateEvent(
-                SerializeModel.UpdateEvent.Change.UPDATED, None, None
-            ))
+            serialize.update_event(SerializeModel.UpdateEvent(SerializeModel.UpdateEvent.Change.UPDATED, None, None))
         )
         self.assertEqual("model-updated", out["event"])
         out = parse_stream(
-            serialize.update_event(SerializeModel.UpdateEvent(
-                SerializeModel.UpdateEvent.Change.REMOVED, None, None
-            ))
+            serialize.update_event(SerializeModel.UpdateEvent(SerializeModel.UpdateEvent.Change.REMOVED, None, None))
         )
         self.assertEqual("model-removed", out["event"])
 
@@ -49,9 +44,7 @@ class TestSerializeModel(unittest.TestCase):
     def test_update_event_is_a_dict(self):
         serialize = SerializeModel()
         out = parse_stream(
-            serialize.update_event(SerializeModel.UpdateEvent(
-                SerializeModel.UpdateEvent.Change.UPDATED, None, None
-            ))
+            serialize.update_event(SerializeModel.UpdateEvent(SerializeModel.UpdateEvent.Change.UPDATED, None, None))
         )
         data = json.loads(out["data"])
         self.assertEqual(dict, type(data))
@@ -66,9 +59,7 @@ class TestSerializeModel(unittest.TestCase):
         a2.local_size = 200
 
         out = parse_stream(
-            serialize.update_event(SerializeModel.UpdateEvent(
-                SerializeModel.UpdateEvent.Change.UPDATED, a1, a2
-            ))
+            serialize.update_event(SerializeModel.UpdateEvent(SerializeModel.UpdateEvent.Change.UPDATED, a1, a2))
         )
         data = json.loads(out["data"])
         self.assertEqual("a", data["old_file"]["name"])
@@ -77,9 +68,7 @@ class TestSerializeModel(unittest.TestCase):
         self.assertEqual(200, data["new_file"]["local_size"])
 
         out = parse_stream(
-            serialize.update_event(SerializeModel.UpdateEvent(
-                SerializeModel.UpdateEvent.Change.ADDED, None, a1
-            ))
+            serialize.update_event(SerializeModel.UpdateEvent(SerializeModel.UpdateEvent.Change.ADDED, None, a1))
         )
         data = json.loads(out["data"])
         self.assertEqual(None, data["old_file"])
@@ -87,9 +76,7 @@ class TestSerializeModel(unittest.TestCase):
         self.assertEqual(100, data["new_file"]["local_size"])
 
         out = parse_stream(
-            serialize.update_event(SerializeModel.UpdateEvent(
-                SerializeModel.UpdateEvent.Change.ADDED, a2, None
-            ))
+            serialize.update_event(SerializeModel.UpdateEvent(SerializeModel.UpdateEvent.Change.ADDED, a2, None))
         )
         data = json.loads(out["data"])
         self.assertEqual("a", data["old_file"]["name"])
@@ -232,7 +219,7 @@ class TestSerializeModel(unittest.TestCase):
         serialize = SerializeModel()
         a = ModelFile("a", True)
         b = ModelFile("b", False)
-        b.local_created_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone.utc)
+        b.local_created_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=UTC)
         files = [a, b]
         out = parse_stream(serialize.model(files))
         data = json.loads(out["data"])
@@ -244,7 +231,7 @@ class TestSerializeModel(unittest.TestCase):
         serialize = SerializeModel()
         a = ModelFile("a", True)
         b = ModelFile("b", False)
-        b.local_modified_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone.utc)
+        b.local_modified_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=UTC)
         files = [a, b]
         out = parse_stream(serialize.model(files))
         data = json.loads(out["data"])
@@ -256,7 +243,7 @@ class TestSerializeModel(unittest.TestCase):
         serialize = SerializeModel()
         a = ModelFile("a", True)
         b = ModelFile("b", False)
-        b.remote_created_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone.utc)
+        b.remote_created_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=UTC)
         files = [a, b]
         out = parse_stream(serialize.model(files))
         data = json.loads(out["data"])
@@ -268,7 +255,7 @@ class TestSerializeModel(unittest.TestCase):
         serialize = SerializeModel()
         a = ModelFile("a", True)
         b = ModelFile("b", False)
-        b.remote_modified_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone.utc)
+        b.remote_modified_timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=UTC)
         files = [a, b]
         out = parse_stream(serialize.model(files))
         data = json.loads(out["data"])

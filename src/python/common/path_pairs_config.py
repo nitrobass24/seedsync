@@ -3,10 +3,8 @@
 import copy
 import json
 import logging
-import os
-import uuid
 import threading
-from typing import List, Optional
+import uuid
 
 from .persist import Persist, PersistError
 
@@ -16,13 +14,15 @@ _logger = logging.getLogger(__name__)
 class PathPair:
     """Represents a single remote-to-local directory mapping."""
 
-    def __init__(self,
-                 pair_id: Optional[str] = None,
-                 name: str = "",
-                 remote_path: str = "",
-                 local_path: str = "",
-                 enabled: bool = True,
-                 auto_queue: bool = True):
+    def __init__(
+        self,
+        pair_id: str | None = None,
+        name: str = "",
+        remote_path: str = "",
+        local_path: str = "",
+        enabled: bool = True,
+        auto_queue: bool = True,
+    ):
         self.id = pair_id or str(uuid.uuid4())
         self.name = name
         self.remote_path = remote_path
@@ -89,19 +89,19 @@ class PathPairsConfig(Persist):
 
     def __init__(self):
         self._lock = threading.RLock()
-        self._pairs: List[PathPair] = []
+        self._pairs: list[PathPair] = []
 
     @property
-    def pairs(self) -> List[PathPair]:
+    def pairs(self) -> list[PathPair]:
         with self._lock:
             return [copy.deepcopy(p) for p in self._pairs]
 
     @pairs.setter
-    def pairs(self, value: List[PathPair]):
+    def pairs(self, value: list[PathPair]):
         with self._lock:
             self._pairs = list(value)
 
-    def get_pair(self, pair_id: str) -> Optional[PathPair]:
+    def get_pair(self, pair_id: str) -> PathPair | None:
         with self._lock:
             for p in self._pairs:
                 if p.id == pair_id:

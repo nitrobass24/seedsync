@@ -10,9 +10,10 @@ def overrides(interface_class):
     :param interface_class: The super class
     :return:
     """
-    assert(inspect.isclass(interface_class)), "Overrides parameter must be a class type"
+    assert inspect.isclass(interface_class), "Overrides parameter must be a class type"
 
     def overrider(method):
-        assert(method.__name__ in dir(interface_class)), "Method does not override super class"
+        assert method.__name__ in dir(interface_class), "Method does not override super class"
         return method
+
     return overrider

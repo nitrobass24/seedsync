@@ -2,13 +2,13 @@
 
 import os
 from threading import Event
-from typing import Optional, Union
 from urllib.parse import unquote
 
 from bottle import HTTPResponse, request
 
 from common import overrides
 from controller import Controller
+
 from ..web_app import IHandler, WebApp
 
 
@@ -33,14 +33,14 @@ def _validate_filename(file_name: str) -> bool:
     return True
 
 
-def _validate_pair_id(pair_id: Optional[str]) -> Optional[str]:
+def _validate_pair_id(pair_id: str | None) -> str | None:
     """Return validated pair_id or None. Returns empty string to signal rejection."""
     if pair_id is not None and pair_id.strip() == "":
         return ""
     return pair_id
 
 
-def _decode_and_validate(file_name: str) -> Union[str, HTTPResponse]:
+def _decode_and_validate(file_name: str) -> str | HTTPResponse:
     """
     Decode a double-encoded filename and validate it.
     Returns the decoded filename, or an HTTPResponse(400) on failure.
@@ -92,47 +92,47 @@ class ControllerHandler(IHandler):
         web_app.add_handler("/server/command/delete_remote/<file_name>", self.__handle_action_delete_remote)
         web_app.add_handler("/server/command/validate/<file_name>", self.__handle_action_validate)
 
-    def __dispatch_command(self, file_name: str,
-                           action: Controller.Command.Action,
-                           success_msg: str):
+    def __dispatch_command(self, file_name: str, action: Controller.Command.Action, success_msg: str):
         """Common handler: decode filename, validate pair_id, dispatch command."""
-        file_name = _decode_and_validate(file_name)
-        if isinstance(file_name, HTTPResponse):
-            return file_name
+        decoded = _decode_and_validate(file_name)
+        if isinstance(decoded, HTTPResponse):
+            return decoded
 
-        pair_id = _validate_pair_id(request.params.get("pair_id"))
+        pair_id = _validate_pair_id(request.params.get("pair_id"))  # type: ignore[attr-defined]
         if pair_id == "":
             return HTTPResponse(body="pair_id must not be blank", status=400)
-        command = Controller.Command(action, file_name, pair_id=pair_id)
+        command = Controller.Command(action, decoded, pair_id=pair_id)
         callback = WebResponseActionCallback()
         command.add_callback(callback)
         self.__controller.queue_command(command)
         callback.wait()
         if callback.success:
-            return HTTPResponse(body=success_msg.format(file_name))
+            return HTTPResponse(body=success_msg.format(decoded))
         else:
-            return HTTPResponse(body=callback.error, status=400)
+            return HTTPResponse(body=callback.error or "Unknown error", status=400)
 
     def __handle_action_queue(self, file_name: str):
-        return self.__dispatch_command(
-            file_name, Controller.Command.Action.QUEUE, "Queued file '{}'")
+        return self.__dispatch_command(file_name, Controller.Command.Action.QUEUE, "Queued file '{}'")
 
     def __handle_action_stop(self, file_name: str):
-        return self.__dispatch_command(
-            file_name, Controller.Command.Action.STOP, "Stopped file '{}'")
+        return self.__dispatch_command(file_name, Controller.Command.Action.STOP, "Stopped file '{}'")
 
     def __handle_action_extract(self, file_name: str):
         return self.__dispatch_command(
-            file_name, Controller.Command.Action.EXTRACT, "Requested extraction for file '{}'")
+            file_name, Controller.Command.Action.EXTRACT, "Requested extraction for file '{}'"
+        )
 
     def __handle_action_delete_local(self, file_name: str):
         return self.__dispatch_command(
-            file_name, Controller.Command.Action.DELETE_LOCAL, "Requested local delete for file '{}'")
+            file_name, Controller.Command.Action.DELETE_LOCAL, "Requested local delete for file '{}'"
+        )
 
     def __handle_action_delete_remote(self, file_name: str):
         return self.__dispatch_command(
-            file_name, Controller.Command.Action.DELETE_REMOTE, "Requested remote delete for file '{}'")
+            file_name, Controller.Command.Action.DELETE_REMOTE, "Requested remote delete for file '{}'"
+        )
 
     def __handle_action_validate(self, file_name: str):
         return self.__dispatch_command(
-            file_name, Controller.Command.Action.VALIDATE, "Requested validation for file '{}'")
+            file_name, Controller.Command.Action.VALIDATE, "Requested validation for file '{}'"
+        )

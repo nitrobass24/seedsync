@@ -2,13 +2,13 @@
 
 from collections import namedtuple
 from enum import Enum
-from typing import List, Tuple
 
 
 class LftpJobStatus:
     """
     Represents the status of a single Lftp jobs
     """
+
     class Type(Enum):
         MIRROR = "mirror"
         PGET = "pget"
@@ -17,12 +17,7 @@ class LftpJobStatus:
         QUEUED = 0
         RUNNING = 1
 
-    class TransferState(namedtuple("TransferState",
-                                   ["size_local",
-                                    "size_remote",
-                                    "percent_local",
-                                    "speed",
-                                    "eta"])):
+    class TransferState(namedtuple("TransferState", ["size_local", "size_remote", "percent_local", "speed", "eta"])):
         """
         State of transfer for a file or entire download
           size_local: size in bytes that have been downloaded
@@ -31,6 +26,7 @@ class LftpJobStatus:
           speed: transfer speed in bytes per second
           eta: est. remaining transfer time in seconds
         """
+
         pass
 
     def __init__(self, job_id: int, job_type: Type, state: State, name: str, flags: str):
@@ -45,16 +41,20 @@ class LftpJobStatus:
         self.__active_files_state = {}
 
     @property
-    def id(self) -> int: return self.__id
+    def id(self) -> int:
+        return self.__id
 
     @property
-    def type(self) -> Type: return self.__type
+    def type(self) -> Type:
+        return self.__type
 
     @property
-    def state(self) -> "LftpJobStatus.State": return self.__state
+    def state(self) -> "LftpJobStatus.State":
+        return self.__state
 
     @property
-    def name(self) -> str: return self.__name
+    def name(self) -> str:
+        return self.__name
 
     @property
     def total_transfer_state(self) -> TransferState:
@@ -71,7 +71,7 @@ class LftpJobStatus:
             raise TypeError("Cannot set transfer state on job of type queue")
         self.__active_files_state[filename] = transfer_state
 
-    def get_active_file_transfer_states(self) -> List[Tuple[str, TransferState]]:
+    def get_active_file_transfer_states(self) -> list[tuple[str, TransferState]]:
         """
         Returns list of pairs (filename, transfer state)
         :return:

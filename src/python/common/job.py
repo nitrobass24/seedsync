@@ -14,6 +14,7 @@ class Job(threading.Thread, ABC):
     """
     Job thread that handles graceful shutdown
     """
+
     _DEFAULT_SLEEP_INTERVAL_IN_SECS = 0.5
 
     def __init__(self, name: str, context: Context):
@@ -74,7 +75,8 @@ class Job(threading.Thread, ABC):
         if self.exc_info:
             exc_info = self.exc_info
             self.exc_info = None
-            raise exc_info[1].with_traceback(exc_info[2])
+            if exc_info[1] is not None:
+                raise exc_info[1].with_traceback(exc_info[2])
 
     @abstractmethod
     def setup(self):

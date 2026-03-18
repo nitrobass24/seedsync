@@ -10,8 +10,8 @@ from filecmp import dircmp
 
 import timeout_decorator
 
-from tests.utils import TestUtils
 from lftp import Lftp
+from tests.utils import TestUtils
 
 
 class TestLftp(unittest.TestCase):
@@ -61,12 +61,11 @@ class TestLftp(unittest.TestCase):
     # noinspection PyMethodMayBeStatic
     def my_touch(self, size: int, *args):
         path = os.path.join(TestLftp.temp_dir, "remote", *args)
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             f.write(bytearray(os.urandom(size)))
 
     def assert_local_equals_remote(self):
-        dcmp = dircmp(os.path.join(TestLftp.temp_dir, "remote"),
-                      os.path.join(TestLftp.temp_dir, "local"))
+        dcmp = dircmp(os.path.join(TestLftp.temp_dir, "remote"), os.path.join(TestLftp.temp_dir, "local"))
         self.assertFalse(dcmp.left_only)
         self.assertFalse(dcmp.right_only)
         self.assertFalse(dcmp.diff_files)
@@ -101,17 +100,17 @@ class TestLftp(unittest.TestCase):
         self.lftp.num_parallel_jobs = 2
         self.lftp.rate_limit = 300
 
-        self.my_mkdir("aaa\"aaa")
-        self.my_touch(128, "aaa\"aaa", "aa\"aa\"aa.txt")
-        self.my_touch(256, "b\"\"b\"\"b.txt")
-        self.my_mkdir("c\"c\"c\"c")
-        self.my_touch(100, "c\"c\"c\"c", "c\"\"\"c.txt")
-        self.my_touch(200, "d\"\"\"d.txt")
+        self.my_mkdir('aaa"aaa')
+        self.my_touch(128, 'aaa"aaa', 'aa"aa"aa.txt')
+        self.my_touch(256, 'b""b""b.txt')
+        self.my_mkdir('c"c"c"c')
+        self.my_touch(100, 'c"c"c"c', 'c"""c.txt')
+        self.my_touch(200, 'd"""d.txt')
 
-        self.lftp.queue("aaa\"aaa", True)
-        self.lftp.queue("b\"\"b\"\"b.txt", False)
-        self.lftp.queue("c\"c\"c\"c", True)
-        self.lftp.queue("d\"\"\"d.txt", False)
+        self.lftp.queue('aaa"aaa', True)
+        self.lftp.queue('b""b""b.txt', False)
+        self.lftp.queue('c"c"c"c', True)
+        self.lftp.queue('d"""d.txt', False)
 
         # Wait until all downloads are done
         while self.lftp.status():
@@ -126,16 +125,16 @@ class TestLftp(unittest.TestCase):
         self.lftp.rate_limit = 300
 
         self.my_mkdir("a' aa\"aaa")
-        self.my_touch(128, "a' aa\"aaa", "aa\"a ' a\"aa.txt")
-        self.my_touch(256, "\"b ' \"b\" ' \"b.txt")
-        self.my_mkdir("'c\" c \" 'c' \"c\"")
-        self.my_touch(100, "'c\" c \" 'c' \"c\"", "c' \" ' \" ' \"c.txt")
-        self.my_touch(200, "d\" ' \" ' \"d.txt")
+        self.my_touch(128, "a' aa\"aaa", 'aa"a \' a"aa.txt')
+        self.my_touch(256, '"b \' "b" \' "b.txt')
+        self.my_mkdir('\'c" c " \'c\' "c"')
+        self.my_touch(100, '\'c" c " \'c\' "c"', "c' \" ' \" ' \"c.txt")
+        self.my_touch(200, 'd" \' " \' "d.txt')
 
         self.lftp.queue("a' aa\"aaa", True)
-        self.lftp.queue("\"b ' \"b\" ' \"b.txt", False)
-        self.lftp.queue("'c\" c \" 'c' \"c\"", True)
-        self.lftp.queue("d\" ' \" ' \"d.txt", False)
+        self.lftp.queue('"b \' "b" \' "b.txt', False)
+        self.lftp.queue('\'c" c " \'c\' "c"', True)
+        self.lftp.queue('d" \' " \' "d.txt', False)
 
         # Wait until all downloads are done
         while self.lftp.status():

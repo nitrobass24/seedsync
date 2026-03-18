@@ -4,8 +4,8 @@ import os
 import shutil
 import tempfile
 import unittest
-from threading import Thread
 from datetime import datetime
+from threading import Thread
 
 from system import SystemScanner, SystemScannerError
 
@@ -16,18 +16,18 @@ def my_mkdir(*args):
 
 def my_touch(size, *args):
     path = os.path.join(TestSystemScanner.temp_dir, *args)
-    with open(path, 'wb') as f:
-        f.write(bytearray([0xff] * size))
+    with open(path, "wb") as f:
+        f.write(bytearray([0xFF] * size))
 
 
 def my_mkdir_latin(*args):
-    os.mkdir(os.path.join(TestSystemScanner.temp_dir.encode('latin-1'), *args))
+    os.mkdir(os.path.join(TestSystemScanner.temp_dir.encode("latin-1"), *args))
 
 
 def my_touch_latin(size, *args):
-    path = os.path.join(TestSystemScanner.temp_dir.encode('latin-1'), *args)
-    with open(path, 'wb') as f:
-        f.write(bytearray([0xff] * size))
+    path = os.path.join(TestSystemScanner.temp_dir.encode("latin-1"), *args)
+    with open(path, "wb") as f:
+        f.write(bytearray([0xFF] * size))
 
 
 # noinspection SpellCheckingInspection
@@ -63,13 +63,13 @@ class TestSystemScanner(unittest.TestCase):
         my_mkdir("a", "aa")
         my_mkdir("a", "aa", ".aaa")
         my_touch(512, "a", "aa", ".aab")
-        my_touch(12*1024+4, "a", "ab")
+        my_touch(12 * 1024 + 4, "a", "ab")
         my_mkdir("b")
         my_mkdir("b", "ba")
-        my_touch(512+7, "b", "ba", "baa")
+        my_touch(512 + 7, "b", "ba", "baa")
         my_mkdir("b", "bb")
         my_mkdir("b", "bb", "bba")
-        my_touch(24*1024*1024+24, "b", "bb", "bbb")
+        my_touch(24 * 1024 * 1024 + 24, "b", "bb", "bbb")
         my_mkdir("b", "bb", "bbc")
         my_mkdir("b", "bb", "bbc", "bbca")
         my_touch(1, "b", "bb", "bbc", "bbca", ".bbcaa")
@@ -143,17 +143,17 @@ class TestSystemScanner(unittest.TestCase):
         bbca = bbc.children[0]
         bbcaa = bbca.children[0]
 
-        self.assertEqual(12*1024+4+512, a.size)
+        self.assertEqual(12 * 1024 + 4 + 512, a.size)
         self.assertEqual(512, aa.size)
         self.assertEqual(0, aaa.size)
         self.assertEqual(512, aab.size)
-        self.assertEqual(12*1024+4, ab.size)
-        self.assertEqual(512+7+24*1024*1024+24+1, b.size)
-        self.assertEqual(512+7, ba.size)
-        self.assertEqual(512+7, baa.size)
-        self.assertEqual(24*1024*1024+24+1, bb.size)
+        self.assertEqual(12 * 1024 + 4, ab.size)
+        self.assertEqual(512 + 7 + 24 * 1024 * 1024 + 24 + 1, b.size)
+        self.assertEqual(512 + 7, ba.size)
+        self.assertEqual(512 + 7, baa.size)
+        self.assertEqual(24 * 1024 * 1024 + 24 + 1, bb.size)
         self.assertEqual(0, bba.size)
-        self.assertEqual(24*1024*1024+24, bbb.size)
+        self.assertEqual(24 * 1024 * 1024 + 24, bbb.size)
         self.assertEqual(1, bbc.size)
         self.assertEqual(1, bbca.size)
         self.assertEqual(1, bbcaa.size)
@@ -161,18 +161,14 @@ class TestSystemScanner(unittest.TestCase):
 
     def test_scan_non_existing_dir_fails(self):
         self.setup_default_tree()
-        scanner = SystemScanner(
-            path_to_scan=os.path.join(TestSystemScanner.temp_dir, "nonexisting")
-        )
+        scanner = SystemScanner(path_to_scan=os.path.join(TestSystemScanner.temp_dir, "nonexisting"))
         with self.assertRaises(SystemScannerError) as ex:
             scanner.scan()
         self.assertTrue(str(ex.exception).startswith("Path does not exist"))
 
     def test_scan_file_fails(self):
         self.setup_default_tree()
-        scanner = SystemScanner(
-            path_to_scan=os.path.join(TestSystemScanner.temp_dir, "c")
-        )
+        scanner = SystemScanner(path_to_scan=os.path.join(TestSystemScanner.temp_dir, "c"))
         with self.assertRaises(SystemScannerError) as ex:
             scanner.scan()
         self.assertTrue(str(ex.exception).startswith("Path is not a directory"))
@@ -198,11 +194,11 @@ class TestSystemScanner(unittest.TestCase):
         self.assertEqual("ab", ab.name)
         self.assertFalse(ab.is_dir)
 
-        self.assertEqual(12*1024+4+512, a.size)
+        self.assertEqual(12 * 1024 + 4 + 512, a.size)
         self.assertEqual(512, aa.size)
         self.assertEqual(0, aaa.size)
         self.assertEqual(512, aab.size)
-        self.assertEqual(12*1024+4, ab.size)
+        self.assertEqual(12 * 1024 + 4, ab.size)
 
     def test_scan_single_file(self):
         self.setup_default_tree()
@@ -215,9 +211,7 @@ class TestSystemScanner(unittest.TestCase):
 
     def test_scan_single_non_existing_path_fails(self):
         self.setup_default_tree()
-        scanner = SystemScanner(
-            path_to_scan=os.path.join(TestSystemScanner.temp_dir)
-        )
+        scanner = SystemScanner(path_to_scan=os.path.join(TestSystemScanner.temp_dir))
         with self.assertRaises(SystemScannerError) as ex:
             scanner.scan_single("nonexisting")
         self.assertTrue(str(ex.exception).startswith("Path does not exist"))
@@ -259,9 +253,9 @@ class TestSystemScanner(unittest.TestCase):
         ba, bb = tuple(b.children)
         bba, bbb, bbc = tuple(bb.children)
         bbca = bbc.children[0]
-        self.assertEqual(12*1024+4, a.size)
+        self.assertEqual(12 * 1024 + 4, a.size)
         self.assertEqual(0, aa.size)
-        self.assertEqual(24*1024*1024+24+0, bb.size)
+        self.assertEqual(24 * 1024 * 1024 + 24 + 0, bb.size)
         self.assertEqual(0, bbc.size)
         self.assertEqual(0, bbca.size)
 
@@ -308,8 +302,8 @@ class TestSystemScanner(unittest.TestCase):
         self.assertEqual(0, a.size)
         self.assertEqual(0, aa.size)
         self.assertEqual(0, aaa.size)
-        self.assertEqual(512+7, b.size)
-        self.assertEqual(512+7, ba.size)
+        self.assertEqual(512 + 7, b.size)
+        self.assertEqual(512 + 7, ba.size)
         self.assertEqual(1234, c.size)
 
     def test_lftp_status_file_size(self):
@@ -334,8 +328,8 @@ class TestSystemScanner(unittest.TestCase):
         # Create a partial file
         os.mkdir(os.path.join(tempdir, "t"))
         path = os.path.join(tempdir, "t", "partial.mkv")
-        with open(path, 'wb') as f:
-            f.write(bytearray([0xff] * 24588))
+        with open(path, "wb") as f:
+            f.write(bytearray([0xFF] * 24588))
         # Write the lftp status out
         path = os.path.join(tempdir, "t", "partial.mkv.lftp-pget-status")
         with open(path, "w") as f:
@@ -367,8 +361,8 @@ class TestSystemScanner(unittest.TestCase):
 
         # Create a partial file
         path = os.path.join(tempdir, "partial.mkv")
-        with open(path, 'wb') as f:
-            f.write(bytearray([0xff] * 24588))
+        with open(path, "wb") as f:
+            f.write(bytearray([0xFF] * 24588))
         # Write the lftp status out
         path = os.path.join(tempdir, "partial.mkv.lftp-pget-status")
         with open(path, "w") as f:
@@ -393,22 +387,22 @@ class TestSystemScanner(unittest.TestCase):
 
         # Create some temp and non-temp files
         temp1 = os.path.join(tempdir, "a.mkv.lftp")
-        with open(temp1, 'wb') as f:
-            f.write(bytearray([0xff] * 100))
+        with open(temp1, "wb") as f:
+            f.write(bytearray([0xFF] * 100))
         temp2 = os.path.join(tempdir, "b.rar.lftp")
-        with open(temp2, 'wb') as f:
-            f.write(bytearray([0xff] * 200))
+        with open(temp2, "wb") as f:
+            f.write(bytearray([0xFF] * 200))
         nontemp1 = os.path.join(tempdir, "c.rar")
-        with open(nontemp1, 'wb') as f:
-            f.write(bytearray([0xff] * 300))
+        with open(nontemp1, "wb") as f:
+            f.write(bytearray([0xFF] * 300))
         nontemp2 = os.path.join(tempdir, "d.lftp.avi")
-        with open(nontemp2, 'wb') as f:
-            f.write(bytearray([0xff] * 400))
+        with open(nontemp2, "wb") as f:
+            f.write(bytearray([0xFF] * 400))
         nontemp3 = os.path.join(tempdir, "e")
         os.mkdir(nontemp3)
         temp3 = os.path.join(nontemp3, "ea.txt.lftp")
-        with open(temp3, 'wb') as f:
-            f.write(bytearray([0xff] * 500))
+        with open(temp3, "wb") as f:
+            f.write(bytearray([0xFF] * 500))
         nontemp4 = os.path.join(tempdir, "f.lftp")
         os.mkdir(nontemp4)
 
@@ -480,24 +474,24 @@ class TestSystemScanner(unittest.TestCase):
         #   non-temp directory with temp name
         #   non-temp directory with non-temp name
         temp1 = os.path.join(tempdir, "a.mkv.lftp")
-        with open(temp1, 'wb') as f:
-            f.write(bytearray([0xff] * 100))
+        with open(temp1, "wb") as f:
+            f.write(bytearray([0xFF] * 100))
 
         nontemp1 = os.path.join(tempdir, "b.rar")
-        with open(nontemp1, 'wb') as f:
-            f.write(bytearray([0xff] * 300))
+        with open(nontemp1, "wb") as f:
+            f.write(bytearray([0xFF] * 300))
 
         nontemp2 = os.path.join(tempdir, "c.lftp")
         os.mkdir(nontemp2)
         temp2 = os.path.join(nontemp2, "c.txt.lftp")
-        with open(temp2, 'wb') as f:
-            f.write(bytearray([0xff] * 500))
+        with open(temp2, "wb") as f:
+            f.write(bytearray([0xFF] * 500))
 
         nontemp3 = os.path.join(tempdir, "d")
         os.mkdir(nontemp3)
         temp3 = os.path.join(nontemp3, "d.avi.lftp")
-        with open(temp3, 'wb') as f:
-            f.write(bytearray([0xff] * 600))
+        with open(temp3, "wb") as f:
+            f.write(bytearray([0xFF] * 600))
 
         scanner = SystemScanner(tempdir)
 
@@ -584,12 +578,13 @@ class TestSystemScanner(unittest.TestCase):
             while not stop:
                 shutil.copytree(orig, dest)
                 shutil.rmtree(dest)
+
         thread = Thread(target=monkey_with_files)
         thread.start()
 
         try:
             # Scan a bunch of times
-            for i in range(0, 2000):
+            for _i in range(0, 2000):
                 files = scanner.scan()
                 # Must have at least the untouched files
                 self.assertGreaterEqual(len(files), 3)
@@ -606,19 +601,13 @@ class TestSystemScanner(unittest.TestCase):
         # directory
         os.utime(
             os.path.join(TestSystemScanner.temp_dir, "a"),
-            (
-                datetime.now().timestamp(),
-                datetime(2018, 11, 9, 21, 40, 18).timestamp()
-            )
+            (datetime.now().timestamp(), datetime(2018, 11, 9, 21, 40, 18).timestamp()),
         )
 
         # file
         os.utime(
             os.path.join(TestSystemScanner.temp_dir, "c"),
-            (
-                datetime.now().timestamp(),
-                datetime(2018, 11, 9, 21, 40, 17).timestamp()
-            )
+            (datetime.now().timestamp(), datetime(2018, 11, 9, 21, 40, 17).timestamp()),
         )
 
         scanner = SystemScanner(TestSystemScanner.temp_dir)

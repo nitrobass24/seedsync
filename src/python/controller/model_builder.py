@@ -1,15 +1,16 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import os
 import logging
-from typing import List, Optional, Set
 import math
+import os
+
+from lftp import LftpJobStatus
+from model import Model, ModelError, ModelFile
 
 # my libs
 from system import SystemFile
-from lftp import LftpJobStatus
-from model import ModelFile, Model, ModelError
-from .extract import ExtractStatus, Extract
+
+from .extract import Extract, ExtractStatus
 from .validate import ValidateStatus
 
 
@@ -22,7 +23,8 @@ class ModelBuilder:
       * remote file system as a Dict[name, SystemFile]
       * lftp status as Dict[name, LftpJobStatus]
     """
-    def __init__(self, pair_id: Optional[str] = None) -> None:
+
+    def __init__(self, pair_id: str | None = None) -> None:
         self.logger = logging.getLogger("ModelBuilder")
         self.__pair_id = pair_id
         self.__local_files = dict()
@@ -43,7 +45,7 @@ class ModelBuilder:
     def set_base_logger(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild("ModelBuilder")
 
-    def set_active_files(self, active_files: List[SystemFile]):
+    def set_active_files(self, active_files: list[SystemFile]):
         prev_active_files = self.__active_files
         self.__active_files = {file.name: file for file in active_files}
         # Always invalidate when active files present (sizes change rapidly)
@@ -52,70 +54,70 @@ class ModelBuilder:
         if len(active_files) > 0 or self.__active_files != prev_active_files:
             self.__cached_model = None
 
-    def set_local_files(self, local_files: List[SystemFile]):
+    def set_local_files(self, local_files: list[SystemFile]):
         prev_local_files = self.__local_files
         self.__local_files = {file.name: file for file in local_files}
         # Invalidate the cache
         if self.__local_files != prev_local_files:
             self.__cached_model = None
 
-    def set_remote_files(self, remote_files: List[SystemFile]):
+    def set_remote_files(self, remote_files: list[SystemFile]):
         prev_remote_files = self.__remote_files
         self.__remote_files = {file.name: file for file in remote_files}
         # Invalidate the cache
         if self.__remote_files != prev_remote_files:
             self.__cached_model = None
 
-    def set_lftp_statuses(self, lftp_statuses: List[LftpJobStatus]):
+    def set_lftp_statuses(self, lftp_statuses: list[LftpJobStatus]):
         prev_lftp_statuses = self.__lftp_statuses
         self.__lftp_statuses = {file.name: file for file in lftp_statuses}
         # Invalidate the cache
         if self.__lftp_statuses != prev_lftp_statuses:
             self.__cached_model = None
 
-    def set_downloaded_files(self, downloaded_files: Set[str]):
+    def set_downloaded_files(self, downloaded_files: set[str]):
         prev_downloaded_files = self.__downloaded_files
         self.__downloaded_files = downloaded_files
         # Invalidate the cache
         if self.__downloaded_files != prev_downloaded_files:
             self.__cached_model = None
 
-    def set_extract_statuses(self, extract_statuses: List[ExtractStatus]):
+    def set_extract_statuses(self, extract_statuses: list[ExtractStatus]):
         prev_extract_statuses = self.__extract_statuses
         self.__extract_statuses = {status.name: status for status in extract_statuses}
         # Invalidate the cache
         if self.__extract_statuses != prev_extract_statuses:
             self.__cached_model = None
 
-    def set_extracted_files(self, extracted_files: Set[str]):
+    def set_extracted_files(self, extracted_files: set[str]):
         prev_extracted_files = self.__extracted_files
         self.__extracted_files = extracted_files
         # Invalidate the cache
         if self.__extracted_files != prev_extracted_files:
             self.__cached_model = None
 
-    def set_extract_failed_files(self, extract_failed_files: Set[str]):
+    def set_extract_failed_files(self, extract_failed_files: set[str]):
         prev_extract_failed_files = self.__extract_failed_files
         self.__extract_failed_files = extract_failed_files
         # Invalidate the cache
         if self.__extract_failed_files != prev_extract_failed_files:
             self.__cached_model = None
 
-    def set_validate_statuses(self, validate_statuses: List[ValidateStatus]):
+    def set_validate_statuses(self, validate_statuses: list[ValidateStatus]):
         prev_validate_statuses = self.__validate_statuses
         self.__validate_statuses = {status.name: status for status in validate_statuses}
         # Invalidate the cache
         if self.__validate_statuses != prev_validate_statuses:
             self.__cached_model = None
 
-    def set_validated_files(self, validated_files: Set[str]):
+    def set_validated_files(self, validated_files: set[str]):
         prev_validated_files = self.__validated_files
         self.__validated_files = validated_files
         # Invalidate the cache
         if self.__validated_files != prev_validated_files:
             self.__cached_model = None
 
-    def set_corrupt_files(self, corrupt_files: Set[str]):
+    def set_corrupt_files(self, corrupt_files: set[str]):
         prev_corrupt_files = self.__corrupt_files
         self.__corrupt_files = corrupt_files
         # Invalidate the cache
@@ -159,9 +161,7 @@ class ModelBuilder:
         _dummy.propagate = False
         model.set_base_logger(_dummy)  # ignore the logs for this temp model
         effective_local = {**self.__local_files, **self.__active_files}
-        all_file_names = set().union(effective_local.keys(),
-                                     self.__remote_files.keys(),
-                                     self.__lftp_statuses.keys())
+        all_file_names = set().union(effective_local.keys(), self.__remote_files.keys(), self.__lftp_statuses.keys())
         for name in all_file_names:
             remote = self.__remote_files.get(name, None)
             local = effective_local.get(name, None)
@@ -172,16 +172,26 @@ class ModelBuilder:
                 raise ModelError("Zero sources have a file object")
 
             # sanity check between the sources
-            is_dir = remote.is_dir if remote else local.is_dir if local else status.type == LftpJobStatus.Type.MIRROR
-            if (remote and is_dir != remote.is_dir) or \
-               (local and is_dir != local.is_dir) or \
-               (status and is_dir != (status.type == LftpJobStatus.Type.MIRROR)):
+            is_dir = (
+                remote.is_dir
+                if remote
+                else local.is_dir
+                if local
+                else (status is not None and status.type == LftpJobStatus.Type.MIRROR)
+            )
+            if (
+                (remote and is_dir != remote.is_dir)
+                or (local and is_dir != local.is_dir)
+                or (status and is_dir != (status.type == LftpJobStatus.Type.MIRROR))
+            ):
                 raise ModelError("Mismatch in is_dir between sources")
 
-            def __fill_model_file(_model_file: ModelFile,
-                                  _remote: Optional[SystemFile],
-                                  _local: Optional[SystemFile],
-                                  _transfer_state: Optional[LftpJobStatus.TransferState]):
+            def __fill_model_file(
+                _model_file: ModelFile,
+                _remote: SystemFile | None,
+                _local: SystemFile | None,
+                _transfer_state: LftpJobStatus.TransferState | None,
+            ):
                 # set local and remote sizes
                 if _remote:
                     _model_file.remote_size = _remote.size
@@ -207,7 +217,8 @@ class ModelBuilder:
                         # also update all parent directories
                         _parent_file = _model_file.parent
                         while _parent_file is not None:
-                            _parent_file.transferred_size += _model_file.transferred_size
+                            if _parent_file.transferred_size is not None and _model_file.transferred_size is not None:
+                                _parent_file.transferred_size += _model_file.transferred_size
                             _parent_file = _parent_file.parent
 
                 # set the is_extractable flag
@@ -236,14 +247,18 @@ class ModelBuilder:
             # for now we only set to Queued or Downloading
             # later after all children are built, we can set to Downloaded after performing a check
             if status:
-                model_file.state = ModelFile.State.QUEUED if status.state == LftpJobStatus.State.QUEUED \
-                                   else ModelFile.State.DOWNLOADING
+                model_file.state = (
+                    ModelFile.State.QUEUED
+                    if status.state == LftpJobStatus.State.QUEUED
+                    else ModelFile.State.DOWNLOADING
+                )
             # fill the rest
-            __fill_model_file(model_file,
-                              remote,
-                              local,
-                              status.total_transfer_state if status and status.state == LftpJobStatus.State.RUNNING
-                              else None)
+            __fill_model_file(
+                model_file,
+                remote,
+                local,
+                status.total_transfer_state if status and status.state == LftpJobStatus.State.RUNNING else None,
+            )
 
             # Traverse SystemFile children tree in BFS order
             # Store (remote, local, status, model_file) tuple in traversal frontier where remote and local
@@ -263,10 +278,13 @@ class ModelBuilder:
                 for _child_name in _all_children_names:
                     _remote_child = _remote_children.get(_child_name, None)
                     _local_child = _local_children.get(_child_name, None)
-                    _is_dir = _remote_child.is_dir if _remote_child else _local_child.is_dir
+                    _is_dir = (
+                        _remote_child.is_dir if _remote_child else (_local_child.is_dir if _local_child else False)
+                    )
                     # sanity check is_dir
-                    if (_remote_child and _is_dir != _remote_child.is_dir) or \
-                       (_local_child and _is_dir != _local_child.is_dir):
+                    if (_remote_child and _is_dir != _remote_child.is_dir) or (
+                        _local_child and _is_dir != _local_child.is_dir
+                    ):
                         raise ModelError("Mismatch in is_dir between child sources")
                     _child_model_file = ModelFile(_child_name, _is_dir, pair_id=self.__pair_id)
 
@@ -279,8 +297,9 @@ class ModelBuilder:
                     _child_status_path = os.path.join(*(_child_model_file.full_path.split(os.sep)[1:]))
                     _child_transfer_state = None
                     if _status:
-                        _child_transfer_state = next((ts for n, ts in _status.get_active_file_transfer_states()
-                                                     if n == _child_status_path), None)
+                        _child_transfer_state = next(
+                            (ts for n, ts in _status.get_active_file_transfer_states() if n == _child_status_path), None
+                        )
                     # Set the state, first matching criteria below decides state
                     #   child is a directory: Default
                     #   child is active: Downloading
@@ -305,29 +324,30 @@ class ModelBuilder:
                         _child_model_file.state = ModelFile.State.DEFAULT
 
                     # fill the rest
-                    __fill_model_file(_child_model_file,
-                                      _remote_child,
-                                      _local_child,
-                                      _child_transfer_state)
+                    __fill_model_file(_child_model_file, _remote_child, _local_child, _child_transfer_state)
                     # add child to frontier
                     frontier.append((_remote_child, _local_child, _status, _child_model_file))
 
             # estimate the ETA for the root if it's not available
-            if model_file.state == ModelFile.State.DOWNLOADING and \
-                    model_file.eta is None and \
-                    model_file.downloading_speed is not None and \
-                    model_file.downloading_speed > 0:
+            if (
+                model_file.state == ModelFile.State.DOWNLOADING
+                and model_file.eta is None
+                and model_file.downloading_speed is not None
+                and model_file.downloading_speed > 0
+            ):
                 raw_eta = None
                 # For directories, prefer LFTP's real-time transfer sizes over
                 # stale filesystem sizes
-                if model_file.is_dir and status and \
-                        status.total_transfer_state.size_local is not None and \
-                        status.total_transfer_state.size_remote is not None and \
-                        status.total_transfer_state.size_remote > 0:
-                    remaining = max(status.total_transfer_state.size_remote -
-                                    status.total_transfer_state.size_local, 0)
+                if (
+                    model_file.is_dir
+                    and status
+                    and status.total_transfer_state.size_local is not None
+                    and status.total_transfer_state.size_remote is not None
+                    and status.total_transfer_state.size_remote > 0
+                ):
+                    remaining = max(status.total_transfer_state.size_remote - status.total_transfer_state.size_local, 0)
                     raw_eta = remaining / model_file.downloading_speed
-                elif model_file.transferred_size is not None:
+                elif model_file.transferred_size is not None and model_file.remote_size is not None:
                     remaining = max(model_file.remote_size - model_file.transferred_size, 0)
                     raw_eta = remaining / model_file.downloading_speed
 
@@ -346,10 +366,12 @@ class ModelBuilder:
             # again we use BFS to traverse
             incomplete_children = False
             if model_file.state == ModelFile.State.DEFAULT:
-                if not model_file.is_dir and \
-                        model_file.local_size is not None and \
-                        model_file.remote_size is not None and \
-                        model_file.local_size >= model_file.remote_size:
+                if (
+                    not model_file.is_dir
+                    and model_file.local_size is not None
+                    and model_file.remote_size is not None
+                    and model_file.local_size >= model_file.remote_size
+                ):
                     # root is a finished single file
                     model_file.state = ModelFile.State.DOWNLOADED
                 elif model_file.is_dir and model_file.remote_size is not None:
@@ -360,9 +382,11 @@ class ModelBuilder:
                     frontier += model_file.get_children()
                     while frontier:
                         _child_file = frontier.pop(0)
-                        if not _child_file.is_dir and \
-                                _child_file.remote_size is not None and \
-                                _child_file.state != ModelFile.State.DOWNLOADED:
+                        if (
+                            not _child_file.is_dir
+                            and _child_file.remote_size is not None
+                            and _child_file.state != ModelFile.State.DOWNLOADED
+                        ):
                             all_downloaded = False
                             break
                         frontier += _child_file.get_children()
@@ -372,17 +396,18 @@ class ModelBuilder:
                         incomplete_children = True
 
             # next we check persist authority for previously downloaded files
-            if model_file.state == ModelFile.State.DEFAULT and \
-                    model_file.name in self.__downloaded_files:
+            if model_file.state == ModelFile.State.DEFAULT and model_file.name in self.__downloaded_files:
                 # Directory with incomplete children always stays DEFAULT
                 # (the children BFS check is authoritative; root-level size
                 # comparisons can be fooled by extra local files like extracted content)
                 if incomplete_children:
                     pass  # Stay DEFAULT for re-download
                 # Partial file overrides persist — stay DEFAULT for re-download
-                elif model_file.local_size is not None and \
-                        model_file.remote_size is not None and \
-                        model_file.local_size < model_file.remote_size:
+                elif (
+                    model_file.local_size is not None
+                    and model_file.remote_size is not None
+                    and model_file.local_size < model_file.remote_size
+                ):
                     pass  # Stay DEFAULT for re-download
                 # Persist authority — applies when auto_delete_remote OFF,
                 # or when remote is already gone (auto_delete_remote ON, delete succeeded)
@@ -403,21 +428,22 @@ class ModelBuilder:
                 extract_status = self.__extract_statuses[model_file.name]
                 if model_file.is_dir != extract_status.is_dir:
                     raise ModelError("Mismatch in is_dir between file and extract status")
-                if model_file.state in (
-                    ModelFile.State.DEFAULT,
-                    ModelFile.State.DOWNLOADED
-                ) and model_file.local_size is not None:
+                if (
+                    model_file.state in (ModelFile.State.DEFAULT, ModelFile.State.DOWNLOADED)
+                    and model_file.local_size is not None
+                ):
                     model_file.state = ModelFile.State.EXTRACTING
                 else:
                     if model_file.local_size is None:
-                        self.logger.warning("File {} has extract status but doesn't exist locally!".format(
-                            model_file.name
-                        ))
+                        self.logger.warning(
+                            "File {} has extract status but doesn't exist locally!".format(model_file.name)
+                        )
                     else:
-                        self.logger.warning("File {} has extract status but is in state {}".format(
-                            model_file.name,
-                            str(model_file.state)
-                        ))
+                        self.logger.warning(
+                            "File {} has extract status but is in state {}".format(
+                                model_file.name, str(model_file.state)
+                            )
+                        )
 
             # next we check if root is Extracted
             # root is Extracted if it is in Downloaded state and in extracted files list
@@ -425,38 +451,49 @@ class ModelBuilder:
             #       for download, and it doesn't make sense to queue after extracting
             #       If a Default file is extracted, it will return back to the Default state
             if model_file.name in self.__extracted_files and model_file.state == ModelFile.State.DOWNLOADED:
-                    model_file.state = ModelFile.State.EXTRACTED
+                model_file.state = ModelFile.State.EXTRACTED
 
             # next we check if root has failed extraction
             if model_file.name in self.__extract_failed_files and model_file.state == ModelFile.State.DOWNLOADED:
-                    model_file.state = ModelFile.State.EXTRACT_FAILED
+                model_file.state = ModelFile.State.EXTRACT_FAILED
 
             # next we check if root is Validating
             # root is Validating if it has a validate status, is in an expected state, and exists locally
             if model_file.name in self.__validate_statuses:
-                if model_file.state in (
-                    ModelFile.State.DEFAULT,
-                    ModelFile.State.DOWNLOADED,
-                    ModelFile.State.EXTRACTED,
-                    ModelFile.State.EXTRACT_FAILED,
-                ) and model_file.local_size is not None:
+                if (
+                    model_file.state
+                    in (
+                        ModelFile.State.DEFAULT,
+                        ModelFile.State.DOWNLOADED,
+                        ModelFile.State.EXTRACTED,
+                        ModelFile.State.EXTRACT_FAILED,
+                    )
+                    and model_file.local_size is not None
+                ):
                     model_file.state = ModelFile.State.VALIDATING
                 else:
-                    self.logger.warning("File {} has validate status but is in state {}".format(
-                        model_file.name, str(model_file.state)))
+                    self.logger.warning(
+                        "File {} has validate status but is in state {}".format(model_file.name, str(model_file.state))
+                    )
 
             # next we check if root is Validated
             # root is Validated if it is in Downloaded/Extracted/ExtractFailed state and in validated files list
             if model_file.name in self.__validated_files and model_file.state in (
-                    ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED, ModelFile.State.EXTRACT_FAILED):
+                ModelFile.State.DOWNLOADED,
+                ModelFile.State.EXTRACTED,
+                ModelFile.State.EXTRACT_FAILED,
+            ):
                 model_file.state = ModelFile.State.VALIDATED
 
             # next we check if root is Corrupt
             # root is Corrupt if it is in Downloaded/Extracted/ExtractFailed/Validated state and in corrupt files list
             # Corrupt overrides Validated because corruption is discovered after validation
             if model_file.name in self.__corrupt_files and model_file.state in (
-                    ModelFile.State.DOWNLOADED, ModelFile.State.EXTRACTED,
-                    ModelFile.State.EXTRACT_FAILED, ModelFile.State.VALIDATED):
+                ModelFile.State.DOWNLOADED,
+                ModelFile.State.EXTRACTED,
+                ModelFile.State.EXTRACT_FAILED,
+                ModelFile.State.VALIDATED,
+            ):
                 model_file.state = ModelFile.State.CORRUPT
 
             model.add_file(model_file)

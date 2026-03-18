@@ -1,29 +1,25 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
-import os
-import tempfile
-import shutil
 import filecmp
 import logging
+import os
+import shutil
 import sys
+import tempfile
+import unittest
 
 import timeout_decorator
 from parameterized import parameterized
 
-from tests.utils import TestUtils
 from common import overrides
 from ssh import Sshcp, SshcpError
-
+from tests.utils import TestUtils
 
 # This is outside so it can be used in the parameterized decorators
 # noinspection SpellCheckingInspection
 _PASSWORD = "seedsyncpass"
 # noinspection SpellCheckingInspection
-_PARAMS = [
-    ("password", _PASSWORD),
-    ("keyauth", None)
-]
+_PARAMS = [("password", _PASSWORD), ("keyauth", None)]
 
 
 # noinspection SpellCheckingInspection
@@ -151,7 +147,7 @@ class TestSshcp(unittest.TestCase):
 
         # single and double quotes - should work
         _dir = os.path.join(self.remote_dir, "a c")
-        out = sshcp.shell('mkdir "{}" && cd \'{}\' && pwd'.format(_dir, _dir))
+        out = sshcp.shell("mkdir \"{}\" && cd '{}' && pwd".format(_dir, _dir))
         out_str = out.decode().strip()
         self.assertEqual(_dir, out_str)
 
@@ -183,5 +179,5 @@ class TestSshcp(unittest.TestCase):
     def test_shell_error_bad_command(self, _, password):
         sshcp = Sshcp(host=self.host, port=self.port, user=self.user, password=password)
         with self.assertRaises(SshcpError) as ctx:
-            sshcp.shell("./some_bad_command.sh".format(self.local_dir))
+            sshcp.shell("./some_bad_command.sh")
         self.assertTrue("./some_bad_command.sh" in str(ctx.exception))

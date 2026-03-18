@@ -1,12 +1,13 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
 import json
-from datetime import datetime, timezone
+import unittest
+from datetime import UTC, datetime
 
-from .test_serialize import parse_stream
 from common import Status
 from web.serialize import SerializeStatus
+
+from .test_serialize import parse_stream
 
 
 class TestSerializeStatus(unittest.TestCase):
@@ -54,7 +55,7 @@ class TestSerializeStatus(unittest.TestCase):
         data = json.loads(out["data"])
         self.assertIsNone(data["controller"]["latest_local_scan_time"])
 
-        timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone.utc)
+        timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=UTC)
         status.controller.latest_local_scan_time = timestamp
         out = parse_stream(serialize.status(status))
         data = json.loads(out["data"])
@@ -67,7 +68,7 @@ class TestSerializeStatus(unittest.TestCase):
         data = json.loads(out["data"])
         self.assertIsNone(data["controller"]["latest_remote_scan_time"])
 
-        timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=timezone.utc)
+        timestamp = datetime(2018, 11, 9, 21, 40, 18, tzinfo=UTC)
         status.controller.latest_remote_scan_time = timestamp
         out = parse_stream(serialize.status(status))
         data = json.loads(out["data"])

@@ -1,13 +1,12 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 from abc import ABC, abstractmethod
-from typing import Any, TypeVar, Type
 from threading import Lock
+from typing import Any, TypeVar
 
 from common import overrides
 
-
-T = TypeVar('T', bound='StatusComponent')
+T = TypeVar("T", bound="StatusComponent")
 
 
 class IStatusComponentListener(ABC):
@@ -29,8 +28,7 @@ class BaseStatus:
     # noinspection PyProtectedMember
     @classmethod
     def _create_property(cls, name: str) -> property:
-        return property(fget=lambda s: s._get_property(name),
-                        fset=lambda s, v: s._set_property(name, v))
+        return property(fget=lambda s: s._get_property(name), fset=lambda s, v: s._set_property(name, v))
 
     def _get_property(self, name: str) -> Any:
         return getattr(self, "__" + name, None)
@@ -57,7 +55,7 @@ class StatusComponent(BaseStatus):
             self.__listeners.remove(listener)
 
     @classmethod
-    def copy(cls: Type[T], src: T, dst: T) -> None:
+    def copy(cls: type[T], src: T, dst: T) -> None:
         property_names = [p for p in dir(cls) if isinstance(getattr(cls, p), property)]
         for prop in property_names:
             setattr(dst, "__" + prop, getattr(src, "__" + prop))
@@ -93,6 +91,7 @@ class Status(BaseStatus):
 
     class CompListener(IStatusComponentListener):
         """Propagates notifications from component to status listeners"""
+
         def __init__(self, status: "Status"):
             self.status = status
 
@@ -164,7 +163,7 @@ class Status(BaseStatus):
             self._listeners.remove(listener)
         self._listeners_lock.release()
 
-    def __create_component(self, comp_cls: Type[T]) -> T:
+    def __create_component(self, comp_cls: type[T]) -> T:
         """Create a component and register our listener with it"""
         # PyCharm is confused and complains about the ctor
         # noinspection PyCallingNonCallable

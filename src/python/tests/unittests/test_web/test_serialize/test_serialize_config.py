@@ -1,7 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
 import json
+import unittest
 
 from common import Config
 from web.serialize import SerializeConfig

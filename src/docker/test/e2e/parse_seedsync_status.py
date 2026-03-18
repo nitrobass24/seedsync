@@ -1,6 +1,7 @@
 import sys
 import json
+
 try:
-    print(json.load(sys.stdin)['server']['up'])
-except:
-    print('False')
+    print(json.load(sys.stdin)["server"]["up"])
+except Exception:
+    print("False")

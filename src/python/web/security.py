@@ -1,22 +1,23 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import secrets
-import time
 import threading
+import time
 from collections import defaultdict
 from urllib.parse import urlparse
 
 import bottle
 
-
 # ---------------------------------------------------------------------------
 # Security Response Headers
 # ---------------------------------------------------------------------------
+
 
 def install_security_headers(app: bottle.Bottle):
     """
     Add security response headers to every response via an after_request hook.
     """
+
     @app.hook("after_request")
     def _add_security_headers():
         bottle.response.headers["X-Content-Type-Options"] = "nosniff"
@@ -69,6 +70,7 @@ def install_csrf_protection(app: bottle.Bottle):
     Validate Origin/Referer on state-changing requests (POST/PUT/DELETE/PATCH).
     Requests from localhost/127.0.0.1/::1 are exempt.
     """
+
     @app.hook("before_request")
     def _csrf_check():
         if bottle.request.method in _CSRF_SAFE_METHODS:
@@ -79,10 +81,7 @@ def install_csrf_protection(app: bottle.Bottle):
         # proxy still undergoes CSRF validation.
         remote_addr = bottle.request.environ.get("REMOTE_ADDR", "")
         if remote_addr in _CSRF_LOCALHOST:
-            has_proxy_header = (
-                bottle.request.get_header("X-Forwarded-For")
-                or bottle.request.get_header("Forwarded")
-            )
+            has_proxy_header = bottle.request.get_header("X-Forwarded-For") or bottle.request.get_header("Forwarded")
             if not has_proxy_header:
                 return
 
@@ -109,14 +108,14 @@ def install_csrf_protection(app: bottle.Bottle):
 # Rate Limiting
 # ---------------------------------------------------------------------------
 
+
 class _RateLimiter:
     """Per-IP sliding-window rate limiter (in-memory)."""
 
-    def __init__(self, max_requests: int = 120, window_seconds: int = 60,
-                 sweep_interval: int = 300):
+    def __init__(self, max_requests: int = 120, window_seconds: int = 60, sweep_interval: int = 300):
         self._max = max_requests
         self._window = window_seconds
-        self._hits = defaultdict(list)   # ip -> [timestamps]
+        self._hits = defaultdict(list)  # ip -> [timestamps]
         self._lock = threading.Lock()
         self._sweep_interval = sweep_interval
         self._last_sweep = time.monotonic()
@@ -212,6 +211,7 @@ def install_api_key_auth(app: bottle.Bottle, get_api_key):
     :param app: Bottle application
     :param get_api_key: callable returning the current API key string
     """
+
     @app.hook("before_request")
     def _api_key_check():
         configured_key = get_api_key()
@@ -230,7 +230,7 @@ def install_api_key_auth(app: bottle.Bottle, get_api_key):
 
         # SSE stream also accepts query parameter
         if not provided and path == _SSE_STREAM_PATH:
-            provided = bottle.request.params.get("api_key")
+            provided = bottle.request.params.get("api_key")  # type: ignore[attr-defined]
 
         if not provided:
             raise bottle.HTTPError(401, "API key required")
@@ -242,8 +242,8 @@ def install_api_key_auth(app: bottle.Bottle, get_api_key):
 # Convenience installer
 # ---------------------------------------------------------------------------
 
-def install_security_middleware(app: bottle.Bottle, *, get_api_key=None,
-                               trust_x_forwarded_for: bool = False):
+
+def install_security_middleware(app: bottle.Bottle, *, get_api_key=None, trust_x_forwarded_for: bool = False):
     """Install all security middleware on the given Bottle app.
 
     :param trust_x_forwarded_for: Pass True only when behind a trusted reverse proxy.

@@ -1,9 +1,9 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import unittest
 import os
-import tempfile
 import shutil
+import tempfile
+import unittest
 
 from controller.move.move_process import MoveProcess
 
@@ -28,18 +28,14 @@ class TestMoveProcess(unittest.TestCase):
         with open(src_file, "w") as f:
             f.write("hello world")
 
-        process = MoveProcess(
-            source_path=self.src_dir,
-            dest_path=self.dst_dir,
-            file_name="test.txt"
-        )
+        process = MoveProcess(source_path=self.src_dir, dest_path=self.dst_dir, file_name="test.txt")
         self._run_process(process)
 
         # Source should be gone, dest should exist
         self.assertFalse(os.path.exists(src_file))
         dst_file = os.path.join(self.dst_dir, "test.txt")
         self.assertTrue(os.path.exists(dst_file))
-        with open(dst_file, "r") as f:
+        with open(dst_file) as f:
             self.assertEqual("hello world", f.read())
 
     def test_move_directory(self):
@@ -52,11 +48,7 @@ class TestMoveProcess(unittest.TestCase):
         with open(os.path.join(src_subdir, "subdir", "b.txt"), "w") as f:
             f.write("file_b")
 
-        process = MoveProcess(
-            source_path=self.src_dir,
-            dest_path=self.dst_dir,
-            file_name="mydir"
-        )
+        process = MoveProcess(source_path=self.src_dir, dest_path=self.dst_dir, file_name="mydir")
         self._run_process(process)
 
         # Source should be gone
@@ -65,18 +57,14 @@ class TestMoveProcess(unittest.TestCase):
         # Dest should have the full tree
         dst_subdir = os.path.join(self.dst_dir, "mydir")
         self.assertTrue(os.path.isdir(dst_subdir))
-        with open(os.path.join(dst_subdir, "a.txt"), "r") as f:
+        with open(os.path.join(dst_subdir, "a.txt")) as f:
             self.assertEqual("file_a", f.read())
-        with open(os.path.join(dst_subdir, "subdir", "b.txt"), "r") as f:
+        with open(os.path.join(dst_subdir, "subdir", "b.txt")) as f:
             self.assertEqual("file_b", f.read())
 
     def test_move_nonexistent_source(self):
         """Moving a nonexistent source should log error and not crash"""
-        process = MoveProcess(
-            source_path=self.src_dir,
-            dest_path=self.dst_dir,
-            file_name="does_not_exist"
-        )
+        process = MoveProcess(source_path=self.src_dir, dest_path=self.dst_dir, file_name="does_not_exist")
         # Should not raise
         self._run_process(process)
 
@@ -90,11 +78,7 @@ class TestMoveProcess(unittest.TestCase):
         with open(src_file, "w") as f:
             f.write("content")
 
-        process = MoveProcess(
-            source_path=self.src_dir,
-            dest_path=nested_dst,
-            file_name="test.txt"
-        )
+        process = MoveProcess(source_path=self.src_dir, dest_path=nested_dst, file_name="test.txt")
         self._run_process(process)
 
         self.assertFalse(os.path.exists(src_file))
@@ -126,15 +110,11 @@ class TestMoveProcess(unittest.TestCase):
         with open(src_file, "w") as f:
             f.write(content)
 
-        process = MoveProcess(
-            source_path=self.src_dir,
-            dest_path=self.dst_dir,
-            file_name="big.txt"
-        )
+        process = MoveProcess(source_path=self.src_dir, dest_path=self.dst_dir, file_name="big.txt")
         self._run_process(process)
 
         dst_file = os.path.join(self.dst_dir, "big.txt")
-        with open(dst_file, "r") as f:
+        with open(dst_file) as f:
             self.assertEqual(content, f.read())
 
     def test_move_empty_directory(self):
@@ -142,11 +122,7 @@ class TestMoveProcess(unittest.TestCase):
         src_empty = os.path.join(self.src_dir, "emptydir")
         os.makedirs(src_empty)
 
-        process = MoveProcess(
-            source_path=self.src_dir,
-            dest_path=self.dst_dir,
-            file_name="emptydir"
-        )
+        process = MoveProcess(source_path=self.src_dir, dest_path=self.dst_dir, file_name="emptydir")
         self._run_process(process)
 
         self.assertFalse(os.path.exists(src_empty))

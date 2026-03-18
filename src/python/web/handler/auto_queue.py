@@ -1,12 +1,14 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from bottle import HTTPResponse
 from urllib.parse import unquote
 
+from bottle import HTTPResponse
+
 from common import overrides
-from controller import AutoQueuePersist, AutoQueuePattern
-from ..web_app import IHandler, WebApp
+from controller import AutoQueuePattern, AutoQueuePersist
+
 from ..serialize import SerializeAutoQueue
+from ..web_app import IHandler, WebApp
 
 
 class AutoQueueHandler(IHandler):

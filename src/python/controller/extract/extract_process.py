@@ -1,20 +1,19 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import multiprocessing
 import datetime
-import time
-import queue
-from typing import Optional, List
 import logging
+import multiprocessing
+import queue
+import time
 
-from .dispatch import ExtractDispatch, ExtractStatus, ExtractListener, ExtractDispatchError
+from common import AppProcess, overrides
+
+from .dispatch import ExtractDispatch, ExtractDispatchError, ExtractListener, ExtractStatus
 from .extract_request import ExtractRequest
-from common import overrides, AppProcess
-from model import ModelFile
 
 
 class ExtractStatusResult:
-    def __init__(self, timestamp: datetime, statuses: List[ExtractStatus]):
+    def __init__(self, timestamp: datetime, statuses: list[ExtractStatus]):
         self.timestamp = timestamp
         self.statuses = statuses
 
@@ -39,27 +38,25 @@ class ExtractProcess(AppProcess):
     __DEFAULT_SLEEP_INTERVAL_IN_SECS = 0.5
 
     class __ExtractListener(ExtractListener):
-        def __init__(self, logger: logging.Logger,
-                     completed_queue: multiprocessing.Queue,
-                     failed_queue: multiprocessing.Queue):
+        def __init__(
+            self, logger: logging.Logger, completed_queue: multiprocessing.Queue, failed_queue: multiprocessing.Queue
+        ):
             self.logger = logger
             self.completed_queue = completed_queue
             self.failed_queue = failed_queue
 
         def extract_completed(self, name: str, is_dir: bool, pair_id: str = None):
             self.logger.info("Extraction completed for {}".format(name))
-            completed_result = ExtractCompletedResult(timestamp=datetime.datetime.now(),
-                                                      name=name,
-                                                      is_dir=is_dir,
-                                                      pair_id=pair_id)
+            completed_result = ExtractCompletedResult(
+                timestamp=datetime.datetime.now(), name=name, is_dir=is_dir, pair_id=pair_id
+            )
             self.completed_queue.put(completed_result)
 
         def extract_failed(self, name: str, is_dir: bool, pair_id: str = None):
             self.logger.error("Extraction failed for {}".format(name))
-            failed_result = ExtractFailedResult(timestamp=datetime.datetime.now(),
-                                                name=name,
-                                                is_dir=is_dir,
-                                                pair_id=pair_id)
+            failed_result = ExtractFailedResult(
+                timestamp=datetime.datetime.now(), name=name, is_dir=is_dir, pair_id=pair_id
+            )
             self.failed_queue.put(failed_result)
 
     def __init__(self):
@@ -77,9 +74,7 @@ class ExtractProcess(AppProcess):
 
         # Add extract listener
         listener = ExtractProcess.__ExtractListener(
-            logger=self.logger,
-            completed_queue=self.__completed_result_queue,
-            failed_queue=self.__failed_result_queue
+            logger=self.logger, completed_queue=self.__completed_result_queue, failed_queue=self.__failed_result_queue
         )
         self.__dispatch.add_listener(listener)
 
@@ -106,7 +101,7 @@ class ExtractProcess(AppProcess):
                         timestamp=datetime.datetime.now(),
                         name=req.model_file.name,
                         is_dir=req.model_file.is_dir,
-                        pair_id=req.pair_id
+                        pair_id=req.pair_id,
                     )
                     self.__failed_result_queue.put(failed_result)
         except queue.Empty:
@@ -114,8 +109,7 @@ class ExtractProcess(AppProcess):
 
         # Queue the latest status
         statuses = self.__dispatch.status()
-        status_result = ExtractStatusResult(timestamp=datetime.datetime.now(),
-                                            statuses=statuses)
+        status_result = ExtractStatusResult(timestamp=datetime.datetime.now(), statuses=statuses)
         self.__status_result_queue.put(status_result)
 
         time.sleep(ExtractProcess.__DEFAULT_SLEEP_INTERVAL_IN_SECS)
@@ -140,7 +134,7 @@ class ExtractProcess(AppProcess):
         """
         self.__command_queue.put(req)
 
-    def pop_latest_statuses(self) -> Optional[ExtractStatusResult]:
+    def pop_latest_statuses(self) -> ExtractStatusResult | None:
         """
         Process-safe method to retrieve latest extract status
         Returns none if no new status is available since the last time
@@ -155,7 +149,7 @@ class ExtractProcess(AppProcess):
             pass
         return latest_result
 
-    def pop_completed(self) -> List[ExtractCompletedResult]:
+    def pop_completed(self) -> list[ExtractCompletedResult]:
         """
         Process-safe method to retrieve list of newly completed extractions
         Returns an empty list if no new extractions were completed since the
@@ -171,7 +165,7 @@ class ExtractProcess(AppProcess):
             pass
         return completed
 
-    def pop_failed(self) -> List[ExtractFailedResult]:
+    def pop_failed(self) -> list[ExtractFailedResult]:
         """
         Process-safe method to retrieve list of newly failed extractions
         Returns an empty list if no new failures since the last call.

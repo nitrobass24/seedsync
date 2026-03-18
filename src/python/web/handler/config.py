@@ -1,11 +1,13 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from bottle import HTTPResponse
 from urllib.parse import unquote
 
-from common import overrides, Config, ConfigError
-from ..web_app import IHandler, WebApp
+from bottle import HTTPResponse
+
+from common import Config, ConfigError, overrides
+
 from ..serialize import SerializeConfig
+from ..web_app import IHandler, WebApp
 
 
 class ConfigHandler(IHandler):

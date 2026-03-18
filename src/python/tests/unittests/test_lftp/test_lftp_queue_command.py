@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 
 class TestLftpQueueCommand(unittest.TestCase):
@@ -13,7 +13,7 @@ class TestLftpQueueCommand(unittest.TestCase):
         """Create an Lftp instance with mocked internals."""
         from lftp import Lftp
 
-        with patch.object(Lftp, '__init__', lambda self, **kwargs: None):
+        with patch.object(Lftp, "__init__", lambda self, **kwargs: None):
             lftp = Lftp.__new__(Lftp)
         # Set the private attributes that queue() uses
         lftp._Lftp__base_remote_dir_path = "/remote/path"
