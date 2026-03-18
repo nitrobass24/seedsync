@@ -3,6 +3,12 @@
 # Self-contained remote filesystem scanner.
 # This script is uploaded to the remote server and executed standalone via
 # `python3 scan_fs.py <path>`. It must NOT import any SeedSync packages.
+#
+# IMPORTANT: This file runs on the REMOTE server which may have Python 3.8+.
+# Use `from __future__ import annotations` so modern type syntax (X | None,
+# list[X]) is valid on older Python versions.
+
+from __future__ import annotations
 
 import json
 import os
@@ -48,10 +54,10 @@ class SystemFile:
         return self.__is_dir
 
     @property
-    def children(self) -> list["SystemFile"]:
+    def children(self) -> list[SystemFile]:
         return self.__children
 
-    def add_child(self, file: "SystemFile"):
+    def add_child(self, file: SystemFile):
         if not self.__is_dir:
             raise TypeError("Cannot add children to a file")
         self.__children.append(file)
