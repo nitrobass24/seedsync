@@ -411,18 +411,18 @@ class Seedsync:
         return False
 
     @staticmethod
-    def _load_persist(cls: type[T_Persist], file_path: str) -> T_Persist:  # type: ignore[reportSelfClsParameterName]
+    def _load_persist(persist_cls: type[T_Persist], file_path: str) -> T_Persist:
         """
         Loads a persist from file.
         Backs up existing persist if it's corrupted. Returns a new blank
         persist in its place.
-        :param cls:
+        :param persist_cls:
         :param file_path:
         :return:
         """
         if os.path.isfile(file_path):
             try:
-                return cls.from_file(file_path)
+                return persist_cls.from_file(file_path)
             except PersistError:
                 if Seedsync.logger:
                     Seedsync.logger.exception("Caught exception")
@@ -431,10 +431,10 @@ class Seedsync:
                 Seedsync.__backup_file(file_path)
 
                 # noinspection PyCallingNonCallable
-                return cls()
+                return persist_cls()
         else:
             # noinspection PyCallingNonCallable
-            return cls()
+            return persist_cls()
 
     @staticmethod
     def __backup_file(file_path: str):

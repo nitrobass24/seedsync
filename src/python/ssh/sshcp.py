@@ -53,6 +53,7 @@ class Sshcp:
         :raises SshcpError: if no working shell can be found
         """
         if self.__shell_detected:
+            assert self.__detected_shell is not None
             return self.__detected_shell
 
         self.logger.debug("Detecting remote shell...")
