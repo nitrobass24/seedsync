@@ -465,9 +465,12 @@ class Lftp:
     def xfer_verify_command(self, command: str):
         self.__set(Lftp.__SET_XFER_VERIFY_COMMAND, command)
 
-    def status(self) -> list[LftpJobStatus]:
+    def status(self) -> list[LftpJobStatus] | None:
         """
-        Return a status list of queued and running jobs
+        Return a status list of queued and running jobs.
+        Returns None when the status output could not be parsed, so callers
+        can distinguish "no jobs" from "parse failed" and avoid false
+        completion signals.
         :return:
         """
         out = self.__run_command("jobs -v")
@@ -478,7 +481,7 @@ class Lftp:
             self.__consecutive_status_errors += 1
             if self.__consecutive_status_errors < MAX_CONSECUTIVE_STATUS_ERRORS:
                 self.logger.warning(f"Ignoring status error (count={self.__consecutive_status_errors})")
-                statuses = []
+                return None
             else:
                 raise
         return statuses
