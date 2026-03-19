@@ -3,6 +3,36 @@ import { AutoQueuePage } from "./pages/autoqueue.page";
 
 test.describe("AutoQueue Page", () => {
   let autoqueue: AutoQueuePage;
+  let savedEnabled: string;
+  let savedPatternsOnly: string;
+
+  test.beforeEach(async ({ apiGet, apiSetConfig }) => {
+    // Save current autoqueue config
+    const config = await apiGet("/server/config/get");
+    savedEnabled = String(config.autoqueue?.enabled ?? "false");
+    savedPatternsOnly = String(config.autoqueue?.patterns_only ?? "false");
+  });
+
+  test.afterEach(async ({ apiSetConfig, apiGet }) => {
+    // Restore autoqueue config
+    await apiSetConfig("autoqueue", "enabled", savedEnabled);
+    await apiSetConfig("autoqueue", "patterns_only", savedPatternsOnly);
+
+    // Clean up any test patterns
+    try {
+      const data = await apiGet("/server/autoqueue/get");
+      const patterns: string[] = Array.isArray(data)
+        ? data
+        : data.patterns || [];
+      for (const p of patterns) {
+        if (p.startsWith("test-")) {
+          // Remove via UI would be fragile, but patterns are cleaned on config restore
+        }
+      }
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
 
   test("when autoqueue disabled: page shows disabled message", async ({
     page,
@@ -68,10 +98,19 @@ test.describe("AutoQueue Page", () => {
     const testPattern = `test-btn-${Date.now()}`;
     await autoqueue.addPattern(testPattern);
 
-    // Verify via API
-    const data = await apiGet("/server/autoqueue/get");
-    const patterns: string[] = Array.isArray(data) ? data : data.patterns || [];
-    expect(patterns).toContain(testPattern);
+    // Poll the API until the pattern appears
+    await expect
+      .poll(
+        async () => {
+          const data = await apiGet("/server/autoqueue/get");
+          const patterns: string[] = Array.isArray(data)
+            ? data
+            : data.patterns || [];
+          return patterns;
+        },
+        { timeout: 5000 }
+      )
+      .toContain(testPattern);
 
     // Cleanup: remove the pattern
     const patternItem = autoqueue.getPatternByText(testPattern);
@@ -98,10 +137,19 @@ test.describe("AutoQueue Page", () => {
     await autoqueue.patternInput.fill(testPattern);
     await autoqueue.patternInput.press("Enter");
 
-    // Verify via API
-    const data = await apiGet("/server/autoqueue/get");
-    const patterns: string[] = Array.isArray(data) ? data : data.patterns || [];
-    expect(patterns).toContain(testPattern);
+    // Poll the API until the pattern appears
+    await expect
+      .poll(
+        async () => {
+          const data = await apiGet("/server/autoqueue/get");
+          const patterns: string[] = Array.isArray(data)
+            ? data
+            : data.patterns || [];
+          return patterns;
+        },
+        { timeout: 5000 }
+      )
+      .toContain(testPattern);
 
     // Cleanup
     const patternItem = autoqueue.getPatternByText(testPattern);
@@ -128,7 +176,21 @@ test.describe("AutoQueue Page", () => {
     const testPattern = `test-remove-${Date.now()}`;
     await autoqueue.addPattern(testPattern);
 
-    // Verify it was added
+    // Poll until it appears in the API
+    await expect
+      .poll(
+        async () => {
+          const data = await apiGet("/server/autoqueue/get");
+          const patterns: string[] = Array.isArray(data)
+            ? data
+            : data.patterns || [];
+          return patterns;
+        },
+        { timeout: 5000 }
+      )
+      .toContain(testPattern);
+
+    // Verify it's visible in the UI
     const patternItem = autoqueue.getPatternByText(testPattern);
     await expect(patternItem).toBeVisible();
 
@@ -136,10 +198,19 @@ test.describe("AutoQueue Page", () => {
     const removeBtn = autoqueue.getRemoveButton(patternItem);
     await removeBtn.click();
 
-    // Verify via API that it's gone
-    const data = await apiGet("/server/autoqueue/get");
-    const patterns: string[] = Array.isArray(data) ? data : data.patterns || [];
-    expect(patterns).not.toContain(testPattern);
+    // Poll the API until it's gone
+    await expect
+      .poll(
+        async () => {
+          const data = await apiGet("/server/autoqueue/get");
+          const patterns: string[] = Array.isArray(data)
+            ? data
+            : data.patterns || [];
+          return patterns;
+        },
+        { timeout: 5000 }
+      )
+      .not.toContain(testPattern);
   });
 
   test("duplicate pattern shows error", async ({

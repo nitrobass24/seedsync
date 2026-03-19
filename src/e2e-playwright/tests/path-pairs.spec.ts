@@ -4,7 +4,18 @@ import { PathPairsPage } from "./pages/path-pairs.page";
 test.describe("Path Pairs", () => {
   let pathPairs: PathPairsPage;
 
-  test.beforeEach(async ({ page }) => {
+  // Clean up all path pairs before each test to ensure clean state
+  test.beforeEach(async ({ page, appUrl }) => {
+    const res = await fetch(`${appUrl}/server/pathpairs`);
+    if (res.ok) {
+      const pairs = await res.json();
+      for (const pair of pairs) {
+        await fetch(`${appUrl}/server/pathpairs/${pair.id}`, {
+          method: "DELETE",
+        });
+      }
+    }
+
     pathPairs = new PathPairsPage(page);
     await pathPairs.goto();
   });
@@ -33,7 +44,7 @@ test.describe("Path Pairs", () => {
     await expect(form.first()).toBeVisible();
   });
 
-  test("fill and save creates a pair via API", async ({ page, appUrl }) => {
+  test("fill and save creates a pair via API", async ({ appUrl }) => {
     await pathPairs.addButton.click();
     await pathPairs.fillForm({
       name: "e2e-test-pair",
@@ -42,17 +53,25 @@ test.describe("Path Pairs", () => {
     });
     await pathPairs.clickSave();
 
-    // Wait for save to complete
-    await page.waitForTimeout(1000);
-
-    const res = await fetch(`${appUrl}/server/pathpairs`);
-    const pairs = await res.json();
-    const created = pairs.find(
-      (p: { name: string }) => p.name === "e2e-test-pair"
-    );
-    expect(created).toBeDefined();
-    expect(created.remote_path).toBe("/remote/e2e");
-    expect(created.local_path).toBe("/local/e2e");
+    // Poll the API until the pair appears
+    await expect
+      .poll(
+        async () => {
+          const res = await fetch(`${appUrl}/server/pathpairs`);
+          const pairs = await res.json();
+          return pairs.find(
+            (p: { name: string }) => p.name === "e2e-test-pair"
+          );
+        },
+        { timeout: 5000 }
+      )
+      .toEqual(
+        expect.objectContaining({
+          name: "e2e-test-pair",
+          remote_path: "/remote/e2e",
+          local_path: "/local/e2e",
+        })
+      );
   });
 
   test("created pair appears in the list", async ({ page }) => {
@@ -63,10 +82,9 @@ test.describe("Path Pairs", () => {
       localPath: "/local/visible",
     });
     await pathPairs.clickSave();
-    await page.waitForTimeout(1000);
 
     const row = pathPairs.getPairByName("visible-pair");
-    await expect(row).toBeVisible();
+    await expect(row).toBeVisible({ timeout: 5000 });
   });
 
   test("duplicate name shows error message", async ({ page, appUrl }) => {
@@ -131,10 +149,7 @@ test.describe("Path Pairs", () => {
     await expect(inputs.nth(2)).toHaveValue("/local/edit");
   });
 
-  test("edit and save updates the pair via API", async ({
-    page,
-    appUrl,
-  }) => {
+  test("edit and save updates the pair via API", async ({ appUrl }) => {
     // Create a pair via API
     await fetch(`${appUrl}/server/pathpairs`, {
       method: "POST",
@@ -157,16 +172,25 @@ test.describe("Path Pairs", () => {
       localPath: "/local/updated",
     });
     await pathPairs.clickSave();
-    await page.waitForTimeout(1000);
 
-    const res = await fetch(`${appUrl}/server/pathpairs`);
-    const pairs = await res.json();
-    const updated = pairs.find(
-      (p: { name: string }) => p.name === "update-me"
-    );
-    expect(updated).toBeDefined();
-    expect(updated.remote_path).toBe("/remote/updated");
-    expect(updated.local_path).toBe("/local/updated");
+    // Poll the API until the pair is updated
+    await expect
+      .poll(
+        async () => {
+          const res = await fetch(`${appUrl}/server/pathpairs`);
+          const pairs = await res.json();
+          return pairs.find(
+            (p: { name: string }) => p.name === "update-me"
+          );
+        },
+        { timeout: 5000 }
+      )
+      .toEqual(
+        expect.objectContaining({
+          remote_path: "/remote/updated",
+          local_path: "/local/updated",
+        })
+      );
   });
 
   test("delete requires two clicks with confirmation", async ({
@@ -199,9 +223,9 @@ test.describe("Path Pairs", () => {
     await deleteBtn.click();
   });
 
-  test("delete removes the pair via API", async ({ page, appUrl }) => {
+  test("delete removes the pair via API", async ({ appUrl }) => {
     // Create a pair via API
-    const createRes = await fetch(`${appUrl}/server/pathpairs`, {
+    await fetch(`${appUrl}/server/pathpairs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -217,24 +241,30 @@ test.describe("Path Pairs", () => {
     const row = pathPairs.getPairByName("gone-pair");
     const deleteBtn = pathPairs.getDeleteButton(row);
 
-    // Two clicks to confirm + delete
+    // First click to show confirmation
     await deleteBtn.click();
-    await page.waitForTimeout(500);
-    await deleteBtn.click();
-    await page.waitForTimeout(1000);
+    const confirmText = row.locator("text=/[Cc]onfirm/");
+    await expect(confirmText).toBeVisible();
 
-    const res = await fetch(`${appUrl}/server/pathpairs`);
-    const pairs = await res.json();
-    const found = pairs.find(
-      (p: { name: string }) => p.name === "gone-pair"
-    );
-    expect(found).toBeUndefined();
+    // Second click to confirm delete
+    await deleteBtn.click();
+
+    // Poll the API until the pair is gone
+    await expect
+      .poll(
+        async () => {
+          const res = await fetch(`${appUrl}/server/pathpairs`);
+          const pairs = await res.json();
+          return pairs.find(
+            (p: { name: string }) => p.name === "gone-pair"
+          );
+        },
+        { timeout: 5000 }
+      )
+      .toBeUndefined();
   });
 
-  test("enable/disable toggle updates via API", async ({
-    page,
-    appUrl,
-  }) => {
+  test("enable/disable toggle updates via API", async ({ appUrl }) => {
     // Create an enabled pair via API
     await fetch(`${appUrl}/server/pathpairs`, {
       method: "POST",
@@ -254,14 +284,20 @@ test.describe("Path Pairs", () => {
 
     // Toggle off
     await toggle.click();
-    await page.waitForTimeout(1000);
 
-    const res = await fetch(`${appUrl}/server/pathpairs`);
-    const pairs = await res.json();
-    const pair = pairs.find(
-      (p: { name: string }) => p.name === "toggle-pair"
-    );
-    expect(pair).toBeDefined();
-    expect(pair.enabled).toBe(false);
+    // Poll the API until the pair is disabled
+    await expect
+      .poll(
+        async () => {
+          const res = await fetch(`${appUrl}/server/pathpairs`);
+          const pairs = await res.json();
+          const pair = pairs.find(
+            (p: { name: string }) => p.name === "toggle-pair"
+          );
+          return pair?.enabled;
+        },
+        { timeout: 5000 }
+      )
+      .toBe(false);
   });
 });

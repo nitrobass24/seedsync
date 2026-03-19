@@ -65,14 +65,12 @@ test.describe("Logs Page", () => {
 
     // Type a term that exists
     await logs.searchInput.fill(searchTerm);
-    await page.waitForTimeout(500); // Allow filter to apply
-    const filteredCount = await records.count();
-    expect(filteredCount).toBeLessThanOrEqual(count);
+    await expect
+      .poll(async () => await records.count(), { timeout: 5000 })
+      .toBeLessThanOrEqual(count);
 
     // Type a nonsense term that should match nothing
     await logs.searchInput.fill("zzz_no_match_xyz_99999");
-    await page.waitForTimeout(500);
-    const noMatchCount = await records.count();
-    expect(noMatchCount).toBe(0);
+    await expect(records).toHaveCount(0, { timeout: 5000 });
   });
 });

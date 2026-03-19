@@ -12,7 +12,7 @@ export class LogsPage {
     this.page = page;
     this.searchInput = page.locator("#log-search, input[placeholder*='search' i]");
     this.levelFilter = page.locator("#log-level, select");
-    this.logHistory = page.locator("[class*='log-history'], [class*='log-records']");
+    this.logHistory = page.locator(".history-section, [class*='history']");
     this.scrollToTop = page.locator("#btn-scroll-top, button", {
       hasText: /top/i,
     });
@@ -27,12 +27,10 @@ export class LogsPage {
   }
 
   getLogRecords() {
-    return this.page.locator("[class*='log-record'], [class*='log-line']");
+    return this.page.locator(".record");
   }
 
   getLogRecordsByLevel(level: string) {
-    return this.page.locator(
-      `[class*='log-record'].${level.toLowerCase()}, [class*='${level.toLowerCase()}']`
-    );
+    return this.page.locator(`.record.${level.toLowerCase()}`);
   }
 }

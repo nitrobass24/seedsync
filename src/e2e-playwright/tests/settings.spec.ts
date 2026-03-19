@@ -23,30 +23,51 @@ test.describe("Settings Page", () => {
   test("text field change saves to backend", async ({ page, apiGet }) => {
     const field = settings.getTextInput("Server Address");
     await field.clear();
-    const testValue = "test-server-" + Date.now();
+    const testValue = "e2e-test-server";
     await field.fill(testValue);
 
-    // Wait for debounce to fire and save
-    await page.waitForTimeout(1500);
-
-    const config = await apiGet("/server/config/get");
-    expect(config.lftp.remote_address).toBe(testValue);
+    // Poll the API until the value is saved
+    await expect
+      .poll(
+        async () => {
+          const config = await apiGet("/server/config/get");
+          return config.lftp.remote_address;
+        },
+        { timeout: 5000 }
+      )
+      .toBe(testValue);
   });
 
   test("checkbox toggle saves to backend", async ({ page, apiGet }) => {
     const checkbox = settings.getCheckbox("Enable Debug");
     const wasBefore = await checkbox.isChecked();
+    const expected = !wasBefore;
 
     await checkbox.click();
-    await page.waitForTimeout(1500);
 
-    const config = await apiGet("/server/config/get");
-    const expected = !wasBefore;
-    expect(config.general.debug).toBe(expected);
+    // Poll the API until the value is saved
+    await expect
+      .poll(
+        async () => {
+          const config = await apiGet("/server/config/get");
+          return config.general.debug;
+        },
+        { timeout: 5000 }
+      )
+      .toBe(expected);
 
     // Toggle back to restore original state
     await checkbox.click();
-    await page.waitForTimeout(1500);
+
+    await expect
+      .poll(
+        async () => {
+          const config = await apiGet("/server/config/get");
+          return config.general.debug;
+        },
+        { timeout: 5000 }
+      )
+      .toBe(wasBefore);
   });
 
   test("password field masks input", async () => {
@@ -60,10 +81,17 @@ test.describe("Settings Page", () => {
   }) => {
     const select = settings.getSelect("Log Format");
     await select.selectOption("json");
-    await page.waitForTimeout(1500);
 
-    const config = await apiGet("/server/config/get");
-    expect(config.general.log_format).toBe("json");
+    // Poll the API until the value is saved
+    await expect
+      .poll(
+        async () => {
+          const config = await apiGet("/server/config/get");
+          return config.general.log_format;
+        },
+        { timeout: 5000 }
+      )
+      .toBe("json");
   });
 
   test("Advanced LFTP section is collapsed by default", async ({ page }) => {
@@ -134,10 +162,9 @@ test.describe("Settings Page", () => {
     const field = settings.getTextInput("Server Address");
     await field.clear();
     await field.fill("trigger-restart-notice-" + Date.now());
-    await page.waitForTimeout(1500);
 
     const notification = settings.getRestartNotification();
-    await expect(notification).toBeVisible();
+    await expect(notification).toBeVisible({ timeout: 5000 });
   });
 
   test("Web GUI Port field shows current port value", async ({ apiGet }) => {

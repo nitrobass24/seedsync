@@ -9,9 +9,7 @@ test.describe("About Page", () => {
     await aboutPage.goto();
   });
 
-  test("version number is displayed and matches format vX.Y.Z", async ({
-    page,
-  }) => {
+  test("version number is displayed and matches format vX.Y.Z", async () => {
     await expect(aboutPage.versionText).toBeVisible();
     const versionContent = await aboutPage.versionText.textContent();
     expect(versionContent).toMatch(/v\d+\.\d+\.\d+/);

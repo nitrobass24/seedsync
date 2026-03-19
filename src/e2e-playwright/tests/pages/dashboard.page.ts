@@ -21,7 +21,7 @@ export class DashboardPage {
 
   async goto() {
     await this.page.goto("/dashboard");
-    await this.page.waitForLoadState("networkidle");
+    await this.page.waitForLoadState("domcontentloaded");
   }
 
   getFileRows() {

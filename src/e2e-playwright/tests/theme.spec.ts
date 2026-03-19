@@ -7,7 +7,7 @@ test.describe("Theme Switching", () => {
   test.beforeEach(async ({ page }) => {
     sidebar = new SidebarPage(page);
     await page.goto("/dashboard");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
   });
 
   test("default theme has data-bs-theme attribute on html element", async ({
@@ -24,10 +24,13 @@ test.describe("Theme Switching", () => {
     const initialTheme = await page
       .locator("html")
       .getAttribute("data-bs-theme");
+    const expectedTheme = initialTheme === "dark" ? "light" : "dark";
+
     await sidebar.themeToggle.click();
-    const newTheme = await page.locator("html").getAttribute("data-bs-theme");
-    expect(newTheme).not.toEqual(initialTheme);
-    expect(["light", "dark"]).toContain(newTheme);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-bs-theme",
+      expectedTheme
+    );
   });
 
   test("clicking theme toggle again switches back to original theme", async ({
@@ -36,30 +39,39 @@ test.describe("Theme Switching", () => {
     const initialTheme = await page
       .locator("html")
       .getAttribute("data-bs-theme");
+    const oppositeTheme = initialTheme === "dark" ? "light" : "dark";
+
     await sidebar.themeToggle.click();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-bs-theme",
+      oppositeTheme
+    );
+
     await sidebar.themeToggle.click();
-    const restoredTheme = await page
-      .locator("html")
-      .getAttribute("data-bs-theme");
-    expect(restoredTheme).toEqual(initialTheme);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-bs-theme",
+      initialTheme!
+    );
   });
 
   test("theme persists after page reload", async ({ page }) => {
     const initialTheme = await page
       .locator("html")
       .getAttribute("data-bs-theme");
+    const expectedTheme = initialTheme === "dark" ? "light" : "dark";
+
     await sidebar.themeToggle.click();
-    const toggledTheme = await page
-      .locator("html")
-      .getAttribute("data-bs-theme");
-    expect(toggledTheme).not.toEqual(initialTheme);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-bs-theme",
+      expectedTheme
+    );
 
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
 
-    const persistedTheme = await page
-      .locator("html")
-      .getAttribute("data-bs-theme");
-    expect(persistedTheme).toEqual(toggledTheme);
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-bs-theme",
+      expectedTheme
+    );
   });
 });

@@ -48,8 +48,14 @@ export class SettingsPage {
     const collapsed = header.locator("[class*='collapsed'], .collapsed");
     if ((await collapsed.count()) > 0) {
       await header.click();
-      // Wait for animation
-      await this.page.waitForTimeout(500);
+      // Wait for the collapse content to become visible
+      const card = this.page.locator(".card, [class*='card']", {
+        has: this.page.locator(`text=${headerText}`),
+      });
+      const collapseBody = card.locator("[class*='collapse']").filter({
+        has: this.page.locator("input, select"),
+      });
+      await collapseBody.first().waitFor({ state: "visible", timeout: 3000 });
     }
   }
 
