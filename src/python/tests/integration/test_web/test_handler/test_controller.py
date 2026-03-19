@@ -187,3 +187,49 @@ class TestControllerHandler(BaseTestWebApp):
         command = self.controller.queue_command.call_args[0][0]
         self.assertEqual(Controller.Command.Action.DELETE_REMOTE, command.action)
         self.assertEqual('value"with"doublequote', command.filename)
+
+
+class TestControllerHandlerValidation(BaseTestWebApp):
+    """Tests for filename validation in controller handler."""
+
+    def test_control_char_newline_rejected(self):
+        uri = quote(quote("file\nname", safe=""), safe="")
+        resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+
+    def test_control_char_carriage_return_rejected(self):
+        uri = quote(quote("file\rname", safe=""), safe="")
+        resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+
+    def test_control_char_tab_rejected(self):
+        uri = quote(quote("file\tname", safe=""), safe="")
+        resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+
+    def test_control_char_soh_rejected(self):
+        uri = quote(quote("file\x01name", safe=""), safe="")
+        resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+
+    def test_control_char_del_rejected(self):
+        uri = quote(quote("file\x7fname", safe=""), safe="")
+        resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+
+    def test_normal_filename_accepted(self):
+        def side_effect(cmd: Controller.Command):
+            cmd.callbacks[0].on_success()
+
+        self.controller.queue_command = MagicMock()
+        self.controller.queue_command.side_effect = side_effect
+
+        resp = self.test_app.get("/server/command/queue/normal_file.txt")
+        self.assertEqual(200, resp.status_int)
+        command = self.controller.queue_command.call_args[0][0]
+        self.assertEqual("normal_file.txt", command.filename)
+
+    def test_path_traversal_rejected(self):
+        uri = quote(quote("../etc/passwd", safe=""), safe="")
+        resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
