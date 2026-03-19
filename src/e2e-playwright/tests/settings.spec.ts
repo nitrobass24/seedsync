@@ -32,7 +32,7 @@ test.describe("Settings Page", () => {
     await expect(advancedHeader).toBeVisible();
   });
 
-  test("text field change saves to backend", async ({ page, apiGet }) => {
+  test("text field change saves to backend", async ({ apiGet }) => {
     const field = settings.getTextInput("Server Address");
     await field.clear();
     const testValue = "e2e-test-server";
@@ -50,7 +50,7 @@ test.describe("Settings Page", () => {
       .toBe(testValue);
   });
 
-  test("checkbox toggle saves to backend", async ({ page, apiGet }) => {
+  test("checkbox toggle saves to backend", async ({ apiGet }) => {
     const checkbox = settings.getCheckbox("Enable Debug");
     const wasBefore = await checkbox.isChecked();
     const expected = !wasBefore;
@@ -156,7 +156,6 @@ test.describe("Settings Page", () => {
   });
 
   test("Server Directory field is disabled when path pairs exist", async ({
-    page,
     apiFetch,
   }) => {
     // Create a path pair via API
@@ -173,22 +172,19 @@ test.describe("Settings Page", () => {
     expect(res.ok).toBe(true);
     const pair = await res.json();
 
-    // Reload to pick up the new state
-    await settings.goto();
-
-    const serverDir = settings.getTextInput("Server Directory");
-    await expect(serverDir).toBeDisabled();
-
-    // Clean up
-    const delRes = await apiFetch(`/server/pathpairs/${pair.id}`, {
-      method: "DELETE",
-    });
-    expect(delRes.ok).toBe(true);
+    try {
+      await settings.goto();
+      const serverDir = settings.getTextInput("Server Directory");
+      await expect(serverDir).toBeDisabled();
+    } finally {
+      // Always clean up the pair
+      if (pair?.id) {
+        await apiFetch(`/server/pathpairs/${pair.id}`, { method: "DELETE" });
+      }
+    }
   });
 
-  test("restart notification appears after config change", async ({
-    page,
-  }) => {
+  test("restart notification appears after config change", async () => {
     const field = settings.getTextInput("Server Address");
     await field.clear();
     await field.fill("trigger-restart-notice-" + Date.now());
