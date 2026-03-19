@@ -190,7 +190,7 @@ jobs:
       - name: Install Playwright
         working-directory: src/e2e-playwright
         run: |
-          npm ci
+          npm install
           npx playwright install --with-deps chromium
 
       - name: Run E2E tests
