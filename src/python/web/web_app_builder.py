@@ -1,5 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import os
+
 from common import Constants, Context
 from controller import AutoQueuePersist, Controller
 
@@ -38,7 +40,11 @@ class WebAppBuilder:
         web_app = WebApp(context=self.__context, controller=self.__controller)
 
         # Install security middleware (headers, CSRF, rate limiting, API key auth)
-        install_security_middleware(web_app, get_api_key=lambda: self.__context.config.web.api_key)
+        install_security_middleware(
+            web_app,
+            get_api_key=lambda: self.__context.config.web.api_key,
+            disable_rate_limiting=os.environ.get("SEEDSYNC_DISABLE_RATE_LIMIT", "").lower() in ("1", "true", "yes"),
+        )
 
         StatusStreamHandler.register(web_app=web_app, status=self.__context.status)
 
