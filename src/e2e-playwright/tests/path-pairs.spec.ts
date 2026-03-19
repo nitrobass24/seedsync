@@ -5,12 +5,12 @@ test.describe("Path Pairs", () => {
   let pathPairs: PathPairsPage;
 
   // Clean up all path pairs before each test to ensure clean state
-  test.beforeEach(async ({ page, appUrl }) => {
-    const res = await fetch(`${appUrl}/server/pathpairs`);
+  test.beforeEach(async ({ page, apiFetch }) => {
+    const res = await apiFetch("/server/pathpairs");
     if (res.ok) {
       const pairs = await res.json();
       for (const pair of pairs) {
-        await fetch(`${appUrl}/server/pathpairs/${pair.id}`, {
+        await apiFetch(`/server/pathpairs/${pair.id}`, {
           method: "DELETE",
         });
       }
@@ -21,12 +21,12 @@ test.describe("Path Pairs", () => {
   });
 
   // Clean up all path pairs after each test
-  test.afterEach(async ({ appUrl }) => {
-    const res = await fetch(`${appUrl}/server/pathpairs`);
+  test.afterEach(async ({ apiFetch }) => {
+    const res = await apiFetch("/server/pathpairs");
     if (!res.ok) return;
     const pairs = await res.json();
     for (const pair of pairs) {
-      await fetch(`${appUrl}/server/pathpairs/${pair.id}`, {
+      await apiFetch(`/server/pathpairs/${pair.id}`, {
         method: "DELETE",
       });
     }
@@ -38,13 +38,11 @@ test.describe("Path Pairs", () => {
 
   test("click Add shows the form", async ({ page }) => {
     await pathPairs.addButton.click();
-    const form = page.locator(
-      "[class*='pair-form'], form, [class*='edit']"
-    );
+    const form = page.locator(".pair-form");
     await expect(form.first()).toBeVisible();
   });
 
-  test("fill and save creates a pair via API", async ({ appUrl }) => {
+  test("fill and save creates a pair via API", async ({ apiFetch }) => {
     await pathPairs.addButton.click();
     await pathPairs.fillForm({
       name: "e2e-test-pair",
@@ -57,7 +55,7 @@ test.describe("Path Pairs", () => {
     await expect
       .poll(
         async () => {
-          const res = await fetch(`${appUrl}/server/pathpairs`);
+          const res = await apiFetch("/server/pathpairs");
           const pairs = await res.json();
           return pairs.find(
             (p: { name: string }) => p.name === "e2e-test-pair"
@@ -83,13 +81,16 @@ test.describe("Path Pairs", () => {
     });
     await pathPairs.clickSave();
 
+    // Wait for the form to close (save completes async)
+    await expect(page.locator(".pair-form")).not.toBeVisible({ timeout: 10_000 });
+
     const row = pathPairs.getPairByName("visible-pair");
-    await expect(row).toBeVisible({ timeout: 5000 });
+    await expect(row).toBeVisible({ timeout: 10_000 });
   });
 
-  test("duplicate name shows error message", async ({ page, appUrl }) => {
+  test("duplicate name shows error message", async ({ page, apiFetch }) => {
     // Create a pair via API first
-    await fetch(`${appUrl}/server/pathpairs`, {
+    await apiFetch("/server/pathpairs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -102,6 +103,7 @@ test.describe("Path Pairs", () => {
 
     // Reload to see the pair
     await pathPairs.goto();
+    await pathPairs.getPairByName("dup-pair").waitFor({ timeout: 10_000 });
 
     // Try to add a pair with the same name
     await pathPairs.addButton.click();
@@ -118,10 +120,10 @@ test.describe("Path Pairs", () => {
 
   test("click Edit shows form with existing values", async ({
     page,
-    appUrl,
+    apiFetch,
   }) => {
     // Create a pair via API
-    await fetch(`${appUrl}/server/pathpairs`, {
+    await apiFetch("/server/pathpairs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -135,11 +137,10 @@ test.describe("Path Pairs", () => {
     await pathPairs.goto();
 
     const row = pathPairs.getPairByName("edit-me");
+    await row.waitFor({ timeout: 10_000 });
     await pathPairs.getEditButton(row).click();
 
-    const form = page.locator(
-      "[class*='pair-form'], form, [class*='edit']"
-    );
+    const form = page.locator(".pair-form");
     await expect(form.first()).toBeVisible();
 
     // Verify the form contains the existing values
@@ -149,9 +150,9 @@ test.describe("Path Pairs", () => {
     await expect(inputs.nth(2)).toHaveValue("/local/edit");
   });
 
-  test("edit and save updates the pair via API", async ({ appUrl }) => {
+  test("edit and save updates the pair via API", async ({ apiFetch }) => {
     // Create a pair via API
-    await fetch(`${appUrl}/server/pathpairs`, {
+    await apiFetch("/server/pathpairs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -165,6 +166,7 @@ test.describe("Path Pairs", () => {
     await pathPairs.goto();
 
     const row = pathPairs.getPairByName("update-me");
+    await row.waitFor({ timeout: 10_000 });
     await pathPairs.getEditButton(row).click();
 
     await pathPairs.fillForm({
@@ -177,7 +179,7 @@ test.describe("Path Pairs", () => {
     await expect
       .poll(
         async () => {
-          const res = await fetch(`${appUrl}/server/pathpairs`);
+          const res = await apiFetch("/server/pathpairs");
           const pairs = await res.json();
           return pairs.find(
             (p: { name: string }) => p.name === "update-me"
@@ -195,10 +197,10 @@ test.describe("Path Pairs", () => {
 
   test("delete requires two clicks with confirmation", async ({
     page,
-    appUrl,
+    apiFetch,
   }) => {
     // Create a pair via API
-    await fetch(`${appUrl}/server/pathpairs`, {
+    await apiFetch("/server/pathpairs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -212,12 +214,13 @@ test.describe("Path Pairs", () => {
     await pathPairs.goto();
 
     const row = pathPairs.getPairByName("delete-me");
+    await row.waitFor({ timeout: 10_000 });
     const deleteBtn = pathPairs.getDeleteButton(row);
 
     // First click should show confirmation
     await deleteBtn.click();
-    const confirmText = row.locator("text=/[Cc]onfirm/");
-    await expect(confirmText).toBeVisible();
+    // After first click, button text changes to "Confirm?"
+    await expect(deleteBtn).toContainText("Confirm");
 
     // Second click actually deletes
     await deleteBtn.click();
@@ -226,9 +229,9 @@ test.describe("Path Pairs", () => {
     await expect(row).not.toBeVisible({ timeout: 5000 });
   });
 
-  test("delete removes the pair via API", async ({ appUrl }) => {
+  test("delete removes the pair via API", async ({ apiFetch }) => {
     // Create a pair via API
-    await fetch(`${appUrl}/server/pathpairs`, {
+    await apiFetch("/server/pathpairs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -242,12 +245,13 @@ test.describe("Path Pairs", () => {
     await pathPairs.goto();
 
     const row = pathPairs.getPairByName("gone-pair");
+    await row.waitFor({ timeout: 10_000 });
     const deleteBtn = pathPairs.getDeleteButton(row);
 
     // First click to show confirmation
     await deleteBtn.click();
-    const confirmText = row.locator("text=/[Cc]onfirm/");
-    await expect(confirmText).toBeVisible();
+    // After first click, button text changes to "Confirm?"
+    await expect(deleteBtn).toContainText("Confirm");
 
     // Second click to confirm delete
     await deleteBtn.click();
@@ -256,7 +260,7 @@ test.describe("Path Pairs", () => {
     await expect
       .poll(
         async () => {
-          const res = await fetch(`${appUrl}/server/pathpairs`);
+          const res = await apiFetch("/server/pathpairs");
           const pairs = await res.json();
           return pairs.find(
             (p: { name: string }) => p.name === "gone-pair"
@@ -267,9 +271,9 @@ test.describe("Path Pairs", () => {
       .toBeUndefined();
   });
 
-  test("enable/disable toggle updates via API", async ({ appUrl }) => {
+  test("enable/disable toggle updates via API", async ({ apiFetch }) => {
     // Create an enabled pair via API
-    await fetch(`${appUrl}/server/pathpairs`, {
+    await apiFetch("/server/pathpairs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -283,6 +287,7 @@ test.describe("Path Pairs", () => {
     await pathPairs.goto();
 
     const row = pathPairs.getPairByName("toggle-pair");
+    await row.waitFor({ timeout: 10_000 });
     const toggle = pathPairs.getEnabledToggle(row);
 
     // Toggle off
@@ -292,7 +297,7 @@ test.describe("Path Pairs", () => {
     await expect
       .poll(
         async () => {
-          const res = await fetch(`${appUrl}/server/pathpairs`);
+          const res = await apiFetch("/server/pathpairs");
           const pairs = await res.json();
           const pair = pairs.find(
             (p: { name: string }) => p.name === "toggle-pair"

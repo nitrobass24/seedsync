@@ -14,10 +14,26 @@ test.describe("AutoQueue Page", () => {
   });
 
   test.afterEach(async ({ apiSetConfig, apiGet }) => {
+    // Clean up any test patterns
+    try {
+      const data = await apiGet("/server/autoqueue/get");
+      const patterns: { pattern: string }[] = Array.isArray(data)
+        ? data
+        : data.patterns || [];
+      for (const p of patterns) {
+        if (p.pattern.startsWith("test-")) {
+          await apiGet(
+            `/server/autoqueue/remove/${encodeURIComponent(p.pattern)}`
+          );
+        }
+      }
+    } catch {
+      // Ignore cleanup errors
+    }
+
     // Restore autoqueue config
     await apiSetConfig("autoqueue", "enabled", savedEnabled);
     await apiSetConfig("autoqueue", "patterns_only", savedPatternsOnly);
-
   });
 
   test("when autoqueue disabled: page shows disabled message", async ({
@@ -89,9 +105,11 @@ test.describe("AutoQueue Page", () => {
       .poll(
         async () => {
           const data = await apiGet("/server/autoqueue/get");
-          const patterns: string[] = Array.isArray(data)
-            ? data
-            : data.patterns || [];
+          const raw = Array.isArray(data) ? data : data.patterns || [];
+          // API returns [{pattern: "..."}] objects
+          const patterns: string[] = raw.map((p: any) =>
+            typeof p === "string" ? p : p.pattern
+          );
           return patterns;
         },
         { timeout: 5000 }
@@ -128,9 +146,11 @@ test.describe("AutoQueue Page", () => {
       .poll(
         async () => {
           const data = await apiGet("/server/autoqueue/get");
-          const patterns: string[] = Array.isArray(data)
-            ? data
-            : data.patterns || [];
+          const raw = Array.isArray(data) ? data : data.patterns || [];
+          // API returns [{pattern: "..."}] objects
+          const patterns: string[] = raw.map((p: any) =>
+            typeof p === "string" ? p : p.pattern
+          );
           return patterns;
         },
         { timeout: 5000 }
@@ -167,9 +187,11 @@ test.describe("AutoQueue Page", () => {
       .poll(
         async () => {
           const data = await apiGet("/server/autoqueue/get");
-          const patterns: string[] = Array.isArray(data)
-            ? data
-            : data.patterns || [];
+          const raw = Array.isArray(data) ? data : data.patterns || [];
+          // API returns [{pattern: "..."}] objects
+          const patterns: string[] = raw.map((p: any) =>
+            typeof p === "string" ? p : p.pattern
+          );
           return patterns;
         },
         { timeout: 5000 }
@@ -189,9 +211,11 @@ test.describe("AutoQueue Page", () => {
       .poll(
         async () => {
           const data = await apiGet("/server/autoqueue/get");
-          const patterns: string[] = Array.isArray(data)
-            ? data
-            : data.patterns || [];
+          const raw = Array.isArray(data) ? data : data.patterns || [];
+          // API returns [{pattern: "..."}] objects
+          const patterns: string[] = raw.map((p: any) =>
+            typeof p === "string" ? p : p.pattern
+          );
           return patterns;
         },
         { timeout: 5000 }

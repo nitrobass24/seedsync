@@ -34,8 +34,8 @@ test.describe("Logs Page", () => {
     }
   });
 
-  test("log history section is visible", async () => {
-    await expect(logs.logHistory).toBeVisible();
+  test("log filters section is visible", async () => {
+    await expect(logs.logFilters).toBeVisible();
   });
 
   test("if log records exist: records show timestamp, level, and message", async () => {

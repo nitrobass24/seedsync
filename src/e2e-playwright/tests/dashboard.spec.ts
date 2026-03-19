@@ -26,21 +26,26 @@ test.describe("Dashboard Page", () => {
   });
 
   test("status filter dropdown is present with options", async () => {
-    await expect(dashboard.statusFilter).toBeVisible();
-    const options = dashboard.statusFilter.locator("option");
-    const count = await options.count();
+    await expect(dashboard.statusFilterButton).toBeVisible();
+    // Click to open the dropdown
+    await dashboard.statusFilterButton.click();
+    const items = dashboard.statusFilterMenu.locator(".dropdown-item");
+    const count = await items.count();
     expect(count).toBeGreaterThanOrEqual(1);
   });
 
   test("sort dropdown is present with Name A-Z, Name Z-A, Status options", async () => {
-    await expect(dashboard.sortDropdown).toBeVisible();
-    const options = dashboard.sortDropdown.locator("option");
+    await expect(dashboard.sortDropdownButton).toBeVisible();
+    // Click to open the dropdown
+    await dashboard.sortDropdownButton.click();
+    const items = dashboard.sortDropdownMenu.locator(".dropdown-item");
     const texts: string[] = [];
-    const count = await options.count();
+    const count = await items.count();
     for (let i = 0; i < count; i++) {
-      const text = await options.nth(i).textContent();
+      const text = await items.nth(i).textContent();
       if (text) texts.push(text.trim());
     }
+    // The HTML uses &#8594; which renders as arrow: "Name A→Z", "Name Z→A"
     expect(texts.some((t) => /name.*a.*z/i.test(t))).toBe(true);
     expect(texts.some((t) => /name.*z.*a/i.test(t))).toBe(true);
     expect(texts.some((t) => /status/i.test(t))).toBe(true);
@@ -81,7 +86,7 @@ test.describe("Dashboard with files", () => {
     test.skip(fileCount === 0, "No files present on the remote seedbox");
 
     const rows = dashboard.getFileRows();
-    const firstName = rows.first().locator(".file-name, [class*='name']");
+    const firstName = rows.first().locator(".name .text .title");
     await expect(firstName).toBeVisible();
     const text = await firstName.textContent();
     expect(text?.trim().length).toBeGreaterThan(0);
@@ -91,9 +96,7 @@ test.describe("Dashboard with files", () => {
     test.skip(fileCount === 0, "No files present on the remote seedbox");
 
     const rows = dashboard.getFileRows();
-    const icon = rows
-      .first()
-      .locator("[class*='status'] i, [class*='icon'], fa-icon, i[class*='fa']");
+    const icon = rows.first().locator(".status img");
     await expect(icon.first()).toBeVisible();
   });
 
@@ -102,7 +105,7 @@ test.describe("Dashboard with files", () => {
 
     const row = dashboard.getFileRows().first();
     await row.click();
-    const actionButtons = row.locator("button");
+    const actionButtons = row.locator(".actions button");
     const btnCount = await actionButtons.count();
     expect(btnCount).toBeGreaterThanOrEqual(1);
   });

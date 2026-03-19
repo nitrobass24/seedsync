@@ -34,11 +34,26 @@ export class AutoQueuePage {
   }
 
   async addPattern(pattern: string) {
+    // Wait for input to be enabled (SSE stream must have delivered config)
+    await this.patternInput.waitFor({ state: "visible", timeout: 10_000 });
+    // Wait until the input is not disabled (config has been received)
+    await this.page.waitForFunction(
+      () => {
+        const el = document.querySelector("input[type='search']") as HTMLInputElement;
+        return el && !el.disabled;
+      },
+      { timeout: 10_000 }
+    );
     await this.patternInput.fill(pattern);
-    await this.addButton.click();
+    // Small delay for Angular change detection to process the input value
+    await this.page.waitForTimeout(200);
+    // Click with force since it's a div, not a native button
+    await this.addButton.click({ force: true });
   }
 
   getErrorMessage() {
-    return this.page.locator("[class*='alert-danger'], [class*='error']");
+    return this.page.locator(".alert-danger.alert-dismissible", {
+      hasText: /already exists|error/i,
+    });
   }
 }

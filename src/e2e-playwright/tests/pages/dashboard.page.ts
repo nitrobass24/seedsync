@@ -4,19 +4,29 @@ export class DashboardPage {
   readonly page: Page;
   readonly fileList: Locator;
   readonly nameFilter: Locator;
-  readonly statusFilter: Locator;
-  readonly sortDropdown: Locator;
+  readonly statusFilterButton: Locator;
+  readonly statusFilterMenu: Locator;
+  readonly sortDropdownButton: Locator;
+  readonly sortDropdownMenu: Locator;
   readonly detailsToggle: Locator;
   readonly bulkActionBar: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.fileList = page.locator("#file-list");
-    this.nameFilter = page.getByPlaceholder(/filter/i);
-    this.statusFilter = page.locator("#statusFilter, [id*='status']");
-    this.sortDropdown = page.locator("#sortDropdown, [id*='sort']");
-    this.detailsToggle = page.locator("button", { hasText: /details/i });
-    this.bulkActionBar = page.locator("app-bulk-action-bar, [class*='bulk']");
+    this.nameFilter = page.locator(
+      '#filter-search input[type="search"]'
+    );
+    this.statusFilterButton = page.locator(
+      "#filter-status .dropdown-toggle"
+    );
+    this.statusFilterMenu = page.locator("#filter-status .dropdown-menu");
+    this.sortDropdownButton = page.locator(
+      "#sort-status .dropdown-toggle"
+    );
+    this.sortDropdownMenu = page.locator("#sort-status .dropdown-menu");
+    this.detailsToggle = page.locator("#toggle-details");
+    this.bulkActionBar = page.locator("app-bulk-action-bar");
   }
 
   async goto() {
@@ -26,11 +36,11 @@ export class DashboardPage {
   }
 
   getFileRows() {
-    return this.page.locator("app-file, [class*='file-row']");
+    return this.page.locator("app-file");
   }
 
   getFileByName(name: string) {
-    return this.page.locator("app-file, [class*='file-row']", {
+    return this.page.locator("app-file", {
       hasText: name,
     });
   }
@@ -48,11 +58,13 @@ export class DashboardPage {
   }
 
   getActionButton(fileRow: Locator, action: string) {
-    return fileRow.locator("button", { hasText: new RegExp(action, "i") });
+    return fileRow.locator(".actions button", {
+      hasText: new RegExp(action, "i"),
+    });
   }
 
   getCheckbox(fileRow: Locator) {
-    return fileRow.locator("input[type='checkbox']");
+    return fileRow.locator(".checkbox input[type='checkbox']");
   }
 
   getBulkButton(action: string) {
@@ -62,8 +74,6 @@ export class DashboardPage {
   }
 
   getBulkSelectedCount() {
-    return this.bulkActionBar.locator("[class*='count'], span", {
-      hasText: /selected/i,
-    });
+    return this.bulkActionBar.locator(".count");
   }
 }

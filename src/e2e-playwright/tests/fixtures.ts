@@ -16,6 +16,8 @@ export const test = base.extend<{
   apiGet: (path: string) => Promise<any>;
   /** Helper to set a config value via the API */
   apiSetConfig: (section: string, key: string, value: string) => Promise<void>;
+  /** Helper to make API fetch requests with proper CSRF Origin header */
+  apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
 }>({
   appUrl: async ({ baseURL }, use) => {
     await use(baseURL || "http://localhost:8800");
@@ -44,6 +46,17 @@ export const test = base.extend<{
         `${appUrl}/server/config/set/${section}/${key}/${encoded}`
       );
       if (!res.ok) throw new Error(`Config set failed: ${res.status}`);
+    });
+  },
+
+  apiFetch: async ({ appUrl }, use) => {
+    await use(async (path: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      // Always include Origin header for CSRF validation
+      if (!headers.has("Origin")) {
+        headers.set("Origin", appUrl);
+      }
+      return fetch(`${appUrl}${path}`, { ...init, headers });
     });
   },
 });

@@ -8,11 +8,9 @@ export class PathPairsPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.addButton = page.locator("button", { hasText: /add/i });
-    this.pairsList = page.locator(
-      "app-path-pairs, [class*='path-pairs']"
-    );
-    this.emptyMessage = page.locator("text=No path pairs configured");
+    this.addButton = page.locator("button.btn-add");
+    this.pairsList = page.locator(".path-pairs");
+    this.emptyMessage = page.locator(".empty-state");
   }
 
   async goto() {
@@ -22,11 +20,11 @@ export class PathPairsPage {
   }
 
   getPairRows() {
-    return this.pairsList.locator("[class*='pair-row'], .pair-item, tr");
+    return this.pairsList.locator(".pair-row");
   }
 
   getPairByName(name: string) {
-    return this.pairsList.locator("[class*='pair-row'], .pair-item, tr", {
+    return this.pairsList.locator(".pair-row", {
       hasText: name,
     });
   }
@@ -39,9 +37,7 @@ export class PathPairsPage {
     enabled?: boolean;
     autoQueue?: boolean;
   }) {
-    const form = this.page.locator(
-      "[class*='pair-form'], form, [class*='edit']"
-    );
+    const form = this.page.locator(".pair-form");
     if (fields.name !== undefined) {
       const nameInput = form.locator("input").first();
       await nameInput.fill(fields.name);
@@ -57,25 +53,23 @@ export class PathPairsPage {
   }
 
   async clickSave() {
-    await this.page.locator("button", { hasText: /save/i }).click();
+    await this.page.locator("button.btn-save").click();
   }
 
   async clickCancel() {
-    await this.page.locator("button", { hasText: /cancel/i }).click();
+    await this.page.locator("button.btn-cancel").click();
   }
 
   getErrorMessage() {
-    return this.page.locator("[class*='error'], [class*='danger']", {
-      hasText: /already exists|error/i,
-    });
+    return this.page.locator(".error-message");
   }
 
   getDeleteButton(pairRow: Locator) {
-    return pairRow.locator("button", { hasText: /delete/i });
+    return pairRow.locator("button.btn-delete");
   }
 
   getEditButton(pairRow: Locator) {
-    return pairRow.locator("button", { hasText: /edit/i });
+    return pairRow.locator("button.btn-edit");
   }
 
   getEnabledToggle(pairRow: Locator) {

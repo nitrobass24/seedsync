@@ -12,12 +12,24 @@ test.describe("Settings Page", () => {
   test("page loads and shows all major sections", async () => {
     for (const section of [
       "Server",
-      "Connections",
       "AutoQueue",
-      "Advanced LFTP",
+      "Staging Directory",
+      "Archive Extraction",
+      "Integrity Check",
+      "File Discovery",
+      "Connections",
+      "Logging",
+      "Other Settings",
+      "Notifications",
     ]) {
       await expect(settings.getSection(section)).toBeVisible();
     }
+    // Advanced LFTP is collapsed by default but its header should still be visible
+    const advancedHeader = settings.page.locator(
+      "h3.card-header.collapsible-header",
+      { hasText: "Advanced LFTP" }
+    );
+    await expect(advancedHeader).toBeVisible();
   });
 
   test("text field change saves to backend", async ({ page, apiGet }) => {
@@ -81,7 +93,7 @@ test.describe("Settings Page", () => {
   }) => {
     // Read the current value so we can restore it
     const configBefore = await apiGet("/server/config/get");
-    const originalFormat = configBefore.general.log_format;
+    const originalFormat = configBefore.logging.log_format;
 
     const select = settings.getSelect("Log Format");
     await select.selectOption("json");
@@ -91,7 +103,7 @@ test.describe("Settings Page", () => {
       .poll(
         async () => {
           const config = await apiGet("/server/config/get");
-          return config.general.log_format;
+          return config.logging.log_format;
         },
         { timeout: 5000 }
       )
@@ -103,7 +115,7 @@ test.describe("Settings Page", () => {
       .poll(
         async () => {
           const config = await apiGet("/server/config/get");
-          return config.general.log_format;
+          return config.logging.log_format;
         },
         { timeout: 5000 }
       )
@@ -111,10 +123,11 @@ test.describe("Settings Page", () => {
   });
 
   test("Advanced LFTP section is collapsed by default", async ({ page }) => {
-    const card = page.locator(".card, [class*='card']", {
-      has: page.locator("text=Advanced LFTP"),
+    const header = page.locator("h3.card-header.collapsible-header", {
+      hasText: "Advanced LFTP",
     });
-    // When collapsed, Angular *ngIf removes the content from the DOM
+    const card = header.locator("xpath=..");
+    // When collapsed, Angular @if removes the card-body from the DOM
     const collapseBody = card.locator("app-option");
     await expect(collapseBody).toHaveCount(0);
   });
@@ -124,14 +137,12 @@ test.describe("Settings Page", () => {
   }) => {
     await settings.expandSection("Advanced LFTP");
 
-    // After expanding, the collapse body should be visible
-    const body = page
-      .locator(".card, [class*='card']", {
-        has: page.locator("text=Advanced LFTP"),
-      })
-      .locator("[class*='collapse']")
-      .filter({ has: page.locator("input, select") });
-    await expect(body.first()).toBeVisible();
+    // After expanding, the card-body with options should be visible
+    const header = page.locator("h3.card-header.collapsible-header", {
+      hasText: "Advanced LFTP",
+    });
+    const body = header.locator("xpath=..").locator(".card-body");
+    await expect(body).toBeVisible();
   });
 
   test("expanded Advanced LFTP section shows all 7 advanced options", async ({
@@ -146,10 +157,10 @@ test.describe("Settings Page", () => {
 
   test("Server Directory field is disabled when path pairs exist", async ({
     page,
-    appUrl,
+    apiFetch,
   }) => {
     // Create a path pair via API
-    const res = await fetch(`${appUrl}/server/pathpairs`, {
+    const res = await apiFetch("/server/pathpairs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -169,7 +180,7 @@ test.describe("Settings Page", () => {
     await expect(serverDir).toBeDisabled();
 
     // Clean up
-    const delRes = await fetch(`${appUrl}/server/pathpairs/${pair.id}`, {
+    const delRes = await apiFetch(`/server/pathpairs/${pair.id}`, {
       method: "DELETE",
     });
     expect(delRes.ok).toBe(true);

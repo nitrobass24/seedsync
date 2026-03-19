@@ -15,9 +15,12 @@ export class SettingsPage {
 
   /** Get a settings section card by its header text */
   getSection(headerText: string) {
-    return this.page.locator(".card, [class*='card']", {
-      has: this.page.locator("text=" + headerText),
-    });
+    // Find the card that contains a matching h3 header
+    // Use XPath parent to go from h3 back to its .card container
+    return this.page
+      .locator("h3.card-header", { hasText: headerText })
+      .first()
+      .locator("xpath=..");
   }
 
   /** Get a text/password input by its label */
@@ -43,25 +46,23 @@ export class SettingsPage {
 
   /** Expand a collapsed section (e.g., Advanced LFTP) */
   async expandSection(headerText: string) {
-    const card = this.page.locator(".card, [class*='card']", {
-      has: this.page.locator(`text=${headerText}`),
+    const header = this.page.locator("h3.card-header.collapsible-header", {
+      hasText: headerText,
     });
+    const card = header.locator("xpath=..");
     const collapseBody = card.locator("app-option");
 
     // If the body content is not visible, click the header to expand
     if ((await collapseBody.count()) === 0) {
-      const header = this.page.locator("h3.card-header.collapsible-header", {
-        hasText: headerText,
-      });
       await header.click();
-      // Wait for Angular *ngIf to render the content
+      // Wait for Angular @if to render the content
       await collapseBody.first().waitFor({ state: "visible", timeout: 3000 });
     }
   }
 
   /** Get the restart notification if visible */
   getRestartNotification() {
-    return this.page.locator("[class*='alert']", {
+    return this.page.locator(".alert", {
       hasText: /restart/i,
     });
   }
