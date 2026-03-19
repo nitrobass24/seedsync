@@ -38,6 +38,8 @@ class ConfigHandler(IHandler):
             return HTTPResponse(body="Section '{}' in config has no option '{}'".format(section, key), status=400)
         try:
             inner_config.set_property(key, value)
+            if Config.is_sensitive(section, key):
+                return HTTPResponse(body="{}.{} updated".format(section, key))
             return HTTPResponse(body="{}.{} set to {}".format(section, key, value))
         except ConfigError as e:
             return HTTPResponse(body=str(e), status=400)
