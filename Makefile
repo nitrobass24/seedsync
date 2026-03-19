@@ -1,7 +1,7 @@
 # SeedSync Makefile - Docker Only
 # Simplified build system for containerized deployment
 
-.PHONY: all build build-fresh run stop logs clean test test-image size shell help
+.PHONY: all build build-fresh run stop logs clean test test-image test-e2e test-e2e-headed test-e2e-report size shell help
 
 # Default target
 all: build
@@ -41,6 +41,30 @@ test:
 	docker run --rm -v $(PWD)/src/python:/app/python seedsync-test \
 		pytest tests/unittests -v --tb=short
 
+# Run Playwright E2E tests with a throwaway Docker container
+test-e2e-docker:
+	@docker rm -f seedsync-e2e-test 2>/dev/null || true
+	docker run -d --name seedsync-e2e-test -p 8801:8800 -e SEEDSYNC_DISABLE_RATE_LIMIT=1 ghcr.io/nitrobass24/seedsync:latest
+	@echo "Waiting for container to start..."
+	@for i in $$(seq 1 30); do \
+		curl -sf http://localhost:8801/ > /dev/null 2>&1 && break; \
+		sleep 1; \
+	done
+	cd src/e2e-playwright && BASE_URL=http://localhost:8801 npx playwright test || true
+	@docker rm -f seedsync-e2e-test
+
+# Run Playwright E2E tests (headless, requires running container on port 8800)
+test-e2e:
+	cd src/e2e-playwright && npx playwright test
+
+# Run Playwright E2E tests (headed, for debugging)
+test-e2e-headed:
+	cd src/e2e-playwright && npx playwright test --headed
+
+# Show Playwright HTML report
+test-e2e-report:
+	cd src/e2e-playwright && npx playwright show-report
+
 # Show image size
 size:
 	@docker images seedsync-seedsync --format "Image size: {{.Size}}"
@@ -64,5 +88,8 @@ help:
 	@echo "  clean       - Remove containers and images"
 	@echo "  test        - Run Python unit tests (in Docker)"
 	@echo "  test-image  - Build cached test image"
+	@echo "  test-e2e    - Run Playwright E2E tests (headless)"
+	@echo "  test-e2e-headed - Run E2E tests with browser visible"
+	@echo "  test-e2e-report - Show Playwright HTML report"
 	@echo "  size        - Show image size"
 	@echo "  shell       - Open shell in running container"

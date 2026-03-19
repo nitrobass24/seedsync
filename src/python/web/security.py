@@ -165,13 +165,16 @@ class _RateLimiter:
 _SSE_STREAM_PATH = "/server/stream"
 
 
-def install_rate_limiting(app: bottle.Bottle, *, trust_x_forwarded_for: bool = False):
+def install_rate_limiting(app: bottle.Bottle, *, trust_x_forwarded_for: bool = False, disable: bool = False):
     """
     Per-IP sliding window rate limiter.  Returns 429 with Retry-After when
     the limit is exceeded.  The SSE stream endpoint is exempt.
 
     :param trust_x_forwarded_for: Only set True when deployed behind a trusted reverse proxy.
+    :param disable: Skip rate limiting entirely (for E2E test environments).
     """
+    if disable:
+        return
     limiter = _RateLimiter()
 
     @app.hook("before_request")
@@ -243,13 +246,20 @@ def install_api_key_auth(app: bottle.Bottle, get_api_key):
 # ---------------------------------------------------------------------------
 
 
-def install_security_middleware(app: bottle.Bottle, *, get_api_key=None, trust_x_forwarded_for: bool = False):
+def install_security_middleware(
+    app: bottle.Bottle,
+    *,
+    get_api_key=None,
+    trust_x_forwarded_for: bool = False,
+    disable_rate_limiting: bool = False,
+):
     """Install all security middleware on the given Bottle app.
 
     :param trust_x_forwarded_for: Pass True only when behind a trusted reverse proxy.
+    :param disable_rate_limiting: Skip rate limiting (for E2E test environments).
     """
     install_security_headers(app)
     install_csrf_protection(app)
-    install_rate_limiting(app, trust_x_forwarded_for=trust_x_forwarded_for)
+    install_rate_limiting(app, trust_x_forwarded_for=trust_x_forwarded_for, disable=disable_rate_limiting)
     if get_api_key is not None:
         install_api_key_auth(app, get_api_key)
