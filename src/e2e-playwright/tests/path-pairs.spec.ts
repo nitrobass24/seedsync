@@ -221,6 +221,9 @@ test.describe("Path Pairs", () => {
 
     // Second click actually deletes
     await deleteBtn.click();
+
+    // Assert the row is gone
+    await expect(row).not.toBeVisible({ timeout: 5000 });
   });
 
   test("delete removes the pair via API", async ({ appUrl }) => {

@@ -11,7 +11,7 @@ export class DashboardPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.fileList = page.locator(".file-list, [class*='file-list']");
+    this.fileList = page.locator("#file-list");
     this.nameFilter = page.getByPlaceholder(/filter/i);
     this.statusFilter = page.locator("#statusFilter, [id*='status']");
     this.sortDropdown = page.locator("#sortDropdown, [id*='sort']");
@@ -40,7 +40,7 @@ export class DashboardPage {
     const count = await rows.count();
     const names: string[] = [];
     for (let i = 0; i < count; i++) {
-      const nameEl = rows.nth(i).locator(".file-name, [class*='name']");
+      const nameEl = rows.nth(i).locator(".name .text .title");
       const text = await nameEl.textContent();
       if (text) names.push(text.trim());
     }

@@ -18,20 +18,6 @@ test.describe("AutoQueue Page", () => {
     await apiSetConfig("autoqueue", "enabled", savedEnabled);
     await apiSetConfig("autoqueue", "patterns_only", savedPatternsOnly);
 
-    // Clean up any test patterns
-    try {
-      const data = await apiGet("/server/autoqueue/get");
-      const patterns: string[] = Array.isArray(data)
-        ? data
-        : data.patterns || [];
-      for (const p of patterns) {
-        if (p.startsWith("test-")) {
-          // Remove via UI would be fragile, but patterns are cleaned on config restore
-        }
-      }
-    } catch {
-      // Ignore cleanup errors
-    }
   });
 
   test("when autoqueue disabled: page shows disabled message", async ({

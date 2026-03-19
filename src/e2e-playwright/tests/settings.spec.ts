@@ -79,6 +79,10 @@ test.describe("Settings Page", () => {
     page,
     apiGet,
   }) => {
+    // Read the current value so we can restore it
+    const configBefore = await apiGet("/server/config/get");
+    const originalFormat = configBefore.general.log_format;
+
     const select = settings.getSelect("Log Format");
     await select.selectOption("json");
 
@@ -92,14 +96,27 @@ test.describe("Settings Page", () => {
         { timeout: 5000 }
       )
       .toBe("json");
+
+    // Restore the original log format
+    await select.selectOption(String(originalFormat));
+    await expect
+      .poll(
+        async () => {
+          const config = await apiGet("/server/config/get");
+          return config.general.log_format;
+        },
+        { timeout: 5000 }
+      )
+      .toBe(originalFormat);
   });
 
   test("Advanced LFTP section is collapsed by default", async ({ page }) => {
-    const header = page.locator("[class*='card-header']", {
-      hasText: "Advanced LFTP",
+    const card = page.locator(".card, [class*='card']", {
+      has: page.locator("text=Advanced LFTP"),
     });
-    const collapsed = header.locator("[class*='collapsed'], .collapsed");
-    await expect(collapsed.first()).toBeVisible();
+    // When collapsed, Angular *ngIf removes the content from the DOM
+    const collapseBody = card.locator("app-option");
+    await expect(collapseBody).toHaveCount(0);
   });
 
   test("clicking Advanced LFTP header expands the section", async ({
@@ -142,6 +159,7 @@ test.describe("Settings Page", () => {
         enabled: true,
       }),
     });
+    expect(res.ok).toBe(true);
     const pair = await res.json();
 
     // Reload to pick up the new state
@@ -151,9 +169,10 @@ test.describe("Settings Page", () => {
     await expect(serverDir).toBeDisabled();
 
     // Clean up
-    await fetch(`${appUrl}/server/pathpairs/${pair.id}`, {
+    const delRes = await fetch(`${appUrl}/server/pathpairs/${pair.id}`, {
       method: "DELETE",
     });
+    expect(delRes.ok).toBe(true);
   });
 
   test("restart notification appears after config change", async ({

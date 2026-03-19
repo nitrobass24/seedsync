@@ -43,19 +43,18 @@ export class SettingsPage {
 
   /** Expand a collapsed section (e.g., Advanced LFTP) */
   async expandSection(headerText: string) {
-    const header = this.page.locator("[class*='card-header']", {
-      hasText: headerText,
+    const card = this.page.locator(".card, [class*='card']", {
+      has: this.page.locator(`text=${headerText}`),
     });
-    const collapsed = header.locator("[class*='collapsed'], .collapsed");
-    if ((await collapsed.count()) > 0) {
+    const collapseBody = card.locator("app-option");
+
+    // If the body content is not visible, click the header to expand
+    if ((await collapseBody.count()) === 0) {
+      const header = this.page.locator("h3.card-header.collapsible-header", {
+        hasText: headerText,
+      });
       await header.click();
-      // Wait for the collapse content to become visible
-      const card = this.page.locator(".card, [class*='card']", {
-        has: this.page.locator(`text=${headerText}`),
-      });
-      const collapseBody = card.locator("[class*='collapse']").filter({
-        has: this.page.locator("input, select"),
-      });
+      // Wait for Angular *ngIf to render the content
       await collapseBody.first().waitFor({ state: "visible", timeout: 3000 });
     }
   }

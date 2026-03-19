@@ -9,13 +9,9 @@ export class AutoQueuePage {
 
   constructor(page: Page) {
     this.page = page;
-    this.patternInput = page.locator(
-      "input[placeholder*='pattern' i], input[type='text']"
-    );
-    this.addButton = page.locator("button", { hasText: "+" });
-    this.patternList = page.locator(
-      "[class*='pattern-list'], [class*='patterns']"
-    );
+    this.patternInput = page.locator("input[type='search']");
+    this.addButton = page.locator("#add-pattern .button");
+    this.patternList = page.locator("#controls");
     this.disabledMessage = page.locator("text=/disabled|all files/i");
   }
 
@@ -26,7 +22,7 @@ export class AutoQueuePage {
   }
 
   getPatternItems() {
-    return this.page.locator("[class*='pattern-item'], [class*='pattern'] li");
+    return this.page.locator("#controls .pattern");
   }
 
   getPatternByText(pattern: string) {
@@ -34,7 +30,7 @@ export class AutoQueuePage {
   }
 
   getRemoveButton(patternItem: Locator) {
-    return patternItem.locator("button", { hasText: /−|remove|-/i });
+    return patternItem.locator(".button");
   }
 
   async addPattern(pattern: string) {

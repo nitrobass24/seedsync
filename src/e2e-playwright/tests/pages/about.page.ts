@@ -7,7 +7,7 @@ export class AboutPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.versionText = page.locator("text=/v\\d+\\.\\d+/");
+    this.versionText = page.locator("text=/v\\d+\\.\\d+\\.\\d+/");
     this.githubLink = page.locator('a[href*="github.com/nitrobass24/seedsync"]');
   }
 
