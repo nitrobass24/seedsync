@@ -13,6 +13,7 @@ export class AboutPage {
 
   async goto() {
     await this.page.goto("/about");
-    await this.page.waitForLoadState("networkidle");
+    await this.page.waitForLoadState("domcontentloaded");
+    await this.page.waitForSelector('a[href="/dashboard"]', { timeout: 10_000 });
   }
 }

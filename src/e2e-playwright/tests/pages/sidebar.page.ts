@@ -17,18 +17,22 @@ export class SidebarPage {
     this.autoqueueLink = page.locator('a[href="/autoqueue"]');
     this.logsLink = page.locator('a[href="/logs"]');
     this.aboutLink = page.locator('a[href="/about"]');
-    this.restartButton = page.locator("button", { hasText: "Restart" });
-    this.themeToggle = page.locator("button", {
+    // Restart and theme toggle are <a class="button"> not <button>
+    this.restartButton = page.locator("#sidebar a.button", {
+      hasText: "Restart",
+    });
+    this.themeToggle = page.locator("#sidebar a.button", {
       hasText: /Dark Mode|Light Mode/,
     });
   }
 
   async navigateTo(link: Locator) {
     await link.click();
-    await this.page.waitForLoadState("networkidle");
+    await this.page.waitForLoadState("domcontentloaded");
+    await this.page.waitForSelector('a[href="/dashboard"]', { timeout: 10_000 });
   }
 
   getActiveLink() {
-    return this.page.locator(".sidebar .selected, .sidebar .active");
+    return this.page.locator("#sidebar a.selected");
   }
 }

@@ -22,6 +22,7 @@ export class DashboardPage {
   async goto() {
     await this.page.goto("/dashboard");
     await this.page.waitForLoadState("domcontentloaded");
+    await this.page.waitForSelector('a[href="/dashboard"]', { timeout: 10_000 });
   }
 
   getFileRows() {

@@ -21,7 +21,8 @@ export class AutoQueuePage {
 
   async goto() {
     await this.page.goto("/autoqueue");
-    await this.page.waitForLoadState("networkidle");
+    await this.page.waitForLoadState("domcontentloaded");
+    await this.page.waitForSelector('a[href="/dashboard"]', { timeout: 10_000 });
   }
 
   getPatternItems() {

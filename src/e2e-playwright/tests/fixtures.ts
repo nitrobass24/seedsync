@@ -21,22 +21,11 @@ export const test = base.extend<{
     await use(baseURL || "http://localhost:8800");
   },
 
-  waitForStream: async ({ appUrl }, use) => {
+  waitForStream: async ({}, use) => {
     await use(async (page: Page) => {
-      // Wait for the Angular app to connect to the SSE stream and receive
-      // the initial model data. The file list renders after model-init.
-      // We detect this by waiting for the stream-connected class or for
-      // the file list to be present.
-      await page.waitForFunction(
-        () => {
-          // The app sets a connected flag that enables buttons
-          const restartBtn = document.querySelector(
-            '[data-testid="restart-btn"], .sidebar-restart'
-          );
-          return restartBtn && !restartBtn.hasAttribute("disabled");
-        },
-        { timeout: 15_000 }
-      );
+      // Wait for the Angular app to render by checking for sidebar nav links.
+      // These are rendered after the app bootstraps and the SSE stream connects.
+      await page.waitForSelector('a[href="/dashboard"]', { timeout: 15_000 });
     });
   },
 

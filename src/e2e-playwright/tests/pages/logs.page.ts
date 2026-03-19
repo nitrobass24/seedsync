@@ -23,7 +23,8 @@ export class LogsPage {
 
   async goto() {
     await this.page.goto("/logs");
-    await this.page.waitForLoadState("networkidle");
+    await this.page.waitForLoadState("domcontentloaded");
+    await this.page.waitForSelector('a[href="/dashboard"]', { timeout: 10_000 });
   }
 
   getLogRecords() {
