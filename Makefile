@@ -1,7 +1,7 @@
 # SeedSync Makefile - Docker Only
 # Simplified build system for containerized deployment
 
-.PHONY: all build build-fresh run stop logs clean test test-image size shell help
+.PHONY: all build build-fresh run stop logs clean test test-image test-e2e test-e2e-headed test-e2e-report size shell help
 
 # Default target
 all: build
@@ -41,6 +41,18 @@ test:
 	docker run --rm -v $(PWD)/src/python:/app/python seedsync-test \
 		pytest tests/unittests -v --tb=short
 
+# Run Playwright E2E tests (headless, requires running container on port 8800)
+test-e2e:
+	cd src/e2e-playwright && npx playwright test
+
+# Run Playwright E2E tests (headed, for debugging)
+test-e2e-headed:
+	cd src/e2e-playwright && npx playwright test --headed
+
+# Show Playwright HTML report
+test-e2e-report:
+	cd src/e2e-playwright && npx playwright show-report
+
 # Show image size
 size:
 	@docker images seedsync-seedsync --format "Image size: {{.Size}}"
@@ -64,5 +76,8 @@ help:
 	@echo "  clean       - Remove containers and images"
 	@echo "  test        - Run Python unit tests (in Docker)"
 	@echo "  test-image  - Build cached test image"
+	@echo "  test-e2e    - Run Playwright E2E tests (headless)"
+	@echo "  test-e2e-headed - Run E2E tests with browser visible"
+	@echo "  test-e2e-report - Show Playwright HTML report"
 	@echo "  size        - Show image size"
 	@echo "  shell       - Open shell in running container"
