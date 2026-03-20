@@ -22,6 +22,9 @@ def _validate_filename(file_name: str) -> bool:
     # Reject embedded null bytes (path truncation attack)
     if "\x00" in file_name:
         return False
+    # Reject control characters (0x00-0x1F, 0x7F)
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in file_name):
+        return False
     # Reject absolute paths
     if os.path.isabs(file_name):
         return False
