@@ -462,6 +462,35 @@ class Config(Persist):
         config_dict["Validate"] = self.validate.as_dict()
         return config_dict
 
+    # Sentinel value used to replace sensitive fields in API responses
+    REDACTED_SENTINEL = "********"
+
+    @staticmethod
+    def sensitive_property_names() -> dict[str, set[str]]:
+        """
+        Returns a mapping of section name -> set of property names that contain
+        sensitive data (passwords, API keys, etc.) and should be redacted in
+        API responses.
+        """
+        return {
+            "Lftp": {"remote_password"},
+            "Web": {"api_key"},
+        }
+
+    @staticmethod
+    def is_sensitive(section_name: str, option_name: str) -> bool:
+        """
+        Returns True if the given section/option pair refers to a sensitive
+        field that should be redacted in API output.
+        Section name matching is case-insensitive.
+        """
+        sensitive = Config.sensitive_property_names()
+        section_lower = section_name.lower()
+        for key, options in sensitive.items():
+            if key.lower() == section_lower and option_name in options:
+                return True
+        return False
+
     def has_section(self, name: str) -> bool:
         """
         Returns true if the given section exists, false otherwise
