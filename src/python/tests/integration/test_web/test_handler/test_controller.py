@@ -196,26 +196,31 @@ class TestControllerHandlerValidation(BaseTestWebApp):
         uri = quote(quote("file\nname", safe=""), safe="")
         resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
         self.assertEqual(400, resp.status_int)
+        self.controller.queue_command.assert_not_called()
 
     def test_control_char_carriage_return_rejected(self):
         uri = quote(quote("file\rname", safe=""), safe="")
         resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
         self.assertEqual(400, resp.status_int)
+        self.controller.queue_command.assert_not_called()
 
     def test_control_char_tab_rejected(self):
         uri = quote(quote("file\tname", safe=""), safe="")
         resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
         self.assertEqual(400, resp.status_int)
+        self.controller.queue_command.assert_not_called()
 
     def test_control_char_soh_rejected(self):
         uri = quote(quote("file\x01name", safe=""), safe="")
         resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
         self.assertEqual(400, resp.status_int)
+        self.controller.queue_command.assert_not_called()
 
     def test_control_char_del_rejected(self):
         uri = quote(quote("file\x7fname", safe=""), safe="")
         resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
         self.assertEqual(400, resp.status_int)
+        self.controller.queue_command.assert_not_called()
 
     def test_normal_filename_accepted(self):
         def side_effect(cmd: Controller.Command):
