@@ -465,8 +465,8 @@ class Config(Persist):
     # Sentinel value used to replace sensitive fields in API responses
     REDACTED_SENTINEL = "********"
 
-    @classmethod
-    def sensitive_property_names(cls) -> dict[str, set[str]]:
+    @staticmethod
+    def sensitive_property_names() -> dict[str, set[str]]:
         """
         Returns a mapping of section name -> set of property names that contain
         sensitive data (passwords, API keys, etc.) and should be redacted in
