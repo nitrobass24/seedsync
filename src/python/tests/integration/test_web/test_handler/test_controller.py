@@ -20,11 +20,11 @@ class TestControllerHandler(BaseTestWebApp):
         self.assertEqual(Controller.Command.Action.QUEUE, command.action)
         self.assertEqual("test1", command.filename)
 
-        uri = quote(quote("/value/with/slashes", safe=""), safe="")
+        uri = quote(quote("value/with/slashes", safe=""), safe="")
         print(self.test_app.get("/server/command/queue/" + uri))
         command = self.controller.queue_command.call_args[0][0]
         self.assertEqual(Controller.Command.Action.QUEUE, command.action)
-        self.assertEqual("/value/with/slashes", command.filename)
+        self.assertEqual("value/with/slashes", command.filename)
 
         uri = quote(quote(" value with spaces", safe=""), safe="")
         print(self.test_app.get("/server/command/queue/" + uri))
@@ -56,11 +56,11 @@ class TestControllerHandler(BaseTestWebApp):
         self.assertEqual(Controller.Command.Action.STOP, command.action)
         self.assertEqual("test1", command.filename)
 
-        uri = quote(quote("/value/with/slashes", safe=""), safe="")
+        uri = quote(quote("value/with/slashes", safe=""), safe="")
         print(self.test_app.get("/server/command/stop/" + uri))
         command = self.controller.queue_command.call_args[0][0]
         self.assertEqual(Controller.Command.Action.STOP, command.action)
-        self.assertEqual("/value/with/slashes", command.filename)
+        self.assertEqual("value/with/slashes", command.filename)
 
         uri = quote(quote(" value with spaces", safe=""), safe="")
         print(self.test_app.get("/server/command/stop/" + uri))
@@ -92,11 +92,11 @@ class TestControllerHandler(BaseTestWebApp):
         self.assertEqual(Controller.Command.Action.EXTRACT, command.action)
         self.assertEqual("test1", command.filename)
 
-        uri = quote(quote("/value/with/slashes", safe=""), safe="")
+        uri = quote(quote("value/with/slashes", safe=""), safe="")
         print(self.test_app.get("/server/command/extract/" + uri))
         command = self.controller.queue_command.call_args[0][0]
         self.assertEqual(Controller.Command.Action.EXTRACT, command.action)
-        self.assertEqual("/value/with/slashes", command.filename)
+        self.assertEqual("value/with/slashes", command.filename)
 
         uri = quote(quote(" value with spaces", safe=""), safe="")
         print(self.test_app.get("/server/command/extract/" + uri))
@@ -128,11 +128,11 @@ class TestControllerHandler(BaseTestWebApp):
         self.assertEqual(Controller.Command.Action.DELETE_LOCAL, command.action)
         self.assertEqual("test1", command.filename)
 
-        uri = quote(quote("/value/with/slashes", safe=""), safe="")
+        uri = quote(quote("value/with/slashes", safe=""), safe="")
         print(self.test_app.get("/server/command/delete_local/" + uri))
         command = self.controller.queue_command.call_args[0][0]
         self.assertEqual(Controller.Command.Action.DELETE_LOCAL, command.action)
-        self.assertEqual("/value/with/slashes", command.filename)
+        self.assertEqual("value/with/slashes", command.filename)
 
         uri = quote(quote(" value with spaces", safe=""), safe="")
         print(self.test_app.get("/server/command/delete_local/" + uri))
@@ -164,11 +164,11 @@ class TestControllerHandler(BaseTestWebApp):
         self.assertEqual(Controller.Command.Action.DELETE_REMOTE, command.action)
         self.assertEqual("test1", command.filename)
 
-        uri = quote(quote("/value/with/slashes", safe=""), safe="")
+        uri = quote(quote("value/with/slashes", safe=""), safe="")
         print(self.test_app.get("/server/command/delete_remote/" + uri))
         command = self.controller.queue_command.call_args[0][0]
         self.assertEqual(Controller.Command.Action.DELETE_REMOTE, command.action)
-        self.assertEqual("/value/with/slashes", command.filename)
+        self.assertEqual("value/with/slashes", command.filename)
 
         uri = quote(quote(" value with spaces", safe=""), safe="")
         print(self.test_app.get("/server/command/delete_remote/" + uri))
