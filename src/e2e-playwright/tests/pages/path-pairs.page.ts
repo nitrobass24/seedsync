@@ -71,6 +71,6 @@ export class PathPairsPage {
   }
 
   getEnabledToggle(pairRow: Locator) {
-    return pairRow.locator("input[type='checkbox']").first();
+    return pairRow.locator('label:has-text("Enabled") input[type="checkbox"]');
   }
 }

@@ -67,29 +67,31 @@ test.describe("Settings Page", () => {
 
     await checkbox.click();
 
-    // Poll the API until the value is saved
-    await expect
-      .poll(
-        async () => {
-          const config = await apiGet("/server/config/get");
-          return config.general.debug;
-        },
-        { timeout: 5000 }
-      )
-      .toBe(expected);
+    try {
+      // Poll the API until the value is saved
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.general.debug;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(expected);
+    } finally {
+      // Toggle back to restore original state
+      await checkbox.click();
 
-    // Toggle back to restore original state
-    await checkbox.click();
-
-    await expect
-      .poll(
-        async () => {
-          const config = await apiGet("/server/config/get");
-          return config.general.debug;
-        },
-        { timeout: 5000 }
-      )
-      .toBe(wasBefore);
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.general.debug;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(wasBefore);
+    }
   });
 
   test("password field masks input", async () => {
@@ -107,28 +109,30 @@ test.describe("Settings Page", () => {
     const select = settings.getSelect("Log Format");
     await select.selectOption("json");
 
-    // Poll the API until the value is saved
-    await expect
-      .poll(
-        async () => {
-          const config = await apiGet("/server/config/get");
-          return config.logging.log_format;
-        },
-        { timeout: 5000 }
-      )
-      .toBe("json");
-
-    // Restore the original log format
-    await select.selectOption(String(originalFormat));
-    await expect
-      .poll(
-        async () => {
-          const config = await apiGet("/server/config/get");
-          return config.logging.log_format;
-        },
-        { timeout: 5000 }
-      )
-      .toBe(originalFormat);
+    try {
+      // Poll the API until the value is saved
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.logging.log_format;
+          },
+          { timeout: 5000 }
+        )
+        .toBe("json");
+    } finally {
+      // Restore the original log format
+      await select.selectOption(String(originalFormat));
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.logging.log_format;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(originalFormat);
+    }
   });
 
   test("Advanced LFTP section is collapsed by default", async ({ page }) => {
