@@ -90,6 +90,7 @@ help:
 	@echo "  clean       - Remove containers and images"
 	@echo "  test        - Run Python unit tests (in Docker)"
 	@echo "  test-image  - Build cached test image"
+	@echo "  test-e2e-docker - Run E2E tests inside a fresh Docker container"
 	@echo "  test-e2e    - Run Playwright E2E tests (headless)"
 	@echo "  test-e2e-headed - Run E2E tests with browser visible"
 	@echo "  test-e2e-report - Show Playwright HTML report"

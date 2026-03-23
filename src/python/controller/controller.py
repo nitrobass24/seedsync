@@ -679,7 +679,6 @@ class Controller:
 
             self.__model_lock.acquire()
             try:
-
                 model_diff = ModelDiffUtil.diff_models(self.__model, new_model)
 
                 for diff in model_diff:
@@ -753,7 +752,10 @@ class Controller:
                             self.__validate_process.validate(req)
                             self.logger.info("Auto-queued validation for '{}'".format(diff.new_file.name))
 
-                        if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
+                        if (
+                            self.__context.config.controller.use_staging
+                            and self.__context.config.controller.staging_path
+                        ):
                             will_auto_extract = (
                                 self.__context.config.autoqueue.auto_extract and diff.new_file.is_extractable
                             )
@@ -767,7 +769,8 @@ class Controller:
 
                     if diff.new_file is not None and pc is not None and diff.new_file.name in pc.pending_completion:
                         use_staging = (
-                            self.__context.config.controller.use_staging and self.__context.config.controller.staging_path
+                            self.__context.config.controller.use_staging
+                            and self.__context.config.controller.staging_path
                         )
                         # A file with no local presence and DEFAULT state means
                         # it was deleted locally (e.g. stopped download whose files
@@ -1248,17 +1251,17 @@ class Controller:
             return
         self.__spawn_move_process(file_name, pc)
 
-    def __spawn_move_process(self, file_name: str, pc: _PairContext | None = None):
+    def __spawn_move_process(self, file_name: str, pc: _PairContext):
         """
         Spawn a MoveProcess to move a file from staging to the final local_path
         """
-        pair_id = pc.pair_id if pc else None
+        pair_id = pc.pair_id
         move_key = _persist_key(pair_id, file_name)
         if move_key in self.__moved_file_keys:
             self.logger.debug("Skipping move for {} - already moved".format(file_name))
             return
 
-        dest_path = pc.local_path if pc else self.__pair_contexts[0].local_path
+        dest_path = pc.local_path
         # Use per-pair staging subdirectory
         staging_source = (
             os.path.join(self.__context.config.controller.staging_path, pair_id)  # type: ignore[arg-type]

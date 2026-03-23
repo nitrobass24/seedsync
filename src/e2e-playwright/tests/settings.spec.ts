@@ -32,22 +32,32 @@ test.describe("Settings Page", () => {
     await expect(advancedHeader).toBeVisible();
   });
 
-  test("text field change saves to backend", async ({ apiGet }) => {
+  test("text field change saves to backend", async ({ apiGet, apiSetConfig }) => {
+    const configBefore = await apiGet("/server/config/get");
+    const originalAddress = configBefore.lftp.remote_address;
+
     const field = settings.getTextInput("Server Address");
     await field.clear();
     const testValue = "e2e-test-server";
     await field.fill(testValue);
 
-    // Poll the API until the value is saved
-    await expect
-      .poll(
-        async () => {
-          const config = await apiGet("/server/config/get");
-          return config.lftp.remote_address;
-        },
-        { timeout: 5000 }
-      )
-      .toBe(testValue);
+    try {
+      // Poll the API until the value is saved
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.lftp.remote_address;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(testValue);
+    } finally {
+      // Restore original value
+      if (originalAddress) {
+        await apiSetConfig("lftp", "remote_address", originalAddress);
+      }
+    }
   });
 
   test("checkbox toggle saves to backend", async ({ apiGet }) => {
@@ -158,11 +168,12 @@ test.describe("Settings Page", () => {
     apiFetch,
   }) => {
     // Create a path pair via API
+    const pairName = `temp-pair-${Date.now()}`;
     const res = await apiFetch("/server/pathpairs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "temp-pair",
+        name: pairName,
         remote_path: "/remote/test",
         local_path: "/local/test",
         enabled: true,
@@ -183,13 +194,22 @@ test.describe("Settings Page", () => {
     }
   });
 
-  test("restart notification appears after config change", async () => {
+  test("restart notification appears after config change", async ({ apiGet, apiSetConfig }) => {
+    const configBefore = await apiGet("/server/config/get");
+    const originalAddress = configBefore.lftp.remote_address;
+
     const field = settings.getTextInput("Server Address");
     await field.clear();
     await field.fill("trigger-restart-notice-" + Date.now());
 
-    const notification = settings.getRestartNotification();
-    await expect(notification).toBeVisible({ timeout: 5000 });
+    try {
+      const notification = settings.getRestartNotification();
+      await expect(notification).toBeVisible({ timeout: 5000 });
+    } finally {
+      if (originalAddress) {
+        await apiSetConfig("lftp", "remote_address", originalAddress);
+      }
+    }
   });
 
   test("Web GUI Port field shows current port value", async ({ apiGet }) => {

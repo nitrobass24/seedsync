@@ -15,7 +15,7 @@ export class PathPairsPage {
 
   async goto() {
     await this.page.goto("/settings");
-    await this.page.waitForLoadState("domcontentloaded");
+    await this.page.waitForURL("**/settings", { timeout: 10_000 });
     await this.page.waitForSelector('a[href="/dashboard"]', { timeout: 10_000 });
   }
 
