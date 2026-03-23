@@ -82,3 +82,19 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertEqual(400, resp.status_int)
         self.assertEqual("Bad config: Lftp.remote_path is empty", str(resp.html))
         self.assertEqual(None, self.context.config.lftp.remote_path)
+
+    def test_get_redacts_sensitive_fields(self):
+        self.context.config.lftp.remote_password = "super-secret"
+        self.context.config.web.api_key = "my-api-key"
+        resp = self.test_app.get("/server/config/get")
+        self.assertEqual(200, resp.status_int)
+        json_dict = json.loads(str(resp.html))
+        self.assertEqual("********", json_dict["lftp"]["remote_password"])
+        self.assertEqual("********", json_dict["web"]["api_key"])
+
+    def test_set_sensitive_field_does_not_echo_value(self):
+        resp = self.test_app.get("/server/config/set/lftp/remote_password/my-secret")
+        self.assertEqual(200, resp.status_int)
+        self.assertNotIn("my-secret", str(resp.html))
+        self.assertIn("lftp.remote_password updated", str(resp.html))
+        self.assertEqual("my-secret", self.context.config.lftp.remote_password)

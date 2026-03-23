@@ -54,6 +54,12 @@ export class OptionComponent implements OnInit, OnDestroy {
   }
 
   onChange(value: any): void {
+    // Don't send updates for password fields when the value is the redacted sentinel.
+    // The server returns "********" for sensitive fields; sending it back would
+    // overwrite the real password with the sentinel.
+    if (this.type() === OptionType.Password && value === '********') {
+      return;
+    }
     this.newValue.next(value);
   }
 }
