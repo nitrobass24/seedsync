@@ -104,9 +104,9 @@ test.describe("Settings Page", () => {
     const originalFormat = configBefore.logging.log_format;
 
     const select = settings.getSelect("Log Format");
-    await select.selectOption("json");
 
     try {
+      await select.selectOption("json");
       // Poll the API until the value is saved
       await expect
         .poll(
@@ -169,7 +169,7 @@ test.describe("Settings Page", () => {
     apiFetch,
   }) => {
     // Create a path pair via API
-    const pairName = `temp-pair-${Date.now()}`;
+    const pairName = `temp-pair-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const res = await apiFetch("/server/pathpairs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -190,7 +190,8 @@ test.describe("Settings Page", () => {
     } finally {
       // Always clean up the pair
       if (pair?.id) {
-        await apiFetch(`/server/pathpairs/${pair.id}`, { method: "DELETE" });
+        const del = await apiFetch(`/server/pathpairs/${pair.id}`, { method: "DELETE" });
+        expect(del.ok, `Failed to delete temp pair ${pair.id}: ${del.status}`).toBe(true);
       }
     }
   });
