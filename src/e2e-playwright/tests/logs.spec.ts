@@ -54,14 +54,15 @@ test.describe("Logs Page", () => {
     expect(text).toMatch(/DEBUG|INFO|WARNING|ERROR|CRITICAL/i);
   });
 
-  test("search filter narrows displayed records", async ({ page }) => {
+  test("search filter narrows displayed records", async () => {
     const records = logs.getLogRecords();
     const count = await records.count();
     test.skip(count === 0, "No log records to search through");
 
     // Get text from the first record to use as a valid search term
     const firstText = await records.first().textContent();
-    const searchTerm = firstText?.trim().split(/\s+/).pop() || "";
+    const searchTerm = firstText?.trim().split(/\s+/).filter(Boolean).pop() || "";
+    test.skip(searchTerm === "", "Could not derive a non-empty search term from log records");
 
     // Type a term that exists
     await logs.searchInput.fill(searchTerm);

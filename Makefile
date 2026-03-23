@@ -50,8 +50,10 @@ test-e2e-docker:
 		curl -sf http://localhost:8801/ > /dev/null 2>&1 && break; \
 		sleep 1; \
 	done
-	cd src/e2e-playwright && BASE_URL=http://localhost:8801 npx playwright test || true
-	@docker rm -f seedsync-e2e-test
+	cd src/e2e-playwright && BASE_URL=http://localhost:8801 npx playwright test; \
+		exit_code=$$?; \
+		docker rm -f seedsync-e2e-test; \
+		exit $$exit_code
 
 # Run Playwright E2E tests (headless, requires running container on port 8800)
 test-e2e:

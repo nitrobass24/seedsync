@@ -9,15 +9,21 @@
 
 ### Fixed
 
+- **ModelFile nullable size fields** — `local_size` and `remote_size` are now correctly typed as `number | null` to match the Python backend JSON contract
+
+### Security
+
 - **Reject control characters in filenames** — Decoded filenames containing control characters are now rejected to prevent corrupted file entries and queue command injection (#300)
 - **Redact sensitive credentials from API** — SSH password and key passphrase are no longer exposed in API responses; set handler rejects the redacted sentinel value (#257)
-- **ModelFile nullable size fields** — `local_size` and `remote_size` are now correctly typed as `number | null` to match the Python backend JSON contract
 
 ### Changed
 
 - **Angular dependency updates** — Bumped Angular group to latest, jsdom to 29.0.1 (#307, #308)
 - **CI: actions/setup-python v6** — Bumped setup-python action from v5 to v6 (#306)
-- **Removed dead Docker E2E infrastructure** — Cleaned up legacy Protractor Docker Compose files, test images, and fixture data
+
+### Removed
+
+- **Legacy Docker E2E infrastructure** — Cleaned up Protractor Docker Compose files, test images, and fixture data
 
 ## [0.14.1] - 2026-03-18
 

@@ -287,6 +287,7 @@ class Controller:
                 # All configured pairs are disabled — signal idle state
                 self.__context.status.controller.no_enabled_pairs = True
                 self.logger.warning("All path pairs are disabled. Enable a pair in Settings to start syncing.")
+                return []
             # Backward compatibility: no path pairs configured, use config.lftp
             return [
                 self._create_pair_context(
@@ -677,165 +678,167 @@ class Controller:
                     seen_names_by_path[norm_path].add(file.name)
 
             self.__model_lock.acquire()
+            try:
 
-            model_diff = ModelDiffUtil.diff_models(self.__model, new_model)
+                model_diff = ModelDiffUtil.diff_models(self.__model, new_model)
 
-            for diff in model_diff:
-                if diff.change == ModelDiff.Change.ADDED:
-                    assert diff.new_file is not None
-                    self.__model.add_file(diff.new_file)
-                elif diff.change == ModelDiff.Change.REMOVED:
-                    assert diff.old_file is not None
-                    self.__model.remove_file(diff.old_file.name, pair_id=diff.old_file.pair_id)
-                elif diff.change == ModelDiff.Change.UPDATED:
-                    assert diff.new_file is not None
-                    self.__model.update_file(diff.new_file)
+                for diff in model_diff:
+                    if diff.change == ModelDiff.Change.ADDED:
+                        assert diff.new_file is not None
+                        self.__model.add_file(diff.new_file)
+                    elif diff.change == ModelDiff.Change.REMOVED:
+                        assert diff.old_file is not None
+                        self.__model.remove_file(diff.old_file.name, pair_id=diff.old_file.pair_id)
+                    elif diff.change == ModelDiff.Change.UPDATED:
+                        assert diff.new_file is not None
+                        self.__model.update_file(diff.new_file)
 
-                diff_file = diff.new_file or diff.old_file
-                assert diff_file is not None
-                pc = self._get_pair_context_for_file(diff_file)
+                    diff_file = diff.new_file or diff.old_file
+                    assert diff_file is not None
+                    pc = self._get_pair_context_for_file(diff_file)
 
-                if diff.new_file is not None and diff.new_file.state in (
-                    ModelFile.State.QUEUED,
-                    ModelFile.State.DOWNLOADING,
-                ):
-                    pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
-                    self.__moved_file_keys.discard(pkey)
-                    self.__persist.downloaded_file_names.discard(pkey)
-                    self.__persist.extracted_file_names.discard(pkey)
-                    self.__persist.extract_failed_file_names.discard(pkey)
-                    self.__persist.validated_file_names.discard(pkey)
-                    self.__persist.corrupt_file_names.discard(pkey)
-                    self._sync_persist_to_all_builders()
-
-                downloaded = False
-                if (
-                    diff.change == ModelDiff.Change.ADDED
-                    and diff.new_file is not None
-                    and diff.new_file.state == ModelFile.State.DOWNLOADED
-                ):
-                    downloaded = True
-                elif (
-                    diff.change == ModelDiff.Change.UPDATED
-                    and diff.new_file is not None
-                    and diff.new_file.state == ModelFile.State.DOWNLOADED
-                    and diff.old_file is not None
-                    and diff.old_file.state != ModelFile.State.DOWNLOADED
-                ):
-                    downloaded = True
-                if downloaded:
-                    assert diff.new_file is not None
-                    assert pc is not None
-                    pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
-                    self.__persist.downloaded_file_names.add(pkey)
-                    self._sync_persist_to_all_builders()
-
-                    # Auto-validate if enabled
-                    if (
-                        self.__context.config.validate.enabled
-                        and self.__context.config.validate.auto_validate
-                        and diff.new_file.remote_size is not None
+                    if diff.new_file is not None and diff.new_file.state in (
+                        ModelFile.State.QUEUED,
+                        ModelFile.State.DOWNLOADING,
                     ):
-                        req = ValidateRequest(
-                            name=diff.new_file.name,
-                            is_dir=diff.new_file.is_dir,
-                            pair_id=pc.pair_id,  # type: ignore[arg-type]
-                            local_path=pc.effective_local_path,
-                            remote_path=pc.remote_path,
-                            algorithm=self.__context.config.validate.algorithm,  # type: ignore[arg-type]
-                            remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
-                            remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
-                            remote_password=self.__password,
-                            remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
-                        )
-                        self.__validate_process.validate(req)
-                        self.logger.info("Auto-queued validation for '{}'".format(diff.new_file.name))
+                        pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
+                        self.__moved_file_keys.discard(pkey)
+                        self.__persist.downloaded_file_names.discard(pkey)
+                        self.__persist.extracted_file_names.discard(pkey)
+                        self.__persist.extract_failed_file_names.discard(pkey)
+                        self.__persist.validated_file_names.discard(pkey)
+                        self.__persist.corrupt_file_names.discard(pkey)
+                        self._sync_persist_to_all_builders()
 
-                    if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-                        will_auto_extract = (
-                            self.__context.config.autoqueue.auto_extract and diff.new_file.is_extractable
-                        )
-                        will_auto_validate = (
+                    downloaded = False
+                    if (
+                        diff.change == ModelDiff.Change.ADDED
+                        and diff.new_file is not None
+                        and diff.new_file.state == ModelFile.State.DOWNLOADED
+                    ):
+                        downloaded = True
+                    elif (
+                        diff.change == ModelDiff.Change.UPDATED
+                        and diff.new_file is not None
+                        and diff.new_file.state == ModelFile.State.DOWNLOADED
+                        and diff.old_file is not None
+                        and diff.old_file.state != ModelFile.State.DOWNLOADED
+                    ):
+                        downloaded = True
+                    if downloaded:
+                        assert diff.new_file is not None
+                        assert pc is not None
+                        pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
+                        self.__persist.downloaded_file_names.add(pkey)
+                        self._sync_persist_to_all_builders()
+
+                        # Auto-validate if enabled
+                        if (
                             self.__context.config.validate.enabled
                             and self.__context.config.validate.auto_validate
                             and diff.new_file.remote_size is not None
+                        ):
+                            req = ValidateRequest(
+                                name=diff.new_file.name,
+                                is_dir=diff.new_file.is_dir,
+                                pair_id=pc.pair_id,  # type: ignore[arg-type]
+                                local_path=pc.effective_local_path,
+                                remote_path=pc.remote_path,
+                                algorithm=self.__context.config.validate.algorithm,  # type: ignore[arg-type]
+                                remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
+                                remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
+                                remote_password=self.__password,
+                                remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
+                            )
+                            self.__validate_process.validate(req)
+                            self.logger.info("Auto-queued validation for '{}'".format(diff.new_file.name))
+
+                        if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
+                            will_auto_extract = (
+                                self.__context.config.autoqueue.auto_extract and diff.new_file.is_extractable
+                            )
+                            will_auto_validate = (
+                                self.__context.config.validate.enabled
+                                and self.__context.config.validate.auto_validate
+                                and diff.new_file.remote_size is not None
+                            )
+                            if not will_auto_extract and not will_auto_validate:
+                                self.__spawn_move_process(diff.new_file.name, pc)
+
+                    if diff.new_file is not None and pc is not None and diff.new_file.name in pc.pending_completion:
+                        use_staging = (
+                            self.__context.config.controller.use_staging and self.__context.config.controller.staging_path
                         )
-                        if not will_auto_extract and not will_auto_validate:
-                            self.__spawn_move_process(diff.new_file.name, pc)
-
-                if diff.new_file is not None and pc is not None and diff.new_file.name in pc.pending_completion:
-                    use_staging = (
-                        self.__context.config.controller.use_staging and self.__context.config.controller.staging_path
-                    )
-                    # A file with no local presence and DEFAULT state means
-                    # it was deleted locally (e.g. stopped download whose files
-                    # were removed). Nothing left to track.
-                    if diff.new_file.state == ModelFile.State.DEFAULT and diff.new_file.local_size is None:
-                        pc.pending_completion.discard(diff.new_file.name)
-                    elif use_staging:
-                        move_key = _persist_key(diff.new_file.pair_id, diff.new_file.name)
-                        if move_key in self.__moved_file_keys:
+                        # A file with no local presence and DEFAULT state means
+                        # it was deleted locally (e.g. stopped download whose files
+                        # were removed). Nothing left to track.
+                        if diff.new_file.state == ModelFile.State.DEFAULT and diff.new_file.local_size is None:
                             pc.pending_completion.discard(diff.new_file.name)
-                        elif diff.new_file.state in (
-                            ModelFile.State.DELETED,
-                            ModelFile.State.EXTRACTED,
-                            ModelFile.State.EXTRACT_FAILED,
-                            ModelFile.State.VALIDATED,
-                            ModelFile.State.CORRUPT,
-                        ):
-                            pc.pending_completion.discard(diff.new_file.name)
-                    else:
-                        if diff.new_file.state in (
-                            ModelFile.State.DOWNLOADED,
-                            ModelFile.State.EXTRACTED,
-                            ModelFile.State.EXTRACT_FAILED,
-                            ModelFile.State.VALIDATED,
-                            ModelFile.State.CORRUPT,
-                            ModelFile.State.DELETED,
-                        ):
-                            pc.pending_completion.discard(diff.new_file.name)
+                        elif use_staging:
+                            move_key = _persist_key(diff.new_file.pair_id, diff.new_file.name)
+                            if move_key in self.__moved_file_keys:
+                                pc.pending_completion.discard(diff.new_file.name)
+                            elif diff.new_file.state in (
+                                ModelFile.State.DELETED,
+                                ModelFile.State.EXTRACTED,
+                                ModelFile.State.EXTRACT_FAILED,
+                                ModelFile.State.VALIDATED,
+                                ModelFile.State.CORRUPT,
+                            ):
+                                pc.pending_completion.discard(diff.new_file.name)
+                        else:
+                            if diff.new_file.state in (
+                                ModelFile.State.DOWNLOADED,
+                                ModelFile.State.EXTRACTED,
+                                ModelFile.State.EXTRACT_FAILED,
+                                ModelFile.State.VALIDATED,
+                                ModelFile.State.CORRUPT,
+                                ModelFile.State.DELETED,
+                            ):
+                                pc.pending_completion.discard(diff.new_file.name)
 
-            # Prune the extracted files list of any files that were deleted locally
-            remove_extracted_keys = set()
-            for pkey in self.__persist.extracted_file_names:
-                # Find the file in the model by checking each pair
-                for _pc in self.__pair_contexts:
-                    bare_name = _strip_persist_key(pkey, _pc.pair_id)
-                    if bare_name != pkey or _pc.pair_id is None:
-                        try:
-                            file = self.__model.get_file(bare_name, pair_id=_pc.pair_id)
-                            if file.state == ModelFile.State.DELETED:
-                                remove_extracted_keys.add(pkey)
-                        except ModelError:
-                            pass
-            if remove_extracted_keys:
-                self.logger.info("Removing from extracted list: {}".format(remove_extracted_keys))
-                self.__persist.extracted_file_names.difference_update(remove_extracted_keys)
-                self._sync_persist_to_all_builders()
-
-            # Persist cleanup: remove entries for files absent from all sources
-            all_scans_received = all(
-                _pc.remote_scan_received and _pc.local_scan_received for _pc in self.__pair_contexts
-            )
-            if all_scans_received:
-                # Build a set of all composite keys present in the model
-                model_keys = set()
-                for f in self.__model.get_all_files():
-                    model_keys.add(_persist_key(f.pair_id, f.name))
-                absent_keys = set()
-                for pkey in self.__persist.downloaded_file_names:
-                    if pkey not in model_keys and pkey not in self.__moved_file_keys:
-                        absent_keys.add(pkey)
-                if absent_keys:
-                    self.logger.info("Persist cleanup (both absent): {}".format(absent_keys))
-                    self.__persist.downloaded_file_names.difference_update(absent_keys)
-                    self.__persist.extracted_file_names.difference_update(absent_keys)
-                    self.__persist.extract_failed_file_names.difference_update(absent_keys)
-                    self.__persist.validated_file_names.difference_update(absent_keys)
-                    self.__persist.corrupt_file_names.difference_update(absent_keys)
+                # Prune the extracted files list of any files that were deleted locally
+                remove_extracted_keys = set()
+                for pkey in self.__persist.extracted_file_names:
+                    # Find the file in the model by checking each pair
+                    for _pc in self.__pair_contexts:
+                        bare_name = _strip_persist_key(pkey, _pc.pair_id)
+                        if bare_name != pkey or _pc.pair_id is None:
+                            try:
+                                file = self.__model.get_file(bare_name, pair_id=_pc.pair_id)
+                                if file.state == ModelFile.State.DELETED:
+                                    remove_extracted_keys.add(pkey)
+                            except ModelError:
+                                pass
+                if remove_extracted_keys:
+                    self.logger.info("Removing from extracted list: {}".format(remove_extracted_keys))
+                    self.__persist.extracted_file_names.difference_update(remove_extracted_keys)
                     self._sync_persist_to_all_builders()
 
-            self.__model_lock.release()
+                # Persist cleanup: remove entries for files absent from all sources
+                all_scans_received = all(
+                    _pc.remote_scan_received and _pc.local_scan_received for _pc in self.__pair_contexts
+                )
+                if all_scans_received:
+                    # Build a set of all composite keys present in the model
+                    model_keys = set()
+                    for f in self.__model.get_all_files():
+                        model_keys.add(_persist_key(f.pair_id, f.name))
+                    absent_keys = set()
+                    for pkey in self.__persist.downloaded_file_names:
+                        if pkey not in model_keys and pkey not in self.__moved_file_keys:
+                            absent_keys.add(pkey)
+                    if absent_keys:
+                        self.logger.info("Persist cleanup (both absent): {}".format(absent_keys))
+                        self.__persist.downloaded_file_names.difference_update(absent_keys)
+                        self.__persist.extracted_file_names.difference_update(absent_keys)
+                        self.__persist.extract_failed_file_names.difference_update(absent_keys)
+                        self.__persist.validated_file_names.difference_update(absent_keys)
+                        self.__persist.corrupt_file_names.difference_update(absent_keys)
+                        self._sync_persist_to_all_builders()
+
+            finally:
+                self.__model_lock.release()
 
         # Process extraction failures — mark as failed immediately
         for result in latest_failed_extractions:

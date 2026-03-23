@@ -3,6 +3,7 @@
 import json
 from urllib.parse import quote
 
+from common import Config
 from tests.integration.test_web.test_web_app import BaseTestWebApp
 
 
@@ -89,8 +90,8 @@ class TestConfigHandler(BaseTestWebApp):
         resp = self.test_app.get("/server/config/get")
         self.assertEqual(200, resp.status_int)
         json_dict = json.loads(str(resp.html))
-        self.assertEqual("********", json_dict["lftp"]["remote_password"])
-        self.assertEqual("********", json_dict["web"]["api_key"])
+        self.assertEqual(Config.REDACTED_SENTINEL, json_dict["lftp"]["remote_password"])
+        self.assertEqual(Config.REDACTED_SENTINEL, json_dict["web"]["api_key"])
 
     def test_set_sensitive_field_does_not_echo_value(self):
         resp = self.test_app.get("/server/config/set/lftp/remote_password/my-secret")
@@ -98,3 +99,11 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertNotIn("my-secret", str(resp.html))
         self.assertIn("lftp.remote_password updated", str(resp.html))
         self.assertEqual("my-secret", self.context.config.lftp.remote_password)
+
+    def test_set_sensitive_field_rejects_redacted_sentinel(self):
+        self.context.config.lftp.remote_password = "real-password"
+        sentinel = quote(quote(Config.REDACTED_SENTINEL, safe=""), safe="")
+        resp = self.test_app.get("/server/config/set/lftp/remote_password/" + sentinel, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+        self.assertIn("Cannot set sensitive field to redacted value", str(resp.html))
+        self.assertEqual("real-password", self.context.config.lftp.remote_password)

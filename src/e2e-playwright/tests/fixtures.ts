@@ -33,7 +33,9 @@ export const test = base.extend<{
 
   apiGet: async ({ appUrl }, use) => {
     await use(async (path: string) => {
-      const res = await fetch(`${appUrl}${path}`);
+      const res = await fetch(`${appUrl}${path}`, {
+        headers: { Origin: appUrl },
+      });
       if (!res.ok) throw new Error(`API ${path} returned ${res.status}`);
       return res.json();
     });

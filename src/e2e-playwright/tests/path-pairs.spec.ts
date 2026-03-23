@@ -56,6 +56,7 @@ test.describe("Path Pairs", () => {
       .poll(
         async () => {
           const res = await apiFetch("/server/pathpairs");
+          if (!res.ok) return undefined;
           const pairs = await res.json();
           return pairs.find(
             (p: { name: string }) => p.name === "e2e-test-pair"
@@ -180,6 +181,7 @@ test.describe("Path Pairs", () => {
       .poll(
         async () => {
           const res = await apiFetch("/server/pathpairs");
+          if (!res.ok) return undefined;
           const pairs = await res.json();
           return pairs.find(
             (p: { name: string }) => p.name === "update-me"
@@ -261,6 +263,7 @@ test.describe("Path Pairs", () => {
       .poll(
         async () => {
           const res = await apiFetch("/server/pathpairs");
+          if (!res.ok) return undefined;
           const pairs = await res.json();
           return pairs.find(
             (p: { name: string }) => p.name === "gone-pair"
@@ -298,6 +301,7 @@ test.describe("Path Pairs", () => {
       .poll(
         async () => {
           const res = await apiFetch("/server/pathpairs");
+          if (!res.ok) return undefined;
           const pairs = await res.json();
           const pair = pairs.find(
             (p: { name: string }) => p.name === "toggle-pair"

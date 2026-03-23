@@ -27,9 +27,11 @@ export class SidebarPage {
   }
 
   async navigateTo(link: Locator) {
+    const href = await link.getAttribute("href");
     await link.click();
-    await this.page.waitForLoadState("domcontentloaded");
-    await this.page.waitForSelector('a[href="/dashboard"]', { timeout: 10_000 });
+    if (href) {
+      await this.page.waitForURL(`**${href}`, { timeout: 10_000 });
+    }
   }
 
   getActiveLink() {

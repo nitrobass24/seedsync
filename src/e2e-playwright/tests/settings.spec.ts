@@ -88,7 +88,6 @@ test.describe("Settings Page", () => {
   });
 
   test("select dropdown changes value and saves to backend", async ({
-    page,
     apiGet,
   }) => {
     // Read the current value so we can restore it

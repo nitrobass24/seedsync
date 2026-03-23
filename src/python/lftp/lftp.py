@@ -493,7 +493,7 @@ class Lftp:
                 raise
         return statuses
 
-    def queue(self, name: str, is_dir: bool, exclude_patterns: list | None = None):
+    def queue(self, name: str, is_dir: bool, exclude_patterns: list[str] | None = None):
         """
         Queues a job for download
         This method may cause an exception to be generated in a later method call:

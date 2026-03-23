@@ -93,14 +93,14 @@ class TestSerializeConfig(unittest.TestCase):
         config.lftp.remote_password = "super-secret-password"
         out = SerializeConfig.config(config)
         out_dict = json.loads(out)
-        self.assertEqual("********", out_dict["lftp"]["remote_password"])
+        self.assertEqual(Config.REDACTED_SENTINEL, out_dict["lftp"]["remote_password"])
 
     def test_redacts_api_key(self):
         config = Config()
         config.web.api_key = "my-secret-api-key"
         out = SerializeConfig.config(config)
         out_dict = json.loads(out)
-        self.assertEqual("********", out_dict["web"]["api_key"])
+        self.assertEqual(Config.REDACTED_SENTINEL, out_dict["web"]["api_key"])
 
     def test_does_not_redact_non_sensitive_fields(self):
         config = Config()

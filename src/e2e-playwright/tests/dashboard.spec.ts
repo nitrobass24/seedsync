@@ -110,17 +110,13 @@ test.describe("Dashboard with files", () => {
     expect(btnCount).toBeGreaterThanOrEqual(1);
   });
 
-  test("Queue button appears for queueable files", async () => {
+  test("clicking a file row renders the action area", async () => {
     test.skip(fileCount === 0, "No files present on the remote seedbox");
 
     const row = dashboard.getFileRows().first();
     await row.click();
-    // Queue button may or may not be present depending on file state;
-    // just verify the action area is rendered after click
-    const queueBtn = dashboard.getActionButton(row, "queue");
-    const queueVisible = await queueBtn.isVisible().catch(() => false);
-    // If this specific file isn't queueable, that's acceptable
-    expect(typeof queueVisible).toBe("boolean");
+    const actionArea = row.locator(".actions");
+    await expect(actionArea).toBeVisible();
   });
 });
 

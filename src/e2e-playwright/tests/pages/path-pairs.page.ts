@@ -34,20 +34,18 @@ export class PathPairsPage {
     name?: string;
     remotePath?: string;
     localPath?: string;
-    enabled?: boolean;
-    autoQueue?: boolean;
   }) {
     const form = this.page.locator(".pair-form");
     if (fields.name !== undefined) {
-      const nameInput = form.locator("input").first();
+      const nameInput = form.locator('label:has-text("Name") input');
       await nameInput.fill(fields.name);
     }
     if (fields.remotePath !== undefined) {
-      const remoteInput = form.locator("input").nth(1);
+      const remoteInput = form.locator('label:has-text("Remote Path") input');
       await remoteInput.fill(fields.remotePath);
     }
     if (fields.localPath !== undefined) {
-      const localInput = form.locator("input").nth(2);
+      const localInput = form.locator('label:has-text("Local Path") input');
       await localInput.fill(fields.localPath);
     }
   }
