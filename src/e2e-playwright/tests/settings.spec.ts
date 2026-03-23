@@ -36,12 +36,12 @@ test.describe("Settings Page", () => {
     const configBefore = await apiGet("/server/config/get");
     const originalAddress = configBefore.lftp.remote_address;
 
-    const field = settings.getTextInput("Server Address");
-    await field.clear();
-    const testValue = "e2e-test-server";
-    await field.fill(testValue);
-
     try {
+      const field = settings.getTextInput("Server Address");
+      await field.clear();
+      const testValue = "e2e-test-server";
+      await field.fill(testValue);
+
       // Poll the API until the value is saved
       await expect
         .poll(
@@ -53,10 +53,7 @@ test.describe("Settings Page", () => {
         )
         .toBe(testValue);
     } finally {
-      // Restore original value
-      if (originalAddress) {
-        await apiSetConfig("lftp", "remote_address", originalAddress);
-      }
+      await apiSetConfig("lftp", "remote_address", originalAddress ?? "");
     }
   });
 
@@ -202,17 +199,15 @@ test.describe("Settings Page", () => {
     const configBefore = await apiGet("/server/config/get");
     const originalAddress = configBefore.lftp.remote_address;
 
-    const field = settings.getTextInput("Server Address");
-    await field.clear();
-    await field.fill("trigger-restart-notice-" + Date.now());
-
     try {
+      const field = settings.getTextInput("Server Address");
+      await field.clear();
+      await field.fill("trigger-restart-notice-" + Date.now());
+
       const notification = settings.getRestartNotification();
       await expect(notification).toBeVisible({ timeout: 5000 });
     } finally {
-      if (originalAddress) {
-        await apiSetConfig("lftp", "remote_address", originalAddress);
-      }
+      await apiSetConfig("lftp", "remote_address", originalAddress ?? "");
     }
   });
 

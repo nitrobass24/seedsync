@@ -24,8 +24,10 @@ export class PathPairsPage {
   }
 
   getPairByName(name: string) {
-    return this.pairsList.locator(".pair-row", {
-      hasText: name,
+    // Use exact match on .pair-name to avoid substring collisions
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return this.pairsList.locator(".pair-row").filter({
+      has: this.page.locator(".pair-name", { hasText: new RegExp(`^${escaped}$`) }),
     });
   }
 
