@@ -39,6 +39,12 @@ class Sshcp:
         self.__shell_detected: bool = False
         self.logger = logging.getLogger(self.__class__.__name__)
 
+    def _remote_address(self) -> str:
+        """Return 'user@host' when user is set, or just 'host' when None."""
+        if self.__user is not None:
+            return "{}@{}".format(self.__user, self.__host)
+        return self.__host
+
     def set_base_logger(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild(self.__class__.__name__)
 
@@ -126,7 +132,7 @@ class Sshcp:
             "-p",
             str(self.__port),
         ]
-        args = ["{}@{}".format(self.__user, self.__host), quoted]
+        args = [self._remote_address(), quoted]
         return self.__run_command(command="ssh", flags=" ".join(flags), args=" ".join(args))
 
     def _check_remote_shells_via_sftp(self) -> list[str]:
@@ -162,7 +168,7 @@ class Sshcp:
         args = [
             "-b",
             "-",  # read commands from stdin
-            "{}@{}".format(self.__user, self.__host),
+            self._remote_address(),
         ]
 
         command_args = ["sftp"]
@@ -411,7 +417,7 @@ class Sshcp:
             "-p",
             str(self.__port),  # port
         ]
-        args = ["{}@{}".format(self.__user, self.__host), command]
+        args = [self._remote_address(), command]
         return self.__run_command(command="ssh", flags=" ".join(flags), args=" ".join(args))
 
     def copy(self, local_path: str, remote_path: str):

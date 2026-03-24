@@ -83,8 +83,7 @@ class TestController(unittest.TestCase):
             zf.write(temp_file_path, os.path.basename(temp_file_path))
             zf.close()
         elif ext == "rar":
-            fnull = open(os.devnull, "w")
-            subprocess.Popen(["rar", "a", "-ep", path, temp_file_path], stdout=fnull).communicate()
+            subprocess.run(["rar", "a", "-ep", path, temp_file_path], stdout=subprocess.DEVNULL, check=True)
         else:
             raise ValueError("Unsupported archive format: {}".format(os.path.basename(path)))
         return os.path.getsize(path)
