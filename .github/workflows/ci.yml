@@ -53,8 +53,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
       - name: Install Ruff
-        run: pip install ruff
+        run: uv pip install --system ruff
 
       - name: Ruff check
         working-directory: src/python
@@ -76,9 +79,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
       - name: Install dependencies
         working-directory: src/python
-        run: pip install -r requirements.txt pyright
+        run: uv pip install --system -r pyproject.toml pyright
 
       - name: Pyright
         working-directory: src/python
@@ -96,14 +102,13 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            src/python/requirements.txt
-            src/python/requirements-test.txt
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
         working-directory: src/python
-        run: pip install -r requirements.txt -r requirements-test.txt
+        run: uv pip install --system -r pyproject.toml --group test
 
       - name: Run unit tests
         working-directory: src/python

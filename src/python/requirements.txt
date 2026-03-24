@@ -1,7 +1,0 @@
-# SeedSync Runtime Dependencies
-# Source of truth: pyproject.toml [project].dependencies
-# Keep in sync when editing pyproject.toml
-
-bottle>=0.12,<1.0
-pexpect>=4.8
-tblib>=3.0
