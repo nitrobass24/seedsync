@@ -36,8 +36,14 @@ class ConfigHandler(IHandler):
         inner_config = getattr(self.__config, section)
         if not inner_config.has_property(key):
             return HTTPResponse(body="Section '{}' in config has no option '{}'".format(section, key), status=400)
+        # Reject the redacted sentinel to prevent accidentally overwriting
+        # real credentials with "********"
+        if Config.is_sensitive(section, key) and value == Config.REDACTED_SENTINEL:
+            return HTTPResponse(body="Cannot set sensitive field to redacted value", status=400)
         try:
             inner_config.set_property(key, value)
+            if Config.is_sensitive(section, key):
+                return HTTPResponse(body="{}.{} updated".format(section, key))
             return HTTPResponse(body="{}.{} set to {}".format(section, key, value))
         except ConfigError as e:
             return HTTPResponse(body=str(e), status=400)

@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -67,18 +67,18 @@ jobs:
   python-typecheck:
     name: Python Type Check
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      - name: Install Pyright
-        run: pip install pyright
+      - name: Install dependencies
+        working-directory: src/python
+        run: pip install -r requirements.txt pyright
 
       - name: Pyright
         working-directory: src/python
@@ -93,7 +93,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -172,16 +172,42 @@ jobs:
           cache-from: type=gha,scope=amd64
           cache-to: type=gha,scope=amd64,mode=max
 
-      - name: Test container starts
+      - name: Start container
         run: |
-          docker run -d --name test-container -p 8800:8800 seedsync:test
+          docker run -d --name test-container -p 8800:8800 -e SEEDSYNC_DISABLE_RATE_LIMIT=1 seedsync:test
           for i in $(seq 1 30); do
             curl -sf http://localhost:8800/ && break
             [ "$i" -eq 30 ] && { echo "Container failed to become ready"; docker logs test-container; exit 1; }
             sleep 1
           done
           docker logs test-container
-          docker stop test-container
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install Playwright
+        working-directory: src/e2e-playwright
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        working-directory: src/e2e-playwright
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: src/e2e-playwright/playwright-report/
+          retention-days: 7
+
+      - name: Stop container
+        if: always()
+        run: docker stop test-container
 
   build-amd64:
     name: Build (amd64)
@@ -334,10 +360,11 @@ jobs:
       && (startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/develop' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
       && needs.unit-test.result == 'success'
       && needs.python-lint.result == 'success'
+      && needs.python-typecheck.result == 'success'
       && needs.python-test.result == 'success'
       && needs.build-amd64.result == 'success'
       && needs.build-arm64.result == 'success'
-    needs: [unit-test, python-lint, python-test, build-amd64, build-arm64]
+    needs: [unit-test, python-lint, python-typecheck, python-test, build-amd64, build-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: read

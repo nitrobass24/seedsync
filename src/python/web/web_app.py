@@ -80,29 +80,29 @@ class WebApp(bottle.Bottle):
         :return:
         """
         # Streaming route
-        self.get("/server/stream")(self.__web_stream)
+        self.get("/server/stream")(self.__web_stream)  # type: ignore[operator]
 
         # Front-end routes
-        self.route("/")(self.__index)
-        self.route("/dashboard")(self.__index)
-        self.route("/settings")(self.__index)
-        self.route("/autoqueue")(self.__index)
-        self.route("/logs")(self.__index)
-        self.route("/about")(self.__index)
+        self.route("/")(self.__index)  # type: ignore[operator]
+        self.route("/dashboard")(self.__index)  # type: ignore[operator]
+        self.route("/settings")(self.__index)  # type: ignore[operator]
+        self.route("/autoqueue")(self.__index)  # type: ignore[operator]
+        self.route("/logs")(self.__index)  # type: ignore[operator]
+        self.route("/about")(self.__index)  # type: ignore[operator]
         # For static files
-        self.route("/<file_path:path>")(self.__static)
+        self.route("/<file_path:path>")(self.__static)  # type: ignore[operator]
 
     def add_handler(self, path: str, handler: Callable):
-        self.get(path)(handler)
+        self.get(path)(handler)  # type: ignore[operator]
 
     def add_post_handler(self, path: str, handler: Callable):
-        self.post(path)(handler)
+        self.post(path)(handler)  # type: ignore[operator]
 
     def add_put_handler(self, path: str, handler: Callable):
-        self.put(path)(handler)
+        self.put(path)(handler)  # type: ignore[operator]
 
     def add_delete_handler(self, path: str, handler: Callable):
-        self.delete(path)(handler)
+        self.delete(path)(handler)  # type: ignore[operator]
 
     def add_streaming_handler(self, handler: type[IStreamHandler], **kwargs):
         self._streaming_handlers.append((handler, kwargs))
@@ -144,7 +144,7 @@ class WebApp(bottle.Bottle):
         try:
             # Setup the response header
             bottle.response.content_type = "text/event-stream"
-            bottle.response.cache_control = "no-cache"
+            bottle.response.cache_control = "no-cache"  # type: ignore[assignment]
             bottle.response.set_header("X-Accel-Buffering", "no")
 
             # Call setup on all handlers

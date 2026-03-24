@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, OnInit, OnDestroy, input, output, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
+import { REDACTED_SENTINEL } from '../../models/config';
 
 export enum OptionType {
   Text,
@@ -54,6 +55,12 @@ export class OptionComponent implements OnInit, OnDestroy {
   }
 
   onChange(value: any): void {
+    // Don't send updates for password fields when the value is the redacted sentinel.
+    // The server returns "********" for sensitive fields; sending it back would
+    // overwrite the real password with the sentinel.
+    if (this.type() === OptionType.Password && value === REDACTED_SENTINEL) {
+      return;
+    }
     this.newValue.next(value);
   }
 }

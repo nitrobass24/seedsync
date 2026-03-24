@@ -75,6 +75,9 @@ export interface Validate {
   xfer_verify: boolean | null;
 }
 
+/** Sentinel value the backend uses to mask sensitive fields in API responses. */
+export const REDACTED_SENTINEL = '********';
+
 export interface Config {
   general: General;
   lftp: Lftp;

@@ -87,3 +87,28 @@ class TestSerializeConfig(unittest.TestCase):
         self.assertEqual("sha256", out_dict["validate"]["algorithm"])
         self.assertEqual(False, out_dict["validate"]["auto_validate"])
         self.assertEqual(True, out_dict["validate"]["xfer_verify"])
+
+    def test_redacts_remote_password(self):
+        config = Config()
+        config.lftp.remote_password = "super-secret-password"
+        out = SerializeConfig.config(config)
+        out_dict = json.loads(out)
+        self.assertEqual(Config.REDACTED_SENTINEL, out_dict["lftp"]["remote_password"])
+
+    def test_redacts_api_key(self):
+        config = Config()
+        config.web.api_key = "my-secret-api-key"
+        out = SerializeConfig.config(config)
+        out_dict = json.loads(out)
+        self.assertEqual(Config.REDACTED_SENTINEL, out_dict["web"]["api_key"])
+
+    def test_does_not_redact_non_sensitive_fields(self):
+        config = Config()
+        config.lftp.remote_address = "server.remote.com"
+        config.lftp.remote_username = "myuser"
+        config.web.port = 8080
+        out = SerializeConfig.config(config)
+        out_dict = json.loads(out)
+        self.assertEqual("server.remote.com", out_dict["lftp"]["remote_address"])
+        self.assertEqual("myuser", out_dict["lftp"]["remote_username"])
+        self.assertEqual(8080, out_dict["web"]["port"])
