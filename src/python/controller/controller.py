@@ -351,11 +351,10 @@ class Controller:
                     for name, val in [("Lftp.remote_path", remote_path), ("Lftp.local_path", local_path)]
                     if val is None
                 ]
+                fields = ", ".join(missing)
                 raise ControllerError(
                     "No path pairs configured and {} not set. "
-                    "Configure at least one path pair in Settings, or set remote_path and local_path.".format(
-                        ", ".join(missing)
-                    )
+                    "Configure at least one path pair in Settings, or set {}.".format(fields, fields)
                 )
             return [
                 self._create_pair_context(
