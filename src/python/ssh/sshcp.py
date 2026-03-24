@@ -437,5 +437,5 @@ class Sshcp:
             "-P",
             str(self.__port),  # port
         ]
-        args = [local_path, "{}@{}:{}".format(self.__user, self.__host, remote_path)]
+        args = [local_path, "{}:{}".format(self._remote_address(), remote_path)]
         self.__run_command(command="scp", flags=" ".join(flags), args=" ".join(args))
