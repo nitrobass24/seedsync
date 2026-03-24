@@ -16,10 +16,14 @@ RUN npx ng build --configuration=production --output-path /build
 # ==============================================================================
 FROM python:3.12-alpine AS python-deps
 
-COPY src/python/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+COPY src/python/pyproject.toml src/python/uv.lock /tmp/
+RUN uv pip install --system --no-cache --strict \
+        -r /tmp/pyproject.toml \
+    && rm -f /usr/local/bin/uv \
     && pip uninstall -y pip setuptools \
-    && rm -rf /root/.cache/pip /tmp/requirements.txt \
+    && rm -rf /root/.cache /tmp/pyproject.toml /tmp/uv.lock \
     && rm -rf \
         /usr/local/lib/python3.12/ensurepip \
         /usr/local/lib/python3.12/idlelib \
