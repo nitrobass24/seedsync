@@ -46,21 +46,24 @@ class TestExtract(unittest.TestCase):
         zf.close()
 
         # rar
-        fnull = open(os.devnull, "w")
         TestExtract.ar_rar = os.path.join(archive_dir, "file.rar")
-        subprocess.Popen(["rar", "a", "-ep", TestExtract.ar_rar, temp_file], stdout=fnull)
+        subprocess.run(["rar", "a", "-ep", TestExtract.ar_rar, temp_file], stdout=subprocess.DEVNULL, check=True)
 
         # rar split
-        subprocess.Popen(
-            ["rar", "a", "-ep", "-m0", "-v50k", os.path.join(archive_dir, "file.split.rar"), temp_file], stdout=fnull
+        subprocess.run(
+            ["rar", "a", "-ep", "-m0", "-v50k", os.path.join(archive_dir, "file.split.rar"), temp_file],
+            stdout=subprocess.DEVNULL,
+            check=True,
         )
         TestExtract.ar_rar_split_p1 = os.path.join(archive_dir, "file.split.part1.rar")
         TestExtract.ar_rar_split_p2 = os.path.join(archive_dir, "file.split.part2.rar")
 
         # tar.gz
         TestExtract.ar_tar_gz = os.path.join(archive_dir, "file.tar.gz")
-        subprocess.Popen(
-            ["tar", "czvf", TestExtract.ar_tar_gz, "-C", os.path.dirname(temp_file), os.path.basename(temp_file)]
+        subprocess.run(
+            ["tar", "czvf", TestExtract.ar_tar_gz, "-C", os.path.dirname(temp_file), os.path.basename(temp_file)],
+            stdout=subprocess.DEVNULL,
+            check=True,
         )
 
     @classmethod

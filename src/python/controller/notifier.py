@@ -112,7 +112,8 @@ class WebhookNotifier(IModelListener):
         try:
             data = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
-            urllib.request.urlopen(req, timeout=5)
+            with urllib.request.urlopen(req, timeout=5):
+                pass
             self._logger.debug("Webhook sent: %s %s", payload["event_type"], payload["filename"])
         except Exception as e:
             self._logger.warning("Webhook failed: %s", str(e))

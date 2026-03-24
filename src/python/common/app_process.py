@@ -5,6 +5,7 @@ import queue
 import signal
 import sys
 import threading
+import time
 from abc import abstractmethod
 from datetime import datetime
 from multiprocessing import Event, Process, Queue
@@ -114,7 +115,7 @@ class AppProcess(Process):
 
         timestamp_start = datetime.now()
         while self.is_alive() and elapsed_ms(timestamp_start) < AppProcess.__DEFAULT_TERMINATE_TIMEOUT_MS:
-            pass
+            time.sleep(0.05)
 
         super().terminate()
 

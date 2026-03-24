@@ -102,7 +102,8 @@ class ExtractDispatch:
         self.__listeners_lock.release()
 
     def status(self) -> list[ExtractStatus]:
-        tasks = list(self.__task_queue.queue)
+        with self.__task_queue.mutex:
+            tasks = list(self.__task_queue.queue)
         statuses = []
         for task in tasks:
             status = ExtractStatus(
@@ -130,10 +131,11 @@ class ExtractDispatch:
         model_file = req.model_file
         self.logger.debug("Received extract for {}".format(model_file.name))
 
-        for task in self.__task_queue.queue:
-            if task.root_name == model_file.name and task.pair_id == req.pair_id:
-                self.logger.info("Ignoring extract for {}, already exists".format(model_file.name))
-                return
+        with self.__task_queue.mutex:
+            for task in self.__task_queue.queue:
+                if task.root_name == model_file.name and task.pair_id == req.pair_id:
+                    self.logger.info("Ignoring extract for {}, already exists".format(model_file.name))
+                    return
 
         # noinspection PyProtectedMember
         task = ExtractDispatch._Task(model_file.name, model_file.is_dir, req.pair_id)
@@ -183,9 +185,11 @@ class ExtractDispatch:
         while not self.__worker_shutdown.is_set():
             # Try to grab next task
             # Do another check for shutdown
-            while len(self.__task_queue.queue) > 0 and not self.__worker_shutdown.is_set():
-                # peek the task
-                task = self.__task_queue.queue[0]
+            with self.__task_queue.mutex:
+                has_tasks = len(self.__task_queue.queue) > 0
+            while has_tasks and not self.__worker_shutdown.is_set():
+                with self.__task_queue.mutex:
+                    task = self.__task_queue.queue[0]
 
                 # We have a task, extract archives one by one
                 completed = True
@@ -216,6 +220,9 @@ class ExtractDispatch:
                     else:
                         listener.extract_failed(task.root_name, task.root_is_dir, task.pair_id)
                 self.__listeners_lock.release()
+
+                with self.__task_queue.mutex:
+                    has_tasks = len(self.__task_queue.queue) > 0
 
             time.sleep(ExtractDispatch.__WORKER_SLEEP_INTERVAL_IN_SECS)
 
