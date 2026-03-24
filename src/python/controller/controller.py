@@ -346,9 +346,16 @@ class Controller:
             remote_path = self.__context.config.lftp.remote_path
             local_path = self.__context.config.lftp.local_path
             if remote_path is None or local_path is None:
+                missing = [
+                    name
+                    for name, val in [("Lftp.remote_path", remote_path), ("Lftp.local_path", local_path)]
+                    if val is None
+                ]
                 raise ControllerError(
-                    "No path pairs configured and Lftp.remote_path / Lftp.local_path are not set. "
-                    "Configure at least one path pair in Settings, or set remote_path and local_path."
+                    "No path pairs configured and {} not set. "
+                    "Configure at least one path pair in Settings, or set remote_path and local_path.".format(
+                        ", ".join(missing)
+                    )
                 )
             return [
                 self._create_pair_context(
