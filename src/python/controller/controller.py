@@ -233,6 +233,9 @@ class Controller:
         # Decide the password here
         self.__password = context.config.lftp.remote_password if not context.config.lftp.use_ssh_key else None
 
+        # Validate required config fields before building anything
+        self._validate_config()
+
         # The command queue
         self.__command_queue = Queue()
 
@@ -273,6 +276,57 @@ class Controller:
 
         self.__started = False
 
+    def _validate_config(self) -> None:
+        """Validate that all required config fields are set (non-None) at startup.
+
+        Collects all missing fields and raises a single ControllerError listing them.
+        """
+        missing: list[str] = []
+        config = self.__context.config
+
+        # Lftp required fields
+        lftp_fields = [
+            "remote_address",
+            "remote_username",
+            "remote_port",
+            "remote_path_to_scan_script",
+            "use_ssh_key",
+            "use_temp_file",
+            "num_max_parallel_downloads",
+            "num_max_parallel_files_per_download",
+            "num_max_connections_per_root_file",
+            "num_max_connections_per_dir_file",
+            "num_max_total_connections",
+        ]
+        for field in lftp_fields:
+            if getattr(config.lftp, field) is None:
+                missing.append("Lftp.{}".format(field))
+
+        # Controller required fields
+        controller_fields = [
+            "interval_ms_remote_scan",
+            "interval_ms_local_scan",
+            "interval_ms_downloading_scan",
+        ]
+        for field in controller_fields:
+            if getattr(config.controller, field) is None:
+                missing.append("Controller.{}".format(field))
+
+        # General required fields
+        if config.general.verbose is None:
+            missing.append("General.verbose")
+
+        # AutoQueue required fields
+        if config.autoqueue.auto_delete_remote is None:
+            missing.append("AutoQueue.auto_delete_remote")
+
+        # Args required fields
+        if self.__context.args.local_path_to_scanfs is None:
+            missing.append("Args.local_path_to_scanfs")
+
+        if missing:
+            raise ControllerError("Required config fields are not set: {}".format(", ".join(missing)))
+
     def _build_pair_contexts(self) -> list[_PairContext]:
         """
         Build a _PairContext for each configured path pair.
@@ -289,12 +343,25 @@ class Controller:
                 self.logger.warning("All path pairs are disabled. Enable a pair in Settings to start syncing.")
                 return []
             # Backward compatibility: no path pairs configured, use config.lftp
+            remote_path = self.__context.config.lftp.remote_path
+            local_path = self.__context.config.lftp.local_path
+            if remote_path is None or local_path is None:
+                missing = [
+                    name
+                    for name, val in [("Lftp.remote_path", remote_path), ("Lftp.local_path", local_path)]
+                    if val is None
+                ]
+                fields = ", ".join(missing)
+                raise ControllerError(
+                    "No path pairs configured and {} not set. "
+                    "Configure at least one path pair in Settings, or set {}.".format(fields, fields)
+                )
             return [
                 self._create_pair_context(
                     pair_id=None,
                     name="Default",
-                    remote_path=self.__context.config.lftp.remote_path,  # type: ignore[arg-type]
-                    local_path=self.__context.config.lftp.local_path,  # type: ignore[arg-type]
+                    remote_path=remote_path,
+                    local_path=local_path,
                 )
             ]
 
