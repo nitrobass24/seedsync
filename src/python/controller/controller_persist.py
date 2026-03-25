@@ -36,7 +36,7 @@ class ControllerPersist(Persist):
         self.corrupt_file_names = set()
 
     @staticmethod
-    def _migrate_legacy_keys(keys: set) -> set:
+    def _migrate_legacy_keys(keys: set[str]) -> set[str]:
         """Replace legacy 'pair_id:name' keys with 'pair_id\\x1fname' keys."""
         migrated = set()
         for key in keys:

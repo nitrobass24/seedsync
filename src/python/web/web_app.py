@@ -4,6 +4,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from typing import Any
 
 import bottle
 from bottle import static_file
@@ -45,7 +46,7 @@ class IStreamHandler(ABC):
         pass
 
     @classmethod
-    def register(cls, web_app: "WebApp", **kwargs):
+    def register(cls, web_app: "WebApp", **kwargs: Any) -> None:
         """
         Register this streaming handler with the web app
         :param web_app: web_app instance
@@ -92,19 +93,19 @@ class WebApp(bottle.Bottle):
         # For static files
         self.route("/<file_path:path>")(self.__static)  # type: ignore[operator]
 
-    def add_handler(self, path: str, handler: Callable):
+    def add_handler(self, path: str, handler: Callable[..., Any]) -> None:
         self.get(path)(handler)  # type: ignore[operator]
 
-    def add_post_handler(self, path: str, handler: Callable):
+    def add_post_handler(self, path: str, handler: Callable[..., Any]) -> None:
         self.post(path)(handler)  # type: ignore[operator]
 
-    def add_put_handler(self, path: str, handler: Callable):
+    def add_put_handler(self, path: str, handler: Callable[..., Any]) -> None:
         self.put(path)(handler)  # type: ignore[operator]
 
-    def add_delete_handler(self, path: str, handler: Callable):
+    def add_delete_handler(self, path: str, handler: Callable[..., Any]) -> None:
         self.delete(path)(handler)  # type: ignore[operator]
 
-    def add_streaming_handler(self, handler: type[IStreamHandler], **kwargs):
+    def add_streaming_handler(self, handler: type[IStreamHandler], **kwargs: Any) -> None:
         self._streaming_handlers.append((handler, kwargs))
 
     def process(self):

@@ -59,7 +59,7 @@ class ExtractStatus:
     def pair_id(self):
         return self.__pair_id
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return self.__dict__ == other.__dict__
 
 

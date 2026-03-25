@@ -26,7 +26,7 @@ class SystemFile:
         self.__timestamp_modified = time_modified
         self.__children = []
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return self.__dict__ == other.__dict__
 
     def __repr__(self):
@@ -72,7 +72,7 @@ class SystemFile:
         }
 
     @staticmethod
-    def from_dict(d: dict) -> "SystemFile":
+    def from_dict(d: dict[str, Any]) -> "SystemFile":
         tc = datetime.fromisoformat(d["time_created"]) if d.get("time_created") else None
         tm = datetime.fromisoformat(d["time_modified"]) if d.get("time_modified") else None
         sf = SystemFile(

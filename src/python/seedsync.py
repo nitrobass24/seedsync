@@ -246,7 +246,7 @@ class Seedsync:
         raise ServiceExit()
 
     @staticmethod
-    def _parse_args(args):
+    def _parse_args(args: list[str]) -> argparse.Namespace:
         parser = argparse.ArgumentParser(description="Seedsync daemon")
         parser.add_argument("-c", "--config_dir", required=True, help="Path to config directory")
         parser.add_argument("--logdir", help="Directory for log files")

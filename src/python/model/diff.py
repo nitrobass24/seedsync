@@ -22,7 +22,7 @@ class ModelDiff:
         self.__old_file = old_file
         self.__new_file = new_file
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return self.__dict__ == other.__dict__
 
     def __repr__(self):

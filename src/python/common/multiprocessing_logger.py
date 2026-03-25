@@ -1,5 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from __future__ import annotations
+
 import logging
 import multiprocessing
 import queue
@@ -30,7 +32,7 @@ class MultiprocessingLogger:
         self.__listener_exc_info = None
 
     @property
-    def queue(self) -> multiprocessing.Queue:
+    def queue(self) -> multiprocessing.Queue[logging.LogRecord]:
         return self.__queue
 
     @property

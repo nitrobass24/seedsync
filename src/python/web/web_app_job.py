@@ -2,9 +2,12 @@
 
 import logging
 import time
+from collections.abc import Iterable
 from socketserver import ThreadingMixIn
 from threading import Thread
+from typing import Any
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
+from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
 import bottle
 
@@ -58,25 +61,25 @@ class _ThreadingWSGIServer(ThreadingMixIn, WSGIServer):
 class _QuietHandler(WSGIRequestHandler):
     """Suppress default stderr request logging."""
 
-    def log_request(self, *args, **kwargs):
+    def log_request(self, *args: Any, **kwargs: Any) -> None:
         pass
 
 
 class _RequestLoggingMiddleware:
     """WSGI middleware that logs request method, path, status, and duration."""
 
-    def __init__(self, app, logger, level=logging.DEBUG):
+    def __init__(self, app: WSGIApplication, logger: logging.Logger, level: int = logging.DEBUG):
         self.app = app
         self.logger = logger
         self.level = level
 
-    def __call__(self, environ, start_response):
+    def __call__(self, environ: WSGIEnvironment, start_response: StartResponse) -> Iterable[bytes]:
         method = environ.get("REQUEST_METHOD", "")
         path = environ.get("PATH_INFO", "")
         start = time.monotonic()
         status_code = None
 
-        def _start_response(status, headers, *args):
+        def _start_response(status: str, headers: list[tuple[str, str]], *args: Any) -> Any:
             nonlocal status_code
             status_code = status.split(" ", 1)[0]
             return start_response(status, headers, *args)
@@ -96,13 +99,13 @@ class MyWSGIRefServer(bottle.ServerAdapter):
 
     quiet = True  # disable logging to stdout
 
-    def __init__(self, logger: logging.Logger, *args, **kwargs):
+    def __init__(self, logger: logging.Logger, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.logger = logger
         self.server = None
 
     @overrides(bottle.ServerAdapter)
-    def run(self, handler):
+    def run(self, handler: WSGIApplication) -> None:
         self.logger.debug("Starting web server")
         handler = _RequestLoggingMiddleware(handler, logger=self.logger, level=logging.DEBUG)
         self.server = make_server(

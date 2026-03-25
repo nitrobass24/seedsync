@@ -5,13 +5,14 @@ import time
 import urllib.request
 from datetime import UTC, datetime
 
+from common import Config
 from model import IModelListener, ModelFile
 
 
 class WebhookNotifier(IModelListener):
     """Sends webhook POST notifications on file state changes."""
 
-    def __init__(self, config, logger: logging.Logger):
+    def __init__(self, config: Config, logger: logging.Logger):
         self._config = config
         self._logger = logger.getChild("WebhookNotifier")
         self._shutdown_flag = False
@@ -97,7 +98,7 @@ class WebhookNotifier(IModelListener):
             self._active_threads.add(thread)
         thread.start()
 
-    def _thread_wrapper(self, url: str, payload: dict):
+    def _thread_wrapper(self, url: str, payload: dict[str, str]) -> None:
         """Wraps _send_post to track thread lifecycle."""
         try:
             self._send_post(url, payload)
@@ -105,7 +106,7 @@ class WebhookNotifier(IModelListener):
             with self._lock:
                 self._active_threads.discard(threading.current_thread())
 
-    def _send_post(self, url: str, payload: dict):
+    def _send_post(self, url: str, payload: dict[str, str]) -> None:
         if not url.startswith(("http://", "https://")):
             self._logger.warning("Webhook URL rejected: scheme is not http/https")
             return

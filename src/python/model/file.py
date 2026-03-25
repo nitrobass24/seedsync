@@ -51,7 +51,9 @@ class ModelFile:
         self.__children = []  # children files
         self.__parent = None  # direct predecessor
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ModelFile):
+            return NotImplemented
         # disregard in comparisons:
         #   timestamp: we don't care about it
         #   parent: semantics are to check self and children only

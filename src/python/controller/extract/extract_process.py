@@ -1,5 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from __future__ import annotations
+
 import logging
 import multiprocessing
 import queue
@@ -39,7 +41,10 @@ class ExtractProcess(AppProcess):
 
     class __ExtractListener(ExtractListener):
         def __init__(
-            self, logger: logging.Logger, completed_queue: multiprocessing.Queue, failed_queue: multiprocessing.Queue
+            self,
+            logger: logging.Logger,
+            completed_queue: multiprocessing.Queue[ExtractCompletedResult],
+            failed_queue: multiprocessing.Queue[ExtractFailedResult],
         ):
             self.logger = logger
             self.completed_queue = completed_queue

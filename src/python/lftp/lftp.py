@@ -6,6 +6,7 @@ import re
 import warnings
 from collections.abc import Callable
 from functools import wraps
+from typing import Any
 
 # 3rd party libs
 import pexpect
@@ -148,7 +149,7 @@ class Lftp:
         """
 
         @wraps(method)
-        def wrapper(inst: "Lftp", *args, **kwargs):
+        def wrapper(inst: "Lftp", *args: Any, **kwargs: Any) -> Any:
             if inst.__process is None or not inst.__process.isalive():
                 try:
                     inst.__restart_process()
@@ -280,7 +281,7 @@ class Lftp:
         """
         out = self.__run_command("set -a | grep {}".format(setting))  # type: ignore[arg-type]
         m = re.search("set {} (.*)".format(setting), out)
-        if not m or not m.group or not m.group(1):
+        if not m or not m.group or not m.group(1):  # type: ignore[reportUnnecessaryComparison]
             raise LftpError("Failed to get setting '{}'. Output: '{}'".format(setting, out))
         return m.group(1).strip()
 

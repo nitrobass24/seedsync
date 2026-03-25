@@ -1,4 +1,5 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
+from __future__ import annotations
 
 import datetime
 import hashlib
@@ -9,8 +10,12 @@ import queue
 import shlex
 import time
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from common import AppProcess, overrides
+
+if TYPE_CHECKING:
+    from ssh import Sshcp
 
 
 class ValidateRequest:
@@ -47,13 +52,13 @@ class ValidateStatus:
     class State(Enum):
         VALIDATING = 0
 
-    def __init__(self, name: str, is_dir: bool, state: "ValidateStatus.State", pair_id: str | None = None):
+    def __init__(self, name: str, is_dir: bool, state: ValidateStatus.State, pair_id: str | None = None):
         self.name = name
         self.is_dir = is_dir
         self.state = state
         self.pair_id = pair_id
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return self.__dict__ == other.__dict__
 
 
@@ -225,7 +230,7 @@ class ValidateProcess(AppProcess):
                 )
             self.logger.info("Validated {}: {}".format(req.name, local_hash))
 
-    def _validate_directory(self, req: ValidateRequest, local_dir: str, sshcp):
+    def _validate_directory(self, req: ValidateRequest, local_dir: str, sshcp: Sshcp) -> None:
         """Validate all files in a directory by comparing local and remote checksums.
 
         Performs symmetric validation: collects local file set via os.walk and
@@ -327,7 +332,7 @@ class ValidateProcess(AppProcess):
         else:
             raise ValueError("Unsupported algorithm: {}".format(algorithm))
 
-    def _hash_remote_file(self, req: ValidateRequest, rel_path: str, algorithm: str, sshcp) -> str:
+    def _hash_remote_file(self, req: ValidateRequest, rel_path: str, algorithm: str, sshcp: Sshcp) -> str:
         """Compute hash of a remote file via SSH."""
         remote_file = os.path.join(req.remote_path, rel_path)
         quoted_file = shlex.quote(remote_file)

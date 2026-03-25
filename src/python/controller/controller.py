@@ -1,5 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from __future__ import annotations
+
 import copy
 import fnmatch
 import logging
@@ -9,6 +11,10 @@ from collections.abc import Callable
 from enum import Enum
 from queue import Queue
 from threading import Lock
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from system import SystemFile
 
 from common import AppError, AppOneShotProcess, Constants, Context, MultiprocessingLogger
 from lftp import Lftp, LftpError, LftpJobStatus
@@ -16,16 +22,16 @@ from model import IModelListener, Model, ModelDiff, ModelDiffUtil, ModelError, M
 
 from .controller_persist import ControllerPersist
 from .delete import DeleteLocalProcess, DeleteRemoteProcess
-from .extract import ExtractProcess, ExtractRequest, ExtractStatus
+from .extract import ExtractCompletedResult, ExtractProcess, ExtractRequest, ExtractStatus, ExtractStatusResult
 from .model_builder import ModelBuilder
 from .move import MoveProcess
 
 # my libs
 from .scan import ActiveScanner, LocalScanner, RemoteScanner, ScannerProcess, ScannerResult
-from .validate import ValidateProcess, ValidateRequest
+from .validate import ValidateProcess, ValidateRequest, ValidateStatusResult
 
 
-def _matches_exclude(name: str, is_dir: bool, patterns: list) -> bool:
+def _matches_exclude(name: str, is_dir: bool, patterns: list[tuple[str, bool]]) -> bool:
     """Return True if *name* matches any of the exclude patterns (case-insensitive).
 
     Each pattern is a (glob, dir_only) tuple.  When dir_only is True the
@@ -35,7 +41,7 @@ def _matches_exclude(name: str, is_dir: bool, patterns: list) -> bool:
     return any(fnmatch.fnmatch(name_lower, p.lower()) and (not dir_only or is_dir) for p, dir_only in patterns)
 
 
-def _filter_children(file, patterns: list):
+def _filter_children(file: SystemFile, patterns: list[tuple[str, bool]]) -> SystemFile:
     """Return a copy of *file* with excluded children (and their subtrees) removed.
 
     If a directory child matches a pattern the entire subtree is dropped.
@@ -76,7 +82,7 @@ def parse_exclude_patterns(exclude_patterns_str: str) -> list[str]:
     return patterns
 
 
-def filter_excluded_files(files: list, exclude_patterns_str: str) -> list:
+def filter_excluded_files(files: list[SystemFile], exclude_patterns_str: str) -> list[SystemFile]:
     parsed = parse_exclude_patterns(exclude_patterns_str)
     if not parsed:
         return files
@@ -221,7 +227,7 @@ class Controller:
         Wraps any one-shot command processes launched by the controller
         """
 
-        def __init__(self, process: AppOneShotProcess, post_callback: Callable):
+        def __init__(self, process: AppOneShotProcess, post_callback: Callable[..., Any]):
             self.process = process
             self.post_callback = post_callback
 
@@ -659,7 +665,7 @@ class Controller:
             return None
         return self.__pair_contexts[0] if self.__pair_contexts else None
 
-    def _build_extract_request(self, file: ModelFile, pc: "_PairContext") -> ExtractRequest:
+    def _build_extract_request(self, file: ModelFile, pc: _PairContext) -> ExtractRequest:
         """Build an ExtractRequest with the correct pair-specific paths."""
         # Determine output directory
         if self.__context.config.controller.use_local_path_as_extract_path:
@@ -726,7 +732,7 @@ class Controller:
             #   2) then adding local-only files only if no other pair with the
             #      same local directory already claims a file with that name.
             seen_names_by_path: dict[str, set[str]] = {}
-            deferred_local_only: list = []  # (file, normalized_local_path)
+            deferred_local_only: list[tuple[ModelFile, str]] = []
             for pc in self.__pair_contexts:
                 norm_path = os.path.normpath(os.path.abspath(pc.local_path))
                 if norm_path not in seen_names_by_path:
@@ -948,20 +954,24 @@ class Controller:
 
         # Update the controller status (use most recent across all pairs)
         for pc in self.__pair_contexts:
-            if pc._latest_remote_scan is not None:
+            if pc._latest_remote_scan is not None:  # type: ignore[reportPrivateUsage]
                 current = self.__context.status.controller.latest_remote_scan_time
-                if current is None or pc._latest_remote_scan.timestamp > current:
-                    self.__context.status.controller.latest_remote_scan_time = pc._latest_remote_scan.timestamp
-                    self.__context.status.controller.latest_remote_scan_failed = pc._latest_remote_scan.failed
-                    self.__context.status.controller.latest_remote_scan_error = pc._latest_remote_scan.error_message
-            if pc._latest_local_scan is not None:
+                if current is None or pc._latest_remote_scan.timestamp > current:  # type: ignore[reportPrivateUsage]
+                    self.__context.status.controller.latest_remote_scan_time = pc._latest_remote_scan.timestamp  # type: ignore[reportPrivateUsage]
+                    self.__context.status.controller.latest_remote_scan_failed = pc._latest_remote_scan.failed  # type: ignore[reportPrivateUsage]
+                    self.__context.status.controller.latest_remote_scan_error = pc._latest_remote_scan.error_message  # type: ignore[reportPrivateUsage]
+            if pc._latest_local_scan is not None:  # type: ignore[reportPrivateUsage]
                 current = self.__context.status.controller.latest_local_scan_time
-                if current is None or pc._latest_local_scan.timestamp > current:
-                    self.__context.status.controller.latest_local_scan_time = pc._latest_local_scan.timestamp
+                if current is None or pc._latest_local_scan.timestamp > current:  # type: ignore[reportPrivateUsage]
+                    self.__context.status.controller.latest_local_scan_time = pc._latest_local_scan.timestamp  # type: ignore[reportPrivateUsage]
 
     def _update_pair_model_state(
-        self, pc: _PairContext, latest_extract_statuses, latest_extracted_results, latest_validate_statuses
-    ):
+        self,
+        pc: _PairContext,
+        latest_extract_statuses: ExtractStatusResult | None,
+        latest_extracted_results: list[ExtractCompletedResult],
+        latest_validate_statuses: ValidateStatusResult | None,
+    ) -> None:
         """
         Update a single pair context's scan results, LFTP status, and model builder state.
         """
@@ -969,8 +979,8 @@ class Controller:
         latest_local_scan = pc.local_scan_process.pop_latest_result()
         latest_active_scan = pc.active_scan_process.pop_latest_result()
 
-        pc._latest_remote_scan = latest_remote_scan
-        pc._latest_local_scan = latest_local_scan
+        pc._latest_remote_scan = latest_remote_scan  # type: ignore[reportPrivateUsage]
+        pc._latest_local_scan = latest_local_scan  # type: ignore[reportPrivateUsage]
 
         lftp_statuses = None
         try:
@@ -1200,7 +1210,7 @@ class Controller:
                     process = DeleteLocalProcess(local_path=delete_path, file_name=file.name)
                     process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
-                    def post_callback(delete_path=delete_path, _pc=pc):
+                    def post_callback(delete_path: str = delete_path, _pc: Any = pc) -> None:
                         _pc.local_scan_process.force_scan()
                         if delete_path != _pc.local_path:
                             _pc.active_scan_process.force_scan()
@@ -1378,6 +1388,6 @@ class Controller:
                     pc.local_scan_process.force_scan()
         self.__active_move_processes = still_active_moves
 
-    def _apply_exclude_patterns(self, files: list) -> list:
+    def _apply_exclude_patterns(self, files: list[SystemFile]) -> list[SystemFile]:
         raw = self.__context.config.general.exclude_patterns
         return filter_excluded_files(files, raw)

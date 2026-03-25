@@ -1,7 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from collections import namedtuple
 from enum import Enum
+from typing import NamedTuple
 
 
 class LftpJobStatus:
@@ -17,7 +17,7 @@ class LftpJobStatus:
         QUEUED = 0
         RUNNING = 1
 
-    class TransferState(namedtuple("TransferState", ["size_local", "size_remote", "percent_local", "speed", "eta"])):
+    class TransferState(NamedTuple):
         """
         State of transfer for a file or entire download
           size_local: size in bytes that have been downloaded
@@ -27,7 +27,11 @@ class LftpJobStatus:
           eta: est. remaining transfer time in seconds
         """
 
-        pass
+        size_local: int | None
+        size_remote: int | None
+        percent_local: float | None
+        speed: int | None
+        eta: int | None
 
     def __init__(self, job_id: int, job_type: Type, state: State, name: str, flags: str):
         self.__id = job_id
@@ -78,7 +82,7 @@ class LftpJobStatus:
         """
         return list(zip(self.__active_files_state.keys(), self.__active_files_state.values()))
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return self.__dict__ == other.__dict__
 
     def __str__(self):

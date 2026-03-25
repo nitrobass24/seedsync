@@ -6,7 +6,7 @@ import copy
 import logging
 import time
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from common import overrides
 
@@ -74,7 +74,7 @@ class QueueLogHandler(logging.Handler, StreamQueue[logging.LogRecord]):
         StreamQueue.__init__(self)
 
     @overrides(logging.Handler)
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         self.put(record)
 
 
@@ -98,7 +98,7 @@ class LogStreamHandler(IStreamHandler):
     # noinspection PyUnresolvedReferences
     @classmethod
     @overrides(IStreamHandler)
-    def register(cls, web_app: WebApp, **kwargs):
+    def register(cls, web_app: WebApp, **kwargs: Any) -> None:
         # Initialize our cache when we register
         LogStreamHandler._cache = CachedQueueLogHandler(history_size_in_ms=LogStreamHandler._CACHE_HISTORY_SIZE_IN_MS)
         kwargs["logger"].addHandler(LogStreamHandler._cache)

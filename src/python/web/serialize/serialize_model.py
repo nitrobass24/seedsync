@@ -2,6 +2,7 @@
 
 import json
 from enum import Enum
+from typing import Any
 
 from model import ModelFile
 
@@ -66,7 +67,7 @@ class SerializeModel(Serialize):
     __KEY_FILE_CHILDREN = "children"
 
     @staticmethod
-    def __model_file_to_json_dict(model_file: ModelFile) -> dict:
+    def __model_file_to_json_dict(model_file: ModelFile) -> dict[str, Any]:
         json_dict = dict()
         json_dict[SerializeModel.__KEY_FILE_NAME] = model_file.name
         json_dict[SerializeModel.__KEY_FILE_PAIR_ID] = model_file.pair_id

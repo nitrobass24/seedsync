@@ -19,7 +19,7 @@ class SystemScannerError(AppError):
 
 
 class PseudoDirEntry:
-    def __init__(self, name: str, path: str, is_dir: bool, stat):
+    def __init__(self, name: str, path: str, is_dir: bool, stat: os.stat_result):
         self.name = name
         self.path = path
         self._is_dir = is_dir
@@ -107,7 +107,7 @@ class SystemScanner:
             PseudoDirEntry(name=name, path=path, is_dir=os.path.isdir(path), stat=os.stat(path))
         )
 
-    def __create_system_file(self, entry) -> SystemFile:
+    def __create_system_file(self, entry: os.DirEntry[str] | PseudoDirEntry) -> SystemFile:
         """
         Creates a system file from a DirEntry.
 

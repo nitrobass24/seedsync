@@ -22,7 +22,9 @@ class AutoQueuePattern(Serializable):
     def pattern(self) -> str:
         return self.__pattern
 
-    def __eq__(self, other: "AutoQueuePattern") -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, AutoQueuePattern):
+            return NotImplemented
         return self.__pattern == other.__pattern
 
     def __hash__(self) -> int:

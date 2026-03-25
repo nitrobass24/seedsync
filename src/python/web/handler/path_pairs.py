@@ -25,7 +25,7 @@ class PathPairsHandler(IHandler):
         return HTTPResponse(body=json.dumps(pairs), headers={"Content-Type": "application/json"})
 
     @staticmethod
-    def __validate_pair_params(data: dict, defaults=None):
+    def __validate_pair_params(data: dict[str, str | bool], defaults: PathPair | None = None):
         """Validate and extract path pair parameters from request data.
         Returns (name, remote_path, local_path, enabled, auto_queue) or an HTTPResponse on error.
         When defaults is provided (a PathPair), missing keys fall back to its values.

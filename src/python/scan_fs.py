@@ -13,7 +13,7 @@ import os
 import re
 import sys
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 class SystemFile:
@@ -61,7 +61,7 @@ class SystemFile:
             raise TypeError("Cannot add children to a file")
         self.__children.append(file)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> "Dict[str, Any]":
         return {
             "name": self.__name,
             "size": self.__size,
@@ -102,7 +102,7 @@ class SystemScanner:
             raise SystemScannerError("Path is not a directory: {}".format(self.path_to_scan))
         return self.__create_children(self.path_to_scan)
 
-    def __create_system_file(self, entry) -> SystemFile:
+    def __create_system_file(self, entry: "os.DirEntry[str]") -> SystemFile:
         if entry.is_dir(follow_symlinks=False):
             sub_children = self.__create_children(entry.path)
             name = entry.name.encode("utf-8", "surrogateescape").decode("utf-8", "replace")

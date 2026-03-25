@@ -30,7 +30,7 @@ class PathPair:
         self.enabled = enabled
         self.auto_queue = auto_queue
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, str | bool]:
         return {
             "id": self.id,
             "name": self.name,
@@ -41,7 +41,7 @@ class PathPair:
         }
 
     @staticmethod
-    def from_dict(d: dict) -> "PathPair":
+    def from_dict(d: dict[str, str | bool]) -> "PathPair":
         pair_id = d["id"]
         name = d.get("name", "")
         remote_path = d["remote_path"]
@@ -69,7 +69,7 @@ class PathPair:
             auto_queue=auto_queue,
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, PathPair):
             return False
         return self.to_dict() == other.to_dict()

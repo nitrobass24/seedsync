@@ -24,7 +24,7 @@ class Args:
         self.exit: bool | None = None
         self.logdir: str | None = None
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[str, str]:
         dct = collections.OrderedDict()
         dct["local_path_to_scanfs"] = str(self.local_path_to_scanfs)
         dct["html_path"] = str(self.html_path)

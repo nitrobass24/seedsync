@@ -1,5 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from __future__ import annotations
+
 import logging
 import queue
 import signal
@@ -23,7 +25,7 @@ class ExceptionWrapper:
     Source: https://stackoverflow.com/a/26096355/8571324
     """
 
-    def __init__(self, ee):
+    def __init__(self, ee: BaseException):
         self.ee = ee
         __, __, self.tb = sys.exc_info()
 
@@ -50,10 +52,10 @@ class AppProcess(Process):
         self._mp_log_queue = None
         self._mp_log_level = None
         self.logger = logging.getLogger(self.__name)
-        self.__exception_queue = Queue()
+        self.__exception_queue: Queue[ExceptionWrapper] = Queue()
         self._terminate = Event()
 
-    def set_mp_log_queue(self, log_queue: Queue, log_level: int):
+    def set_mp_log_queue(self, log_queue: Queue[logging.LogRecord], log_level: int):
         """Configure cross-process logging. Must be called before start()."""
         self._mp_log_queue = log_queue
         self._mp_log_level = log_level
@@ -108,7 +110,7 @@ class AppProcess(Process):
             return
         self._terminate.set()
 
-        def elapsed_ms(start):
+        def elapsed_ms(start: datetime) -> int:
             delta_in_s = (datetime.now() - start).total_seconds()
             delta_in_ms = int(delta_in_s * 1000)
             return delta_in_ms

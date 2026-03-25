@@ -120,7 +120,7 @@ class InnerConfig(ABC):
     class PropMetadata:
         """Tracks property metadata"""
 
-        def __init__(self, checker: Callable, converter: Callable):
+        def __init__(self, checker: Callable[..., Any], converter: Callable[..., Any]):
             self.checker = checker
             self.converter = converter
 
@@ -129,7 +129,7 @@ class InnerConfig(ABC):
     __prop_addon_map = collections.OrderedDict()
 
     @classmethod
-    def _create_property(cls, name: str, checker: Callable, converter: Callable) -> property:
+    def _create_property(cls, name: str, checker: Callable[..., Any], converter: Callable[..., Any]) -> property:
         # noinspection PyProtectedMember
         prop = property(fget=lambda s: s._get_property(name), fset=lambda s, v: s._set_property(name, v, checker))
         prop_addon = InnerConfig.PropMetadata(checker=checker, converter=converter)
@@ -139,7 +139,7 @@ class InnerConfig(ABC):
     def _get_property(self, name: str) -> Any:
         return getattr(self, "__" + name, None)
 
-    def _set_property(self, name: str, value: Any, checker: Callable):
+    def _set_property(self, name: str, value: Any, checker: Callable[..., Any]):
         # Allow setting to None for the first time
         if value is None and self._get_property(name) is None:
             setattr(self, "__" + name, None)
@@ -227,7 +227,7 @@ class InnerConfig(ABC):
 # Useful aliases
 IC = InnerConfig
 # noinspection PyProtectedMember
-PROP = InnerConfig._create_property
+PROP = InnerConfig._create_property  # type: ignore[reportPrivateUsage]
 
 
 class Config(Persist):
@@ -428,7 +428,7 @@ class Config(Persist):
             section_dict = config_dict[section]
             for key in section_dict:
                 value = section_dict[key]
-                config_parser.set(section, key, "" if value is None else str(value))
+                config_parser.set(section, key, "" if value is None else str(value))  # type: ignore[reportUnnecessaryComparison]
         str_io = StringIO()
         config_parser.write(str_io)
         return str_io.getvalue()

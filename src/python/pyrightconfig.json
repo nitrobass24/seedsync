@@ -1,10 +1,17 @@
 {
-    "typeCheckingMode": "basic",
+    "typeCheckingMode": "strict",
     "pythonVersion": "3.12",
     "include": [
         "."
     ],
     "exclude": [
         "tests"
-    ]
+    ],
+    "reportMissingTypeStubs": false,
+    "reportUnusedImport": false,
+    "reportUnknownMemberType": false,
+    "reportUnknownVariableType": false,
+    "reportUnknownArgumentType": false,
+    "reportUnknownParameterType": false,
+    "reportUnknownLambdaType": false
 }

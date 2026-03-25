@@ -217,7 +217,7 @@ class ModelBuilder:
                         # also update all parent directories
                         _parent_file = _model_file.parent
                         while _parent_file is not None:
-                            if _parent_file.transferred_size is not None and _model_file.transferred_size is not None:
+                            if _parent_file.transferred_size is not None and _model_file.transferred_size is not None:  # type: ignore[reportUnnecessaryComparison]
                                 _parent_file.transferred_size += _model_file.transferred_size
                             _parent_file = _parent_file.parent
 
