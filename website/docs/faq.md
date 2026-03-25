@@ -64,7 +64,7 @@ To fix:
 
 ## SeedSync fails with "command not found: python3"
 
-SeedSync requires Python 3 on the remote server to run its filesystem scanner. Most Linux servers include Python 3 by default, but some minimal or container-based seedbox environments may not.
+SeedSync requires Python 3.5+ on the remote server to run its filesystem scanner. Most Linux servers include Python 3 by default, but some minimal or container-based seedbox environments may not.
 
 To fix, install Python 3 on your remote server:
 
@@ -77,6 +77,15 @@ sudo yum install python3
 ```
 
 If you don't have root access, check with your seedbox provider — most will have Python 3 available at a different path or can install it on request.
+
+## My seedbox has Python 3 installed at a custom path
+
+Some seedbox providers ship an older system Python or don't include Python 3 on the default `PATH`. If you've installed Python 3 to a custom location (e.g. your home directory), set **Remote Python Path** in Settings to the full path to the binary:
+
+- Example: `~/python3/bin/python3`
+- Example: `/home/user/.local/bin/python3`
+
+Leave it empty to use the system default `python3`.
 
 ## What is the recommended way to set up SeedSync with my torrent client?
 

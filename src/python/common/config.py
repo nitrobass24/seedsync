@@ -254,6 +254,7 @@ class Config(Persist):
         remote_path = PROP("remote_path", Checkers.string_nonempty, Converters.null)
         local_path = PROP("local_path", Checkers.string_nonempty, Converters.null)
         remote_path_to_scan_script = PROP("remote_path_to_scan_script", Checkers.string_nonempty, Converters.null)
+        remote_python_path = PROP("remote_python_path", Checkers.string_allow_empty, Converters.null)
         use_ssh_key = PROP("use_ssh_key", Checkers.null, Converters.bool)
         num_max_parallel_downloads = PROP("num_max_parallel_downloads", Checkers.int_positive, Converters.int)
         num_max_parallel_files_per_download = PROP(
@@ -287,6 +288,7 @@ class Config(Persist):
             self.remote_path = None
             self.local_path = None
             self.remote_path_to_scan_script = None
+            self.remote_python_path = ""
             self.use_ssh_key = None
             self.num_max_parallel_downloads = None
             self.num_max_parallel_files_per_download = None

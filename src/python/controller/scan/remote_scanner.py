@@ -33,11 +33,13 @@ class RemoteScanner(IScanner):
         remote_path_to_scan: str,
         local_path_to_scan_script: str,
         remote_path_to_scan_script: str,
+        remote_python_path: str = "",
     ):
         self.logger = logging.getLogger("RemoteScanner")
         self.__remote_path_to_scan = remote_path_to_scan
         self.__local_path_to_scan_script = local_path_to_scan_script
         self.__remote_path_to_scan_script = remote_path_to_scan_script
+        self.__remote_python_cmd = remote_python_path if remote_python_path else "python3"
         self.__ssh = Sshcp(host=remote_address, port=remote_port, user=remote_username, password=remote_password)
         self.__first_run = True
 
@@ -81,14 +83,16 @@ class RemoteScanner(IScanner):
                 # (for $HOME expansion), single quotes otherwise
                 if self.__remote_path_to_scan.startswith("~"):
                     return self.__ssh.shell(
-                        "python3 {} {}".format(
+                        "{} {} {}".format(
+                            self.__remote_python_cmd,
                             _escape_remote_path_double(self.__remote_path_to_scan_script),
                             _escape_remote_path_double(self.__remote_path_to_scan),
                         )
                     )
                 else:
                     return self.__ssh.shell(
-                        "python3 {} {}".format(
+                        "{} {} {}".format(
+                            self.__remote_python_cmd,
                             _escape_remote_path_single(self.__remote_path_to_scan_script),
                             _escape_remote_path_single(self.__remote_path_to_scan),
                         )
