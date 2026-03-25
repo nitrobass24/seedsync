@@ -52,6 +52,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "I001"]  # re-exports, import order is load-order sensitive
 "tests/**" = ["W291"]  # trailing whitespace in test string literals (lftp output data)
+"scan_fs.py" = ["UP006", "UP035", "UP045"]  # must use typing.List/Optional for Python 3.5 compat on remote
 
 [tool.ruff.lint.isort]
 known-first-party = ["common", "controller", "model", "lftp", "ssh", "web", "system"]

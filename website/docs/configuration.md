@@ -19,6 +19,7 @@ Open the UI and fill out the Settings page:
 - **Remote Path**: Path on the server to sync
 - **Local Path**: Must be `/downloads` inside the container
 - **Server Script Path**: Directory on the remote server where SeedSync copies its scanner utility. Defaults to `/tmp`. Some seedbox providers restrict writes to `/tmp` — if you see an SCP permission error on startup, change this to a directory you own (e.g. `~` or `~/.local`).
+- **Remote Python Path**: Path to the Python 3 binary on the remote server. Leave empty to use the default `python3`. Set this if your seedbox has a custom Python install (e.g. `~/python3/bin/python3`).
 
 ## Path Pairs
 

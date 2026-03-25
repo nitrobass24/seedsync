@@ -4,17 +4,16 @@
 # This script is uploaded to the remote server and executed standalone via
 # `python3 scan_fs.py <path>`. It must NOT import any SeedSync packages.
 #
-# IMPORTANT: This file runs on the REMOTE server which may have Python 3.8+.
-# Use `from __future__ import annotations` so modern type syntax (X | None,
-# list[X]) is valid on older Python versions.
-
-from __future__ import annotations
+# IMPORTANT: This file runs on the REMOTE server which may have Python 3.5+.
+# Do NOT use modern type syntax (X | None, list[X]) or
+# `from __future__ import annotations` — use typing imports instead.
 
 import json
 import os
 import re
 import sys
 from datetime import datetime
+from typing import List, Optional
 
 
 class SystemFile:
@@ -29,8 +28,8 @@ class SystemFile:
         name: str,
         size: int,
         is_dir: bool = False,
-        time_created: datetime | None = None,
-        time_modified: datetime | None = None,
+        time_created: Optional[datetime] = None,
+        time_modified: Optional[datetime] = None,
     ):
         if size < 0:
             raise ValueError("File size must be non-negative")
@@ -54,10 +53,10 @@ class SystemFile:
         return self.__is_dir
 
     @property
-    def children(self) -> list[SystemFile]:
+    def children(self) -> "List[SystemFile]":
         return self.__children
 
-    def add_child(self, file: SystemFile):
+    def add_child(self, file: "SystemFile"):
         if not self.__is_dir:
             raise TypeError("Cannot add children to a file")
         self.__children.append(file)
@@ -96,7 +95,7 @@ class SystemScanner:
     def add_exclude_suffix(self, suffix: str):
         self.exclude_suffixes.append(suffix)
 
-    def scan(self) -> list[SystemFile]:
+    def scan(self) -> "List[SystemFile]":
         if not os.path.exists(self.path_to_scan):
             raise SystemScannerError("Path does not exist: {}".format(self.path_to_scan))
         elif not os.path.isdir(self.path_to_scan):
@@ -133,7 +132,7 @@ class SystemScanner:
             sys_file = SystemFile(file_name, file_size, False, time_created=time_created, time_modified=time_modified)
         return sys_file
 
-    def __create_children(self, path: str) -> list[SystemFile]:
+    def __create_children(self, path: str) -> "List[SystemFile]":
         children = []
         for entry in os.scandir(path):
             skip = False
@@ -187,8 +186,8 @@ class SystemScanner:
 
 
 if __name__ == "__main__":
-    if sys.hexversion < 0x03060000:
-        sys.exit("Python 3.6 or newer is required to run this program.")
+    if sys.hexversion < 0x03050000:
+        sys.exit("Python 3.5 or newer is required to run this program.")
 
     import argparse
 

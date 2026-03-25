@@ -419,6 +419,7 @@ class Controller:
             remote_path_to_scan=remote_path,
             local_path_to_scan_script=self.__context.args.local_path_to_scanfs,  # type: ignore[arg-type]
             remote_path_to_scan_script=self.__context.config.lftp.remote_path_to_scan_script,  # type: ignore[arg-type]
+            remote_python_path=self.__context.config.lftp.remote_python_path,  # type: ignore[arg-type]
         )
 
         # Scanner processes

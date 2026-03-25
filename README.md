@@ -209,6 +209,10 @@ id  # Shows your UID and GID
 - Ensure your credentials are correct
 - If using SSH key auth, ensure the key is mounted at `/home/seedsync/.ssh/id_rsa` (read-only is fine)
 
+### Custom Python Path on Remote Server
+
+If your seedbox has Python 3 installed at a non-standard location (e.g. a custom build in your home directory), set **Remote Python Path** in Settings to the full path to the Python 3 binary. For example: `~/python3/bin/python3`. Leave empty to use the default `python3`.
+
 ### Remote Shell Not Found
 
 If you see an error about `/bin/bash` not found, SeedSync will attempt to auto-detect the available shell on your remote server. Check the logs for the detected shell path. If detection fails, create a symlink on the remote server:

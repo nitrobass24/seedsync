@@ -67,6 +67,14 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
       valuePath: ['lftp', 'remote_path_to_scan_script'],
       description: 'Where to install scanner script on remote server',
     },
+    {
+      type: OptionType.Text,
+      label: 'Remote Python Path',
+      valuePath: ['lftp', 'remote_python_path'],
+      description:
+        'Path to Python 3 on the remote server. Leave empty to use the default "python3". ' +
+        'Set this if your seedbox has a custom Python install (e.g. "~/python3/bin/python3").',
+    },
   ],
 };
 
