@@ -543,7 +543,7 @@ class TestConfig(unittest.TestCase):
         config.lftp.remote_path = "/remote/server/path"
         config.lftp.local_path = "/local/server/path"
         config.lftp.remote_path_to_scan_script = "/remote/server/path/to/script"
-        config.lftp.remote_python_path = ""
+        config.lftp.remote_python_path = "/opt/python/bin/python3"
         config.lftp.use_ssh_key = True
         config.lftp.num_max_parallel_downloads = 6
         config.lftp.num_max_parallel_files_per_download = 7
@@ -590,7 +590,7 @@ class TestConfig(unittest.TestCase):
         remote_path = /remote/server/path
         local_path = /local/server/path
         remote_path_to_scan_script = /remote/server/path/to/script
-        remote_python_path =
+        remote_python_path = /opt/python/bin/python3
         use_ssh_key = True
         num_max_parallel_downloads = 6
         num_max_parallel_files_per_download = 7

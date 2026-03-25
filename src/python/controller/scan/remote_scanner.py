@@ -39,7 +39,7 @@ class RemoteScanner(IScanner):
         self.__remote_path_to_scan = remote_path_to_scan
         self.__local_path_to_scan_script = local_path_to_scan_script
         self.__remote_path_to_scan_script = remote_path_to_scan_script
-        self.__remote_python_cmd = remote_python_path if remote_python_path else "python3"
+        self.__remote_python_cmd = remote_python_path.strip() if remote_python_path and remote_python_path.strip() else "python3"
         self.__ssh = Sshcp(host=remote_address, port=remote_port, user=remote_username, password=remote_password)
         self.__first_run = True
 
@@ -84,7 +84,7 @@ class RemoteScanner(IScanner):
                 if self.__remote_path_to_scan.startswith("~"):
                     return self.__ssh.shell(
                         "{} {} {}".format(
-                            self.__remote_python_cmd,
+                            _escape_remote_path_double(self.__remote_python_cmd),
                             _escape_remote_path_double(self.__remote_path_to_scan_script),
                             _escape_remote_path_double(self.__remote_path_to_scan),
                         )
@@ -92,7 +92,7 @@ class RemoteScanner(IScanner):
                 else:
                     return self.__ssh.shell(
                         "{} {} {}".format(
-                            self.__remote_python_cmd,
+                            _escape_remote_path_single(self.__remote_python_cmd),
                             _escape_remote_path_single(self.__remote_path_to_scan_script),
                             _escape_remote_path_single(self.__remote_path_to_scan),
                         )
