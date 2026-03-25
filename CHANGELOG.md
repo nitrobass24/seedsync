@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.14.3] - 2026-03-25
+
+### Added
+
+- **Configurable remote Python path** — New "Remote Python Path" setting lets users specify a custom Python binary on the remote server (e.g. `~/python3/bin/python3`), solving issues on seedboxes where `python3` is not on the default PATH (#314, #315)
+- **Startup config validation** — SeedSync now validates required LFTP config fields on startup and shows clear error messages when `remote_address`, `remote_username`, `remote_path`, or `local_path` are missing (#310, #313)
+
+### Fixed
+
+- **scan_fs.py Python 3.5 compatibility** — Remote scanner script now works on servers with Python 3.5+ by using `typing.List`/`Optional` instead of modern type syntax (#314, #315)
+- **Sshcp.copy() user@host format** — Fixed `scp` command construction to use the shared `_remote_address()` helper, matching the pattern used by `shell()` (#312)
+- **Pre-existing code quality bugs** — Fixed extraction retry counter, NotImplementedError base class, and process cleanup issues found during Ruff review (#289, #312)
+
+### Changed
+
+- **uv for Python dependencies** — Replaced pip + requirements.txt with uv and PEP 621 dependency groups; pinned uv versions in CI and Docker (#286, #311)
+
 ## [0.14.2] - 2026-03-23
 
 ### Added
