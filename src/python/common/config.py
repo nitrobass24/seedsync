@@ -126,7 +126,7 @@ class InnerConfig(ABC):
 
     # Global map to map a property to its metadata
     # Is there a way for each concrete class to do this separately?
-    __prop_addon_map = collections.OrderedDict()
+    __prop_addon_map: collections.OrderedDict[property, "InnerConfig.PropMetadata"] = collections.OrderedDict()
 
     @classmethod
     def _create_property(cls, name: str, checker: Callable[..., Any], converter: Callable[..., Any]) -> property:
@@ -184,7 +184,7 @@ class InnerConfig(ABC):
         Return the dict representation of the inner config
         :return:
         """
-        config_dict = collections.OrderedDict()
+        config_dict: collections.OrderedDict[str, Any] = collections.OrderedDict()
         cls = self.__class__
         my_property_to_name_map = {getattr(cls, p): p for p in dir(cls) if isinstance(getattr(cls, p), property)}
         # Arrange prop names in order of creation. Use the prop map to get the order
@@ -412,7 +412,7 @@ class Config(Persist):
             config_parser.read_string(content)
         except (configparser.MissingSectionHeaderError, configparser.ParsingError) as e:
             raise PersistError("Error parsing Config - {}: {}".format(type(e).__name__, str(e)))
-        config_dict = {}
+        config_dict: OuterConfigType = {}
         for section in config_parser.sections():
             config_dict[section] = {}
             for option in config_parser.options(section):
@@ -453,7 +453,7 @@ class Config(Persist):
     def as_dict(self) -> OuterConfigType:
         # We convert all values back to strings
         # Use an ordered dict to main section order
-        config_dict = collections.OrderedDict()
+        config_dict: collections.OrderedDict[str, InnerConfigType] = collections.OrderedDict()
         config_dict["General"] = self.general.as_dict()
         config_dict["Lftp"] = self.lftp.as_dict()
         config_dict["Controller"] = self.controller.as_dict()

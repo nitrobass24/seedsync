@@ -25,7 +25,7 @@ class ModelDiff:
     def __eq__(self, other: object) -> bool:
         return self.__dict__ == other.__dict__
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.__dict__)
 
     @property
@@ -51,7 +51,7 @@ class ModelDiffUtil:
         :param model_after:
         :return:
         """
-        diffs = []
+        diffs: list[ModelDiff] = []
 
         # Build key->file maps
         before_map = {Model.file_key(f): f for f in model_before.get_all_files()}

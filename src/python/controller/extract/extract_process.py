@@ -64,11 +64,11 @@ class ExtractProcess(AppProcess):
 
     def __init__(self):
         super().__init__(name=self.__class__.__name__)
-        self.__command_queue = multiprocessing.Queue()
-        self.__status_result_queue = multiprocessing.Queue()
-        self.__completed_result_queue = multiprocessing.Queue()
-        self.__failed_result_queue = multiprocessing.Queue()
-        self.__dispatch = None
+        self.__command_queue: multiprocessing.Queue[ExtractRequest] = multiprocessing.Queue()
+        self.__status_result_queue: multiprocessing.Queue[ExtractStatusResult] = multiprocessing.Queue()
+        self.__completed_result_queue: multiprocessing.Queue[ExtractCompletedResult] = multiprocessing.Queue()
+        self.__failed_result_queue: multiprocessing.Queue[ExtractFailedResult] = multiprocessing.Queue()
+        self.__dispatch: ExtractDispatch | None = None
 
     @overrides(AppProcess)
     def run_init(self):
@@ -161,7 +161,7 @@ class ExtractProcess(AppProcess):
         last time this method was called.
         :return:
         """
-        completed = []
+        completed: list[ExtractCompletedResult] = []
         try:
             while True:
                 result = self.__completed_result_queue.get(block=False)
@@ -176,7 +176,7 @@ class ExtractProcess(AppProcess):
         Returns an empty list if no new failures since the last call.
         :return:
         """
-        failed = []
+        failed: list[ExtractFailedResult] = []
         try:
             while True:
                 result = self.__failed_result_queue.get(block=False)

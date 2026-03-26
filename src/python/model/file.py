@@ -35,21 +35,21 @@ class ModelFile:
         self.__is_dir = is_dir  # True if this is a dir, False if file
         self.__pair_id = pair_id  # which path pair this file belongs to
         self.__state = ModelFile.State.DEFAULT  # status
-        self.__remote_size = None  # remote size in bytes, None if file does not exist
-        self.__local_size = None  # local size in bytes, None if file does not exist
-        self.__transferred_size = None  # transferred size in bytes, None if file does not exist
-        self.__downloading_speed = None  # in bytes / sec, None if not downloading
-        self.__eta = None  # est. time remaining in seconds, None if not available
+        self.__remote_size: int | None = None  # remote size in bytes, None if file does not exist
+        self.__local_size: int | None = None  # local size in bytes, None if file does not exist
+        self.__transferred_size: int | None = None  # transferred size in bytes, None if file does not exist
+        self.__downloading_speed: int | None = None  # in bytes / sec, None if not downloading
+        self.__eta: int | None = None  # est. time remaining in seconds, None if not available
         self.__is_extractable = False  # whether file is an archive or dir contains archives
-        self.__local_created_timestamp = None
-        self.__local_modified_timestamp = None
-        self.__remote_created_timestamp = None
-        self.__remote_modified_timestamp = None
+        self.__local_created_timestamp: datetime | None = None
+        self.__local_modified_timestamp: datetime | None = None
+        self.__remote_created_timestamp: datetime | None = None
+        self.__remote_modified_timestamp: datetime | None = None
         # timestamp of the latest update
         # Note: timestamp is not part of equality operator
         self.__update_timestamp = datetime.now()
-        self.__children = []  # children files
-        self.__parent = None  # direct predecessor
+        self.__children: list[ModelFile] = []  # children files
+        self.__parent: ModelFile | None = None  # direct predecessor
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ModelFile):
@@ -83,7 +83,7 @@ class ModelFile:
 
         return True
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.__dict__)
 
     @property

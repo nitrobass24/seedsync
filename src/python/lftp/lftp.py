@@ -75,12 +75,12 @@ class Lftp:
         self.__timeout = 10  # in seconds
         self.__consecutive_status_errors = 0
         self.__consecutive_timeouts = 0
-        self.__settings_cache = {}
+        self.__settings_cache: dict[str, str] = {}
 
         self.__log_command_output = False
-        self.__pending_error = None
+        self.__pending_error: str | None = None
 
-        self.__process = None
+        self.__process: pexpect.spawn | None = None  # type: ignore[type-arg]
         self.__spawn_process()
 
     def set_verbose_logging(self, verbose: bool):
@@ -140,7 +140,7 @@ class Lftp:
         # permission bits (e.g. 664 → remote) which would override our umask setting
         self.__set(Lftp.__SET_SFTP_SET_PERMISSIONS, "false")
 
-    def with_check_process(method: Callable):  # type: ignore[override]
+    def with_check_process(method: Callable[..., Any]) -> Callable[..., Any]:  # type: ignore[override]
         """
         Decorator that checks for a valid process before executing
         the decorated method. Attempts restart if process is dead.
@@ -214,11 +214,10 @@ class Lftp:
         if self.__log_command_output:
             self.logger.debug("out ({} bytes):\n {}".format(len(out), out))
             after_val = self.__process.after
-            after = (
-                after_val.decode("utf8", "replace").strip()  # type: ignore[union-attr]
-                if after_val != pexpect.TIMEOUT
-                else ""
-            )
+            if isinstance(after_val, bytes):
+                after = after_val.decode("utf8", "replace").strip()
+            else:
+                after = ""
             self.logger.debug("after: {}".format(after))
 
         # let's try and detect some errors
@@ -239,11 +238,10 @@ class Lftp:
             if self.__log_command_output:
                 self.logger.debug("retry out ({} bytes):\n {}".format(len(out), out))
                 after_val = self.__process.after
-                after = (
-                    after_val.decode("utf8", "replace").strip()  # type: ignore[union-attr]
-                    if after_val != pexpect.TIMEOUT
-                    else ""
-                )
+                if isinstance(after_val, bytes):
+                    after = after_val.decode("utf8", "replace").strip()
+                else:
+                    after = ""
                 self.logger.debug("retry after: {}".format(after))
             self.logger.error("Lftp detected error: {}".format(error_out))
             # save pending error

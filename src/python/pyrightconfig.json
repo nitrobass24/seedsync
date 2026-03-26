@@ -6,12 +6,5 @@
     ],
     "exclude": [
         "tests"
-    ],
-    "reportMissingTypeStubs": false,
-    "reportUnusedImport": false,
-    "reportUnknownMemberType": false,
-    "reportUnknownVariableType": false,
-    "reportUnknownArgumentType": false,
-    "reportUnknownParameterType": false,
-    "reportUnknownLambdaType": false
+    ]
 }

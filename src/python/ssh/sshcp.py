@@ -141,7 +141,7 @@ class Sshcp:
         SFTP does not require a working login shell.
         Returns a list of available shell paths.
         """
-        available = []
+        available: list[str] = []
         for shell_path in self.SHELL_CANDIDATES:
             try:
                 self._sftp_stat(shell_path)

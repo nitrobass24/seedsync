@@ -28,7 +28,7 @@ class SerializeLogRecord(Serialize):
         self.__log_formatter = logging.Formatter()
 
     def record(self, record: logging.LogRecord) -> str:
-        json_dict = dict()
+        json_dict: dict[str, str | None] = dict()
         json_dict[SerializeLogRecord.__KEY_TIME] = str(record.created)
         json_dict[SerializeLogRecord.__KEY_LEVEL_NAME] = record.levelname
         json_dict[SerializeLogRecord.__KEY_LOGGER_NAME] = record.name

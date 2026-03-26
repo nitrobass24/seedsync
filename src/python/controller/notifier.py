@@ -16,7 +16,7 @@ class WebhookNotifier(IModelListener):
         self._config = config
         self._logger = logger.getChild("WebhookNotifier")
         self._shutdown_flag = False
-        self._active_threads = set()
+        self._active_threads: set[threading.Thread] = set()
         self._lock = threading.Lock()
 
     def file_added(self, file: ModelFile):

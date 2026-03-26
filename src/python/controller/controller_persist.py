@@ -29,16 +29,16 @@ class ControllerPersist(Persist):
     __KEY_CORRUPT_FILE_NAMES = "corrupt"
 
     def __init__(self):
-        self.downloaded_file_names = set()
-        self.extracted_file_names = set()
-        self.extract_failed_file_names = set()
-        self.validated_file_names = set()
-        self.corrupt_file_names = set()
+        self.downloaded_file_names: set[str] = set()
+        self.extracted_file_names: set[str] = set()
+        self.extract_failed_file_names: set[str] = set()
+        self.validated_file_names: set[str] = set()
+        self.corrupt_file_names: set[str] = set()
 
     @staticmethod
     def _migrate_legacy_keys(keys: set[str]) -> set[str]:
         """Replace legacy 'pair_id:name' keys with 'pair_id\\x1fname' keys."""
-        migrated = set()
+        migrated: set[str] = set()
         for key in keys:
             m = _LEGACY_KEY_RE.match(key)
             if m:
@@ -72,7 +72,7 @@ class ControllerPersist(Persist):
 
     @overrides(Persist)
     def to_str(self) -> str:
-        dct = dict()
+        dct: dict[str, list[str]] = {}
         dct[ControllerPersist.__KEY_DOWNLOADED_FILE_NAMES] = list(self.downloaded_file_names)
         dct[ControllerPersist.__KEY_EXTRACTED_FILE_NAMES] = list(self.extracted_file_names)
         dct[ControllerPersist.__KEY_EXTRACT_FAILED_FILE_NAMES] = list(self.extract_failed_file_names)

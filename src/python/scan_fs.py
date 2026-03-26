@@ -38,7 +38,7 @@ class SystemFile:
         self.__is_dir = is_dir
         self.__timestamp_created = time_created
         self.__timestamp_modified = time_modified
-        self.__children = []
+        self.__children: List[SystemFile] = []
 
     @property
     def name(self) -> str:
@@ -86,8 +86,8 @@ class SystemScanner:
 
     def __init__(self, path_to_scan: str):
         self.path_to_scan = path_to_scan
-        self.exclude_prefixes = []
-        self.exclude_suffixes = [SystemScanner.__LFTP_STATUS_FILE_SUFFIX]
+        self.exclude_prefixes: List[str] = []
+        self.exclude_suffixes: List[str] = [SystemScanner.__LFTP_STATUS_FILE_SUFFIX]
 
     def add_exclude_prefix(self, prefix: str):
         self.exclude_prefixes.append(prefix)
@@ -133,7 +133,7 @@ class SystemScanner:
         return sys_file
 
     def __create_children(self, path: str) -> "List[SystemFile]":
-        children = []
+        children: List[SystemFile] = []
         for entry in os.scandir(path):
             skip = False
             for prefix in self.exclude_prefixes:

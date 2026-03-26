@@ -74,7 +74,7 @@ def parse_exclude_patterns(exclude_patterns_str: str) -> list[str]:
     """
     if not exclude_patterns_str or not exclude_patterns_str.strip():
         return []
-    patterns = []
+    patterns: list[str] = []
     for p in exclude_patterns_str.split(","):
         p = p.strip()
         if p:
@@ -87,7 +87,7 @@ def filter_excluded_files(files: list[SystemFile], exclude_patterns_str: str) ->
     if not parsed:
         return files
     patterns = [(p.rstrip("/"), p.endswith("/")) for p in parsed]
-    result = []
+    result: list[SystemFile] = []
     for f in files:
         if _matches_exclude(f.name, f.is_dir, patterns):
             continue
@@ -217,7 +217,7 @@ class Controller:
             self.action = action
             self.filename = filename
             self.pair_id = pair_id
-            self.callbacks = []
+            self.callbacks: list[Controller.Command.ICallback] = []
 
         def add_callback(self, callback: ICallback):
             self.callbacks.append(callback)
@@ -243,7 +243,7 @@ class Controller:
         self._validate_config()
 
         # The command queue
-        self.__command_queue = Queue()
+        self.__command_queue: Queue[Controller.Command] = Queue()
 
         # The model (shared across all pairs)
         self.__model = Model()
@@ -271,10 +271,10 @@ class Controller:
         self.__validate_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
         # Keep track of active command processes (shared)
-        self.__active_command_processes = []
+        self.__active_command_processes: list[Controller.CommandProcessWrapper] = []
 
         # Keep track of active move processes (staging -> final, shared)
-        self.__active_move_processes = []
+        self.__active_move_processes: list[MoveProcess] = []
         # Use composite keys (pair_id:name) to avoid collisions across pairs
         self.__moved_file_keys: set[str] = set()
 
@@ -372,7 +372,7 @@ class Controller:
             ]
 
         self.__context.status.controller.no_enabled_pairs = False
-        contexts = []
+        contexts: list[_PairContext] = []
         for pair in enabled_pairs:
             contexts.append(
                 self._create_pair_context(
@@ -632,7 +632,7 @@ class Controller:
         self.__command_queue.put(command)
 
     def __get_model_files(self) -> list[ModelFile]:
-        model_files = []
+        model_files: list[ModelFile] = []
         for file in self.__model.get_all_files():
             model_files.append(copy.deepcopy(file))
         return model_files
@@ -875,7 +875,7 @@ class Controller:
                                 pc.pending_completion.discard(diff.new_file.name)
 
                 # Prune the extracted files list of any files that were deleted locally
-                remove_extracted_keys = set()
+                remove_extracted_keys: set[str] = set()
                 for pkey in self.__persist.extracted_file_names:
                     # Find the file in the model by checking each pair
                     for _pc in self.__pair_contexts:
@@ -898,10 +898,10 @@ class Controller:
                 )
                 if all_scans_received:
                     # Build a set of all composite keys present in the model
-                    model_keys = set()
+                    model_keys: set[str] = set()
                     for f in self.__model.get_all_files():
                         model_keys.add(_persist_key(f.pair_id, f.name))
-                    absent_keys = set()
+                    absent_keys: set[str] = set()
                     for pkey in self.__persist.downloaded_file_names:
                         if pkey not in model_keys and pkey not in self.__moved_file_keys:
                             absent_keys.add(pkey)
@@ -1068,11 +1068,11 @@ class Controller:
             # Defense-in-depth: from_str() migrates colon keys at load time,
             # but we check both separators here in case of incomplete migration.
             legacy_prefix = f"{pc.pair_id}:" if pc.pair_id else ""
-            downloaded = set()
-            extracted = set()
-            extract_failed = set()
-            validated = set()
-            corrupt = set()
+            downloaded: set[str] = set()
+            extracted: set[str] = set()
+            extract_failed: set[str] = set()
+            validated: set[str] = set()
+            corrupt: set[str] = set()
             for key in self.__persist.downloaded_file_names:
                 if prefix and key.startswith(prefix):
                     downloaded.add(key[len(prefix) :])
@@ -1341,21 +1341,22 @@ class Controller:
 
         dest_path = pc.local_path
         # Use per-pair staging subdirectory
-        staging_source = (
-            os.path.join(self.__context.config.controller.staging_path, pair_id)  # type: ignore[arg-type]
+        assert self.__context.config.controller.staging_path is not None
+        staging_source: str = (
+            os.path.join(self.__context.config.controller.staging_path, pair_id)
             if pair_id
-            else self.__context.config.controller.staging_path  # type: ignore[arg-type]
+            else self.__context.config.controller.staging_path
         )
 
         # Skip if the file doesn't exist in staging (e.g. already moved in a prior session)
-        staging_file = os.path.join(staging_source, file_name)  # type: ignore[arg-type]
+        staging_file = os.path.join(staging_source, file_name)
         if not os.path.exists(staging_file):
             self.logger.debug("Skipping move for {} - not found in staging".format(file_name))
             self.__moved_file_keys.add(move_key)
             return
 
         self.__moved_file_keys.add(move_key)
-        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name)  # type: ignore[arg-type]
+        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name)
         process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
         self.__active_move_processes.append(process)
         process.start()
@@ -1366,7 +1367,7 @@ class Controller:
         Cleanup the list of active commands and do any callbacks
         :return:
         """
-        still_active_processes = []
+        still_active_processes: list[Controller.CommandProcessWrapper] = []
         for command_process in self.__active_command_processes:
             if command_process.process.is_alive():
                 still_active_processes.append(command_process)
@@ -1378,7 +1379,7 @@ class Controller:
                     self.logger.warning("Command process failed: %s", command_process.process.name, exc_info=True)
         self.__active_command_processes = still_active_processes
 
-        still_active_moves = []
+        still_active_moves: list[MoveProcess] = []
         for move_process in self.__active_move_processes:
             if move_process.is_alive():
                 still_active_moves.append(move_process)

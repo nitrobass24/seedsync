@@ -24,12 +24,12 @@ class SystemFile:
         self.__is_dir = is_dir
         self.__timestamp_created = time_created
         self.__timestamp_modified = time_modified
-        self.__children = []
+        self.__children: list[SystemFile] = []
 
     def __eq__(self, other: object) -> bool:
         return self.__dict__ == other.__dict__
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.__dict__)
 
     @property

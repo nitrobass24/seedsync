@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import json
+from typing import Any, cast
 
 from bottle import HTTPResponse, request
 
@@ -53,11 +54,12 @@ class PathPairsHandler(IHandler):
 
     def __handle_create(self):
         try:
-            data = json.loads(request.body.read().decode("utf-8"))  # type: ignore[attr-defined]
+            raw_data: Any = json.loads(request.body.read().decode("utf-8"))  # type: ignore[attr-defined]
         except (json.JSONDecodeError, UnicodeDecodeError):
             return HTTPResponse(body="Invalid JSON", status=400)
-        if not isinstance(data, dict):
+        if not isinstance(raw_data, dict):
             return HTTPResponse(body="Expected JSON object", status=400)
+        data = cast(dict[str, str | bool], raw_data)
 
         result = self.__validate_pair_params(data)
         if isinstance(result, HTTPResponse):
@@ -85,11 +87,12 @@ class PathPairsHandler(IHandler):
             return HTTPResponse(body="Path pair not found", status=404)
 
         try:
-            data = json.loads(request.body.read().decode("utf-8"))  # type: ignore[attr-defined]
+            raw_data: Any = json.loads(request.body.read().decode("utf-8"))  # type: ignore[attr-defined]
         except (json.JSONDecodeError, UnicodeDecodeError):
             return HTTPResponse(body="Invalid JSON", status=400)
-        if not isinstance(data, dict):
+        if not isinstance(raw_data, dict):
             return HTTPResponse(body="Expected JSON object", status=400)
+        data = cast(dict[str, str | bool], raw_data)
 
         result = self.__validate_pair_params(data, defaults=existing)
         if isinstance(result, HTTPResponse):

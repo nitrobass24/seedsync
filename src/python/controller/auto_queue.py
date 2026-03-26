@@ -31,13 +31,13 @@ class AutoQueuePattern(Serializable):
         return hash(self.__pattern)
 
     def to_str(self) -> str:
-        dct = dict()
+        dct: dict[str, str] = {}
         dct[AutoQueuePattern.__KEY_PATTERN] = self.__pattern
         return json.dumps(dct)
 
     @classmethod
     def from_str(cls, content: str) -> "AutoQueuePattern":
-        dct = json.loads(content)
+        dct: dict[str, str] = json.loads(content)
         return AutoQueuePattern(pattern=dct[AutoQueuePattern.__KEY_PATTERN])
 
 
@@ -62,8 +62,8 @@ class AutoQueuePersist(Persist):
     __KEY_PATTERNS = "patterns"
 
     def __init__(self):
-        self.__patterns = []
-        self.__listeners = []
+        self.__patterns: list[AutoQueuePattern] = []
+        self.__listeners: list[IAutoQueuePersistListener] = []
 
     @property
     def patterns(self) -> set[AutoQueuePattern]:
@@ -103,7 +103,7 @@ class AutoQueuePersist(Persist):
 
     @overrides(Persist)
     def to_str(self) -> str:
-        dct = dict()
+        dct: dict[str, list[str]] = {}
         dct[AutoQueuePersist.__KEY_PATTERNS] = list(p.to_str() for p in self.__patterns)
         return json.dumps(dct, indent=Constants.JSON_PRETTY_PRINT_INDENT)
 
@@ -112,8 +112,8 @@ class AutoQueueModelListener(IModelListener):
     """Keeps track of added and modified files"""
 
     def __init__(self):
-        self.new_files = []  # list of new files
-        self.modified_files = []  # list of pairs (old_file, new_file)
+        self.new_files: list[ModelFile] = []
+        self.modified_files: list[tuple[ModelFile, ModelFile]] = []
 
     @overrides(IModelListener)
     def file_added(self, file: ModelFile):
@@ -132,7 +132,7 @@ class AutoQueuePersistListener(IAutoQueuePersistListener):
     """Keeps track of newly added patterns"""
 
     def __init__(self):
-        self.new_patterns = set()
+        self.new_patterns: set[AutoQueuePattern] = set()
 
     @overrides(IAutoQueuePersistListener)
     def pattern_added(self, pattern: AutoQueuePattern):
@@ -204,10 +204,10 @@ class AutoQueue:
         ###
         # Queue (only when auto-queue is enabled)
         ###
-        files_to_queue = []
+        files_to_queue: list[tuple[str, str | None, AutoQueuePattern | None]] = []
 
         if self.__enabled:
-            queue_candidate_files = []
+            queue_candidate_files: list[ModelFile] = []
 
             # Candidate all new files
             queue_candidate_files += self.__model_listener.new_files
@@ -229,10 +229,10 @@ class AutoQueue:
         ###
         # Extract
         ###
-        files_to_extract = []
+        files_to_extract: list[tuple[str, str | None, AutoQueuePattern | None]] = []
 
         if self.__auto_extract_enabled:
-            extract_candidate_files = []
+            extract_candidate_files: list[ModelFile] = []
 
             # Candidate all new files
             extract_candidate_files += self.__model_listener.new_files
@@ -260,10 +260,10 @@ class AutoQueue:
         ###
         # Delete Remote
         ###
-        files_to_delete_remote = []
+        files_to_delete_remote: list[tuple[str, str | None, AutoQueuePattern | None]] = []
 
         if self.__auto_delete_remote_enabled:
-            delete_remote_candidate_files = []
+            delete_remote_candidate_files: list[ModelFile] = []
 
             # Candidate all new files
             delete_remote_candidate_files += self.__model_listener.new_files
@@ -365,7 +365,7 @@ class AutoQueue:
 
     def __filter_candidates(
         self, candidates: list[ModelFile], accept: Callable[[ModelFile], bool]
-    ) -> list[tuple[str, str | None, AutoQueuePattern]]:
+    ) -> list[tuple[str, str | None, AutoQueuePattern | None]]:
         """
         Given a list of candidate files, filter out those that match the accept criteria
         Also takes into consideration new patterns that were added
@@ -377,7 +377,7 @@ class AutoQueue:
         """
         # Files accepted and matched, (name, pair_id) -> pattern map
         # Composite key prevents a file from being accepted twice
-        files_matched = dict()
+        files_matched: dict[tuple[str, str | None], AutoQueuePattern | None] = {}
 
         # Step 1: run candidates through all the patterns if they are enabled
         #         otherwise accept all files

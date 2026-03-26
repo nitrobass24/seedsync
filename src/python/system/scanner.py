@@ -45,9 +45,9 @@ class SystemScanner:
         :param path_to_scan: path to file or directory to scan
         """
         self.path_to_scan = path_to_scan
-        self.exclude_prefixes = []
-        self.exclude_suffixes = [SystemScanner.__LFTP_STATUS_FILE_SUFFIX]
-        self.__lftp_temp_file_suffix = None
+        self.exclude_prefixes: list[str] = []
+        self.exclude_suffixes: list[str] = [SystemScanner.__LFTP_STATUS_FILE_SUFFIX]
+        self.__lftp_temp_file_suffix: str | None = None
 
     def add_exclude_prefix(self, prefix: str):
         """
@@ -160,7 +160,7 @@ class SystemScanner:
         return sys_file
 
     def __create_children(self, path: str) -> list[SystemFile]:
-        children = []
+        children: list[SystemFile] = []
         # Files may get deleted while scanning, ignore the error
         for entry in os.scandir(path):
             # Skip excluded entries

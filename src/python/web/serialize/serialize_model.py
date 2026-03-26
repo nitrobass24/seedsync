@@ -68,7 +68,7 @@ class SerializeModel(Serialize):
 
     @staticmethod
     def __model_file_to_json_dict(model_file: ModelFile) -> dict[str, Any]:
-        json_dict = dict()
+        json_dict: dict[str, Any] = dict()
         json_dict[SerializeModel.__KEY_FILE_NAME] = model_file.name
         json_dict[SerializeModel.__KEY_FILE_PAIR_ID] = model_file.pair_id
         json_dict[SerializeModel.__KEY_FILE_IS_DIR] = model_file.is_dir
@@ -91,7 +91,7 @@ class SerializeModel(Serialize):
             str(model_file.remote_modified_timestamp.timestamp()) if model_file.remote_modified_timestamp else None
         )
         json_dict[SerializeModel.__KEY_FILE_FULL_PATH] = model_file.full_path
-        json_dict[SerializeModel.__KEY_FILE_CHILDREN] = list()
+        json_dict[SerializeModel.__KEY_FILE_CHILDREN] = list[dict[str, Any]]()
         for child in model_file.get_children():
             json_dict[SerializeModel.__KEY_FILE_CHILDREN].append(SerializeModel.__model_file_to_json_dict(child))
         return json_dict

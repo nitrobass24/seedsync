@@ -42,7 +42,7 @@ class LftpJobStatus:
         self.__total_transfer_state = LftpJobStatus.TransferState(None, None, None, None, None)
         # dict of active file transfer states, maps filename to their transfer state
         # there's no hierarchical info for now
-        self.__active_files_state = {}
+        self.__active_files_state: dict[str, LftpJobStatus.TransferState] = {}
 
     @property
     def id(self) -> int:
@@ -85,8 +85,8 @@ class LftpJobStatus:
     def __eq__(self, other: object) -> bool:
         return self.__dict__ == other.__dict__
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.__dict__)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.__dict__)

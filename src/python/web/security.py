@@ -116,7 +116,7 @@ class _RateLimiter:
     def __init__(self, max_requests: int = 120, window_seconds: int = 60, sweep_interval: int = 300):
         self._max = max_requests
         self._window = window_seconds
-        self._hits = defaultdict(list)  # ip -> [timestamps]
+        self._hits: defaultdict[str, list[float]] = defaultdict(list)
         self._lock = threading.Lock()
         self._sweep_interval = sweep_interval
         self._last_sweep = time.monotonic()
@@ -184,7 +184,7 @@ def install_rate_limiting(app: bottle.Bottle, *, trust_x_forwarded_for: bool = F
             return
 
         # Only trust X-Forwarded-For when explicitly enabled (behind trusted reverse proxy)
-        ip = None
+        ip: str | None = None
         if trust_x_forwarded_for:
             forwarded = bottle.request.get_header("X-Forwarded-For")
             if forwarded:
@@ -192,6 +192,7 @@ def install_rate_limiting(app: bottle.Bottle, *, trust_x_forwarded_for: bool = F
         if not ip:
             ip = bottle.request.environ.get("REMOTE_ADDR", "127.0.0.1")
 
+        assert ip is not None
         if not limiter.is_allowed(ip):
             retry = limiter.retry_after(ip)
             resp = bottle.HTTPError(429, "Rate limit exceeded")

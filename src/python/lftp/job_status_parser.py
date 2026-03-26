@@ -89,7 +89,7 @@ class LftpJobStatusParser:
         return ansi_pattern.sub("", text)
 
     def parse(self, output: str) -> list[LftpJobStatus]:
-        statuses = list()
+        statuses: list[LftpJobStatus] = list()
         # Strip ANSI escape codes that may be present in terminal output
         output = self._strip_ansi_codes(output)
         # Phase 1: Strip junk before the first 'jobs -v' command echo.
@@ -119,7 +119,7 @@ class LftpJobStatusParser:
         return statuses
 
     def __parse_jobs(self, lines: list[str]) -> list[LftpJobStatus]:
-        jobs = []
+        jobs: list[LftpJobStatus] = []
 
         # Header patterns
         # pget header
@@ -261,7 +261,7 @@ class LftpJobStatusParser:
         )
         chunk_wrap_m = re.compile(chunk_wrap_pattern)
 
-        prev_job = None
+        prev_job: LftpJobStatus | None = None
         while lines:
             line = lines.pop(0)
 
@@ -541,7 +541,7 @@ class LftpJobStatusParser:
 
     @staticmethod
     def __parse_queue(lines: list[str]) -> list[LftpJobStatus]:
-        queue = []
+        queue: list[LftpJobStatus] = []
 
         queue_done_m = re.compile(LftpJobStatusParser.__QUEUE_DONE_REGEX)
         if len(lines) == 1:

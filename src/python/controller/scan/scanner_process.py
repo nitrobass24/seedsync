@@ -1,4 +1,5 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
+from __future__ import annotations
 
 import logging
 import multiprocessing
@@ -65,7 +66,7 @@ class ScannerProcess(AppProcess):
         :param interval_in_ms: Minimum interval (in ms) between results
         """
         super().__init__(name=scanner.__class__.__name__)
-        self.__queue = multiprocessing.Queue()
+        self.__queue: multiprocessing.Queue[ScannerResult] = multiprocessing.Queue()
         self.__wake_event = multiprocessing.Event()
         self.__scanner = scanner
         self.__interval_in_ms = interval_in_ms

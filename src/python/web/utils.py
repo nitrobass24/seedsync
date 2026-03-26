@@ -1,5 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from __future__ import annotations
+
 from queue import Empty, Queue
 from typing import Generic, TypeVar
 
@@ -15,7 +17,7 @@ class StreamQueue(Generic[T]):
     """
 
     def __init__(self):
-        self.__queue = Queue()
+        self.__queue: Queue[T] = Queue()
 
     def put(self, event: T):
         self.__queue.put(event)

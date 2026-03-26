@@ -110,11 +110,11 @@ class ValidateProcess(AppProcess):
 
     def __init__(self):
         super().__init__(name=self.__class__.__name__)
-        self.__command_queue = multiprocessing.Queue()
-        self.__status_result_queue = multiprocessing.Queue()
-        self.__completed_result_queue = multiprocessing.Queue()
-        self.__failed_result_queue = multiprocessing.Queue()
-        self.__active_validations = {}  # (pair_id, name) -> ValidateRequest
+        self.__command_queue: multiprocessing.Queue[ValidateRequest] = multiprocessing.Queue()
+        self.__status_result_queue: multiprocessing.Queue[ValidateStatusResult] = multiprocessing.Queue()
+        self.__completed_result_queue: multiprocessing.Queue[ValidateCompletedResult] = multiprocessing.Queue()
+        self.__failed_result_queue: multiprocessing.Queue[ValidateFailedResult] = multiprocessing.Queue()
+        self.__active_validations: dict[tuple[str, str], ValidateRequest] = {}
 
     @overrides(AppProcess)
     def run_init(self):
@@ -238,7 +238,7 @@ class ValidateProcess(AppProcess):
         Files only on one side are flagged as mismatches.
         """
         # Build local file set (relative paths from local_dir)
-        local_rel_paths = set()
+        local_rel_paths: set[str] = set()
         for root, _dirs, files in os.walk(local_dir):
             for filename in files:
                 local_file = os.path.join(root, filename)
@@ -252,7 +252,7 @@ class ValidateProcess(AppProcess):
         try:
             find_output = sshcp.shell(find_cmd)
             remote_abs_paths = find_output.decode().strip().split("\n")
-            remote_rel_paths = set()
+            remote_rel_paths: set[str] = set()
             for abs_path in remote_abs_paths:
                 abs_path = abs_path.strip()
                 if abs_path:
@@ -263,7 +263,7 @@ class ValidateProcess(AppProcess):
 
         # Validate the union of both sets
         all_paths = local_rel_paths | remote_rel_paths
-        mismatches = []
+        mismatches: list[str] = []
 
         for rel_path in sorted(all_paths):
             local_file = os.path.join(req.local_path, rel_path)
@@ -376,7 +376,7 @@ class ValidateProcess(AppProcess):
 
     def pop_completed(self) -> list[ValidateCompletedResult]:
         """Process-safe method to retrieve newly completed validations."""
-        completed = []
+        completed: list[ValidateCompletedResult] = []
         try:
             while True:
                 result = self.__completed_result_queue.get(block=False)
@@ -387,7 +387,7 @@ class ValidateProcess(AppProcess):
 
     def pop_failed(self) -> list[ValidateFailedResult]:
         """Process-safe method to retrieve newly failed validations."""
-        failed = []
+        failed: list[ValidateFailedResult] = []
         try:
             while True:
                 result = self.__failed_result_queue.get(block=False)
