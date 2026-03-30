@@ -1256,8 +1256,9 @@ class Controller:
                         file_name=file.name,
                     )
                     process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
-                    post_callback = pc.remote_scan_process.force_scan
-                    command_wrapper = Controller.CommandProcessWrapper(process=process, post_callback=post_callback)
+                    command_wrapper = Controller.CommandProcessWrapper(
+                        process=process, post_callback=pc.remote_scan_process.force_scan
+                    )
                     self.__active_command_processes.append(command_wrapper)
                     command_wrapper.process.start()
 
