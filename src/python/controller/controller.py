@@ -58,10 +58,9 @@ def _filter_children(file: SystemFile, patterns: list[tuple[str, bool]]) -> Syst
             child = _filter_children(child, patterns)
         kept_children.append(child)
 
-    size = sum(c.size for c in kept_children) if file.is_dir else file.size
     filtered = SystemFile(
         name=file.name,
-        size=size,
+        size=file.size,
         is_dir=file.is_dir,
         time_created=file.timestamp_created,
         time_modified=file.timestamp_modified,
@@ -282,6 +281,9 @@ class Controller:
         self.__active_move_processes: list[MoveProcess] = []
         # Use composite keys (pair_id:name) to avoid collisions across pairs
         self.__moved_file_keys: set[str] = set()
+
+        # Track files with pending validation so extraction-completion doesn't race the move
+        self.__pending_validation_keys: set[str] = set()
 
         # Track extraction retry counts by composite key (in-memory, resets on restart)
 
@@ -733,7 +735,8 @@ class Controller:
                 pkey = _persist_key(result.pair_id, result.name)
                 self.__persist.extracted_file_names.add(pkey)
                 if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-                    self.__spawn_move_process(result.name, owner_pc)
+                    if pkey not in self.__pending_validation_keys:
+                        self.__spawn_move_process(result.name, owner_pc)
             self._sync_persist_to_all_builders()
 
         # Build an aggregate new model from all pairs
@@ -844,6 +847,7 @@ class Controller:
                                 remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
                             )
                             self.__validate_process.validate(req)
+                            self.__pending_validation_keys.add(_persist_key(pc.pair_id, diff.new_file.name))
                             self.logger.info("Auto-queued validation for '{}'".format(diff.new_file.name))
 
                         if (
@@ -948,6 +952,7 @@ class Controller:
         for result in latest_validated_results:
             self.logger.info("Validation passed for '{}'".format(result.name))
             pkey = _persist_key(result.pair_id, result.name)
+            self.__pending_validation_keys.discard(pkey)
             self.__persist.validated_file_names.add(pkey)
             self.__persist.corrupt_file_names.discard(pkey)
             self._sync_persist_to_all_builders()
@@ -958,6 +963,7 @@ class Controller:
         for result in latest_failed_validations:
             self.logger.error("Validation failed for '{}': {}".format(result.name, result.error_message))
             pkey = _persist_key(result.pair_id, result.name)
+            self.__pending_validation_keys.discard(pkey)
             if result.is_checksum_mismatch:
                 # Checksum mismatch — mark as corrupt
                 self.__persist.corrupt_file_names.add(pkey)
@@ -1294,6 +1300,7 @@ class Controller:
                         remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
                     )
                     self.__validate_process.validate(req)
+                    self.__pending_validation_keys.add(pkey)
 
             for callback in command.callbacks:
                 callback.on_success()
