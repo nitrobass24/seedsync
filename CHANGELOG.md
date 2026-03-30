@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.14.4] - 2026-03-30
+
+### Changed
+
+- **Pyright strict mode** — Upgraded Pyright type checking from basic to strict mode across the entire Python codebase; added type stubs for bottle, pexpect, and tblib (#291, #316)
+
+### Fixed
+
+- **Extraction-move validation race** — Extraction completion no longer spawns a staging move while validation is still running; the move is deferred to the validation completion path (#316)
+- **Directory size preservation in exclude filter** — `_filter_children` now preserves scanner-reported directory sizes instead of recomputing from filtered children, preventing `remote_size` divergence (#316)
+
+### Security
+
+- **Website dependency bumps** — Fixed 4 vulnerabilities in website transitive dependencies: brace-expansion, path-to-regexp, picomatch, minimatch (#324)
+- **Pygments 2.20.0** — Bumped pygments to fix ReDoS vulnerability GHSA-5239-wwwm-4pmq (#325)
+
 ## [0.14.3] - 2026-03-25
 
 ### Added
