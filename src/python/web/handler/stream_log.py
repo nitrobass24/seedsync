@@ -71,7 +71,7 @@ class QueueLogHandler(logging.Handler, StreamQueue[logging.LogRecord]):
 
     def __init__(self):
         logging.Handler.__init__(self)
-        StreamQueue[logging.LogRecord].__init__(self)
+        StreamQueue.__init__(self)  # type: ignore[reportUnknownMemberType]
 
     @overrides(logging.Handler)
     def emit(self, record: logging.LogRecord) -> None:
