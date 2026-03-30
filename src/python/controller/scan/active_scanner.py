@@ -1,4 +1,5 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
+from __future__ import annotations
 
 import logging
 import multiprocessing
@@ -22,8 +23,8 @@ class ActiveScanner(IScanner):
         self.__scanner = SystemScanner(local_path)
         if lftp_temp_suffix:
             self.__scanner.set_lftp_temp_suffix(lftp_temp_suffix)
-        self.__active_files_queue = multiprocessing.Queue()
-        self.__active_files = []  # latest state
+        self.__active_files_queue: multiprocessing.Queue[list[str]] = multiprocessing.Queue()
+        self.__active_files: list[str] = []
         self.logger = logging.getLogger(self.__class__.__name__)
 
     @overrides(IScanner)
@@ -54,7 +55,7 @@ class ActiveScanner(IScanner):
 
         # Do the scan
         # self.logger.debug("Scanning files: {}".format(str(self.__active_files)))
-        result = []
+        result: list[SystemFile] = []
         for file_name in self.__active_files:
             try:
                 result.append(self.__scanner.scan_single(file_name))

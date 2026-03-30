@@ -3,7 +3,8 @@
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from typing import Any
 
 import bottle
 from bottle import static_file
@@ -45,7 +46,7 @@ class IStreamHandler(ABC):
         pass
 
     @classmethod
-    def register(cls, web_app: "WebApp", **kwargs):
+    def register(cls, web_app: "WebApp", **kwargs: Any) -> None:
         """
         Register this streaming handler with the web app
         :param web_app: web_app instance
@@ -71,7 +72,7 @@ class WebApp(bottle.Bottle):
         self.__status = context.status
         self.logger.info("Html path set to: {}".format(self.__html_path))
         self._stop_event = threading.Event()
-        self._streaming_handlers = []  # list of (handler, kwargs) pairs
+        self._streaming_handlers: list[tuple[type[IStreamHandler], dict[str, Any]]] = []
 
     def add_default_routes(self):
         """
@@ -92,19 +93,19 @@ class WebApp(bottle.Bottle):
         # For static files
         self.route("/<file_path:path>")(self.__static)  # type: ignore[operator]
 
-    def add_handler(self, path: str, handler: Callable):
+    def add_handler(self, path: str, handler: Callable[..., Any]) -> None:
         self.get(path)(handler)  # type: ignore[operator]
 
-    def add_post_handler(self, path: str, handler: Callable):
+    def add_post_handler(self, path: str, handler: Callable[..., Any]) -> None:
         self.post(path)(handler)  # type: ignore[operator]
 
-    def add_put_handler(self, path: str, handler: Callable):
+    def add_put_handler(self, path: str, handler: Callable[..., Any]) -> None:
         self.put(path)(handler)  # type: ignore[operator]
 
-    def add_delete_handler(self, path: str, handler: Callable):
+    def add_delete_handler(self, path: str, handler: Callable[..., Any]) -> None:
         self.delete(path)(handler)  # type: ignore[operator]
 
-    def add_streaming_handler(self, handler: type[IStreamHandler], **kwargs):
+    def add_streaming_handler(self, handler: type[IStreamHandler], **kwargs: Any) -> None:
         self._streaming_handlers.append((handler, kwargs))
 
     def process(self):
@@ -135,11 +136,12 @@ class WebApp(bottle.Bottle):
         :param file_path:
         :return:
         """
+        assert self.__html_path is not None
         return static_file(file_path, root=self.__html_path)
 
-    def __web_stream(self):
+    def __web_stream(self) -> Iterator[str]:
         # Initialize all the handlers
-        handlers = [cls(**kwargs) for (cls, kwargs) in self._streaming_handlers]
+        handlers: list[IStreamHandler] = [cls(**kwargs) for (cls, kwargs) in self._streaming_handlers]
 
         try:
             # Setup the response header

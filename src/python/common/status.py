@@ -43,8 +43,8 @@ class StatusComponent(BaseStatus):
     """
 
     def __init__(self):
-        self.__listeners = []
-        self.__properties = []  # names of properties created
+        self.__listeners: list[IStatusComponentListener] = []
+        self.__properties: list[str] = []  # names of properties created
 
     def add_listener(self, listener: IStatusComponentListener):
         if listener not in self.__listeners:
@@ -133,7 +133,7 @@ class Status(BaseStatus):
     controller = BaseStatus._create_property("controller")
 
     def __init__(self):
-        self._listeners = []
+        self._listeners: list[IStatusListener] = []
         self._listeners_lock = Lock()
         self.__comp_listener = Status.CompListener(self)
 

@@ -13,7 +13,7 @@ class SerializeConfig:
 
         # Make the section names lower case
         keys = list(config_dict.keys())
-        config_dict_lowercase = collections.OrderedDict()
+        config_dict_lowercase: collections.OrderedDict[str, dict[str, str]] = collections.OrderedDict()
         for key in keys:
             config_dict_lowercase[key.lower()] = config_dict[key]
 

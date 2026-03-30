@@ -60,13 +60,13 @@ class LogsHandler(IHandler):
 
         return HTTPResponse(body=json.dumps(entries), content_type="application/json")
 
-    def _read_logs(self, search: str, min_level: int, limit: int, before: int) -> list[dict]:
-        entries = []
+    def _read_logs(self, search: str, min_level: int, limit: int, before: int) -> list[dict[str, str]]:
+        entries: list[dict[str, str]] = []
         assert self._logdir is not None
         base_path = os.path.join(self._logdir, "{}.log".format(self._service_name))
 
         # Gather log file paths: .log, .log.1, .log.2, ... up to backup count
-        log_files = []
+        log_files: list[str] = []
         if os.path.isfile(base_path):
             log_files.append(base_path)
         for i in range(1, Constants.LOG_BACKUP_COUNT + 1):
@@ -118,7 +118,7 @@ class LogsHandler(IHandler):
         return entries
 
     @staticmethod
-    def _entry_matches(entry: dict, search: str, min_level: int) -> bool:
+    def _entry_matches(entry: dict[str, str], search: str, min_level: int) -> bool:
         if min_level > 0:
             entry_level = _LEVEL_ORDER.get(entry["level"], 0)
             if entry_level < min_level:

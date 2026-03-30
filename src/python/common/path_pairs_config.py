@@ -5,6 +5,7 @@ import json
 import logging
 import threading
 import uuid
+from typing import Any, cast
 
 from .persist import Persist, PersistError
 
@@ -30,7 +31,7 @@ class PathPair:
         self.enabled = enabled
         self.auto_queue = auto_queue
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, str | bool]:
         return {
             "id": self.id,
             "name": self.name,
@@ -41,7 +42,7 @@ class PathPair:
         }
 
     @staticmethod
-    def from_dict(d: dict) -> "PathPair":
+    def from_dict(d: dict[str, str | bool]) -> "PathPair":
         pair_id = d["id"]
         name = d.get("name", "")
         remote_path = d["remote_path"]
@@ -69,12 +70,12 @@ class PathPair:
             auto_queue=auto_queue,
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, PathPair):
-            return False
+            return NotImplemented
         return self.to_dict() == other.to_dict()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "PathPair({})".format(self.to_dict())
 
 
@@ -136,16 +137,18 @@ class PathPairsConfig(Persist):
     @classmethod
     def from_str(cls, content: str) -> "PathPairsConfig":
         try:
-            data = json.loads(content)
+            raw: Any = json.loads(content)
         except json.JSONDecodeError as e:
             raise PersistError("Error parsing PathPairsConfig: {}".format(str(e))) from e
 
-        if not isinstance(data, dict):
+        if not isinstance(raw, dict):
             raise PersistError("Expected JSON object in PathPairsConfig")
+        data = cast(dict[str, Any], raw)
         config = PathPairsConfig()
-        pairs_list = data.get("path_pairs", [])
-        if not isinstance(pairs_list, list):
+        raw_pairs = data.get("path_pairs", [])
+        if not isinstance(raw_pairs, list):
             raise PersistError("Expected 'path_pairs' to be a list")
+        pairs_list = cast(list[dict[str, str | bool]], raw_pairs)
         for pair_dict in pairs_list:
             try:
                 config.add_pair(PathPair.from_dict(pair_dict))

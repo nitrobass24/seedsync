@@ -29,8 +29,6 @@ class Sshcp:
     SHELL_CANDIDATES = ["/bin/bash", "/usr/bin/bash", "/bin/sh", "/usr/bin/sh"]
 
     def __init__(self, host: str, port: int, user: str | None = None, password: str | None = None):
-        if host is None:
-            raise ValueError("Hostname not specified.")
         self.__host = host
         self.__port = port
         self.__user = user
@@ -141,7 +139,7 @@ class Sshcp:
         SFTP does not require a working login shell.
         Returns a list of available shell paths.
         """
-        available = []
+        available: list[str] = []
         for shell_path in self.SHELL_CANDIDATES:
             try:
                 self._sftp_stat(shell_path)

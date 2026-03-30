@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import json
+from typing import Any
 
 from common import Status
 
@@ -21,7 +22,7 @@ class SerializeStatusJson:
 
     @staticmethod
     def status(status: Status) -> str:
-        json_dict = dict()
+        json_dict: dict[str, Any] = dict()
 
         json_dict[SerializeStatusJson.__KEY_SERVER] = dict()
         json_dict[SerializeStatusJson.__KEY_SERVER][SerializeStatusJson.__KEY_SERVER_UP] = status.server.up

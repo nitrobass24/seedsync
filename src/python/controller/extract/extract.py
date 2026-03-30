@@ -38,7 +38,7 @@ class Extract:
     _7Z_TIMEOUT_SECS = 3600
 
     @staticmethod
-    def _format_7z_error(result: subprocess.CompletedProcess, prefix: str) -> str:
+    def _format_7z_error(result: subprocess.CompletedProcess[str], prefix: str) -> str:
         """Format a 7z failure message with both stderr and stdout details."""
         details = result.stderr.strip()
         if result.stdout.strip():

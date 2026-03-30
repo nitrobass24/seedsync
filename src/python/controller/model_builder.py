@@ -27,20 +27,20 @@ class ModelBuilder:
     def __init__(self, pair_id: str | None = None) -> None:
         self.logger = logging.getLogger("ModelBuilder")
         self.__pair_id = pair_id
-        self.__local_files = dict()
-        self.__active_files = dict()
-        self.__remote_files = dict()
-        self.__lftp_statuses = dict()
-        self.__downloaded_files = set()
-        self.__extract_statuses = dict()
-        self.__extracted_files = set()
-        self.__extract_failed_files = set()
-        self.__validate_statuses = dict()
-        self.__validated_files = set()
-        self.__corrupt_files = set()
+        self.__local_files: dict[str, SystemFile] = {}
+        self.__active_files: dict[str, SystemFile] = {}
+        self.__remote_files: dict[str, SystemFile] = {}
+        self.__lftp_statuses: dict[str, LftpJobStatus] = {}
+        self.__downloaded_files: set[str] = set()
+        self.__extract_statuses: dict[str, ExtractStatus] = {}
+        self.__extracted_files: set[str] = set()
+        self.__extract_failed_files: set[str] = set()
+        self.__validate_statuses: dict[str, ValidateStatus] = {}
+        self.__validated_files: set[str] = set()
+        self.__corrupt_files: set[str] = set()
         self.__auto_delete_remote = False
-        self.__cached_model = None
-        self.__smoothed_etas = dict()
+        self.__cached_model: Model | None = None
+        self.__smoothed_etas: dict[str, float] = {}
 
     def set_base_logger(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild("ModelBuilder")
@@ -161,7 +161,9 @@ class ModelBuilder:
         _dummy.propagate = False
         model.set_base_logger(_dummy)  # ignore the logs for this temp model
         effective_local = {**self.__local_files, **self.__active_files}
-        all_file_names = set().union(effective_local.keys(), self.__remote_files.keys(), self.__lftp_statuses.keys())
+        all_file_names: set[str] = set[str]().union(
+            effective_local.keys(), self.__remote_files.keys(), self.__lftp_statuses.keys()
+        )
         for name in all_file_names:
             remote = self.__remote_files.get(name, None)
             local = effective_local.get(name, None)
@@ -217,7 +219,7 @@ class ModelBuilder:
                         # also update all parent directories
                         _parent_file = _model_file.parent
                         while _parent_file is not None:
-                            if _parent_file.transferred_size is not None and _model_file.transferred_size is not None:
+                            if _parent_file.transferred_size is not None and _model_file.transferred_size is not None:  # type: ignore[reportUnnecessaryComparison]
                                 _parent_file.transferred_size += _model_file.transferred_size
                             _parent_file = _parent_file.parent
 
@@ -267,14 +269,14 @@ class ModelBuilder:
             # for the pair
             # Note: in this case the frontier contains nodes that have already been process, it is
             #       merely used for traversing children
-            frontier = []
+            frontier: list[tuple[SystemFile | None, SystemFile | None, LftpJobStatus | None, ModelFile]] = []
             if remote or local:
                 frontier.append((remote, local, status, model_file))
             while frontier:
                 _remote, _local, _status, _model_file = frontier.pop(0)
-                _remote_children = {sf.name: sf for sf in _remote.children} if _remote else {}
-                _local_children = {sf.name: sf for sf in _local.children} if _local else {}
-                _all_children_names = set().union(_remote_children.keys(), _local_children.keys())
+                _remote_children: dict[str, SystemFile] = {sf.name: sf for sf in _remote.children} if _remote else {}
+                _local_children: dict[str, SystemFile] = {sf.name: sf for sf in _local.children} if _local else {}
+                _all_children_names: set[str] = set[str]().union(_remote_children.keys(), _local_children.keys())
                 for _child_name in _all_children_names:
                     _remote_child = _remote_children.get(_child_name, None)
                     _local_child = _local_children.get(_child_name, None)
@@ -378,10 +380,10 @@ class ModelBuilder:
                     # root is a directory that also exists remotely
                     # check all the children
                     all_downloaded = True
-                    frontier = []
-                    frontier += model_file.get_children()
-                    while frontier:
-                        _child_file = frontier.pop(0)
+                    frontier_check: list[ModelFile] = []
+                    frontier_check += model_file.get_children()
+                    while frontier_check:
+                        _child_file = frontier_check.pop(0)
                         if (
                             not _child_file.is_dir
                             and _child_file.remote_size is not None
@@ -389,7 +391,7 @@ class ModelBuilder:
                         ):
                             all_downloaded = False
                             break
-                        frontier += _child_file.get_children()
+                        frontier_check += _child_file.get_children()
                     if all_downloaded:
                         model_file.state = ModelFile.State.DOWNLOADED
                     else:

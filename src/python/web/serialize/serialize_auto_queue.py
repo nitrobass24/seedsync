@@ -10,7 +10,7 @@ class SerializeAutoQueue:
 
     @staticmethod
     def patterns(patterns: list[AutoQueuePattern]) -> str:
-        patterns_list = []
+        patterns_list: list[dict[str, str]] = []
         for pattern in patterns:
             patterns_list.append({SerializeAutoQueue.__KEY_PATTERN: pattern.pattern})
 

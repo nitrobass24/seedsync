@@ -1,5 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from __future__ import annotations
+
 import copy
 import fnmatch
 import logging
@@ -9,6 +11,10 @@ from collections.abc import Callable
 from enum import Enum
 from queue import Queue
 from threading import Lock
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from system import SystemFile
 
 from common import AppError, AppOneShotProcess, Constants, Context, MultiprocessingLogger
 from lftp import Lftp, LftpError, LftpJobStatus
@@ -16,16 +22,16 @@ from model import IModelListener, Model, ModelDiff, ModelDiffUtil, ModelError, M
 
 from .controller_persist import ControllerPersist
 from .delete import DeleteLocalProcess, DeleteRemoteProcess
-from .extract import ExtractProcess, ExtractRequest, ExtractStatus
+from .extract import ExtractProcess, ExtractRequest, ExtractStatus, ExtractStatusResult
 from .model_builder import ModelBuilder
 from .move import MoveProcess
 
 # my libs
 from .scan import ActiveScanner, LocalScanner, RemoteScanner, ScannerProcess, ScannerResult
-from .validate import ValidateProcess, ValidateRequest
+from .validate import ValidateProcess, ValidateRequest, ValidateStatusResult
 
 
-def _matches_exclude(name: str, is_dir: bool, patterns: list) -> bool:
+def _matches_exclude(name: str, is_dir: bool, patterns: list[tuple[str, bool]]) -> bool:
     """Return True if *name* matches any of the exclude patterns (case-insensitive).
 
     Each pattern is a (glob, dir_only) tuple.  When dir_only is True the
@@ -35,14 +41,22 @@ def _matches_exclude(name: str, is_dir: bool, patterns: list) -> bool:
     return any(fnmatch.fnmatch(name_lower, p.lower()) and (not dir_only or is_dir) for p, dir_only in patterns)
 
 
-def _filter_children(file, patterns: list):
+def _filter_children(file: SystemFile, patterns: list[tuple[str, bool]]) -> SystemFile:
     """Return a copy of *file* with excluded children (and their subtrees) removed.
 
     If a directory child matches a pattern the entire subtree is dropped.
     Non-matching directory children are recursed into so their own children
-    are filtered as well.
+    are filtered as well.  Directory sizes are preserved from the original file.
     """
     from system import SystemFile  # avoid circular import at module level
+
+    kept_children: list[SystemFile] = []
+    for child in file.children:
+        if _matches_exclude(child.name, child.is_dir, patterns):
+            continue  # drop matched child (and its subtree)
+        if child.is_dir:
+            child = _filter_children(child, patterns)
+        kept_children.append(child)
 
     filtered = SystemFile(
         name=file.name,
@@ -51,11 +65,7 @@ def _filter_children(file, patterns: list):
         time_created=file.timestamp_created,
         time_modified=file.timestamp_modified,
     )
-    for child in file.children:
-        if _matches_exclude(child.name, child.is_dir, patterns):
-            continue  # drop matched child (and its subtree)
-        if child.is_dir:
-            child = _filter_children(child, patterns)
+    for child in kept_children:
         filtered.add_child(child)
     return filtered
 
@@ -68,7 +78,7 @@ def parse_exclude_patterns(exclude_patterns_str: str) -> list[str]:
     """
     if not exclude_patterns_str or not exclude_patterns_str.strip():
         return []
-    patterns = []
+    patterns: list[str] = []
     for p in exclude_patterns_str.split(","):
         p = p.strip()
         if p:
@@ -76,12 +86,12 @@ def parse_exclude_patterns(exclude_patterns_str: str) -> list[str]:
     return patterns
 
 
-def filter_excluded_files(files: list, exclude_patterns_str: str) -> list:
+def filter_excluded_files(files: list[SystemFile], exclude_patterns_str: str) -> list[SystemFile]:
     parsed = parse_exclude_patterns(exclude_patterns_str)
     if not parsed:
         return files
     patterns = [(p.rstrip("/"), p.endswith("/")) for p in parsed]
-    result = []
+    result: list[SystemFile] = []
     for f in files:
         if _matches_exclude(f.name, f.is_dir, patterns):
             continue
@@ -211,7 +221,7 @@ class Controller:
             self.action = action
             self.filename = filename
             self.pair_id = pair_id
-            self.callbacks = []
+            self.callbacks: list[Controller.Command.ICallback] = []
 
         def add_callback(self, callback: ICallback):
             self.callbacks.append(callback)
@@ -221,7 +231,7 @@ class Controller:
         Wraps any one-shot command processes launched by the controller
         """
 
-        def __init__(self, process: AppOneShotProcess, post_callback: Callable):
+        def __init__(self, process: AppOneShotProcess, post_callback: Callable[[], None]):
             self.process = process
             self.post_callback = post_callback
 
@@ -237,7 +247,7 @@ class Controller:
         self._validate_config()
 
         # The command queue
-        self.__command_queue = Queue()
+        self.__command_queue: Queue[Controller.Command] = Queue()
 
         # The model (shared across all pairs)
         self.__model = Model()
@@ -265,12 +275,15 @@ class Controller:
         self.__validate_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
         # Keep track of active command processes (shared)
-        self.__active_command_processes = []
+        self.__active_command_processes: list[Controller.CommandProcessWrapper] = []
 
         # Keep track of active move processes (staging -> final, shared)
-        self.__active_move_processes = []
+        self.__active_move_processes: list[MoveProcess] = []
         # Use composite keys (pair_id:name) to avoid collisions across pairs
         self.__moved_file_keys: set[str] = set()
+
+        # Track files with pending validation so extraction-completion doesn't race the move
+        self.__pending_validation_keys: set[str] = set()
 
         # Track extraction retry counts by composite key (in-memory, resets on restart)
 
@@ -366,7 +379,7 @@ class Controller:
             ]
 
         self.__context.status.controller.no_enabled_pairs = False
-        contexts = []
+        contexts: list[_PairContext] = []
         for pair in enabled_pairs:
             contexts.append(
                 self._create_pair_context(
@@ -626,7 +639,7 @@ class Controller:
         self.__command_queue.put(command)
 
     def __get_model_files(self) -> list[ModelFile]:
-        model_files = []
+        model_files: list[ModelFile] = []
         for file in self.__model.get_all_files():
             model_files.append(copy.deepcopy(file))
         return model_files
@@ -659,7 +672,7 @@ class Controller:
             return None
         return self.__pair_contexts[0] if self.__pair_contexts else None
 
-    def _build_extract_request(self, file: ModelFile, pc: "_PairContext") -> ExtractRequest:
+    def _build_extract_request(self, file: ModelFile, pc: _PairContext) -> ExtractRequest:
         """Build an ExtractRequest with the correct pair-specific paths."""
         # Determine output directory
         if self.__context.config.controller.use_local_path_as_extract_path:
@@ -706,9 +719,25 @@ class Controller:
 
         # Process each pair context's scan results and LFTP status
         for pc in self.__pair_contexts:
-            self._update_pair_model_state(
-                pc, latest_extract_statuses, latest_extracted_results, latest_validate_statuses
-            )
+            self._update_pair_model_state(pc, latest_extract_statuses, latest_validate_statuses)
+
+        # Process extraction completions once (shared across all pairs)
+        if latest_extracted_results:
+            for result in latest_extracted_results:
+                owner_pc = self._find_pair_by_id(result.pair_id)
+                if owner_pc is None:
+                    self.logger.warning(
+                        "Ignoring extract completion for '{}': pair '{}' no longer exists".format(
+                            result.name, result.pair_id
+                        )
+                    )
+                    continue
+                pkey = _persist_key(result.pair_id, result.name)
+                self.__persist.extracted_file_names.add(pkey)
+                if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
+                    if pkey not in self.__pending_validation_keys:
+                        self.__spawn_move_process(result.name, owner_pc)
+            self._sync_persist_to_all_builders()
 
         # Build an aggregate new model from all pairs
         any_pair_has_changes = any(pc.model_builder.has_changes() for pc in self.__pair_contexts)
@@ -726,7 +755,7 @@ class Controller:
             #   2) then adding local-only files only if no other pair with the
             #      same local directory already claims a file with that name.
             seen_names_by_path: dict[str, set[str]] = {}
-            deferred_local_only: list = []  # (file, normalized_local_path)
+            deferred_local_only: list[tuple[ModelFile, str]] = []
             for pc in self.__pair_contexts:
                 norm_path = os.path.normpath(os.path.abspath(pc.local_path))
                 if norm_path not in seen_names_by_path:
@@ -808,7 +837,7 @@ class Controller:
                             req = ValidateRequest(
                                 name=diff.new_file.name,
                                 is_dir=diff.new_file.is_dir,
-                                pair_id=pc.pair_id,  # type: ignore[arg-type]
+                                pair_id=pc.pair_id,
                                 local_path=pc.effective_local_path,
                                 remote_path=pc.remote_path,
                                 algorithm=self.__context.config.validate.algorithm,  # type: ignore[arg-type]
@@ -818,6 +847,7 @@ class Controller:
                                 remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
                             )
                             self.__validate_process.validate(req)
+                            self.__pending_validation_keys.add(_persist_key(pc.pair_id, diff.new_file.name))
                             self.logger.info("Auto-queued validation for '{}'".format(diff.new_file.name))
 
                         if (
@@ -869,7 +899,7 @@ class Controller:
                                 pc.pending_completion.discard(diff.new_file.name)
 
                 # Prune the extracted files list of any files that were deleted locally
-                remove_extracted_keys = set()
+                remove_extracted_keys: set[str] = set()
                 for pkey in self.__persist.extracted_file_names:
                     # Find the file in the model by checking each pair
                     for _pc in self.__pair_contexts:
@@ -892,10 +922,10 @@ class Controller:
                 )
                 if all_scans_received:
                     # Build a set of all composite keys present in the model
-                    model_keys = set()
+                    model_keys: set[str] = set()
                     for f in self.__model.get_all_files():
                         model_keys.add(_persist_key(f.pair_id, f.name))
-                    absent_keys = set()
+                    absent_keys: set[str] = set()
                     for pkey in self.__persist.downloaded_file_names:
                         if pkey not in model_keys and pkey not in self.__moved_file_keys:
                             absent_keys.add(pkey)
@@ -922,6 +952,7 @@ class Controller:
         for result in latest_validated_results:
             self.logger.info("Validation passed for '{}'".format(result.name))
             pkey = _persist_key(result.pair_id, result.name)
+            self.__pending_validation_keys.discard(pkey)
             self.__persist.validated_file_names.add(pkey)
             self.__persist.corrupt_file_names.discard(pkey)
             self._sync_persist_to_all_builders()
@@ -932,6 +963,7 @@ class Controller:
         for result in latest_failed_validations:
             self.logger.error("Validation failed for '{}': {}".format(result.name, result.error_message))
             pkey = _persist_key(result.pair_id, result.name)
+            self.__pending_validation_keys.discard(pkey)
             if result.is_checksum_mismatch:
                 # Checksum mismatch — mark as corrupt
                 self.__persist.corrupt_file_names.add(pkey)
@@ -948,20 +980,23 @@ class Controller:
 
         # Update the controller status (use most recent across all pairs)
         for pc in self.__pair_contexts:
-            if pc._latest_remote_scan is not None:
+            if pc._latest_remote_scan is not None:  # type: ignore[reportPrivateUsage]
                 current = self.__context.status.controller.latest_remote_scan_time
-                if current is None or pc._latest_remote_scan.timestamp > current:
-                    self.__context.status.controller.latest_remote_scan_time = pc._latest_remote_scan.timestamp
-                    self.__context.status.controller.latest_remote_scan_failed = pc._latest_remote_scan.failed
-                    self.__context.status.controller.latest_remote_scan_error = pc._latest_remote_scan.error_message
-            if pc._latest_local_scan is not None:
+                if current is None or pc._latest_remote_scan.timestamp > current:  # type: ignore[reportPrivateUsage]
+                    self.__context.status.controller.latest_remote_scan_time = pc._latest_remote_scan.timestamp  # type: ignore[reportPrivateUsage]
+                    self.__context.status.controller.latest_remote_scan_failed = pc._latest_remote_scan.failed  # type: ignore[reportPrivateUsage]
+                    self.__context.status.controller.latest_remote_scan_error = pc._latest_remote_scan.error_message  # type: ignore[reportPrivateUsage]
+            if pc._latest_local_scan is not None:  # type: ignore[reportPrivateUsage]
                 current = self.__context.status.controller.latest_local_scan_time
-                if current is None or pc._latest_local_scan.timestamp > current:
-                    self.__context.status.controller.latest_local_scan_time = pc._latest_local_scan.timestamp
+                if current is None or pc._latest_local_scan.timestamp > current:  # type: ignore[reportPrivateUsage]
+                    self.__context.status.controller.latest_local_scan_time = pc._latest_local_scan.timestamp  # type: ignore[reportPrivateUsage]
 
     def _update_pair_model_state(
-        self, pc: _PairContext, latest_extract_statuses, latest_extracted_results, latest_validate_statuses
-    ):
+        self,
+        pc: _PairContext,
+        latest_extract_statuses: ExtractStatusResult | None,
+        latest_validate_statuses: ValidateStatusResult | None,
+    ) -> None:
         """
         Update a single pair context's scan results, LFTP status, and model builder state.
         """
@@ -969,8 +1004,8 @@ class Controller:
         latest_local_scan = pc.local_scan_process.pop_latest_result()
         latest_active_scan = pc.active_scan_process.pop_latest_result()
 
-        pc._latest_remote_scan = latest_remote_scan
-        pc._latest_local_scan = latest_local_scan
+        pc._latest_remote_scan = latest_remote_scan  # type: ignore[reportPrivateUsage]
+        pc._latest_local_scan = latest_local_scan  # type: ignore[reportPrivateUsage]
 
         lftp_statuses = None
         try:
@@ -1028,22 +1063,6 @@ class Controller:
         if latest_validate_statuses is not None:
             pair_validate_statuses = [s for s in latest_validate_statuses.statuses if s.pair_id == pc.pair_id]
             pc.model_builder.set_validate_statuses(pair_validate_statuses)
-        if latest_extracted_results:
-            for result in latest_extracted_results:
-                # Use pair_id from the extraction result
-                owner_pc = self._find_pair_by_id(result.pair_id)
-                if owner_pc is None:
-                    self.logger.warning(
-                        "Ignoring extract completion for '{}': pair '{}' no longer exists".format(
-                            result.name, result.pair_id
-                        )
-                    )
-                    continue
-                pkey = _persist_key(result.pair_id, result.name)
-                self.__persist.extracted_file_names.add(pkey)
-                if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-                    self.__spawn_move_process(result.name, owner_pc)
-            self._sync_persist_to_all_builders()
 
     def _sync_persist_to_all_builders(self):
         """Push current persist state to all pair model builders, filtered by pair_id."""
@@ -1058,11 +1077,11 @@ class Controller:
             # Defense-in-depth: from_str() migrates colon keys at load time,
             # but we check both separators here in case of incomplete migration.
             legacy_prefix = f"{pc.pair_id}:" if pc.pair_id else ""
-            downloaded = set()
-            extracted = set()
-            extract_failed = set()
-            validated = set()
-            corrupt = set()
+            downloaded: set[str] = set()
+            extracted: set[str] = set()
+            extract_failed: set[str] = set()
+            validated: set[str] = set()
+            corrupt: set[str] = set()
             for key in self.__persist.downloaded_file_names:
                 if prefix and key.startswith(prefix):
                     downloaded.add(key[len(prefix) :])
@@ -1200,7 +1219,7 @@ class Controller:
                     process = DeleteLocalProcess(local_path=delete_path, file_name=file.name)
                     process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
-                    def post_callback(delete_path=delete_path, _pc=pc):
+                    def post_callback(delete_path: str = delete_path, _pc: _PairContext = pc) -> None:
                         _pc.local_scan_process.force_scan()
                         if delete_path != _pc.local_path:
                             _pc.active_scan_process.force_scan()
@@ -1237,8 +1256,9 @@ class Controller:
                         file_name=file.name,
                     )
                     process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
-                    post_callback = pc.remote_scan_process.force_scan  # type: ignore[assignment]
-                    command_wrapper = Controller.CommandProcessWrapper(process=process, post_callback=post_callback)
+                    command_wrapper = Controller.CommandProcessWrapper(
+                        process=process, post_callback=pc.remote_scan_process.force_scan
+                    )
                     self.__active_command_processes.append(command_wrapper)
                     command_wrapper.process.start()
 
@@ -1271,7 +1291,7 @@ class Controller:
                     req = ValidateRequest(
                         name=file.name,
                         is_dir=file.is_dir,
-                        pair_id=pc.pair_id,  # type: ignore[arg-type]
+                        pair_id=pc.pair_id,
                         local_path=pc.effective_local_path,
                         remote_path=pc.remote_path,
                         algorithm=self.__context.config.validate.algorithm,  # type: ignore[arg-type]
@@ -1281,6 +1301,7 @@ class Controller:
                         remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
                     )
                     self.__validate_process.validate(req)
+                    self.__pending_validation_keys.add(pkey)
 
             for callback in command.callbacks:
                 callback.on_success()
@@ -1331,21 +1352,20 @@ class Controller:
 
         dest_path = pc.local_path
         # Use per-pair staging subdirectory
-        staging_source = (
-            os.path.join(self.__context.config.controller.staging_path, pair_id)  # type: ignore[arg-type]
-            if pair_id
-            else self.__context.config.controller.staging_path  # type: ignore[arg-type]
-        )
+        # All callers guard with `use_staging and staging_path` so this is safe
+        staging_path = self.__context.config.controller.staging_path
+        assert isinstance(staging_path, str)
+        staging_source: str = os.path.join(staging_path, pair_id) if pair_id else staging_path
 
         # Skip if the file doesn't exist in staging (e.g. already moved in a prior session)
-        staging_file = os.path.join(staging_source, file_name)  # type: ignore[arg-type]
+        staging_file = os.path.join(staging_source, file_name)
         if not os.path.exists(staging_file):
             self.logger.debug("Skipping move for {} - not found in staging".format(file_name))
             self.__moved_file_keys.add(move_key)
             return
 
         self.__moved_file_keys.add(move_key)
-        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name)  # type: ignore[arg-type]
+        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name)
         process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
         self.__active_move_processes.append(process)
         process.start()
@@ -1356,7 +1376,7 @@ class Controller:
         Cleanup the list of active commands and do any callbacks
         :return:
         """
-        still_active_processes = []
+        still_active_processes: list[Controller.CommandProcessWrapper] = []
         for command_process in self.__active_command_processes:
             if command_process.process.is_alive():
                 still_active_processes.append(command_process)
@@ -1368,7 +1388,7 @@ class Controller:
                     self.logger.warning("Command process failed: %s", command_process.process.name, exc_info=True)
         self.__active_command_processes = still_active_processes
 
-        still_active_moves = []
+        still_active_moves: list[MoveProcess] = []
         for move_process in self.__active_move_processes:
             if move_process.is_alive():
                 still_active_moves.append(move_process)
@@ -1378,6 +1398,6 @@ class Controller:
                     pc.local_scan_process.force_scan()
         self.__active_move_processes = still_active_moves
 
-    def _apply_exclude_patterns(self, files: list) -> list:
+    def _apply_exclude_patterns(self, files: list[SystemFile]) -> list[SystemFile]:
         raw = self.__context.config.general.exclude_patterns
         return filter_excluded_files(files, raw)
