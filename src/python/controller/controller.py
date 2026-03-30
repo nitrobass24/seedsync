@@ -11,7 +11,7 @@ from collections.abc import Callable
 from enum import Enum
 from queue import Queue
 from threading import Lock
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from system import SystemFile
@@ -1219,7 +1219,7 @@ class Controller:
                     process = DeleteLocalProcess(local_path=delete_path, file_name=file.name)
                     process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
-                    def post_callback(delete_path: str = delete_path, _pc: Any = pc) -> None:
+                    def post_callback(delete_path: str = delete_path, _pc: _PairContext = pc) -> None:
                         _pc.local_scan_process.force_scan()
                         if delete_path != _pc.local_path:
                             _pc.active_scan_process.force_scan()
