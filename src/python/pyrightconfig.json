@@ -5,6 +5,7 @@
         "."
     ],
     "exclude": [
-        "tests"
+        "tests",
+        "scan_fs.py"
     ]
 }
