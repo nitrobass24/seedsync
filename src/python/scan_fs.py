@@ -13,7 +13,7 @@ import os
 import re
 import sys
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 class SystemFile:
@@ -38,7 +38,7 @@ class SystemFile:
         self.__is_dir = is_dir
         self.__timestamp_created = time_created
         self.__timestamp_modified = time_modified
-        self.__children = []
+        self.__children = []  # type: List[SystemFile]
 
     @property
     def name(self) -> str:
@@ -61,7 +61,7 @@ class SystemFile:
             raise TypeError("Cannot add children to a file")
         self.__children.append(file)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> "Dict[str, Any]":
         return {
             "name": self.__name,
             "size": self.__size,
@@ -86,8 +86,8 @@ class SystemScanner:
 
     def __init__(self, path_to_scan: str):
         self.path_to_scan = path_to_scan
-        self.exclude_prefixes = []
-        self.exclude_suffixes = [SystemScanner.__LFTP_STATUS_FILE_SUFFIX]
+        self.exclude_prefixes = []  # type: List[str]
+        self.exclude_suffixes = [SystemScanner.__LFTP_STATUS_FILE_SUFFIX]  # type: List[str]
 
     def add_exclude_prefix(self, prefix: str):
         self.exclude_prefixes.append(prefix)
@@ -102,16 +102,15 @@ class SystemScanner:
             raise SystemScannerError("Path is not a directory: {}".format(self.path_to_scan))
         return self.__create_children(self.path_to_scan)
 
-    def __create_system_file(self, entry) -> SystemFile:
+    def __create_system_file(self, entry: "os.DirEntry[str]") -> SystemFile:
         if entry.is_dir(follow_symlinks=False):
             sub_children = self.__create_children(entry.path)
             name = entry.name.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
             size = sum(sub_child.size for sub_child in sub_children)
             time_created = None
-            try:
-                time_created = datetime.fromtimestamp(entry.stat().st_birthtime)
-            except AttributeError:
-                pass
+            birthtime = getattr(entry.stat(), "st_birthtime", None)
+            if birthtime is not None:
+                time_created = datetime.fromtimestamp(birthtime)
             time_modified = datetime.fromtimestamp(entry.stat().st_mtime)
             sys_file = SystemFile(name, size, True, time_created=time_created, time_modified=time_modified)
             for sub_child in sub_children:
@@ -124,16 +123,15 @@ class SystemScanner:
                     file_size = SystemScanner._lftp_status_file_size(f.read())
             file_name = entry.name.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
             time_created = None
-            try:
-                time_created = datetime.fromtimestamp(entry.stat().st_birthtime)
-            except AttributeError:
-                pass
+            birthtime = getattr(entry.stat(), "st_birthtime", None)
+            if birthtime is not None:
+                time_created = datetime.fromtimestamp(birthtime)
             time_modified = datetime.fromtimestamp(entry.stat().st_mtime)
             sys_file = SystemFile(file_name, file_size, False, time_created=time_created, time_modified=time_modified)
         return sys_file
 
     def __create_children(self, path: str) -> "List[SystemFile]":
-        children = []
+        children = []  # type: List[SystemFile]
         for entry in os.scandir(path):
             skip = False
             for prefix in self.exclude_prefixes:

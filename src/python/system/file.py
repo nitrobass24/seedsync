@@ -24,12 +24,14 @@ class SystemFile:
         self.__is_dir = is_dir
         self.__timestamp_created = time_created
         self.__timestamp_modified = time_modified
-        self.__children = []
+        self.__children: list[SystemFile] = []
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, SystemFile):
+            return NotImplemented
         return self.__dict__ == other.__dict__
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.__dict__)
 
     @property
@@ -72,7 +74,7 @@ class SystemFile:
         }
 
     @staticmethod
-    def from_dict(d: dict) -> "SystemFile":
+    def from_dict(d: dict[str, Any]) -> "SystemFile":
         tc = datetime.fromisoformat(d["time_created"]) if d.get("time_created") else None
         tm = datetime.fromisoformat(d["time_modified"]) if d.get("time_modified") else None
         sf = SystemFile(

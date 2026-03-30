@@ -120,16 +120,16 @@ class InnerConfig(ABC):
     class PropMetadata:
         """Tracks property metadata"""
 
-        def __init__(self, checker: Callable, converter: Callable):
+        def __init__(self, checker: Callable[..., Any], converter: Callable[..., Any]):
             self.checker = checker
             self.converter = converter
 
     # Global map to map a property to its metadata
     # Is there a way for each concrete class to do this separately?
-    __prop_addon_map = collections.OrderedDict()
+    __prop_addon_map: collections.OrderedDict[property, "InnerConfig.PropMetadata"] = collections.OrderedDict()
 
     @classmethod
-    def _create_property(cls, name: str, checker: Callable, converter: Callable) -> property:
+    def _create_property(cls, name: str, checker: Callable[..., Any], converter: Callable[..., Any]) -> property:
         # noinspection PyProtectedMember
         prop = property(fget=lambda s: s._get_property(name), fset=lambda s, v: s._set_property(name, v, checker))
         prop_addon = InnerConfig.PropMetadata(checker=checker, converter=converter)
@@ -139,7 +139,7 @@ class InnerConfig(ABC):
     def _get_property(self, name: str) -> Any:
         return getattr(self, "__" + name, None)
 
-    def _set_property(self, name: str, value: Any, checker: Callable):
+    def _set_property(self, name: str, value: Any, checker: Callable[..., Any]):
         # Allow setting to None for the first time
         if value is None and self._get_property(name) is None:
             setattr(self, "__" + name, None)
@@ -184,7 +184,7 @@ class InnerConfig(ABC):
         Return the dict representation of the inner config
         :return:
         """
-        config_dict = collections.OrderedDict()
+        config_dict: collections.OrderedDict[str, Any] = collections.OrderedDict()
         cls = self.__class__
         my_property_to_name_map = {getattr(cls, p): p for p in dir(cls) if isinstance(getattr(cls, p), property)}
         # Arrange prop names in order of creation. Use the prop map to get the order
@@ -227,7 +227,7 @@ class InnerConfig(ABC):
 # Useful aliases
 IC = InnerConfig
 # noinspection PyProtectedMember
-PROP = InnerConfig._create_property
+PROP = InnerConfig._create_property  # type: ignore[reportPrivateUsage]
 
 
 class Config(Persist):
@@ -412,7 +412,7 @@ class Config(Persist):
             config_parser.read_string(content)
         except (configparser.MissingSectionHeaderError, configparser.ParsingError) as e:
             raise PersistError("Error parsing Config - {}: {}".format(type(e).__name__, str(e)))
-        config_dict = {}
+        config_dict: OuterConfigType = {}
         for section in config_parser.sections():
             config_dict[section] = {}
             for option in config_parser.options(section):
@@ -428,7 +428,7 @@ class Config(Persist):
             section_dict = config_dict[section]
             for key in section_dict:
                 value = section_dict[key]
-                config_parser.set(section, key, "" if value is None else str(value))
+                config_parser.set(section, key, "" if value is None else str(value))  # type: ignore[reportUnnecessaryComparison]
         str_io = StringIO()
         config_parser.write(str_io)
         return str_io.getvalue()
@@ -453,7 +453,7 @@ class Config(Persist):
     def as_dict(self) -> OuterConfigType:
         # We convert all values back to strings
         # Use an ordered dict to main section order
-        config_dict = collections.OrderedDict()
+        config_dict: collections.OrderedDict[str, InnerConfigType] = collections.OrderedDict()
         config_dict["General"] = self.general.as_dict()
         config_dict["Lftp"] = self.lftp.as_dict()
         config_dict["Controller"] = self.controller.as_dict()

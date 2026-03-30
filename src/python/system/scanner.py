@@ -19,7 +19,7 @@ class SystemScannerError(AppError):
 
 
 class PseudoDirEntry:
-    def __init__(self, name: str, path: str, is_dir: bool, stat):
+    def __init__(self, name: str, path: str, is_dir: bool, stat: os.stat_result):
         self.name = name
         self.path = path
         self._is_dir = is_dir
@@ -45,9 +45,9 @@ class SystemScanner:
         :param path_to_scan: path to file or directory to scan
         """
         self.path_to_scan = path_to_scan
-        self.exclude_prefixes = []
-        self.exclude_suffixes = [SystemScanner.__LFTP_STATUS_FILE_SUFFIX]
-        self.__lftp_temp_file_suffix = None
+        self.exclude_prefixes: list[str] = []
+        self.exclude_suffixes: list[str] = [SystemScanner.__LFTP_STATUS_FILE_SUFFIX]
+        self.__lftp_temp_file_suffix: str | None = None
 
     def add_exclude_prefix(self, prefix: str):
         """
@@ -107,7 +107,7 @@ class SystemScanner:
             PseudoDirEntry(name=name, path=path, is_dir=os.path.isdir(path), stat=os.stat(path))
         )
 
-    def __create_system_file(self, entry) -> SystemFile:
+    def __create_system_file(self, entry: os.DirEntry[str] | PseudoDirEntry) -> SystemFile:
         """
         Creates a system file from a DirEntry.
 
@@ -126,10 +126,9 @@ class SystemScanner:
             name = entry.name.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
             size = sum(sub_child.size for sub_child in sub_children)
             time_created = None
-            try:
-                time_created = datetime.fromtimestamp(entry.stat().st_birthtime)
-            except AttributeError:
-                pass
+            birthtime = getattr(entry.stat(), "st_birthtime", None)
+            if birthtime is not None:
+                time_created = datetime.fromtimestamp(birthtime)
             time_modified = datetime.fromtimestamp(entry.stat().st_mtime)
             sys_file = SystemFile(name, size, True, time_created=time_created, time_modified=time_modified)
             for sub_child in sub_children:
@@ -151,16 +150,15 @@ class SystemScanner:
             ):
                 file_name = file_name[: -len(self.__lftp_temp_file_suffix)]
             time_created = None
-            try:
-                time_created = datetime.fromtimestamp(entry.stat().st_birthtime)
-            except AttributeError:
-                pass
+            birthtime = getattr(entry.stat(), "st_birthtime", None)
+            if birthtime is not None:
+                time_created = datetime.fromtimestamp(birthtime)
             time_modified = datetime.fromtimestamp(entry.stat().st_mtime)
             sys_file = SystemFile(file_name, file_size, False, time_created=time_created, time_modified=time_modified)
         return sys_file
 
     def __create_children(self, path: str) -> list[SystemFile]:
-        children = []
+        children: list[SystemFile] = []
         # Files may get deleted while scanning, ignore the error
         for entry in os.scandir(path):
             # Skip excluded entries

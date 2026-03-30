@@ -1,11 +1,14 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from __future__ import annotations
+
 import logging
 import multiprocessing
 import queue
 import sys
 import threading
 import time
+import types
 
 
 class MultiprocessingLogger:
@@ -23,14 +26,16 @@ class MultiprocessingLogger:
 
     def __init__(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild("MPLogger")
-        self.__queue = multiprocessing.Queue(-1)
+        self.__queue: multiprocessing.Queue[logging.LogRecord] = multiprocessing.Queue(-1)
         self.__logger_level = base_logger.getEffectiveLevel()
         self.__listener_thread: threading.Thread = threading.Thread(name="MPLoggerListener", target=self.__listener)
         self.__listener_shutdown = threading.Event()
-        self.__listener_exc_info = None
+        self.__listener_exc_info: (
+            tuple[type[BaseException], BaseException, types.TracebackType | None] | tuple[None, None, None] | None
+        ) = None
 
     @property
-    def queue(self) -> multiprocessing.Queue:
+    def queue(self) -> multiprocessing.Queue[logging.LogRecord]:
         return self.__queue
 
     @property

@@ -1,5 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from __future__ import annotations
+
 import logging
 import multiprocessing
 import queue
@@ -39,7 +41,10 @@ class ExtractProcess(AppProcess):
 
     class __ExtractListener(ExtractListener):
         def __init__(
-            self, logger: logging.Logger, completed_queue: multiprocessing.Queue, failed_queue: multiprocessing.Queue
+            self,
+            logger: logging.Logger,
+            completed_queue: multiprocessing.Queue[ExtractCompletedResult],
+            failed_queue: multiprocessing.Queue[ExtractFailedResult],
         ):
             self.logger = logger
             self.completed_queue = completed_queue
@@ -59,11 +64,11 @@ class ExtractProcess(AppProcess):
 
     def __init__(self):
         super().__init__(name=self.__class__.__name__)
-        self.__command_queue = multiprocessing.Queue()
-        self.__status_result_queue = multiprocessing.Queue()
-        self.__completed_result_queue = multiprocessing.Queue()
-        self.__failed_result_queue = multiprocessing.Queue()
-        self.__dispatch = None
+        self.__command_queue: multiprocessing.Queue[ExtractRequest] = multiprocessing.Queue()
+        self.__status_result_queue: multiprocessing.Queue[ExtractStatusResult] = multiprocessing.Queue()
+        self.__completed_result_queue: multiprocessing.Queue[ExtractCompletedResult] = multiprocessing.Queue()
+        self.__failed_result_queue: multiprocessing.Queue[ExtractFailedResult] = multiprocessing.Queue()
+        self.__dispatch: ExtractDispatch | None = None
 
     @overrides(AppProcess)
     def run_init(self):
@@ -156,7 +161,7 @@ class ExtractProcess(AppProcess):
         last time this method was called.
         :return:
         """
-        completed = []
+        completed: list[ExtractCompletedResult] = []
         try:
             while True:
                 result = self.__completed_result_queue.get(block=False)
@@ -171,7 +176,7 @@ class ExtractProcess(AppProcess):
         Returns an empty list if no new failures since the last call.
         :return:
         """
-        failed = []
+        failed: list[ExtractFailedResult] = []
         try:
             while True:
                 result = self.__failed_result_queue.get(block=False)

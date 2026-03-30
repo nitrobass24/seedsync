@@ -79,13 +79,13 @@ class Model:
 
     def __init__(self):
         self.logger = logging.getLogger("Model")
-        self.__files = {}  # key->ModelFile (key is pair_id:name or just name)
-        self.__listeners = []
+        self.__files: dict[str, ModelFile] = {}  # key->ModelFile (key is pair_id:name or just name)
+        self.__listeners: list[IModelListener] = []
 
     def set_base_logger(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild("Model")
 
-    def add_listener(self, listener: IModelListener):
+    def add_listener(self, listener: IModelListener) -> None:
         """
         Add a model listener
         :param listener:
@@ -95,7 +95,7 @@ class Model:
         if listener not in self.__listeners:
             self.__listeners.append(listener)
 
-    def remove_listener(self, listener: IModelListener):
+    def remove_listener(self, listener: IModelListener) -> None:
         """
         Add a model listener
         :param listener:
@@ -107,7 +107,7 @@ class Model:
         else:
             self.__listeners.remove(listener)
 
-    def add_file(self, file: ModelFile):
+    def add_file(self, file: ModelFile) -> None:
         """
         Add a file to the model
         :param file:
@@ -121,7 +121,7 @@ class Model:
         for listener in self.__listeners:
             listener.file_added(self.__files[key])
 
-    def remove_file(self, filename: str, pair_id: str | None = None):
+    def remove_file(self, filename: str, pair_id: str | None = None) -> None:
         """
         Remove the file from the model
         :param filename:
@@ -137,7 +137,7 @@ class Model:
         for listener in self.__listeners:
             listener.file_removed(file)
 
-    def update_file(self, file: ModelFile):
+    def update_file(self, file: ModelFile) -> None:
         """
         Update an already existing file
         :param file:

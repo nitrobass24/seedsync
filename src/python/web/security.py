@@ -4,6 +4,7 @@ import secrets
 import threading
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from urllib.parse import urlparse
 
 import bottle
@@ -19,7 +20,7 @@ def install_security_headers(app: bottle.Bottle):
     """
 
     @app.hook("after_request")
-    def _add_security_headers():
+    def _add_security_headers():  # type: ignore[reportUnusedFunction]
         bottle.response.headers["X-Content-Type-Options"] = "nosniff"
         bottle.response.headers["X-Frame-Options"] = "DENY"
         bottle.response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -44,7 +45,7 @@ _CSRF_LOCALHOST = frozenset({"localhost", "127.0.0.1", "::1"})
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
-def _origin_tuple(header_value):
+def _origin_tuple(header_value: str | None) -> tuple[str, str, int | None] | None:
     """Parse an Origin or Referer value into a canonical (scheme, host, port) tuple.
 
     Port is normalised to the scheme default (80/443) when not explicitly present,
@@ -72,7 +73,7 @@ def install_csrf_protection(app: bottle.Bottle):
     """
 
     @app.hook("before_request")
-    def _csrf_check():
+    def _csrf_check():  # type: ignore[reportUnusedFunction]
         if bottle.request.method in _CSRF_SAFE_METHODS:
             return
 
@@ -115,7 +116,7 @@ class _RateLimiter:
     def __init__(self, max_requests: int = 120, window_seconds: int = 60, sweep_interval: int = 300):
         self._max = max_requests
         self._window = window_seconds
-        self._hits = defaultdict(list)  # ip -> [timestamps]
+        self._hits: defaultdict[str, list[float]] = defaultdict(list)
         self._lock = threading.Lock()
         self._sweep_interval = sweep_interval
         self._last_sweep = time.monotonic()
@@ -178,12 +179,12 @@ def install_rate_limiting(app: bottle.Bottle, *, trust_x_forwarded_for: bool = F
     limiter = _RateLimiter()
 
     @app.hook("before_request")
-    def _rate_limit():
+    def _rate_limit():  # type: ignore[reportUnusedFunction]
         if bottle.request.path == _SSE_STREAM_PATH:
             return
 
         # Only trust X-Forwarded-For when explicitly enabled (behind trusted reverse proxy)
-        ip = None
+        ip: str | None = None
         if trust_x_forwarded_for:
             forwarded = bottle.request.get_header("X-Forwarded-For")
             if forwarded:
@@ -191,6 +192,7 @@ def install_rate_limiting(app: bottle.Bottle, *, trust_x_forwarded_for: bool = F
         if not ip:
             ip = bottle.request.environ.get("REMOTE_ADDR", "127.0.0.1")
 
+        assert ip is not None
         if not limiter.is_allowed(ip):
             retry = limiter.retry_after(ip)
             resp = bottle.HTTPError(429, "Rate limit exceeded")
@@ -205,7 +207,7 @@ def install_rate_limiting(app: bottle.Bottle, *, trust_x_forwarded_for: bool = F
 _API_KEY_EXEMPT_PATHS = frozenset({"/server/config/get"})
 
 
-def install_api_key_auth(app: bottle.Bottle, get_api_key):
+def install_api_key_auth(app: bottle.Bottle, get_api_key: Callable[[], str]) -> None:
     """
     Require X-Api-Key header on /server/* routes when an API key is configured.
     The SSE stream endpoint also accepts ?api_key= query parameter.
@@ -216,7 +218,7 @@ def install_api_key_auth(app: bottle.Bottle, get_api_key):
     """
 
     @app.hook("before_request")
-    def _api_key_check():
+    def _api_key_check():  # type: ignore[reportUnusedFunction]
         configured_key = get_api_key()
         if not configured_key:
             return  # auth disabled
@@ -249,7 +251,7 @@ def install_api_key_auth(app: bottle.Bottle, get_api_key):
 def install_security_middleware(
     app: bottle.Bottle,
     *,
-    get_api_key=None,
+    get_api_key: Callable[[], str] | None = None,
     trust_x_forwarded_for: bool = False,
     disable_rate_limiting: bool = False,
 ):

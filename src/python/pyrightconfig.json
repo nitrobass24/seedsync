@@ -1,10 +1,11 @@
 {
-    "typeCheckingMode": "basic",
+    "typeCheckingMode": "strict",
     "pythonVersion": "3.12",
     "include": [
         "."
     ],
     "exclude": [
-        "tests"
+        "tests",
+        "scan_fs.py"
     ]
 }

@@ -56,10 +56,12 @@ class ExtractStatus:
         return self.__state
 
     @property
-    def pair_id(self):
+    def pair_id(self) -> str | None:
         return self.__pair_id
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ExtractStatus):
+            return NotImplemented
         return self.__dict__ == other.__dict__
 
 
@@ -71,17 +73,17 @@ class ExtractDispatch:
             self.root_name = root_name
             self.root_is_dir = root_is_dir
             self.pair_id = pair_id
-            self.archive_paths = []  # list of (archive path, out path) pairs
+            self.archive_paths: list[tuple[str, str]] = []
 
         def add_archive(self, archive_path: str, out_dir_path: str):
             self.archive_paths.append((archive_path, out_dir_path))
 
     def __init__(self):
-        self.__task_queue = queue.Queue()
+        self.__task_queue: queue.Queue[ExtractDispatch._Task] = queue.Queue()
         self.__worker_thread: threading.Thread = threading.Thread(name="ExtractWorker", target=self.__worker)
         self.__worker_shutdown = threading.Event()
 
-        self.__listeners = []
+        self.__listeners: list[ExtractListener] = []
         self.__listeners_lock = threading.Lock()
 
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -104,7 +106,7 @@ class ExtractDispatch:
     def status(self) -> list[ExtractStatus]:
         with self.__task_queue.mutex:
             tasks = list(self.__task_queue.queue)
-        statuses = []
+        statuses: list[ExtractStatus] = []
         for task in tasks:
             status = ExtractStatus(
                 name=task.root_name, is_dir=task.root_is_dir, state=ExtractStatus.State.EXTRACTING, pair_id=task.pair_id
@@ -236,7 +238,7 @@ class ExtractDispatch:
         :return:
         """
         # Filter out any rxx files for a split rar
-        filtered_paths = []
+        filtered_paths: list[tuple[str, str]] = []
         for archive_path, out_path in task.archive_paths:
             file_ext = os.path.splitext(os.path.basename(archive_path))[1]
             if not re.match(r"^\.r\d{2,}$", file_ext):

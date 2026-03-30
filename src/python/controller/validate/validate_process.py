@@ -1,4 +1,5 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
+from __future__ import annotations
 
 import datetime
 import hashlib
@@ -9,8 +10,12 @@ import queue
 import shlex
 import time
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from common import AppProcess, overrides
+
+if TYPE_CHECKING:
+    from ssh import Sshcp
 
 
 class ValidateRequest:
@@ -20,7 +25,7 @@ class ValidateRequest:
         self,
         name: str,
         is_dir: bool,
-        pair_id: str,
+        pair_id: str | None,
         local_path: str,
         remote_path: str,
         algorithm: str,
@@ -47,13 +52,15 @@ class ValidateStatus:
     class State(Enum):
         VALIDATING = 0
 
-    def __init__(self, name: str, is_dir: bool, state: "ValidateStatus.State", pair_id: str | None = None):
+    def __init__(self, name: str, is_dir: bool, state: ValidateStatus.State, pair_id: str | None = None):
         self.name = name
         self.is_dir = is_dir
         self.state = state
         self.pair_id = pair_id
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ValidateStatus):
+            return NotImplemented
         return self.__dict__ == other.__dict__
 
 
@@ -105,11 +112,11 @@ class ValidateProcess(AppProcess):
 
     def __init__(self):
         super().__init__(name=self.__class__.__name__)
-        self.__command_queue = multiprocessing.Queue()
-        self.__status_result_queue = multiprocessing.Queue()
-        self.__completed_result_queue = multiprocessing.Queue()
-        self.__failed_result_queue = multiprocessing.Queue()
-        self.__active_validations = {}  # (pair_id, name) -> ValidateRequest
+        self.__command_queue: multiprocessing.Queue[ValidateRequest] = multiprocessing.Queue()
+        self.__status_result_queue: multiprocessing.Queue[ValidateStatusResult] = multiprocessing.Queue()
+        self.__completed_result_queue: multiprocessing.Queue[ValidateCompletedResult] = multiprocessing.Queue()
+        self.__failed_result_queue: multiprocessing.Queue[ValidateFailedResult] = multiprocessing.Queue()
+        self.__active_validations: dict[tuple[str | None, str], ValidateRequest] = {}
 
     @overrides(AppProcess)
     def run_init(self):
@@ -225,7 +232,7 @@ class ValidateProcess(AppProcess):
                 )
             self.logger.info("Validated {}: {}".format(req.name, local_hash))
 
-    def _validate_directory(self, req: ValidateRequest, local_dir: str, sshcp):
+    def _validate_directory(self, req: ValidateRequest, local_dir: str, sshcp: Sshcp) -> None:
         """Validate all files in a directory by comparing local and remote checksums.
 
         Performs symmetric validation: collects local file set via os.walk and
@@ -233,7 +240,7 @@ class ValidateProcess(AppProcess):
         Files only on one side are flagged as mismatches.
         """
         # Build local file set (relative paths from local_dir)
-        local_rel_paths = set()
+        local_rel_paths: set[str] = set()
         for root, _dirs, files in os.walk(local_dir):
             for filename in files:
                 local_file = os.path.join(root, filename)
@@ -247,7 +254,7 @@ class ValidateProcess(AppProcess):
         try:
             find_output = sshcp.shell(find_cmd)
             remote_abs_paths = find_output.decode().strip().split("\n")
-            remote_rel_paths = set()
+            remote_rel_paths: set[str] = set()
             for abs_path in remote_abs_paths:
                 abs_path = abs_path.strip()
                 if abs_path:
@@ -258,7 +265,7 @@ class ValidateProcess(AppProcess):
 
         # Validate the union of both sets
         all_paths = local_rel_paths | remote_rel_paths
-        mismatches = []
+        mismatches: list[str] = []
 
         for rel_path in sorted(all_paths):
             local_file = os.path.join(req.local_path, rel_path)
@@ -327,7 +334,7 @@ class ValidateProcess(AppProcess):
         else:
             raise ValueError("Unsupported algorithm: {}".format(algorithm))
 
-    def _hash_remote_file(self, req: ValidateRequest, rel_path: str, algorithm: str, sshcp) -> str:
+    def _hash_remote_file(self, req: ValidateRequest, rel_path: str, algorithm: str, sshcp: Sshcp) -> str:
         """Compute hash of a remote file via SSH."""
         remote_file = os.path.join(req.remote_path, rel_path)
         quoted_file = shlex.quote(remote_file)
@@ -371,7 +378,7 @@ class ValidateProcess(AppProcess):
 
     def pop_completed(self) -> list[ValidateCompletedResult]:
         """Process-safe method to retrieve newly completed validations."""
-        completed = []
+        completed: list[ValidateCompletedResult] = []
         try:
             while True:
                 result = self.__completed_result_queue.get(block=False)
@@ -382,7 +389,7 @@ class ValidateProcess(AppProcess):
 
     def pop_failed(self) -> list[ValidateFailedResult]:
         """Process-safe method to retrieve newly failed validations."""
-        failed = []
+        failed: list[ValidateFailedResult] = []
         try:
             while True:
                 result = self.__failed_result_queue.get(block=False)
