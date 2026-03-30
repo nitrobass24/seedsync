@@ -126,10 +126,9 @@ class SystemScanner:
             name = entry.name.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
             size = sum(sub_child.size for sub_child in sub_children)
             time_created = None
-            try:
-                time_created = datetime.fromtimestamp(entry.stat().st_birthtime)
-            except AttributeError:
-                pass
+            birthtime = getattr(entry.stat(), "st_birthtime", None)
+            if birthtime is not None:
+                time_created = datetime.fromtimestamp(birthtime)
             time_modified = datetime.fromtimestamp(entry.stat().st_mtime)
             sys_file = SystemFile(name, size, True, time_created=time_created, time_modified=time_modified)
             for sub_child in sub_children:
@@ -151,10 +150,9 @@ class SystemScanner:
             ):
                 file_name = file_name[: -len(self.__lftp_temp_file_suffix)]
             time_created = None
-            try:
-                time_created = datetime.fromtimestamp(entry.stat().st_birthtime)
-            except AttributeError:
-                pass
+            birthtime = getattr(entry.stat(), "st_birthtime", None)
+            if birthtime is not None:
+                time_created = datetime.fromtimestamp(birthtime)
             time_modified = datetime.fromtimestamp(entry.stat().st_mtime)
             sys_file = SystemFile(file_name, file_size, False, time_created=time_created, time_modified=time_modified)
         return sys_file
