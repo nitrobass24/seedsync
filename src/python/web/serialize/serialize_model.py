@@ -68,7 +68,7 @@ class SerializeModel(Serialize):
 
     @staticmethod
     def __model_file_to_json_dict(model_file: ModelFile) -> dict[str, Any]:
-        json_dict: dict[str, Any] = dict()
+        json_dict: dict[str, Any] = {}
         json_dict[SerializeModel.__KEY_FILE_NAME] = model_file.name
         json_dict[SerializeModel.__KEY_FILE_PAIR_ID] = model_file.pair_id
         json_dict[SerializeModel.__KEY_FILE_IS_DIR] = model_file.is_dir
