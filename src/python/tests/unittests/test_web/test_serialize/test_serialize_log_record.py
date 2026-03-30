@@ -120,6 +120,24 @@ class TestSerializeLogRecord(unittest.TestCase):
         data = json.loads(out["data"])
         self.assertEqual("my logger msg", data["message"])
 
+    def test_serialize_message_with_args(self):
+        serialize = SerializeLogRecord()
+        logger = logging.getLogger()
+        record = logger.makeRecord(
+            name=None,
+            level=logging.INFO,
+            fn=None,
+            lno=None,
+            msg="Hello %s, count=%d",
+            args=("world", 42),
+            exc_info=None,
+            func=None,
+            sinfo=None,
+        )
+        out = parse_stream(serialize.record(record))
+        data = json.loads(out["data"])
+        self.assertEqual("Hello world, count=42", data["message"])
+
     def test_record_exception_text(self):
         serialize = SerializeLogRecord()
         logger = logging.getLogger()

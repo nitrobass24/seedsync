@@ -25,7 +25,7 @@ class ValidateRequest:
         self,
         name: str,
         is_dir: bool,
-        pair_id: str,
+        pair_id: str | None,
         local_path: str,
         remote_path: str,
         algorithm: str,
@@ -116,7 +116,7 @@ class ValidateProcess(AppProcess):
         self.__status_result_queue: multiprocessing.Queue[ValidateStatusResult] = multiprocessing.Queue()
         self.__completed_result_queue: multiprocessing.Queue[ValidateCompletedResult] = multiprocessing.Queue()
         self.__failed_result_queue: multiprocessing.Queue[ValidateFailedResult] = multiprocessing.Queue()
-        self.__active_validations: dict[tuple[str, str], ValidateRequest] = {}
+        self.__active_validations: dict[tuple[str | None, str], ValidateRequest] = {}
 
     @overrides(AppProcess)
     def run_init(self):

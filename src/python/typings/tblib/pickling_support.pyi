@@ -1,7 +1,7 @@
 from collections.abc import Callable
-from types import TracebackType
+from typing import Any
 
 def install(
     *exc_classes_or_instances: type[BaseException] | BaseException,
-    get_locals: Callable[[TracebackType], dict[str, object]] | None = None,
+    get_locals: Callable[[Any], dict[str, object]] | None = None,
 ) -> type[BaseException] | None: ...

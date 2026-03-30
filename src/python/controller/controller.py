@@ -22,7 +22,7 @@ from model import IModelListener, Model, ModelDiff, ModelDiffUtil, ModelError, M
 
 from .controller_persist import ControllerPersist
 from .delete import DeleteLocalProcess, DeleteRemoteProcess
-from .extract import ExtractCompletedResult, ExtractProcess, ExtractRequest, ExtractStatus, ExtractStatusResult
+from .extract import ExtractProcess, ExtractRequest, ExtractStatus, ExtractStatusResult
 from .model_builder import ModelBuilder
 from .move import MoveProcess
 
@@ -46,22 +46,27 @@ def _filter_children(file: SystemFile, patterns: list[tuple[str, bool]]) -> Syst
 
     If a directory child matches a pattern the entire subtree is dropped.
     Non-matching directory children are recursed into so their own children
-    are filtered as well.
+    are filtered as well.  Directory sizes are recomputed from filtered children.
     """
     from system import SystemFile  # avoid circular import at module level
 
-    filtered = SystemFile(
-        name=file.name,
-        size=file.size,
-        is_dir=file.is_dir,
-        time_created=file.timestamp_created,
-        time_modified=file.timestamp_modified,
-    )
+    kept_children: list[SystemFile] = []
     for child in file.children:
         if _matches_exclude(child.name, child.is_dir, patterns):
             continue  # drop matched child (and its subtree)
         if child.is_dir:
             child = _filter_children(child, patterns)
+        kept_children.append(child)
+
+    size = sum(c.size for c in kept_children) if file.is_dir else file.size
+    filtered = SystemFile(
+        name=file.name,
+        size=size,
+        is_dir=file.is_dir,
+        time_created=file.timestamp_created,
+        time_modified=file.timestamp_modified,
+    )
+    for child in kept_children:
         filtered.add_child(child)
     return filtered
 
@@ -712,9 +717,24 @@ class Controller:
 
         # Process each pair context's scan results and LFTP status
         for pc in self.__pair_contexts:
-            self._update_pair_model_state(
-                pc, latest_extract_statuses, latest_extracted_results, latest_validate_statuses
-            )
+            self._update_pair_model_state(pc, latest_extract_statuses, latest_validate_statuses)
+
+        # Process extraction completions once (shared across all pairs)
+        if latest_extracted_results:
+            for result in latest_extracted_results:
+                owner_pc = self._find_pair_by_id(result.pair_id)
+                if owner_pc is None:
+                    self.logger.warning(
+                        "Ignoring extract completion for '{}': pair '{}' no longer exists".format(
+                            result.name, result.pair_id
+                        )
+                    )
+                    continue
+                pkey = _persist_key(result.pair_id, result.name)
+                self.__persist.extracted_file_names.add(pkey)
+                if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
+                    self.__spawn_move_process(result.name, owner_pc)
+            self._sync_persist_to_all_builders()
 
         # Build an aggregate new model from all pairs
         any_pair_has_changes = any(pc.model_builder.has_changes() for pc in self.__pair_contexts)
@@ -814,7 +834,7 @@ class Controller:
                             req = ValidateRequest(
                                 name=diff.new_file.name,
                                 is_dir=diff.new_file.is_dir,
-                                pair_id=pc.pair_id,  # type: ignore[arg-type]
+                                pair_id=pc.pair_id,
                                 local_path=pc.effective_local_path,
                                 remote_path=pc.remote_path,
                                 algorithm=self.__context.config.validate.algorithm,  # type: ignore[arg-type]
@@ -969,7 +989,6 @@ class Controller:
         self,
         pc: _PairContext,
         latest_extract_statuses: ExtractStatusResult | None,
-        latest_extracted_results: list[ExtractCompletedResult],
         latest_validate_statuses: ValidateStatusResult | None,
     ) -> None:
         """
@@ -1038,22 +1057,6 @@ class Controller:
         if latest_validate_statuses is not None:
             pair_validate_statuses = [s for s in latest_validate_statuses.statuses if s.pair_id == pc.pair_id]
             pc.model_builder.set_validate_statuses(pair_validate_statuses)
-        if latest_extracted_results:
-            for result in latest_extracted_results:
-                # Use pair_id from the extraction result
-                owner_pc = self._find_pair_by_id(result.pair_id)
-                if owner_pc is None:
-                    self.logger.warning(
-                        "Ignoring extract completion for '{}': pair '{}' no longer exists".format(
-                            result.name, result.pair_id
-                        )
-                    )
-                    continue
-                pkey = _persist_key(result.pair_id, result.name)
-                self.__persist.extracted_file_names.add(pkey)
-                if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-                    self.__spawn_move_process(result.name, owner_pc)
-            self._sync_persist_to_all_builders()
 
     def _sync_persist_to_all_builders(self):
         """Push current persist state to all pair model builders, filtered by pair_id."""
@@ -1281,7 +1284,7 @@ class Controller:
                     req = ValidateRequest(
                         name=file.name,
                         is_dir=file.is_dir,
-                        pair_id=pc.pair_id,  # type: ignore[arg-type]
+                        pair_id=pc.pair_id,
                         local_path=pc.effective_local_path,
                         remote_path=pc.remote_path,
                         algorithm=self.__context.config.validate.algorithm,  # type: ignore[arg-type]

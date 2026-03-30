@@ -91,7 +91,7 @@ class SerializeModel(Serialize):
             str(model_file.remote_modified_timestamp.timestamp()) if model_file.remote_modified_timestamp else None
         )
         json_dict[SerializeModel.__KEY_FILE_FULL_PATH] = model_file.full_path
-        json_dict[SerializeModel.__KEY_FILE_CHILDREN] = list[dict[str, Any]]()
+        json_dict[SerializeModel.__KEY_FILE_CHILDREN] = []
         for child in model_file.get_children():
             json_dict[SerializeModel.__KEY_FILE_CHILDREN].append(SerializeModel.__model_file_to_json_dict(child))
         return json_dict
