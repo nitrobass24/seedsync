@@ -46,7 +46,7 @@ def _filter_children(file: SystemFile, patterns: list[tuple[str, bool]]) -> Syst
 
     If a directory child matches a pattern the entire subtree is dropped.
     Non-matching directory children are recursed into so their own children
-    are filtered as well.  Directory sizes are recomputed from filtered children.
+    are filtered as well.  Directory sizes are preserved from the original file.
     """
     from system import SystemFile  # avoid circular import at module level
 
@@ -231,7 +231,7 @@ class Controller:
         Wraps any one-shot command processes launched by the controller
         """
 
-        def __init__(self, process: AppOneShotProcess, post_callback: Callable[..., Any]):
+        def __init__(self, process: AppOneShotProcess, post_callback: Callable[[], None]):
             self.process = process
             self.post_callback = post_callback
 
@@ -1256,7 +1256,7 @@ class Controller:
                         file_name=file.name,
                     )
                     process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
-                    post_callback = pc.remote_scan_process.force_scan  # type: ignore[assignment]
+                    post_callback = pc.remote_scan_process.force_scan
                     command_wrapper = Controller.CommandProcessWrapper(process=process, post_callback=post_callback)
                     self.__active_command_processes.append(command_wrapper)
                     command_wrapper.process.start()

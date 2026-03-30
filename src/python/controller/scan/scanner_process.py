@@ -127,6 +127,6 @@ class ScannerProcess(AppProcess):
         self.__queue.join_thread()
         super().close_queues()
 
-    def force_scan(self):
+    def force_scan(self) -> None:
         """Force process to wake and do an immediate scan"""
         self.__wake_event.set()
