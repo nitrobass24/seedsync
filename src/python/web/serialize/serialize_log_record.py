@@ -32,7 +32,7 @@ class SerializeLogRecord(Serialize):
         json_dict[SerializeLogRecord.__KEY_TIME] = str(record.created)
         json_dict[SerializeLogRecord.__KEY_LEVEL_NAME] = record.levelname
         json_dict[SerializeLogRecord.__KEY_LOGGER_NAME] = record.name
-        json_dict[SerializeLogRecord.__KEY_MESSAGE] = record.msg
+        json_dict[SerializeLogRecord.__KEY_MESSAGE] = record.getMessage()
         exc_text = None
         if record.exc_text:
             exc_text = record.exc_text

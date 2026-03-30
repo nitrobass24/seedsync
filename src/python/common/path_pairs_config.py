@@ -72,7 +72,7 @@ class PathPair:
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, PathPair):
-            return False
+            return NotImplemented
         return self.to_dict() == other.to_dict()
 
     def __repr__(self) -> str:

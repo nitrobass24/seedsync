@@ -29,8 +29,6 @@ class Sshcp:
     SHELL_CANDIDATES = ["/bin/bash", "/usr/bin/bash", "/bin/sh", "/usr/bin/sh"]
 
     def __init__(self, host: str, port: int, user: str | None = None, password: str | None = None):
-        if host is None:  # type: ignore[reportUnnecessaryComparison]
-            raise ValueError("Hostname not specified.")
         self.__host = host
         self.__port = port
         self.__user = user
