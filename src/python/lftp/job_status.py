@@ -83,6 +83,8 @@ class LftpJobStatus:
         return list(zip(self.__active_files_state.keys(), self.__active_files_state.values()))
 
     def __eq__(self, other: object) -> bool:
+        if not isinstance(other, LftpJobStatus):
+            return NotImplemented
         return self.__dict__ == other.__dict__
 
     def __str__(self) -> str:

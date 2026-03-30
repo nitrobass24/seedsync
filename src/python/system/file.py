@@ -27,6 +27,8 @@ class SystemFile:
         self.__children: list[SystemFile] = []
 
     def __eq__(self, other: object) -> bool:
+        if not isinstance(other, SystemFile):
+            return NotImplemented
         return self.__dict__ == other.__dict__
 
     def __repr__(self) -> str:

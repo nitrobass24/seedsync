@@ -59,6 +59,8 @@ class ValidateStatus:
         self.pair_id = pair_id
 
     def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ValidateStatus):
+            return NotImplemented
         return self.__dict__ == other.__dict__
 
 

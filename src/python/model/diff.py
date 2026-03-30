@@ -23,6 +23,8 @@ class ModelDiff:
         self.__new_file = new_file
 
     def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ModelDiff):
+            return NotImplemented
         return self.__dict__ == other.__dict__
 
     def __repr__(self) -> str:

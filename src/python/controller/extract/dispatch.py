@@ -60,6 +60,8 @@ class ExtractStatus:
         return self.__pair_id
 
     def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ExtractStatus):
+            return NotImplemented
         return self.__dict__ == other.__dict__
 
 
