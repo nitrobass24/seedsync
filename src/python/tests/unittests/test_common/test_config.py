@@ -61,7 +61,6 @@ class TestCheckers(unittest.TestCase):
         with self.assertRaises(ConfigError):
             Checkers.algorithm_allowed(TestCheckers, "algo", "invalid")
 
-
     def test_log_level_allowed(self):
         for level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
             self.assertEqual(level, Checkers.log_level_allowed(None, "", level))
