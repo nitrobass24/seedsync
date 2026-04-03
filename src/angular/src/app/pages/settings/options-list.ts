@@ -310,16 +310,17 @@ export const OPTIONS_CONTEXT_LOGGING: IOptionsContext = {
   id: 'logging',
   options: [
     {
-      type: OptionType.Checkbox,
-      label: 'Enable Debug',
-      valuePath: ['general', 'debug'],
-      description: 'Enables debug logging',
+      type: OptionType.Select,
+      label: 'Log Level',
+      valuePath: ['general', 'log_level'],
+      description: 'Controls which log messages are recorded',
+      choices: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
     },
     {
       type: OptionType.Checkbox,
       label: 'Verbose LFTP Logging',
       valuePath: ['general', 'verbose'],
-      description: 'Log all LFTP command output (debug mode must be enabled for logs to appear).',
+      description: 'Log all LFTP command output (log level must be set to DEBUG for logs to appear).',
     },
     {
       type: OptionType.Select,

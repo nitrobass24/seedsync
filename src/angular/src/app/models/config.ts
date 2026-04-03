@@ -4,7 +4,7 @@
  */
 
 export interface General {
-  debug: boolean | null;
+  log_level: string | null;
   verbose: boolean | null;
   exclude_patterns: string | null;
 }
@@ -90,7 +90,7 @@ export interface Config {
 }
 
 export const DEFAULT_GENERAL: General = {
-  debug: null,
+  log_level: null,
   verbose: null,
   exclude_patterns: null,
 };

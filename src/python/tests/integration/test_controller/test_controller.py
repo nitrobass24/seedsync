@@ -283,7 +283,7 @@ class TestController(unittest.TestCase):
         ctx_args.local_path_to_scanfs = local_script_path
 
         config_dict = {
-            "General": {"debug": "True", "verbose": "True"},
+            "General": {"log_level": "DEBUG", "verbose": "True"},
             "Lftp": {
                 "remote_address": "localhost",
                 "remote_username": "seedsynctest",

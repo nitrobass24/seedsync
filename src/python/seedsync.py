@@ -81,9 +81,14 @@ class Seedsync:
             config = Seedsync._create_default_config()
             config.to_file(self.config_path)
 
-        # Determine the true value of debug
+        # Determine the effective log level
         assert config is not None
-        is_debug = bool(args.debug or config.general.debug)
+        # --debug CLI flag overrides config to DEBUG for backward compatibility
+        if args.debug:
+            effective_log_level = "DEBUG"
+        else:
+            effective_log_level = config.general.log_level or "INFO"
+        is_debug = effective_log_level == "DEBUG"
 
         # Create context args
         ctx_args = Args()
@@ -97,13 +102,13 @@ class Seedsync:
         # We separate the main log from the web-access log
         log_format = config.logging.log_format or "standard"
         logger = self._create_logger(
-            name=Constants.SERVICE_NAME, debug=is_debug, logdir=args.logdir, log_format=log_format
+            name=Constants.SERVICE_NAME, log_level=effective_log_level, logdir=args.logdir, log_format=log_format
         )
         Seedsync.logger = logger
         web_access_logger = self._create_logger(
-            name=Constants.WEB_ACCESS_LOG_NAME, debug=is_debug, logdir=args.logdir, log_format=log_format
+            name=Constants.WEB_ACCESS_LOG_NAME, log_level=effective_log_level, logdir=args.logdir, log_format=log_format
         )
-        logger.info("Debug mode is {}.".format("enabled" if is_debug else "disabled"))
+        logger.info("Log level: {}".format(effective_log_level))
 
         # Create status
         status = Status()
@@ -274,7 +279,7 @@ class Seedsync:
         return parser.parse_args(args)
 
     @staticmethod
-    def _create_logger(name: str, debug: bool, logdir: str | None, log_format: str = "standard") -> logging.Logger:
+    def _create_logger(name: str, log_level: str, logdir: str | None, log_format: str = "standard") -> logging.Logger:
         logger = logging.getLogger(name)
 
         # Remove any existing handlers (needed when restarting)
@@ -283,7 +288,8 @@ class Seedsync:
             handler.close()
             logger.removeHandler(handler)
 
-        logger.setLevel(logging.DEBUG if debug else logging.INFO)
+        numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+        logger.setLevel(numeric_level)
         if logdir is not None:
             # Output logs to a file in the given directory
             handler = RotatingFileHandler(
@@ -311,7 +317,7 @@ class Seedsync:
         """
         config = Config()
 
-        config.general.debug = False
+        config.general.log_level = "INFO"
         config.general.verbose = False
 
         config.lftp.remote_address = Seedsync.__CONFIG_DUMMY_VALUE
