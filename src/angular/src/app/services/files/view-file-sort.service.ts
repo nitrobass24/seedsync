@@ -43,6 +43,38 @@ const NameDescendingComparator: ViewFileComparator = (a: ViewFile, b: ViewFile):
   return b.name.localeCompare(a.name);
 };
 
+/**
+ * Get the effective size for sorting: use remoteSize, fall back to localSize.
+ * Returns null if both are zero/unavailable.
+ */
+function getEffectiveSize(file: ViewFile): number | null {
+  if (file.remoteSize > 0) return file.remoteSize;
+  if (file.localSize > 0) return file.localSize;
+  return null;
+}
+
+const SizeAscendingComparator: ViewFileComparator = (a: ViewFile, b: ViewFile): number => {
+  const aSize = getEffectiveSize(a);
+  const bSize = getEffectiveSize(b);
+  // Null sizes sort last
+  if (aSize === null && bSize === null) return a.name.localeCompare(b.name);
+  if (aSize === null) return 1;
+  if (bSize === null) return -1;
+  if (aSize !== bSize) return aSize - bSize;
+  return a.name.localeCompare(b.name);
+};
+
+const SizeDescendingComparator: ViewFileComparator = (a: ViewFile, b: ViewFile): number => {
+  const aSize = getEffectiveSize(a);
+  const bSize = getEffectiveSize(b);
+  // Null sizes sort last
+  if (aSize === null && bSize === null) return a.name.localeCompare(b.name);
+  if (aSize === null) return 1;
+  if (bSize === null) return -1;
+  if (aSize !== bSize) return bSize - aSize;
+  return a.name.localeCompare(b.name);
+};
+
 @Injectable({ providedIn: 'root' })
 export class ViewFileSortService {
   private readonly logger = inject(LoggerService);
@@ -64,6 +96,12 @@ export class ViewFileSortService {
         } else if (this.sortMethod === SortMethod.NAME_ASC) {
           this.viewFileService.setComparator(NameAscendingComparator);
           this.logger.debug('Comparator set to: Name Asc');
+        } else if (this.sortMethod === SortMethod.SIZE_ASC) {
+          this.viewFileService.setComparator(SizeAscendingComparator);
+          this.logger.debug('Comparator set to: Size Asc');
+        } else if (this.sortMethod === SortMethod.SIZE_DESC) {
+          this.viewFileService.setComparator(SizeDescendingComparator);
+          this.logger.debug('Comparator set to: Size Desc');
         } else {
           this.viewFileService.setComparator(null);
           this.logger.debug('Comparator set to: null');
