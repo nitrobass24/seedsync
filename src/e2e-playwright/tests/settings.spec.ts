@@ -58,7 +58,7 @@ test.describe("Settings Page", () => {
   });
 
   test("checkbox toggle saves to backend", async ({ apiGet }) => {
-    const checkbox = settings.getCheckbox("Enable Debug");
+    const checkbox = settings.getCheckbox("Verbose LFTP Logging");
     const wasBefore = await checkbox.isChecked();
     const expected = !wasBefore;
 
@@ -70,7 +70,7 @@ test.describe("Settings Page", () => {
         .poll(
           async () => {
             const config = await apiGet("/server/config/get");
-            return config.general.debug;
+            return config.general.verbose;
           },
           { timeout: 5000 }
         )
@@ -83,7 +83,7 @@ test.describe("Settings Page", () => {
         .poll(
           async () => {
             const config = await apiGet("/server/config/get");
-            return config.general.debug;
+            return config.general.verbose;
           },
           { timeout: 5000 }
         )

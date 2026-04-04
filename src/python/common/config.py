@@ -103,6 +103,18 @@ class Checkers:
             )
         return normalized
 
+    @staticmethod
+    def log_level_allowed(cls: T, name: str, value: str) -> str:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
+        allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        normalized = value.strip().upper() if value else ""
+        if normalized not in allowed:
+            raise ConfigError(
+                "Bad config: {}.{} ({}) must be one of: {}".format(
+                    cls.__name__, name, value, ", ".join(sorted(allowed))
+                )
+            )
+        return normalized
+
 
 class InnerConfig(ABC):
     """
@@ -236,13 +248,13 @@ class Config(Persist):
     """
 
     class General(IC):
-        debug = PROP("debug", Checkers.null, Converters.bool)
+        log_level = PROP("log_level", Checkers.log_level_allowed, Converters.null)
         verbose = PROP("verbose", Checkers.null, Converters.bool)
         exclude_patterns = PROP("exclude_patterns", Checkers.string_allow_empty, Converters.null)
 
         def __init__(self):
             super().__init__()
-            self.debug = None
+            self.log_level = "INFO"
             self.verbose = None
             self.exclude_patterns = ""
 

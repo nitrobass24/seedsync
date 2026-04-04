@@ -61,6 +61,20 @@ class TestCheckers(unittest.TestCase):
         with self.assertRaises(ConfigError):
             Checkers.algorithm_allowed(TestCheckers, "algo", "invalid")
 
+    def test_log_level_allowed(self):
+        for level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+            self.assertEqual(level, Checkers.log_level_allowed(None, "", level))
+        # Case normalization
+        self.assertEqual("DEBUG", Checkers.log_level_allowed(None, "", "debug"))
+        self.assertEqual("INFO", Checkers.log_level_allowed(None, "", "Info"))
+        # Invalid levels
+        with self.assertRaises(ConfigError):
+            Checkers.log_level_allowed(TestCheckers, "level", "WARN")
+        with self.assertRaises(ConfigError):
+            Checkers.log_level_allowed(TestCheckers, "level", "")
+        with self.assertRaises(ConfigError):
+            Checkers.log_level_allowed(TestCheckers, "level", "invalid")
+
 
 class DummyInnerConfig(InnerConfig):
     c_prop1 = InnerConfig._create_property("prop1", Checkers.null, Converters.null)
@@ -174,20 +188,40 @@ class TestConfig(unittest.TestCase):
 
     def test_general(self):
         good_dict = {
-            "debug": "True",
+            "log_level": "DEBUG",
             "verbose": "False",
         }
         general = Config.General.from_dict(good_dict)
-        self.assertEqual(True, general.debug)
+        self.assertEqual("DEBUG", general.log_level)
         self.assertEqual(False, general.verbose)
 
-        self.check_common(Config.General, good_dict, {"debug", "verbose"})
+        self.check_common(Config.General, good_dict, {"verbose"})
 
         # bad values
-        self.check_bad_value_error(Config.General, good_dict, "debug", "SomeString")
-        self.check_bad_value_error(Config.General, good_dict, "debug", "-1")
+        self.check_bad_value_error(Config.General, good_dict, "log_level", "SomeString")
+        self.check_bad_value_error(Config.General, good_dict, "log_level", "-1")
         self.check_bad_value_error(Config.General, good_dict, "verbose", "SomeString")
         self.check_bad_value_error(Config.General, good_dict, "verbose", "-1")
+
+        # all valid log levels
+        for level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+            general = Config.General.from_dict({"log_level": level, "verbose": "False"})
+            self.assertEqual(level, general.log_level)
+
+        # case insensitive input is normalized to uppercase
+        general = Config.General.from_dict({"log_level": "info", "verbose": "False"})
+        self.assertEqual("INFO", general.log_level)
+
+    def test_general_old_debug_key_ignored(self):
+        """Old config files with 'debug' key should be silently ignored"""
+        old_dict = {
+            "debug": "True",
+            "verbose": "False",
+        }
+        general = Config.General.from_dict(old_dict)
+        # 'debug' is unknown and silently ignored; log_level gets its default
+        self.assertEqual("INFO", general.log_level)
+        self.assertEqual(False, general.verbose)
 
     def test_lftp(self):
         good_dict = {
@@ -440,7 +474,7 @@ class TestConfig(unittest.TestCase):
 
         config_file.write("""
         [General]
-        debug=False
+        log_level=WARNING
         verbose=True
 
         [Lftp]
@@ -481,7 +515,7 @@ class TestConfig(unittest.TestCase):
         config_file.flush()
         config = Config.from_file(config_file.name)
 
-        self.assertEqual(False, config.general.debug)
+        self.assertEqual("WARNING", config.general.log_level)
         self.assertEqual(True, config.general.verbose)
 
         self.assertEqual("remote.server.com", config.lftp.remote_address)
@@ -523,7 +557,7 @@ class TestConfig(unittest.TestCase):
         config_file.flush()
         config2 = Config.from_file(config_file.name)
         # Should load without error, known sections still valid
-        self.assertEqual(False, config2.general.debug)
+        self.assertEqual("WARNING", config2.general.log_level)
 
         # Remove config file
         config_file.close()
@@ -534,7 +568,7 @@ class TestConfig(unittest.TestCase):
         os.close(fd)
 
         config = Config()
-        config.general.debug = True
+        config.general.log_level = "DEBUG"
         config.general.verbose = False
         config.lftp.remote_address = "server.remote.com"
         config.lftp.remote_username = "user-on-remote-server"
@@ -578,7 +612,7 @@ class TestConfig(unittest.TestCase):
 
         golden_str = """
         [General]
-        debug = True
+        log_level = DEBUG
         verbose = False
         exclude_patterns =
 
@@ -680,7 +714,7 @@ class TestConfig(unittest.TestCase):
 
     def test_from_dict_missing_key_uses_default(self):
         """Missing keys in from_dict should use the __init__ default value"""
-        # Config.General has defaults: debug=None, verbose=None
+        # Config.General has defaults: log_level="INFO", verbose=None
         # Config.AutoQueue has defaults: enabled=None, etc.
         # Use Config.Web which has a single property 'port' with default None
         # Test with Lftp which has net_limit_rate defaulting to ""
@@ -718,10 +752,10 @@ class TestConfig(unittest.TestCase):
         """Missing sections in from_dict should use defaults instead of raising"""
         # Only General section present - all others should get defaults
         config_dict = {
-            "General": {"debug": "True", "verbose": "False"},
+            "General": {"log_level": "DEBUG", "verbose": "False"},
         }
         config = Config.from_dict(config_dict)
-        self.assertEqual(True, config.general.debug)
+        self.assertEqual("DEBUG", config.general.log_level)
         self.assertEqual(False, config.general.verbose)
         # Other sections should have default (None) values
         self.assertIsNone(config.lftp.remote_address)
@@ -732,7 +766,7 @@ class TestConfig(unittest.TestCase):
     def test_from_dict_empty_uses_all_defaults(self):
         """Completely empty dict should return config with all defaults"""
         config = Config.from_dict({})
-        self.assertIsNone(config.general.debug)
+        self.assertEqual("INFO", config.general.log_level)
         self.assertIsNone(config.lftp.remote_address)
         self.assertIsNone(config.controller.interval_ms_remote_scan)
         self.assertIsNone(config.web.port)
@@ -742,14 +776,14 @@ class TestConfig(unittest.TestCase):
         """Parsing a config string with missing sections should use defaults"""
         content = """
         [General]
-        debug=True
+        log_level=DEBUG
         verbose=False
 
         [Web]
         port=9999
         """
         config = Config.from_str(content)
-        self.assertEqual(True, config.general.debug)
+        self.assertEqual("DEBUG", config.general.log_level)
         self.assertEqual(9999, config.web.port)
         # Missing sections get defaults
         self.assertIsNone(config.lftp.remote_address)
@@ -759,7 +793,7 @@ class TestConfig(unittest.TestCase):
     def test_default_config_round_trip(self):
         """Default config should survive a write-then-read round trip"""
         config = Config()
-        config.general.debug = False
+        config.general.log_level = "INFO"
         config.general.verbose = False
         config.lftp.remote_address = "addr"
         config.lftp.remote_username = "user"
@@ -891,7 +925,7 @@ class TestConfig(unittest.TestCase):
     def test_controller_staging_round_trip(self):
         """Staging properties should survive a serialization round trip"""
         config = Config()
-        config.general.debug = False
+        config.general.log_level = "INFO"
         config.general.verbose = False
         config.lftp.remote_address = "addr"
         config.lftp.remote_username = "user"

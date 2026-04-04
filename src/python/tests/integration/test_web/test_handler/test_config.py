@@ -9,23 +9,23 @@ from tests.integration.test_web.test_web_app import BaseTestWebApp
 
 class TestConfigHandler(BaseTestWebApp):
     def test_get(self):
-        self.context.config.general.debug = True
+        self.context.config.general.log_level = "DEBUG"
         self.context.config.lftp.remote_path = "/remote/server/path"
         self.context.config.controller.interval_ms_local_scan = 5678
         self.context.config.web.port = 8080
         resp = self.test_app.get("/server/config/get")
         self.assertEqual(200, resp.status_int)
         json_dict = json.loads(str(resp.html))
-        self.assertEqual(True, json_dict["general"]["debug"])
+        self.assertEqual("DEBUG", json_dict["general"]["log_level"])
         self.assertEqual("/remote/server/path", json_dict["lftp"]["remote_path"])
         self.assertEqual(5678, json_dict["controller"]["interval_ms_local_scan"])
         self.assertEqual(8080, json_dict["web"]["port"])
 
     def test_set_good(self):
-        self.assertEqual(None, self.context.config.general.debug)
-        resp = self.test_app.get("/server/config/set/general/debug/True")
+        self.assertEqual("INFO", self.context.config.general.log_level)
+        resp = self.test_app.get("/server/config/set/general/log_level/DEBUG")
         self.assertEqual(200, resp.status_int)
-        self.assertEqual(True, self.context.config.general.debug)
+        self.assertEqual("DEBUG", self.context.config.general.log_level)
 
         self.assertEqual(None, self.context.config.lftp.remote_path)
         uri = quote(quote("/path/to/somewhere", safe=""), safe="")
@@ -58,12 +58,12 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertFalse(self.context.config.general.has_property("bad_option"))
 
     def test_set_bad_value(self):
-        # boolean
-        self.assertEqual(None, self.context.config.general.debug)
-        resp = self.test_app.get("/server/config/set/general/debug/cat", expect_errors=True)
+        # log_level
+        self.assertEqual("INFO", self.context.config.general.log_level)
+        resp = self.test_app.get("/server/config/set/general/log_level/cat", expect_errors=True)
         self.assertEqual(400, resp.status_int)
-        self.assertEqual("Bad config: General.debug (cat) must be a boolean value", str(resp.html))
-        self.assertEqual(None, self.context.config.general.debug)
+        self.assertIn("Bad config: General.log_level (cat) must be one of:", str(resp.html))
+        self.assertEqual("INFO", self.context.config.general.log_level)
 
         # positive int
         self.assertEqual(None, self.context.config.controller.interval_ms_local_scan)

@@ -10,11 +10,11 @@ from web.serialize import SerializeConfig
 class TestSerializeConfig(unittest.TestCase):
     def test_section_general(self):
         config = Config()
-        config.general.debug = True
+        config.general.log_level = "DEBUG"
         out = SerializeConfig.config(config)
         out_dict = json.loads(out)
         self.assertIn("general", out_dict)
-        self.assertEqual(True, out_dict["general"]["debug"])
+        self.assertEqual("DEBUG", out_dict["general"]["log_level"])
 
     def test_section_lftp(self):
         config = Config()
