@@ -4,14 +4,20 @@
     display: none;
 }
 
+/* Virtual scroll viewport */
+.file-viewport {
+    height: calc(100vh - 160px);
+    min-height: 200px;
+}
+
 /* striped rows */
-#file-list > div:nth-child(even){
+.file-row:nth-child(even){
     background-color: var(--ss-primary-lighter);
 }
 
 /* list separator */
-#file-list > div {border-bottom: 1px solid var(--ss-border);}
-#file-list > div:last-child{border-bottom: none;}
+.file-row {border-bottom: 1px solid var(--ss-border);}
+.file-row:last-child{border-bottom: none;}
 
 
 /* Medium and large screens */
@@ -49,16 +55,16 @@
 
 // ── Dark mode refinements ──
 :host-context([data-bs-theme="dark"]) {
-    #file-list > div:nth-child(even) {
+    .file-row:nth-child(even) {
         background-color: rgba(255, 255, 255, 0.02);
     }
 
-    #file-list > div {
+    .file-row {
         border-bottom-color: rgba(255, 255, 255, 0.04);
         transition: background 120ms ease;
     }
 
-    #file-list > div:last-child {
+    .file-row:last-child {
         border-bottom: none;
     }
 
