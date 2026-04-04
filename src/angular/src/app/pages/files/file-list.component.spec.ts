@@ -114,6 +114,8 @@ describe('FileListComponent', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(FileListComponent);
+    // Give the virtual scroll viewport a stable height so it renders items
+    (fixture.nativeElement as HTMLElement).style.height = '400px';
     fixture.detectChanges();
     component = fixture.componentInstance;
   });

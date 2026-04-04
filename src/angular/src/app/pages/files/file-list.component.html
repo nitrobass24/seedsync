@@ -23,7 +23,7 @@
       }
     }
     <cdk-virtual-scroll-viewport itemSize="50" class="file-viewport">
-        <div *cdkVirtualFor="let file of files; trackBy: identify" class="file-row">
+        <div *cdkVirtualFor="let file of files; trackBy: identify; let isEven = even" class="file-row" [class.even]="isEven">
             <app-file
                 [file]="file"
                 [options]="options"
