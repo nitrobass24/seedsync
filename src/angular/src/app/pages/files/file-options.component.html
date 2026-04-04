@@ -132,25 +132,25 @@
                 }
                 @if ((options | async)?.sortMethod === SortMethod.NAME_ASC) {
                     <div class="sel-item">
-                        <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" /></div>
+                        <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" alt="Sort ascending" /></div>
                         <span class="text">Name A&#8594;Z</span>
                     </div>
                 }
                 @if ((options | async)?.sortMethod === SortMethod.NAME_DESC) {
                     <div class="sel-item">
-                        <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" /></div>
+                        <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" alt="Sort descending" /></div>
                         <span class="text">Name Z&#8594;A</span>
                     </div>
                 }
                 @if ((options | async)?.sortMethod === SortMethod.SIZE_ASC) {
                     <div class="sel-item">
-                        <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" /></div>
+                        <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" alt="Sort ascending" /></div>
                         <span class="text">Size S&#8594;L</span>
                     </div>
                 }
                 @if ((options | async)?.sortMethod === SortMethod.SIZE_DESC) {
                     <div class="sel-item">
-                        <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" /></div>
+                        <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" alt="Sort descending" /></div>
                         <span class="text">Size L&#8594;S</span>
                     </div>
                 }
@@ -166,25 +166,25 @@
             <div class="dropdown-item"
                  [class.active]="(options | async)?.sortMethod === SortMethod.NAME_ASC"
                  (click)="onSort(SortMethod.NAME_ASC)">
-                <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" /></div>
+                <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" alt="Sort ascending" /></div>
                 <span class="text">Name A&#8594;Z</span>
             </div>
             <div class="dropdown-item"
                  [class.active]="(options | async)?.sortMethod === SortMethod.NAME_DESC"
                  (click)="onSort(SortMethod.NAME_DESC)">
-                <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" /></div>
+                <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" alt="Sort descending" /></div>
                 <span class="text">Name Z&#8594;A</span>
             </div>
             <div class="dropdown-item"
                  [class.active]="(options | async)?.sortMethod === SortMethod.SIZE_ASC"
                  (click)="onSort(SortMethod.SIZE_ASC)">
-                <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" /></div>
+                <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" alt="Sort ascending" /></div>
                 <span class="text">Size S&#8594;L</span>
             </div>
             <div class="dropdown-item"
                  [class.active]="(options | async)?.sortMethod === SortMethod.SIZE_DESC"
                  (click)="onSort(SortMethod.SIZE_DESC)">
-                <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" /></div>
+                <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" alt="Sort descending" /></div>
                 <span class="text">Size L&#8594;S</span>
             </div>
         </div>
