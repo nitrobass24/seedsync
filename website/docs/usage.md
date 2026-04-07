@@ -2,6 +2,40 @@
 title: Usage
 ---
 
+## Recommended Setup
+
+The best way to use SeedSync is with **hard links** and a dedicated completion directory. This ensures each file is downloaded exactly once and is never re-downloaded — even after a container restart.
+
+### How it works
+
+1. **Configure your torrent client** (qBittorrent, ruTorrent, etc.) to hard link completed downloads into a dedicated directory. For example, if your client downloads to `/downloads/tv`, have it hard link completed files to `/downloads/complete`.
+2. **Point SeedSync** at the completion directory (`/downloads/complete`).
+3. **Enable Auto-Queue** and turn on **"Delete remote file after syncing"** in Settings.
+
+Hard links don't consume extra disk space on the seedbox — they create another reference to the same data on disk. When SeedSync finishes syncing and deletes from `/downloads/complete`, only the hard link is removed. The original file stays intact for seeding.
+
+:::note
+Hard links only work when both directories are on the **same filesystem**. If your download and completion directories are on different mounts, use a bind mount to place them on the same filesystem, or use a copy-on-complete script instead (at the cost of extra disk space).
+:::
+
+### Setting up hard links
+
+- **qBittorrent**: Use [qbit-hardlinker](https://github.com/gravelfreeman/qbit-hardlinker) to automatically hard link completed downloads to your SeedSync directory.
+- **ruTorrent**: Use a post-completion script that creates hard links. Note that the Autotools "Move to" option performs a *move*, not a hard link — this would break seeding since the original file is relocated.
+
+### Example directory layout
+
+```text
+/downloads/
+├── tv/              ← Sonarr downloads here, torrents continue seeding
+├── movies/          ← Radarr downloads here
+└── complete/        ← Hard links go here, SeedSync watches this directory
+```
+
+:::tip
+This setup also solves the common problem of setting up SeedSync on a seedbox that already has many existing files. Since only newly completed downloads get hard-linked into the completion directory, SeedSync won't try to sync your entire library.
+:::
+
 ## Dashboard
 
 The Dashboard lists files and folders on the remote server and the local machine. From here you can:

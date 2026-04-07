@@ -28,6 +28,7 @@ This is the modernized fork of `ipsingh06/seedsync`, with updated dependencies a
 1. Follow the [Installation](./installation.md) guide to run the container.
 2. Open the web UI at `http://localhost:8800`.
 3. Go to Settings and configure your remote server and local paths.
+4. Set up the [recommended workflow](./usage.md#recommended-setup) with hard links and auto-delete for a sync-once, never-re-download setup.
 
 ## Docs
 

@@ -149,6 +149,20 @@ You can limit download speed in Settings under the **Connections** section. The 
 - Values with suffixes: `K` for KB/s, `M` for MB/s (e.g., `500K`, `2M`)
 - `0` or empty for unlimited
 
+## Recommended Workflow
+
+The best way to use SeedSync is with **hard links** and a dedicated completion directory:
+
+1. **Configure your torrent client** (qBittorrent, ruTorrent, etc.) to hard link completed downloads into a separate folder (e.g., `/downloads/complete`). Hard links don't use extra disk space — your originals stay intact for seeding.
+2. **Point SeedSync** at the completion directory.
+3. **Enable Auto-Queue** and turn on **"Delete remote file after syncing"** in Settings.
+
+This way, each file is downloaded exactly once. After SeedSync syncs it, the hard link is removed from the completion directory, so it's never re-downloaded — even after a container restart. Your originals remain untouched for seeding.
+
+> **Note**: Both directories must be on the same filesystem for hard links to work.
+
+See the [full setup guide](https://nitrobass24.github.io/seedsync/usage#recommended-setup) in the docs for directory layout examples and torrent client configuration.
+
 ## Building from Source
 
 ```bash
@@ -235,12 +249,6 @@ Fix:
 1. Change **Server Script Path** to a location outside your sync tree (`~` or `~/.local`)
 2. Remove the conflicting directory from the remote server: `rm -rf /your/sync/path/scanfs`
 3. Restart the container
-
-### Recommended Setup with Hard Links
-
-The preferred way to use SeedSync is with a dedicated completion directory using **hard links**. Configure your torrent client to hard link completed downloads to a separate folder (e.g., `/downloads/complete`), point SeedSync at that folder, and enable auto-delete of remote files after syncing. Hard links don't use extra disk space, and your originals remain intact for seeding. Note: both directories must be on the same filesystem for hard links to work.
-
-See the [FAQ](https://nitrobass24.github.io/seedsync/faq#what-is-the-recommended-way-to-set-up-seedsync-with-my-torrent-client) for a detailed setup guide and [qbit-hardlinker](https://github.com/gravelfreeman/qbit-hardlinker) for qBittorrent integration.
 
 ## Report an Issue
 
