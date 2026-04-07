@@ -1194,6 +1194,8 @@ class Controller:
 
             elif command.action == Controller.Command.Action.DELETE_LOCAL:
                 if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
+                    self.logger.debug("Deferring %s for '%s': %d active processes at cap",
+                                     command.action, command.filename, len(self.__active_command_processes))
                     deferred.append(command)
                     continue
                 if file.state not in (
@@ -1237,6 +1239,8 @@ class Controller:
 
             elif command.action == Controller.Command.Action.DELETE_REMOTE:
                 if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
+                    self.logger.debug("Deferring %s for '%s': %d active processes at cap",
+                                     command.action, command.filename, len(self.__active_command_processes))
                     deferred.append(command)
                     continue
                 if file.state not in (
