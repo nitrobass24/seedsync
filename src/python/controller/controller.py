@@ -1131,6 +1131,8 @@ class Controller:
             for _callback in _command.callbacks:
                 _callback.on_failure(_msg)
 
+        deferred: list[Controller.Command] = []
+
         while not self.__command_queue.empty():
             command = self.__command_queue.get()
             self.logger.info("Received command {} for file {}".format(str(command.action), command.filename))
@@ -1192,7 +1194,7 @@ class Controller:
 
             elif command.action == Controller.Command.Action.DELETE_LOCAL:
                 if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
-                    self.__command_queue.put(command)
+                    deferred.append(command)
                     continue
                 if file.state not in (
                     ModelFile.State.DEFAULT,
@@ -1235,7 +1237,7 @@ class Controller:
 
             elif command.action == Controller.Command.Action.DELETE_REMOTE:
                 if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
-                    self.__command_queue.put(command)
+                    deferred.append(command)
                     continue
                 if file.state not in (
                     ModelFile.State.DEFAULT,
@@ -1313,6 +1315,9 @@ class Controller:
 
             for callback in command.callbacks:
                 callback.on_success()
+
+        for cmd in deferred:
+            self.__command_queue.put(cmd)
 
     def __propagate_exceptions(self):
         """
