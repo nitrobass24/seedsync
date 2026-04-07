@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject, Observable, of, forkJoin } from 'rxjs';
+import { BehaviorSubject, Observable, of, from } from 'rxjs';
+import { mergeMap, toArray } from 'rxjs/operators';
 
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
@@ -213,7 +214,10 @@ export class ViewFileService {
     if (checked.length === 0) {
       return of([]);
     }
-    return forkJoin(checked.map(f => action(f)));
+    return from(checked).pipe(
+      mergeMap(f => action(f), 4),
+      toArray()
+    );
   }
 
   setFilterCriteria(criteria: ViewFileFilterCriteria | null): void {

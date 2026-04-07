@@ -235,6 +235,8 @@ class Controller:
             self.process = process
             self.post_callback = post_callback
 
+    _MAX_CONCURRENT_COMMAND_PROCESSES = 8
+
     def __init__(self, context: Context, persist: ControllerPersist):
         self.__context = context
         self.__persist = persist
@@ -1189,6 +1191,9 @@ class Controller:
                     self.__extract_process.extract(req)
 
             elif command.action == Controller.Command.Action.DELETE_LOCAL:
+                if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
+                    self.__command_queue.put(command)
+                    continue
                 if file.state not in (
                     ModelFile.State.DEFAULT,
                     ModelFile.State.DOWNLOADED,
@@ -1229,6 +1234,9 @@ class Controller:
                     command_wrapper.process.start()
 
             elif command.action == Controller.Command.Action.DELETE_REMOTE:
+                if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
+                    self.__command_queue.put(command)
+                    continue
                 if file.state not in (
                     ModelFile.State.DEFAULT,
                     ModelFile.State.DOWNLOADED,
@@ -1393,7 +1401,10 @@ class Controller:
             if move_process.is_alive():
                 still_active_moves.append(move_process)
             else:
-                move_process.propagate_exception()
+                try:
+                    move_process.propagate_exception()
+                except Exception:
+                    self.logger.warning("Move process failed: %s", move_process.name, exc_info=True)
                 for pc in self.__pair_contexts:
                     pc.local_scan_process.force_scan()
         self.__active_move_processes = still_active_moves
