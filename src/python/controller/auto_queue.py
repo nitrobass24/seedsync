@@ -41,6 +41,10 @@ class AutoQueuePattern(Serializable):
         return AutoQueuePattern(pattern=dct[AutoQueuePattern.__KEY_PATTERN])
 
 
+# (filename, pair_id, matched_pattern)
+_Candidate = tuple[str, str | None, AutoQueuePattern | None]
+
+
 class IAutoQueuePersistListener(ABC):
     """Listener for receiving AutoQueuePersist events"""
 
@@ -220,7 +224,7 @@ class AutoQueue:
         # Clear the new patterns
         self.__persist_listener.new_patterns.clear()
 
-    def __gather_queue_candidates(self) -> list[tuple[str, str | None, AutoQueuePattern | None]]:
+    def __gather_queue_candidates(self) -> list[_Candidate]:
         candidates: list[ModelFile] = list(self.__model_listener.new_files)
         for old_file, new_file in self.__model_listener.modified_files:
             if old_file.remote_size != new_file.remote_size:
@@ -234,7 +238,7 @@ class AutoQueue:
             ),
         )
 
-    def __gather_extract_candidates(self) -> list[tuple[str, str | None, AutoQueuePattern | None]]:
+    def __gather_extract_candidates(self) -> list[_Candidate]:
         candidates: list[ModelFile] = list(self.__model_listener.new_files)
         # Candidate modified files that just became DOWNLOADED
         # But not files that went EXTRACTING -> DOWNLOADED (failed extraction)
@@ -255,7 +259,7 @@ class AutoQueue:
             ),
         )
 
-    def __gather_delete_remote_candidates(self) -> list[tuple[str, str | None, AutoQueuePattern | None]]:
+    def __gather_delete_remote_candidates(self) -> list[_Candidate]:
         candidates: list[ModelFile] = list(self.__model_listener.new_files)
         for old_file, new_file in self.__model_listener.modified_files:
             if old_file.state != new_file.state and new_file.state in (
@@ -279,7 +283,7 @@ class AutoQueue:
 
     def __send_commands(
         self,
-        files: list[tuple[str, str | None, AutoQueuePattern | None]],
+        files: list[_Candidate],
         action: Controller.Command.Action,
         log_prefix: str,
     ) -> None:
@@ -291,9 +295,7 @@ class AutoQueue:
             command = Controller.Command(action, filename, pair_id=pair_id)
             self.__controller.queue_command(command)
 
-    def __retry_delete_remote(
-        self, files_to_delete_remote: list[tuple[str, str | None, AutoQueuePattern | None]]
-    ) -> None:
+    def __retry_delete_remote(self, files_to_delete_remote: list[_Candidate]) -> None:
         RETRY_INTERVAL = 20  # cycles between retries
         already_sent = {(name, pid) for name, pid, _ in files_to_delete_remote}
         model_files = self.__controller.get_model_files()
@@ -329,9 +331,7 @@ class AutoQueue:
             return self.__pair_auto_queue.get(file.pair_id, False)
         return True
 
-    def __filter_candidates(
-        self, candidates: list[ModelFile], accept: Callable[[ModelFile], bool]
-    ) -> list[tuple[str, str | None, AutoQueuePattern | None]]:
+    def __filter_candidates(self, candidates: list[ModelFile], accept: Callable[[ModelFile], bool]) -> list[_Candidate]:
         """
         Given a list of candidate files, filter out those that match the accept criteria
         Also takes into consideration new patterns that were added
