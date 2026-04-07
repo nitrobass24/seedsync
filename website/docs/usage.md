@@ -33,7 +33,7 @@ Hard links only work when both directories are on the **same filesystem**. If yo
 ```
 
 :::tip
-This setup also solves the common problem of setting up SeedSync on a seedbox that already has many existing files. Since only newly completed downloads get hard linked into the completion directory, SeedSync won't try to sync your entire library.
+This setup also solves the common problem of setting up SeedSync on a seedbox that already has many existing files. Since only newly completed downloads get hard-linked into the completion directory, SeedSync won't try to sync your entire library.
 :::
 
 ## Dashboard
