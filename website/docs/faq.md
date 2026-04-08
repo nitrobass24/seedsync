@@ -89,7 +89,7 @@ Leave it empty to use the system default `python3`.
 
 ## What is the recommended way to set up SeedSync with my torrent client?
 
-Use hard links with a dedicated completion directory and enable "Delete remote file after syncing." See the [Recommended Setup](./usage.md#recommended-setup) guide for full details.
+Use hard links with a dedicated completion directory and enable "Delete from remote after download." See the [Recommended Setup](./usage.md#recommended-setup) guide for full details.
 
 ## Where are settings stored?
 

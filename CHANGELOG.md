@@ -6,7 +6,7 @@
 
 - **Virtual scrolling for large file lists** — Improves performance when browsing directories with many files (#335)
 - **Size sorting in file list** — New sort option to order files by size (#334)
-- **Log level dropdown** — Replaced debug toggle with a full log level selector (trace/debug/info/warning/error) (#332)
+- **Log level dropdown** — Replaced debug toggle with a full log level selector (DEBUG/INFO/WARNING/ERROR/CRITICAL) (#332)
 
 ### Fixed
 

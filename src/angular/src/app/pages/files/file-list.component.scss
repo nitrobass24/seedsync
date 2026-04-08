@@ -4,10 +4,13 @@
     display: none;
 }
 
-/* Virtual scroll viewport — 160px accounts for navbar (56px) + header row (40px) + file-options bar (48px) + padding (16px) */
-$file-list-chrome-height: 160px;
+/* Virtual scroll viewport — on small screens the header row is hidden,
+   so we only subtract navbar (56px) + file-options bar (48px) + padding (16px) = 120px.
+   At medium+ the header row (40px) is visible, totalling 160px. */
+$file-list-chrome-height-sm: 120px;
+$file-list-chrome-height-md: 160px;
 .file-viewport {
-    height: calc(100vh - $file-list-chrome-height);
+    height: calc(100vh - $file-list-chrome-height-sm);
     min-height: 200px;
 }
 
@@ -26,6 +29,10 @@ $file-list-chrome-height: 160px;
 @media only screen and (min-width: $medium-min-width) {
     #file-list #header {
         display: flex;
+    }
+
+    .file-viewport {
+        height: calc(100vh - $file-list-chrome-height-md);
     }
 
     /* width */
