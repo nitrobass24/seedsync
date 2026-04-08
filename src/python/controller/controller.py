@@ -235,6 +235,8 @@ class Controller:
             self.process = process
             self.post_callback = post_callback
 
+    _MAX_CONCURRENT_COMMAND_PROCESSES = 8
+
     def __init__(self, context: Context, persist: ControllerPersist):
         self.__context = context
         self.__persist = persist
@@ -1129,6 +1131,8 @@ class Controller:
             for _callback in _command.callbacks:
                 _callback.on_failure(_msg)
 
+        deferred: list[Controller.Command] = []
+
         while not self.__command_queue.empty():
             command = self.__command_queue.get()
             self.logger.info("Received command {} for file {}".format(str(command.action), command.filename))
@@ -1189,6 +1193,15 @@ class Controller:
                     self.__extract_process.extract(req)
 
             elif command.action == Controller.Command.Action.DELETE_LOCAL:
+                if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
+                    self.logger.debug(
+                        "Deferring %s for '%s': %d active processes at cap",
+                        command.action,
+                        command.filename,
+                        len(self.__active_command_processes),
+                    )
+                    deferred.append(command)
+                    continue
                 if file.state not in (
                     ModelFile.State.DEFAULT,
                     ModelFile.State.DOWNLOADED,
@@ -1229,6 +1242,15 @@ class Controller:
                     command_wrapper.process.start()
 
             elif command.action == Controller.Command.Action.DELETE_REMOTE:
+                if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
+                    self.logger.debug(
+                        "Deferring %s for '%s': %d active processes at cap",
+                        command.action,
+                        command.filename,
+                        len(self.__active_command_processes),
+                    )
+                    deferred.append(command)
+                    continue
                 if file.state not in (
                     ModelFile.State.DEFAULT,
                     ModelFile.State.DOWNLOADED,
@@ -1306,6 +1328,9 @@ class Controller:
             for callback in command.callbacks:
                 callback.on_success()
 
+        for cmd in deferred:
+            self.__command_queue.put(cmd)
+
     def __propagate_exceptions(self):
         """
         Propagate any exceptions from child processes/threads to this thread
@@ -1365,7 +1390,7 @@ class Controller:
             return
 
         self.__moved_file_keys.add(move_key)
-        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name)
+        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name, pair_id=pair_id)
         process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
         self.__active_move_processes.append(process)
         process.start()
@@ -1393,7 +1418,12 @@ class Controller:
             if move_process.is_alive():
                 still_active_moves.append(move_process)
             else:
-                move_process.propagate_exception()
+                try:
+                    move_process.propagate_exception()
+                except Exception:
+                    self.logger.warning("Move process failed: %s", move_process.name, exc_info=True)
+                    move_key = _persist_key(move_process.pair_id, move_process.file_name)
+                    self.__moved_file_keys.discard(move_key)
                 for pc in self.__pair_contexts:
                     pc.local_scan_process.force_scan()
         self.__active_move_processes = still_active_moves
