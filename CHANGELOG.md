@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.15.0] - 2026-04-08
+
+### Added
+
+- **Virtual scrolling for large file lists** — Improves performance when browsing directories with many files (#335)
+- **Size sorting in file list** — New sort option to order files by size (#334)
+- **Log level dropdown** — Replaced debug toggle with a full log level selector (trace/debug/info/warning/error) (#332)
+
+### Fixed
+
+- **Bulk delete crash** — Fixed unbounded process spawning that caused crashes during bulk delete; scoped concurrency cap to delete operations and added move retry on failure (#338, #341)
+- **Infinite busy-loop in command process throttling** — Fixed CPU spin in the controller process throttle logic
+
+### Changed
+
+- **Dependency updates** — Angular group bump (9 packages), hono 4.12.7→4.12.12, @hono/node-server bump, jsdom 29.0.1→29.0.2, vitest 4.1.2→4.1.3, lodash 4.17.23→4.18.1, all deps to latest compatible versions (#326, #333, #336, #337, #343, #344, #345)
+- **Documentation** — Promoted recommended workflow to front-and-center in usage docs; fixed hyphenation of "hard-linked" (#340)
+
 ## [0.14.4] - 2026-03-30
 
 ### Changed
