@@ -15,11 +15,20 @@ class MoveProcess(AppOneShotProcess):
     for cross-device moves.
     """
 
-    def __init__(self, source_path: str, dest_path: str, file_name: str):
+    def __init__(self, source_path: str, dest_path: str, file_name: str, pair_id: str | None = None):
         super().__init__(name=self.__class__.__name__)
         self.__source_path = source_path
         self.__dest_path = dest_path
         self.__file_name = file_name
+        self._pair_id = pair_id
+
+    @property
+    def file_name(self) -> str:
+        return self.__file_name
+
+    @property
+    def pair_id(self) -> str | None:
+        return self._pair_id
 
     @staticmethod
     def _get_total_size(path: str) -> int:

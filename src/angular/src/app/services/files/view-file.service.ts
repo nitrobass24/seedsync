@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject, Observable, of, forkJoin } from 'rxjs';
+import { BehaviorSubject, Observable, of, from } from 'rxjs';
+import { mergeMap, toArray } from 'rxjs/operators';
 
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
@@ -198,22 +199,26 @@ export class ViewFileService {
   }
 
   bulkDeleteLocal(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isLocallyDeletable, f => this.deleteLocal(f));
+    return this.bulkAction(f => f.isLocallyDeletable, f => this.deleteLocal(f), 4);
   }
 
   bulkDeleteRemote(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isRemotelyDeletable, f => this.deleteRemote(f));
+    return this.bulkAction(f => f.isRemotelyDeletable, f => this.deleteRemote(f), 4);
   }
 
   private bulkAction(
     filter: (f: ViewFile) => boolean,
-    action: (f: ViewFile) => Observable<WebReaction>
+    action: (f: ViewFile) => Observable<WebReaction>,
+    concurrency: number = Infinity
   ): Observable<WebReaction[]> {
     const checked = this.files.filter(f => this.checkedSet.has(viewFileKey(f)) && filter(f));
     if (checked.length === 0) {
       return of([]);
     }
-    return forkJoin(checked.map(f => action(f)));
+    return from(checked).pipe(
+      mergeMap(f => action(f), concurrency),
+      toArray()
+    );
   }
 
   setFilterCriteria(criteria: ViewFileFilterCriteria | null): void {
@@ -330,10 +335,17 @@ export class ViewFileService {
         observer.complete();
       } else {
         const modelFile = this.prevModelFiles.get(key)!;
-        action(modelFile).subscribe((reaction) => {
-          this.logger.debug('Received model reaction: %O', reaction);
-          observer.next(reaction);
-          observer.complete();
+        action(modelFile).subscribe({
+          next: (reaction) => {
+            this.logger.debug('Received model reaction: %O', reaction);
+            observer.next(reaction);
+            observer.complete();
+          },
+          error: (err) => {
+            this.logger.error('Action failed for file: ' + key, err);
+            observer.next({ success: false, data: null, errorMessage: String(err?.message ?? err) });
+            observer.complete();
+          },
         });
       }
     });

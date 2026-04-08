@@ -22,8 +22,8 @@
         </app-bulk-action-bar>
       }
     }
-    @for (file of files | async; track identify($index, file)) {
-        <div>
+    <cdk-virtual-scroll-viewport itemSize="50" class="file-viewport">
+        <div *cdkVirtualFor="let file of files; trackBy: identify; let isEven = even" class="file-row" [class.even]="isEven">
             <app-file
                 [file]="file"
                 [options]="options"
@@ -37,5 +37,5 @@
                 (deleteRemoteEvent)="onDeleteRemote($event)">
             </app-file>
         </div>
-    }
+    </cdk-virtual-scroll-viewport>
 </div>

@@ -2,6 +2,7 @@ import { Component, ChangeDetectionStrategy, DestroyRef, inject } from '@angular
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AsyncPipe } from '@angular/common';
 import { Observable } from 'rxjs';
+import { CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf } from '@angular/cdk/scrolling';
 
 import { ViewFileService } from '../../services/files/view-file.service';
 import { WebReaction } from '../../services/utils/rest.service';
@@ -16,7 +17,7 @@ import { BulkActionBarComponent } from './bulk-action-bar.component';
 @Component({
   selector: 'app-file-list',
   standalone: true,
-  imports: [AsyncPipe, FileComponent, BulkActionBarComponent],
+  imports: [AsyncPipe, FileComponent, BulkActionBarComponent, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf],
   templateUrl: './file-list.component.html',
   styleUrls: ['./file-list.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush

@@ -4,20 +4,35 @@
     display: none;
 }
 
-/* striped rows */
-#file-list > div:nth-child(even){
+/* Virtual scroll viewport — on small screens the header row is hidden,
+   so we only subtract navbar (56px) + file-options bar (48px) + padding (16px) = 120px.
+   At medium+ the header row (40px) is visible, totalling 160px. */
+$file-list-chrome-height-sm: 120px;
+$file-list-chrome-height-md: 160px;
+.file-viewport {
+    height: calc(100vh - $file-list-chrome-height-sm);
+    min-height: 200px;
+}
+
+/* striped rows — use template-driven .even class instead of :nth-child
+   because virtual scroll recycles DOM nodes */
+.file-row.even {
     background-color: var(--ss-primary-lighter);
 }
 
-/* list separator */
-#file-list > div {border-bottom: 1px solid var(--ss-border);}
-#file-list > div:last-child{border-bottom: none;}
+/* list separator — use top-border so recycled rows always show a separator
+   regardless of DOM position (no :last-child needed) */
+.file-row + .file-row {border-top: 1px solid var(--ss-border);}
 
 
 /* Medium and large screens */
 @media only screen and (min-width: $medium-min-width) {
     #file-list #header {
         display: flex;
+    }
+
+    .file-viewport {
+        height: calc(100vh - $file-list-chrome-height-md);
     }
 
     /* width */
@@ -49,17 +64,16 @@
 
 // ── Dark mode refinements ──
 :host-context([data-bs-theme="dark"]) {
-    #file-list > div:nth-child(even) {
+    .file-row.even {
         background-color: rgba(255, 255, 255, 0.02);
     }
 
-    #file-list > div {
-        border-bottom-color: rgba(255, 255, 255, 0.04);
-        transition: background 120ms ease;
+    .file-row + .file-row {
+        border-top-color: rgba(255, 255, 255, 0.04);
     }
 
-    #file-list > div:last-child {
-        border-bottom: none;
+    .file-row {
+        transition: background 120ms ease;
     }
 
     #header div {

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { BehaviorSubject, Observable, of, EMPTY } from 'rxjs';
+import { ScrollingModule } from '@angular/cdk/scrolling';
 
 import { FileListComponent } from './file-list.component';
 import { ViewFileService } from '../../services/files/view-file.service';
@@ -104,7 +105,7 @@ describe('FileListComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [FileListComponent],
+      imports: [FileListComponent, ScrollingModule],
       providers: [
         { provide: ViewFileService, useValue: mockViewFileService },
         { provide: ViewFileOptionsService, useValue: { options$: optionsSubject.asObservable() } },
@@ -113,6 +114,8 @@ describe('FileListComponent', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(FileListComponent);
+    // Give the virtual scroll viewport a stable height so it renders items
+    (fixture.nativeElement as HTMLElement).style.height = '400px';
     fixture.detectChanges();
     component = fixture.componentInstance;
   });

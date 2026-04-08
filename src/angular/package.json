@@ -1,6 +1,6 @@
 {
   "name": "seedsync",
-  "version": "0.14.4",
+  "version": "0.15.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -23,12 +23,13 @@
   "private": true,
   "packageManager": "npm@10.9.2",
   "dependencies": {
-    "@angular/common": "^21.2.6",
-    "@angular/compiler": "^21.2.6",
-    "@angular/core": "^21.2.6",
-    "@angular/forms": "^21.2.6",
-    "@angular/platform-browser": "^21.2.6",
-    "@angular/router": "^21.2.6",
+    "@angular/cdk": "^21.2.5",
+    "@angular/common": "^21.2.7",
+    "@angular/compiler": "^21.2.7",
+    "@angular/core": "^21.2.7",
+    "@angular/forms": "^21.2.7",
+    "@angular/platform-browser": "^21.2.7",
+    "@angular/router": "^21.2.7",
     "@fortawesome/fontawesome-free": "^7.1.0",
     "bootstrap": "^5.3.8",
     "compare-versions": "^6.1.1",
@@ -36,9 +37,9 @@
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@angular/build": "^21.2.5",
-    "@angular/cli": "^21.2.5",
-    "@angular/compiler-cli": "^21.2.6",
+    "@angular/build": "^21.2.6",
+    "@angular/cli": "^21.2.6",
+    "@angular/compiler-cli": "^21.2.7",
     "jsdom": "^29.0.1",
     "typescript": "~5.9.2",
     "vitest": "^4.1.2"
