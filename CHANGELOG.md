@@ -16,7 +16,7 @@
 ### Changed
 
 - **Dependency updates** — Angular group bump (9 packages), hono 4.12.7→4.12.12, @hono/node-server bump, jsdom 29.0.1→29.0.2, vitest 4.1.2→4.1.3, lodash 4.17.23→4.18.1, all deps to latest compatible versions (#326, #333, #336, #337, #343, #344, #345)
-- **Documentation** — Promoted recommended workflow to front-and-center in usage docs; fixed hyphenation of "hard-linked" (#340)
+- **Documentation** — Moved recommended hard-link workflow from FAQ to a dedicated Usage section with getting-started link on the homepage; fixed hyphenation of "hard-linked" (#340)
 
 ## [0.14.4] - 2026-03-30
 
