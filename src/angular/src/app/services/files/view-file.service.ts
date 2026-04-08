@@ -199,23 +199,24 @@ export class ViewFileService {
   }
 
   bulkDeleteLocal(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isLocallyDeletable, f => this.deleteLocal(f));
+    return this.bulkAction(f => f.isLocallyDeletable, f => this.deleteLocal(f), 4);
   }
 
   bulkDeleteRemote(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isRemotelyDeletable, f => this.deleteRemote(f));
+    return this.bulkAction(f => f.isRemotelyDeletable, f => this.deleteRemote(f), 4);
   }
 
   private bulkAction(
     filter: (f: ViewFile) => boolean,
-    action: (f: ViewFile) => Observable<WebReaction>
+    action: (f: ViewFile) => Observable<WebReaction>,
+    concurrency: number = Infinity
   ): Observable<WebReaction[]> {
     const checked = this.files.filter(f => this.checkedSet.has(viewFileKey(f)) && filter(f));
     if (checked.length === 0) {
       return of([]);
     }
     return from(checked).pipe(
-      mergeMap(f => action(f), 4),
+      mergeMap(f => action(f), concurrency),
       toArray()
     );
   }

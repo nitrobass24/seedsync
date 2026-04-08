@@ -1390,7 +1390,7 @@ class Controller:
             return
 
         self.__moved_file_keys.add(move_key)
-        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name)
+        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name, pair_id=pair_id)
         process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
         self.__active_move_processes.append(process)
         process.start()
@@ -1422,6 +1422,8 @@ class Controller:
                     move_process.propagate_exception()
                 except Exception:
                     self.logger.warning("Move process failed: %s", move_process.name, exc_info=True)
+                    move_key = _persist_key(move_process.pair_id, move_process.file_name)
+                    self.__moved_file_keys.discard(move_key)
                 for pc in self.__pair_contexts:
                     pc.local_scan_process.force_scan()
         self.__active_move_processes = still_active_moves
