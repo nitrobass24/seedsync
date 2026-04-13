@@ -42,6 +42,6 @@
     "@angular/compiler-cli": "^21.2.7",
     "jsdom": "^29.0.1",
     "typescript": "~5.9.2",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.4"
   }
 }
