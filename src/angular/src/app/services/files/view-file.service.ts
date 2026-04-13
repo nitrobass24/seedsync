@@ -5,7 +5,7 @@ import { mergeMap, toArray } from 'rxjs/operators';
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
 import { PathPairsService } from '../settings/path-pairs.service';
-import { RestService, WebReaction } from '../utils/rest.service';
+import { WebReaction } from '../utils/rest.service';
 import { ModelFile, ModelFileState } from '../../models/model-file';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
 import { fileKey } from './file-key';
