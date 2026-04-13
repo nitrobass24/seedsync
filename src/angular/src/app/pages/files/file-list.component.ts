@@ -33,7 +33,7 @@ export class FileListComponent {
   checked$ = this.viewFileService.checked$;
   identify = FileListComponent.identify;
 
-  static identify(index: number, item: ViewFile): string {
+  static identify(_index: number, item: ViewFile): string {
     return fileKey(item.pairId, item.name);
   }
 
