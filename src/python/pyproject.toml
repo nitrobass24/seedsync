@@ -5,7 +5,7 @@ description = "File synchronization tool for seedboxes"
 requires-python = ">=3.12"
 dependencies = [
     "bottle>=0.12,<1.0",
-    "pexpect>=4.8",
+    "pexpect>=4.9.0",
     "tblib>=3.2.2",
 ]
 
