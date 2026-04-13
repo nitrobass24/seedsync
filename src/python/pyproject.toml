@@ -16,7 +16,7 @@ test = [
     "testfixtures>=8.0",
     "webtest>=3.0",
     "timeout-decorator>=0.5",
-    "pytest-timeout>=2.0",
+    "pytest-timeout>=2.4.0",
 ]
 dev = [
     "ruff>=0.11",
