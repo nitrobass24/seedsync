@@ -11,7 +11,7 @@ dependencies = [
 
 [dependency-groups]
 test = [
-    "pytest>=7.0",
+    "pytest>=9.0.3",
     "parameterized>=0.9",
     "testfixtures>=8.0",
     "webtest>=3.0",
