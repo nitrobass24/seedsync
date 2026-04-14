@@ -72,7 +72,7 @@
       <div class="card">
         <h3 class="card-header">Integrations</h3>
         <div class="card-body">
-          <h5>Sonarr</h5>
+          <div class="integration-label">Sonarr</div>
           @for (option of OPTIONS_CONTEXT_INTEGRATIONS_SONARR.options; track option.label) {
             <div>
               <app-option
@@ -99,7 +99,7 @@
 
           <hr />
 
-          <h5>Radarr</h5>
+          <div class="integration-label">Radarr</div>
           @for (option of OPTIONS_CONTEXT_INTEGRATIONS_RADARR.options; track option.label) {
             <div>
               <app-option

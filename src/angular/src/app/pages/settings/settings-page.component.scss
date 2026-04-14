@@ -83,8 +83,13 @@
 }
 
 
+.integration-label {
+    font-weight: bold;
+    margin: 8px 20px 0;
+}
+
 .test-connection {
-    padding: 8px 15px;
+    padding: 8px 20px;
     display: flex;
     align-items: center;
     gap: 10px;

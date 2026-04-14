@@ -164,7 +164,7 @@ describe('SettingsPageComponent integration tests', () => {
 
   it('should render Integrations card with Sonarr and Radarr headings', () => {
     const el = fixture.nativeElement as HTMLElement;
-    const headings = Array.from(el.querySelectorAll('h5')).map((h) => h.textContent?.trim());
+    const headings = Array.from(el.querySelectorAll('.integration-label')).map((h) => h.textContent?.trim());
     expect(headings).toContain('Sonarr');
     expect(headings).toContain('Radarr');
   });
