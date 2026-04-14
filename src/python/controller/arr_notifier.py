@@ -96,14 +96,14 @@ class ArrNotifier(IModelListener):
             self._active_threads.add(thread)
         thread.start()
 
-    def _thread_wrapper(self, service: str, url: str, api_key: str, payload: dict) -> None:
+    def _thread_wrapper(self, service: str, url: str, api_key: str, payload: dict[str, str]) -> None:
         try:
             self._send_post(service, url, api_key, payload)
         finally:
             with self._lock:
                 self._active_threads.discard(threading.current_thread())
 
-    def _send_post(self, service: str, url: str, api_key: str, payload: dict) -> None:
+    def _send_post(self, service: str, url: str, api_key: str, payload: dict[str, str]) -> None:
         if not url.startswith(("http://", "https://")):
             self._logger.warning("%s URL rejected: scheme is not http/https", service)
             return

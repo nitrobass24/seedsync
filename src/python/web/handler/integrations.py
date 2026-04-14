@@ -35,7 +35,9 @@ class IntegrationsHandler(IHandler):
         if not api_key:
             return HTTPResponse(body=json.dumps({"error": f"{service} API key is not configured"}), status=400)
         if not url.startswith(("http://", "https://")):
-            return HTTPResponse(body=json.dumps({"error": f"{service} URL must start with http:// or https://"}), status=400)
+            return HTTPResponse(
+                body=json.dumps({"error": f"{service} URL must start with http:// or https://"}), status=400
+            )
 
         endpoint = url.rstrip("/") + "/api/v3/system/status"
         try:

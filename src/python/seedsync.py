@@ -391,7 +391,16 @@ class Seedsync:
         """
         defaults = Seedsync._create_default_config()
         changed = False
-        for section_attr in ["general", "lftp", "controller", "web", "autoqueue", "logging", "notifications", "integrations"]:
+        for section_attr in [
+            "general",
+            "lftp",
+            "controller",
+            "web",
+            "autoqueue",
+            "logging",
+            "notifications",
+            "integrations",
+        ]:
             section = getattr(config, section_attr)
             default_section = getattr(defaults, section_attr)
             for key in section.as_dict():
