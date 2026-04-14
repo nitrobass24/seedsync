@@ -91,7 +91,7 @@
               {{ sonarrTesting ? 'Testing...' : 'Test Connection' }}
             </button>
             @if (sonarrTestResult) {
-              <span class="test-result" [class.text-success]="sonarrTestResult.success" [class.text-danger]="!sonarrTestResult.success">
+              <span class="test-result" aria-live="polite" aria-atomic="true" [class.text-success]="sonarrTestResult.success" [class.text-danger]="!sonarrTestResult.success">
                 {{ sonarrTestResult.message }}
               </span>
             }
@@ -118,7 +118,7 @@
               {{ radarrTesting ? 'Testing...' : 'Test Connection' }}
             </button>
             @if (radarrTestResult) {
-              <span class="test-result" [class.text-success]="radarrTestResult.success" [class.text-danger]="!radarrTestResult.success">
+              <span class="test-result" aria-live="polite" aria-atomic="true" [class.text-success]="radarrTestResult.success" [class.text-danger]="!radarrTestResult.success">
                 {{ radarrTestResult.message }}
               </span>
             }

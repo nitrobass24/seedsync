@@ -158,28 +158,28 @@ SeedSync can notify Sonarr and Radarr when a download completes, triggering an a
 1. Go to **Settings → Integrations**
 2. Enable the integration (Sonarr, Radarr, or both)
 3. Enter the base URL (e.g. `http://sonarr:8989` or `http://radarr:7878`)
-4. Enter the API key (found in the *arr app under **Settings → General → API Key**)
+4. Enter the API key (found in the Arr app under **Settings → General → API Key**)
 5. Click **Test Connection** to verify
 
 ### How it works
 
-When a file transitions to the **Downloaded** state, SeedSync sends a `POST` to the *arr app's command API:
+When a file transitions to the **Downloaded** state, SeedSync sends a `POST` to the Arr app's command API:
 
 | App | Endpoint | Command |
 | --- | --- | --- |
 | Sonarr | `POST /api/v3/command` | `DownloadedEpisodesScan` |
 | Radarr | `POST /api/v3/command` | `DownloadedMoviesScan` |
 
-The request includes the absolute local path of the downloaded file, so the *arr app scans only that path instead of the entire download directory.
+The request includes the absolute local path of the downloaded file, so the Arr app scans only that path instead of the entire download directory.
 
 Notifications are fire-and-forget — they run in background threads and never block the download pipeline. Failed notifications are logged as warnings.
 
 :::tip
-If you run SeedSync and *arr apps in Docker, use the Docker service name as the host (e.g. `http://sonarr:8989`) and make sure all containers share a Docker network.
+If you run SeedSync and Arr apps in Docker, use the Docker service name as the host (e.g. `http://sonarr:8989`) and make sure all containers share a Docker network.
 :::
 
 :::note
-The local path sent to the *arr app is the path **inside the SeedSync container**. If your *arr app sees a different mount path for the same files, configure a [remote path mapping](https://wiki.servarr.com/sonarr/settings#remote-path-mappings) in the *arr app.
+The local path sent to the Arr app is the path **inside the SeedSync container**. If your Arr app sees a different mount path for the same files, configure a [remote path mapping](https://wiki.servarr.com/sonarr/settings#remote-path-mappings) in the Arr app.
 :::
 
 ### Configuration reference
@@ -187,8 +187,8 @@ The local path sent to the *arr app is the path **inside the SeedSync container*
 | Setting | Description |
 | --- | --- |
 | **Enable Sonarr/Radarr integration** | Toggle notifications on or off |
-| **URL** | Base URL of the *arr app (e.g. `http://localhost:8989`) |
-| **API Key** | *arr app API key (masked in the UI) |
+| **URL** | Base URL of the Arr app (e.g. `http://localhost:8989`) |
+| **API Key** | Arr app API key (masked in the UI) |
 
 ## Webhooks
 
