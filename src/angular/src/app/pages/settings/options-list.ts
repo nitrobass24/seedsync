@@ -406,6 +406,56 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
   ],
 };
 
+export const OPTIONS_CONTEXT_INTEGRATIONS_SONARR: IOptionsContext = {
+  header: 'Sonarr',
+  id: 'integrations-sonarr',
+  options: [
+    {
+      type: OptionType.Checkbox,
+      label: 'Enable Sonarr integration',
+      valuePath: ['integrations', 'sonarr_enabled'],
+      description: 'Trigger Sonarr to scan for downloaded episodes when a download completes',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Sonarr URL',
+      valuePath: ['integrations', 'sonarr_url'],
+      description: 'Base URL for Sonarr (e.g. http://localhost:8989)',
+    },
+    {
+      type: OptionType.Password,
+      label: 'Sonarr API Key',
+      valuePath: ['integrations', 'sonarr_api_key'],
+      description: 'Found in Sonarr under Settings > General > API Key',
+    },
+  ],
+};
+
+export const OPTIONS_CONTEXT_INTEGRATIONS_RADARR: IOptionsContext = {
+  header: 'Radarr',
+  id: 'integrations-radarr',
+  options: [
+    {
+      type: OptionType.Checkbox,
+      label: 'Enable Radarr integration',
+      valuePath: ['integrations', 'radarr_enabled'],
+      description: 'Trigger Radarr to scan for downloaded movies when a download completes',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Radarr URL',
+      valuePath: ['integrations', 'radarr_url'],
+      description: 'Base URL for Radarr (e.g. http://localhost:7878)',
+    },
+    {
+      type: OptionType.Password,
+      label: 'Radarr API Key',
+      valuePath: ['integrations', 'radarr_api_key'],
+      description: 'Found in Radarr under Settings > General > API Key',
+    },
+  ],
+};
+
 export const OPTIONS_CONTEXT_EXTRACT: IOptionsContext = {
   header: 'Archive Extraction',
   id: 'extraction',

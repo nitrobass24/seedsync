@@ -1,7 +1,12 @@
 import '@angular/compiler';
 import { describe, it, expect } from 'vitest';
 import { SettingsPageComponent } from './settings-page.component';
-import { IOptionsContext } from './options-list';
+import { OptionType } from './option.component';
+import {
+  IOptionsContext,
+  OPTIONS_CONTEXT_INTEGRATIONS_SONARR,
+  OPTIONS_CONTEXT_INTEGRATIONS_RADARR,
+} from './options-list';
 
 // Access private static methods for unit testing
 const buildServerContext = (hasEnabledPairs: boolean): IOptionsContext =>
@@ -65,6 +70,49 @@ describe('SettingsPageComponent.buildAutoqueueContext', () => {
 
     for (const option of others) {
       expect(option.disabled).toBeFalsy();
+    }
+  });
+});
+
+describe('Integrations options contexts', () => {
+  it('Sonarr context should have correct options', () => {
+    expect(OPTIONS_CONTEXT_INTEGRATIONS_SONARR.header).toBe('Sonarr');
+    expect(OPTIONS_CONTEXT_INTEGRATIONS_SONARR.id).toBe('integrations-sonarr');
+    const optionKeys = OPTIONS_CONTEXT_INTEGRATIONS_SONARR.options.map((o) => o.valuePath[1]);
+    expect(optionKeys).toContain('sonarr_enabled');
+    expect(optionKeys).toContain('sonarr_url');
+    expect(optionKeys).toContain('sonarr_api_key');
+  });
+
+  it('Sonarr API key should be a Password field', () => {
+    const apiKeyOption = OPTIONS_CONTEXT_INTEGRATIONS_SONARR.options.find(
+      (o) => o.valuePath[1] === 'sonarr_api_key',
+    )!;
+    expect(apiKeyOption.type).toBe(OptionType.Password);
+  });
+
+  it('Radarr context should have correct options', () => {
+    expect(OPTIONS_CONTEXT_INTEGRATIONS_RADARR.header).toBe('Radarr');
+    expect(OPTIONS_CONTEXT_INTEGRATIONS_RADARR.id).toBe('integrations-radarr');
+    const optionKeys = OPTIONS_CONTEXT_INTEGRATIONS_RADARR.options.map((o) => o.valuePath[1]);
+    expect(optionKeys).toContain('radarr_enabled');
+    expect(optionKeys).toContain('radarr_url');
+    expect(optionKeys).toContain('radarr_api_key');
+  });
+
+  it('Radarr API key should be a Password field', () => {
+    const apiKeyOption = OPTIONS_CONTEXT_INTEGRATIONS_RADARR.options.find(
+      (o) => o.valuePath[1] === 'radarr_api_key',
+    )!;
+    expect(apiKeyOption.type).toBe(OptionType.Password);
+  });
+
+  it('all integrations options should reference the integrations section', () => {
+    for (const opt of OPTIONS_CONTEXT_INTEGRATIONS_SONARR.options) {
+      expect(opt.valuePath[0]).toBe('integrations');
+    }
+    for (const opt of OPTIONS_CONTEXT_INTEGRATIONS_RADARR.options) {
+      expect(opt.valuePath[0]).toBe('integrations');
     }
   });
 });

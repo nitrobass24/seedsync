@@ -83,6 +83,17 @@
 }
 
 
+.test-connection {
+    padding: 8px 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    .test-result {
+        font-size: 85%;
+    }
+}
+
 /* Medium and large screens */
 @media only screen and (min-width: $medium-min-width) {
     #settings {

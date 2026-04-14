@@ -68,6 +68,61 @@
       <ng-container
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_NOTIFICATIONS">
       </ng-container>
+
+      <div class="card">
+        <h3 class="card-header">Integrations</h3>
+        <div class="card-body">
+          <h5>Sonarr</h5>
+          @for (option of OPTIONS_CONTEXT_INTEGRATIONS_SONARR.options; track option.label) {
+            <div>
+              <app-option
+                [type]="option.type"
+                [label]="option.label"
+                [description]="option.description"
+                [choices]="option.choices || []"
+                [value]="getOptionValue(config$ | async, option.valuePath)"
+                (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
+              </app-option>
+            </div>
+          }
+          <div class="test-connection">
+            <button class="btn btn-sm btn-outline-secondary" [disabled]="sonarrTesting" (click)="onTestSonarr()">
+              {{ sonarrTesting ? 'Testing...' : 'Test Connection' }}
+            </button>
+            @if (sonarrTestResult) {
+              <span class="test-result" [class.text-success]="sonarrTestResult.success" [class.text-danger]="!sonarrTestResult.success">
+                {{ sonarrTestResult.message }}
+              </span>
+            }
+          </div>
+
+          <hr />
+
+          <h5>Radarr</h5>
+          @for (option of OPTIONS_CONTEXT_INTEGRATIONS_RADARR.options; track option.label) {
+            <div>
+              <app-option
+                [type]="option.type"
+                [label]="option.label"
+                [description]="option.description"
+                [choices]="option.choices || []"
+                [value]="getOptionValue(config$ | async, option.valuePath)"
+                (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
+              </app-option>
+            </div>
+          }
+          <div class="test-connection">
+            <button class="btn btn-sm btn-outline-secondary" [disabled]="radarrTesting" (click)="onTestRadarr()">
+              {{ radarrTesting ? 'Testing...' : 'Test Connection' }}
+            </button>
+            @if (radarrTestResult) {
+              <span class="test-result" [class.text-success]="radarrTestResult.success" [class.text-danger]="!radarrTestResult.success">
+                {{ radarrTestResult.message }}
+              </span>
+            }
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
