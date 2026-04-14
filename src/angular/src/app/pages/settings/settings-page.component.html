@@ -86,7 +86,7 @@
             </div>
           }
           <div class="test-connection">
-            <button class="btn btn-sm btn-outline-secondary" [disabled]="sonarrTesting" (click)="onTestSonarr()">
+            <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="sonarrTesting" (click)="onTestSonarr()">
               {{ sonarrTesting ? 'Testing...' : 'Test Connection' }}
             </button>
             @if (sonarrTestResult) {
@@ -112,7 +112,7 @@
             </div>
           }
           <div class="test-connection">
-            <button class="btn btn-sm btn-outline-secondary" [disabled]="radarrTesting" (click)="onTestRadarr()">
+            <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="radarrTesting" (click)="onTestRadarr()">
               {{ radarrTesting ? 'Testing...' : 'Test Connection' }}
             </button>
             @if (radarrTestResult) {

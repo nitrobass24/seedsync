@@ -93,8 +93,8 @@ class ArrNotifier(IModelListener):
             if self._shutdown_flag:
                 self._logger.debug("%s scan suppressed during shutdown: %s", service, path)
                 return
+            thread.start()
             self._active_threads.add(thread)
-        thread.start()
 
     def _thread_wrapper(self, service: str, url: str, api_key: str, payload: dict[str, str]) -> None:
         try:

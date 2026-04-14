@@ -2,7 +2,7 @@ import '@angular/compiler';
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { IntegrationsService } from './integrations.service';
 
@@ -16,6 +16,10 @@ describe('IntegrationsService', () => {
     });
     service = TestBed.inject(IntegrationsService);
     httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
   });
 
   it('should return success on Sonarr test', () => {

@@ -1,6 +1,5 @@
 import logging
 import threading
-import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -47,8 +46,7 @@ class TestArrNotifier(unittest.TestCase):
 
         with patch.object(notifier, "_send_post") as mock_send:
             notifier.file_updated(old_file, new_file)
-            # Give threads a moment (there shouldn't be any)
-            time.sleep(0.1)
+            notifier.shutdown(timeout=2)
             mock_send.assert_not_called()
 
     def test_sonarr_fires_on_download_complete(self):
@@ -102,7 +100,7 @@ class TestArrNotifier(unittest.TestCase):
 
         with patch.object(notifier, "_send_post") as mock_send:
             notifier.file_updated(old_file, new_file)
-            time.sleep(0.1)
+            notifier.shutdown(timeout=2)
             mock_send.assert_not_called()
 
     def test_no_fire_when_state_unchanged(self):
@@ -113,7 +111,7 @@ class TestArrNotifier(unittest.TestCase):
 
         with patch.object(notifier, "_send_post") as mock_send:
             notifier.file_updated(old_file, new_file)
-            time.sleep(0.1)
+            notifier.shutdown(timeout=2)
             mock_send.assert_not_called()
 
     def test_no_fire_when_url_empty(self):
@@ -124,7 +122,7 @@ class TestArrNotifier(unittest.TestCase):
 
         with patch.object(notifier, "_send_post") as mock_send:
             notifier.file_updated(old_file, new_file)
-            time.sleep(0.1)
+            notifier.shutdown(timeout=2)
             mock_send.assert_not_called()
 
     def test_no_fire_when_api_key_empty(self):
@@ -135,7 +133,7 @@ class TestArrNotifier(unittest.TestCase):
 
         with patch.object(notifier, "_send_post") as mock_send:
             notifier.file_updated(old_file, new_file)
-            time.sleep(0.1)
+            notifier.shutdown(timeout=2)
             mock_send.assert_not_called()
 
     def test_shutdown_prevents_new_scans(self):
@@ -183,11 +181,12 @@ class TestArrNotifier(unittest.TestCase):
             started.set()
             raise RuntimeError("connection refused")
 
-        with patch.object(notifier, "_send_post", side_effect=failing_send):
+        with patch.object(notifier, "_send_post", side_effect=failing_send) as mock_send:
             old_file = self._make_model_file(state=ModelFile.State.DOWNLOADING)
             new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
             notifier.file_updated(old_file, new_file)
-            started.wait(timeout=5)
+            self.assertTrue(started.wait(timeout=5), "failing_send was never invoked")
+            mock_send.assert_called_once()
             notifier.shutdown(timeout=2)
 
             with notifier._lock:

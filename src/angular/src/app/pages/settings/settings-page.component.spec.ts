@@ -1,7 +1,17 @@
 import '@angular/compiler';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { TestBed, ComponentFixture } from '@angular/core/testing';
+import { BehaviorSubject, of } from 'rxjs';
 import { SettingsPageComponent } from './settings-page.component';
 import { OptionType } from './option.component';
+import { LoggerService } from '../../services/utils/logger.service';
+import { ConfigService } from '../../services/settings/config.service';
+import { IntegrationsService, TestConnectionResult } from '../../services/settings/integrations.service';
+import { NotificationService } from '../../services/utils/notification.service';
+import { ServerCommandService } from '../../services/server/server-command.service';
+import { ConnectedService } from '../../services/utils/connected.service';
+import { PathPairsService } from '../../services/settings/path-pairs.service';
+import { Config, DEFAULT_CONFIG } from '../../models/config';
 import {
   IOptionsContext,
   OPTIONS_CONTEXT_INTEGRATIONS_SONARR,
@@ -114,5 +124,107 @@ describe('Integrations options contexts', () => {
     for (const opt of OPTIONS_CONTEXT_INTEGRATIONS_RADARR.options) {
       expect(opt.valuePath[0]).toBe('integrations');
     }
+  });
+});
+
+describe('SettingsPageComponent integration tests', () => {
+  let fixture: ComponentFixture<SettingsPageComponent>;
+  let component: SettingsPageComponent;
+  let configSubject: BehaviorSubject<Config | null>;
+  let connectedSubject: BehaviorSubject<boolean>;
+  let pairsSubject: BehaviorSubject<any[]>;
+  let mockIntegrationsService: { testSonarr: ReturnType<typeof vi.fn>; testRadarr: ReturnType<typeof vi.fn> };
+
+  beforeEach(async () => {
+    configSubject = new BehaviorSubject<Config | null>({ ...DEFAULT_CONFIG });
+    connectedSubject = new BehaviorSubject<boolean>(true);
+    pairsSubject = new BehaviorSubject<any[]>([]);
+    mockIntegrationsService = {
+      testSonarr: vi.fn(),
+      testRadarr: vi.fn(),
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [SettingsPageComponent],
+      providers: [
+        { provide: LoggerService, useValue: { info: vi.fn(), error: vi.fn(), debug: vi.fn(), warn: vi.fn() } },
+        { provide: ConfigService, useValue: { config$: configSubject.asObservable(), set: vi.fn(() => of({ success: true, data: 'ok', errorMessage: null })) } },
+        { provide: IntegrationsService, useValue: mockIntegrationsService },
+        { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
+        { provide: ServerCommandService, useValue: { restart: vi.fn() } },
+        { provide: ConnectedService, useValue: { connected$: connectedSubject.asObservable() } },
+        { provide: PathPairsService, useValue: { pairs$: pairsSubject.asObservable() } },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(SettingsPageComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('should render Integrations card with Sonarr and Radarr headings', () => {
+    const el = fixture.nativeElement as HTMLElement;
+    const headings = Array.from(el.querySelectorAll('h5')).map((h) => h.textContent?.trim());
+    expect(headings).toContain('Sonarr');
+    expect(headings).toContain('Radarr');
+  });
+
+  it('should render test connection buttons with type="button"', () => {
+    const el = fixture.nativeElement as HTMLElement;
+    const buttons = Array.from(el.querySelectorAll('.test-connection button'));
+    expect(buttons.length).toBe(2);
+    for (const btn of buttons) {
+      expect(btn.getAttribute('type')).toBe('button');
+    }
+  });
+
+  it('should call integrationsService.testSonarr on Sonarr test button click', () => {
+    const successResult: TestConnectionResult = { success: true, message: 'Sonarr connected (v4.0.0)' };
+    mockIntegrationsService.testSonarr.mockReturnValue(of(successResult));
+
+    component.onTestSonarr();
+    fixture.detectChanges();
+
+    expect(mockIntegrationsService.testSonarr).toHaveBeenCalledOnce();
+    expect(component.sonarrTestResult).toEqual(successResult);
+    expect(component.sonarrTesting).toBe(false);
+  });
+
+  it('should call integrationsService.testRadarr on Radarr test button click', () => {
+    const successResult: TestConnectionResult = { success: true, message: 'Radarr connected (v5.2.0)' };
+    mockIntegrationsService.testRadarr.mockReturnValue(of(successResult));
+
+    component.onTestRadarr();
+    fixture.detectChanges();
+
+    expect(mockIntegrationsService.testRadarr).toHaveBeenCalledOnce();
+    expect(component.radarrTestResult).toEqual(successResult);
+    expect(component.radarrTesting).toBe(false);
+  });
+
+  it('should display failure result in the DOM after failed test', () => {
+    const failResult: TestConnectionResult = { success: false, message: 'Connection failed: refused' };
+    mockIntegrationsService.testSonarr.mockReturnValue(of(failResult));
+
+    component.onTestSonarr();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const resultSpan = el.querySelector('.test-connection .test-result.text-danger');
+    expect(resultSpan).not.toBeNull();
+    expect(resultSpan!.textContent?.trim()).toContain('Connection failed');
+  });
+
+  it('should display success result in the DOM after successful test', () => {
+    const successResult: TestConnectionResult = { success: true, message: 'Sonarr connected (v4.0.0)' };
+    mockIntegrationsService.testSonarr.mockReturnValue(of(successResult));
+
+    component.onTestSonarr();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const resultSpan = el.querySelector('.test-connection .test-result.text-success');
+    expect(resultSpan).not.toBeNull();
+    expect(resultSpan!.textContent?.trim()).toContain('Sonarr connected');
   });
 });
