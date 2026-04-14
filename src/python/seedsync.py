@@ -35,6 +35,7 @@ from common import (
 )
 from common.json_formatter import JsonFormatter
 from controller import AutoQueue, AutoQueuePersist, Controller, ControllerJob, ControllerPersist
+from controller.arr_notifier import ArrNotifier
 from controller.notifier import WebhookNotifier
 from web import WebAppBuilder, WebAppJob
 
@@ -152,6 +153,10 @@ class Seedsync:
         webhook_notifier = WebhookNotifier(self.context.config, self.context.logger)
         controller.add_model_listener(webhook_notifier)
 
+        # Create arr notifier (Sonarr/Radarr integration)
+        arr_notifier = ArrNotifier(self.context.config, self.context.path_pairs_config, self.context.logger)
+        controller.add_model_listener(arr_notifier)
+
         # Create auto queue
         auto_queue = AutoQueue(self.context, self.auto_queue_persist, controller)
 
@@ -226,8 +231,9 @@ class Seedsync:
                 controller_job.join()
             webapp_job.join()
 
-            # Drain in-flight webhook notifications
+            # Drain in-flight notifications
             webhook_notifier.shutdown()
+            arr_notifier.shutdown()
 
             # Last persist
             self.persist()
@@ -358,6 +364,13 @@ class Seedsync:
         config.notifications.notify_on_extraction_failed = True
         config.notifications.notify_on_delete_complete = True
 
+        config.integrations.sonarr_url = ""
+        config.integrations.sonarr_api_key = ""
+        config.integrations.sonarr_enabled = False
+        config.integrations.radarr_url = ""
+        config.integrations.radarr_api_key = ""
+        config.integrations.radarr_enabled = False
+
         config.lftp.net_limit_rate = ""
         config.lftp.net_socket_buffer = "8M"
         config.lftp.pget_min_chunk_size = "100M"
@@ -378,7 +391,17 @@ class Seedsync:
         """
         defaults = Seedsync._create_default_config()
         changed = False
-        for section_attr in ["general", "lftp", "controller", "web", "autoqueue", "logging", "notifications"]:
+        for section_attr in [
+            "general",
+            "lftp",
+            "controller",
+            "web",
+            "autoqueue",
+            "logging",
+            "notifications",
+            "integrations",
+            "validate",
+        ]:
             section = getattr(config, section_attr)
             default_section = getattr(defaults, section_attr)
             for key in section.as_dict():

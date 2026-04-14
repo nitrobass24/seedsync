@@ -61,6 +61,14 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
       notify_on_extraction_failed: false,
       notify_on_delete_complete: false,
     },
+    integrations: {
+      sonarr_url: null,
+      sonarr_api_key: null,
+      sonarr_enabled: false,
+      radarr_url: null,
+      radarr_api_key: null,
+      radarr_enabled: false,
+    },
     validate: {
       enabled: false,
       algorithm: "md5",

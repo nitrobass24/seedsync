@@ -21,6 +21,7 @@ test.describe("Settings Page", () => {
       "Logging",
       "Other Settings",
       "Notifications",
+      "Integrations",
     ]) {
       await expect(settings.getSection(section)).toBeVisible();
     }
@@ -220,7 +221,10 @@ test.describe("Settings Page", () => {
   });
 
   test("API Key field is a password field", async () => {
-    const field = settings.getTextInput("API Key");
+    const otherSettings = settings.getSection("Other Settings");
+    const field = otherSettings
+      .locator("app-option", { hasText: "API Key" })
+      .locator("input[type='text'], input[type='password']");
     await expect(field).toHaveAttribute("type", "password");
   });
 });

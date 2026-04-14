@@ -380,6 +380,23 @@ class Config(Persist):
             self.notify_on_extraction_failed = True
             self.notify_on_delete_complete = True
 
+    class Integrations(IC):
+        sonarr_url = PROP("sonarr_url", Checkers.string_allow_empty, Converters.null)
+        sonarr_api_key = PROP("sonarr_api_key", Checkers.string_allow_empty, Converters.null)
+        sonarr_enabled = PROP("sonarr_enabled", Checkers.null, Converters.bool)
+        radarr_url = PROP("radarr_url", Checkers.string_allow_empty, Converters.null)
+        radarr_api_key = PROP("radarr_api_key", Checkers.string_allow_empty, Converters.null)
+        radarr_enabled = PROP("radarr_enabled", Checkers.null, Converters.bool)
+
+        def __init__(self):
+            super().__init__()
+            self.sonarr_url = ""
+            self.sonarr_api_key = ""
+            self.sonarr_enabled = False
+            self.radarr_url = ""
+            self.radarr_api_key = ""
+            self.radarr_enabled = False
+
     class Validate(IC):
         enabled = PROP("enabled", Checkers.null, Converters.bool)
         algorithm = PROP("algorithm", Checkers.algorithm_allowed, Converters.null)
@@ -401,6 +418,7 @@ class Config(Persist):
         self.autoqueue = Config.AutoQueue()
         self.logging = Config.Logging()
         self.notifications = Config.Notifications()
+        self.integrations = Config.Integrations()
         self.validate = Config.Validate()
 
     @staticmethod
@@ -457,6 +475,7 @@ class Config(Persist):
         config.autoqueue = Config.AutoQueue.from_dict(config_dict.pop("AutoQueue", {}))
         config.logging = Config.Logging.from_dict(config_dict.pop("Logging", {}))
         config.notifications = Config.Notifications.from_dict(config_dict.pop("Notifications", {}))
+        config.integrations = Config.Integrations.from_dict(config_dict.pop("Integrations", {}))
         config.validate = Config.Validate.from_dict(config_dict.pop("Validate", {}))
 
         Config._check_empty_outer_dict(config_dict)
@@ -473,6 +492,7 @@ class Config(Persist):
         config_dict["AutoQueue"] = self.autoqueue.as_dict()
         config_dict["Logging"] = self.logging.as_dict()
         config_dict["Notifications"] = self.notifications.as_dict()
+        config_dict["Integrations"] = self.integrations.as_dict()
         config_dict["Validate"] = self.validate.as_dict()
         return config_dict
 
@@ -489,6 +509,7 @@ class Config(Persist):
         return {
             "Lftp": {"remote_password"},
             "Web": {"api_key"},
+            "Integrations": {"sonarr_api_key", "radarr_api_key"},
         }
 
     @staticmethod
