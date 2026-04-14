@@ -21,6 +21,7 @@ test.describe("Settings Page", () => {
       "Logging",
       "Other Settings",
       "Notifications",
+      "Integrations",
     ]) {
       await expect(settings.getSection(section)).toBeVisible();
     }

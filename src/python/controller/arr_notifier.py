@@ -1,18 +1,20 @@
 import json
 import logging
+import os
 import threading
 import time
 import urllib.request
 
-from common import Config
+from common import Config, PathPairsConfig
 from model import IModelListener, ModelFile
 
 
 class ArrNotifier(IModelListener):
     """Notifies Sonarr/Radarr on download completion so they can trigger import scans."""
 
-    def __init__(self, config: Config, logger: logging.Logger):
+    def __init__(self, config: Config, path_pairs_config: PathPairsConfig, logger: logging.Logger):
         self._config = config
+        self._path_pairs_config = path_pairs_config
         self._logger = logger.getChild("ArrNotifier")
         self._shutdown_flag = False
         self._active_threads: set[threading.Thread] = set()
@@ -31,7 +33,7 @@ class ArrNotifier(IModelListener):
         if new_file.state != ModelFile.State.DOWNLOADED:
             return
 
-        local_path = new_file.full_path
+        local_path = self._resolve_local_path(new_file)
         cfg = self._config.integrations
 
         if cfg.sonarr_enabled and cfg.sonarr_url and cfg.sonarr_api_key:
@@ -79,6 +81,17 @@ class ArrNotifier(IModelListener):
             )
         else:
             self._logger.info("Arr notifier shutdown: all threads completed")
+
+    def _resolve_local_path(self, file: ModelFile) -> str:
+        """Resolve the absolute local filesystem path for a downloaded file."""
+        base = ""
+        if file.pair_id:
+            pair = self._path_pairs_config.get_pair(file.pair_id)
+            if pair:
+                base = pair.local_path
+        if not base:
+            base = self._config.lftp.local_path or ""
+        return os.path.join(base, file.full_path) if base else file.full_path
 
     def _fire_scan(self, service: str, base_url: str, api_key: str, command_name: str, path: str):
         """Fire-and-forget POST in a daemon thread."""

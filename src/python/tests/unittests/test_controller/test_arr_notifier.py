@@ -18,6 +18,7 @@ class TestArrNotifier(unittest.TestCase):
         radarr_enabled=False,
         radarr_url="http://localhost:7878",
         radarr_api_key="test-radarr-key",
+        local_path="/downloads",
     ):
         config = MagicMock()
         config.integrations.sonarr_enabled = sonarr_enabled
@@ -26,12 +27,15 @@ class TestArrNotifier(unittest.TestCase):
         config.integrations.radarr_enabled = radarr_enabled
         config.integrations.radarr_url = radarr_url
         config.integrations.radarr_api_key = radarr_api_key
+        config.lftp.local_path = local_path
         return config
 
     def _make_notifier(self, **kwargs):
         config = self._make_config(**kwargs)
+        path_pairs_config = MagicMock()
+        path_pairs_config.get_pair.return_value = None
         logger = logging.getLogger("test_arr_notifier")
-        return ArrNotifier(config, logger)
+        return ArrNotifier(config, path_pairs_config, logger)
 
     def _make_model_file(self, name="test.mkv", state=ModelFile.State.DEFAULT):
         f = ModelFile(name, False)
@@ -203,6 +207,39 @@ class TestArrNotifier(unittest.TestCase):
             notifier.shutdown(timeout=2)
             url_arg = mock_send.call_args[0][1]
             self.assertEqual(url_arg, "http://localhost:8989/api/v3/command")
+
+    def test_payload_path_is_absolute(self):
+        """Payload path should be the absolute local filesystem path."""
+        notifier = self._make_notifier(sonarr_enabled=True, local_path="/downloads")
+        old_file = self._make_model_file(name="Show.S01E01.mkv", state=ModelFile.State.DOWNLOADING)
+        new_file = self._make_model_file(name="Show.S01E01.mkv", state=ModelFile.State.DOWNLOADED)
+
+        with patch.object(notifier, "_send_post") as mock_send:
+            notifier.file_updated(old_file, new_file)
+            notifier.shutdown(timeout=2)
+            payload = mock_send.call_args[0][3]
+            self.assertEqual(payload["path"], "/downloads/Show.S01E01.mkv")
+
+    def test_payload_path_uses_pair_local_path(self):
+        """When file has a pair_id, use the pair's local_path."""
+        config = self._make_config(sonarr_enabled=True, local_path="/fallback")
+        path_pairs_config = MagicMock()
+        pair = MagicMock()
+        pair.local_path = "/media/tv"
+        path_pairs_config.get_pair.return_value = pair
+        logger = logging.getLogger("test_arr_notifier")
+        notifier = ArrNotifier(config, path_pairs_config, logger)
+
+        old_file = self._make_model_file(name="Show.S01E01.mkv", state=ModelFile.State.DOWNLOADING)
+        new_file = self._make_model_file(name="Show.S01E01.mkv", state=ModelFile.State.DOWNLOADED)
+        new_file.pair_id = "pair-1"
+
+        with patch.object(notifier, "_send_post") as mock_send:
+            notifier.file_updated(old_file, new_file)
+            notifier.shutdown(timeout=2)
+            payload = mock_send.call_args[0][3]
+            self.assertEqual(payload["path"], "/media/tv/Show.S01E01.mkv")
+            path_pairs_config.get_pair.assert_called_with("pair-1")
 
 
 if __name__ == "__main__":

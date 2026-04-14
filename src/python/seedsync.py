@@ -154,7 +154,7 @@ class Seedsync:
         controller.add_model_listener(webhook_notifier)
 
         # Create arr notifier (Sonarr/Radarr integration)
-        arr_notifier = ArrNotifier(self.context.config, self.context.logger)
+        arr_notifier = ArrNotifier(self.context.config, self.context.path_pairs_config, self.context.logger)
         controller.add_model_listener(arr_notifier)
 
         # Create auto queue
@@ -400,6 +400,7 @@ class Seedsync:
             "logging",
             "notifications",
             "integrations",
+            "validate",
         ]:
             section = getattr(config, section_attr)
             default_section = getattr(defaults, section_attr)
