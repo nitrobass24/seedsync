@@ -102,7 +102,7 @@ class StatsRecorder(IModelListener):
         assert self._conn is not None
         now = datetime.now()
         with self._lock:
-            start = self._start_times.pop(key, None)
+            start = self._start_times.get(key)
         duration = (now - start).total_seconds() if start else None
         size_bytes = file.remote_size
 
@@ -114,6 +114,7 @@ class StatsRecorder(IModelListener):
                     (file.name, file.pair_id, size_bytes, duration, time.time(), status),
                 )
                 self._conn.commit()
+                self._start_times.pop(key, None)
             except Exception:
                 self._logger.exception("Failed to record transfer for %s", file.name)
 
@@ -128,7 +129,6 @@ class StatsRecorder(IModelListener):
             if not self._speed_buffer:
                 return
             samples = list(self._speed_buffer)
-            self._speed_buffer.clear()
 
         # Aggregate into per-minute buckets (max speed per bucket)
         buckets: dict[int, int] = {}
@@ -144,6 +144,7 @@ class StatsRecorder(IModelListener):
                     list(buckets.items()),
                 )
                 self._conn.commit()
+                self._speed_buffer.clear()
             except Exception:
                 self._logger.exception("Failed to flush speed buffer")
 
@@ -159,8 +160,8 @@ class StatsRecorder(IModelListener):
                 """
                 SELECT
                     COUNT(*) AS total_count,
-                    SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success_count,
-                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+                    COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) AS success_count,
+                    COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_count,
                     COALESCE(SUM(CASE WHEN status = 'success' THEN size_bytes ELSE 0 END), 0) AS total_bytes,
                     COALESCE(AVG(CASE WHEN status = 'success' AND duration_seconds > 0
                         THEN size_bytes / duration_seconds END), 0) AS avg_speed_bps

@@ -22,10 +22,18 @@ class StatsHandler(IHandler):
         web_app.add_handler("/server/stats/transfers", self._handle_transfers)
         web_app.add_handler("/server/stats/speed-history", self._handle_speed_history)
 
+    _ALLOWED_DAYS = {7, 30, 90}
+
     def _handle_summary(self) -> HTTPResponse:
-        days = self._parse_int_param("days", default=7, min_val=1, max_val=365)
+        days = self._parse_int_param("days", default=7, min_val=1, max_val=90)
         if isinstance(days, HTTPResponse):
             return days
+        if days not in self._ALLOWED_DAYS:
+            return HTTPResponse(
+                body=json.dumps({"error": "'days' must be one of 7, 30, or 90"}),
+                status=400,
+                content_type=_JSON,
+            )
         result = self._stats_recorder.get_summary(days=days)
         return HTTPResponse(body=json.dumps(result), content_type=_JSON)
 
