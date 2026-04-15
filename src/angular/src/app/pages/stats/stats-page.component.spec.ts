@@ -91,7 +91,7 @@ describe('StatsPageComponent', () => {
     expect(cardValues[2].textContent?.trim()).toBe('2');
   });
 
-  it('should render transfer table rows', () => {
+  it('should render transfer table rows sorted by completed_at desc', () => {
     const fixture = TestBed.createComponent(StatsPageComponent);
     fixture.detectChanges();
 
@@ -99,8 +99,9 @@ describe('StatsPageComponent', () => {
     const rows = el.querySelectorAll('tbody tr');
     expect(rows.length).toBe(2);
 
+    // Default sort: completed_at desc — show.mkv (epoch 1700001000) before movie.mkv (1700000000)
     const firstRow = rows[0];
-    expect(firstRow.querySelector('.filename-cell')?.textContent?.trim()).toBe('movie.mkv');
+    expect(firstRow.querySelector('.filename-cell')?.textContent?.trim()).toBe('show.mkv');
   });
 
   it('should show empty message when no transfers', () => {
@@ -144,8 +145,46 @@ describe('StatsPageComponent', () => {
 
     const el: HTMLElement = fixture.nativeElement;
     const badges = el.querySelectorAll('.badge');
-    expect(badges[0].classList.contains('bg-success')).toBe(true);
-    expect(badges[1].classList.contains('bg-danger')).toBe(true);
+    // Default sort: completed_at desc — failed (show.mkv) first, then success (movie.mkv)
+    expect(badges[0].classList.contains('bg-danger')).toBe(true);
+    expect(badges[1].classList.contains('bg-success')).toBe(true);
+  });
+
+  it('should sort transfers when header is clicked', () => {
+    const fixture = TestBed.createComponent(StatsPageComponent);
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance;
+    // Default sort is completed_at desc
+    expect(component.sortColumn).toBe('completed_at');
+    expect(component.sortDirection).toBe('desc');
+
+    // Click filename header — should switch to filename asc
+    component.onSort('filename');
+    expect(component.sortColumn).toBe('filename');
+    expect(component.sortDirection).toBe('asc');
+    expect(component.transfers[0].filename).toBe('movie.mkv');
+
+    // Click filename again — should toggle to desc
+    component.onSort('filename');
+    expect(component.sortDirection).toBe('desc');
+    expect(component.transfers[0].filename).toBe('show.mkv');
+  });
+
+  it('should render aria-sort attributes on headers', () => {
+    const fixture = TestBed.createComponent(StatsPageComponent);
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    const headers = el.querySelectorAll('th.sortable');
+    expect(headers.length).toBe(5);
+
+    // completed_at is the default sort column (desc)
+    const completedHeader = headers[3];
+    expect(completedHeader.getAttribute('aria-sort')).toBe('descending');
+
+    // Other headers should be 'none'
+    expect(headers[0].getAttribute('aria-sort')).toBe('none');
   });
 
   it('should show disabled message when stats_enabled is false', () => {

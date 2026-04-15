@@ -77,11 +77,21 @@
         <table class="table table-sm">
           <thead>
             <tr>
-              <th>Filename</th>
-              <th>Size</th>
-              <th>Duration</th>
-              <th>Completed</th>
-              <th>Status</th>
+              <th class="sortable" [attr.aria-sort]="sortAriaFor('filename')" (click)="onSort('filename')">
+                Filename <span class="sort-indicator">{{ sortColumn === 'filename' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '' }}</span>
+              </th>
+              <th class="sortable" [attr.aria-sort]="sortAriaFor('size_bytes')" (click)="onSort('size_bytes')">
+                Size <span class="sort-indicator">{{ sortColumn === 'size_bytes' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '' }}</span>
+              </th>
+              <th class="sortable" [attr.aria-sort]="sortAriaFor('duration_seconds')" (click)="onSort('duration_seconds')">
+                Duration <span class="sort-indicator">{{ sortColumn === 'duration_seconds' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '' }}</span>
+              </th>
+              <th class="sortable" [attr.aria-sort]="sortAriaFor('completed_at')" (click)="onSort('completed_at')">
+                Completed <span class="sort-indicator">{{ sortColumn === 'completed_at' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '' }}</span>
+              </th>
+              <th class="sortable" [attr.aria-sort]="sortAriaFor('status')" (click)="onSort('status')">
+                Status <span class="sort-indicator">{{ sortColumn === 'status' ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '' }}</span>
+              </th>
             </tr>
           </thead>
           <tbody>

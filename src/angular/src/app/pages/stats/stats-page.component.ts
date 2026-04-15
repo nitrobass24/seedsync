@@ -15,6 +15,9 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { StatsService } from '../../services/stats/stats.service';
 import { ConfigService } from '../../services/settings/config.service';
 import { StatsSummary, TransferRecord, SpeedSample, EMPTY_SUMMARY } from '../../models/stats';
+
+type SortColumn = 'filename' | 'size_bytes' | 'duration_seconds' | 'completed_at' | 'status';
+type SortDirection = 'asc' | 'desc';
 import { FileSizePipe } from '../../common/file-size.pipe';
 
 @Component({
@@ -36,6 +39,8 @@ export class StatsPageComponent implements OnInit, AfterViewInit {
   transfers: TransferRecord[] = [];
   speedHistory: SpeedSample[] = [];
   selectedDays = 7;
+  sortColumn: SortColumn = 'completed_at';
+  sortDirection: SortDirection = 'desc';
   private chartReady = false;
   private dataLoaded = false;
 
@@ -67,6 +72,21 @@ export class StatsPageComponent implements OnInit, AfterViewInit {
     this.loadData();
   }
 
+  onSort(column: SortColumn): void {
+    if (this.sortColumn === column) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortColumn = column;
+      this.sortDirection = 'asc';
+    }
+    this.sortTransfers();
+  }
+
+  sortAriaFor(column: SortColumn): 'ascending' | 'descending' | 'none' {
+    if (this.sortColumn !== column) return 'none';
+    return this.sortDirection === 'asc' ? 'ascending' : 'descending';
+  }
+
   get successRate(): number {
     if (this.summary.total_count === 0) return 0;
     return Math.round((this.summary.success_count / this.summary.total_count) * 100);
@@ -84,6 +104,7 @@ export class StatsPageComponent implements OnInit, AfterViewInit {
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((transfers) => {
       this.transfers = transfers;
+      this.sortTransfers();
       this.cdr.markForCheck();
     });
 
@@ -95,6 +116,21 @@ export class StatsPageComponent implements OnInit, AfterViewInit {
       if (this.chartReady) {
         this.drawSpeedChart();
       }
+    });
+  }
+
+  private sortTransfers(): void {
+    const dir = this.sortDirection === 'asc' ? 1 : -1;
+    const col = this.sortColumn;
+    this.transfers.sort((a, b) => {
+      const av = a[col];
+      const bv = b[col];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
     });
   }
 

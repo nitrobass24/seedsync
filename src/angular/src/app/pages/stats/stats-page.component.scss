@@ -91,6 +91,21 @@
 
     table {
       font-size: 0.85rem;
+
+      th.sortable {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+
+        &:hover {
+          background-color: var(--ss-hover-bg, rgba(0, 0, 0, 0.03));
+        }
+
+        .sort-indicator {
+          font-size: 0.65rem;
+          margin-left: 2px;
+        }
+      }
     }
 
     .filename-cell {
