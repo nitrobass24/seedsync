@@ -570,6 +570,7 @@ class TestConfig(unittest.TestCase):
         config = Config()
         config.general.log_level = "DEBUG"
         config.general.verbose = False
+        config.general.stats_enabled = True
         config.lftp.remote_address = "server.remote.com"
         config.lftp.remote_username = "user-on-remote-server"
         config.lftp.remote_password = "pass-on-remote-server"
@@ -615,6 +616,7 @@ class TestConfig(unittest.TestCase):
         log_level = DEBUG
         verbose = False
         exclude_patterns =
+        stats_enabled = True
 
         [Lftp]
         remote_address = server.remote.com
