@@ -1,6 +1,6 @@
 import logging
-import time
 import threading
+import time
 import unittest
 
 from controller.stats_recorder import StatsRecorder

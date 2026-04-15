@@ -4,6 +4,7 @@ import sqlite3
 import threading
 import time
 from datetime import datetime
+from typing import Any
 
 from model import IModelListener, ModelFile
 
@@ -40,6 +41,7 @@ class StatsRecorder(IModelListener):
         self._start_times: dict[str, datetime] = {}
         self._speed_buffer: collections.deque[tuple[float, int]] = collections.deque()
         self._stop_event = threading.Event()
+        self._conn: sqlite3.Connection | None = None
 
         try:
             self._conn = sqlite3.connect(db_path, check_same_thread=False)
@@ -96,7 +98,8 @@ class StatsRecorder(IModelListener):
             self._record_transfer(key, new_file, "failed")
             return
 
-    def _record_transfer(self, key: str, file: ModelFile, status: str):
+    def _record_transfer(self, key: str, file: ModelFile, status: str) -> None:
+        assert self._conn is not None
         now = datetime.now()
         with self._lock:
             start = self._start_times.pop(key, None)
@@ -114,11 +117,13 @@ class StatsRecorder(IModelListener):
             except Exception:
                 self._logger.exception("Failed to record transfer for %s", file.name)
 
-    def _flush_loop(self):
+    def _flush_loop(self) -> None:
         while not self._stop_event.wait(self._FLUSH_INTERVAL_SECS):
             self._flush_speed_buffer()
 
-    def _flush_speed_buffer(self):
+    def _flush_speed_buffer(self) -> None:
+        if self._conn is None:
+            return
         with self._lock:
             if not self._speed_buffer:
                 return
@@ -144,8 +149,8 @@ class StatsRecorder(IModelListener):
 
     # --- Query methods (called from HTTP handler threads) ---
 
-    def get_summary(self, days: int = 7) -> dict:
-        if not self._available:
+    def get_summary(self, days: int = 7) -> dict[str, int]:
+        if not self._available or self._conn is None:
             return {"total_count": 0, "success_count": 0, "failed_count": 0, "total_bytes": 0, "avg_speed_bps": 0}
 
         cutoff = time.time() - days * 86400
@@ -173,8 +178,8 @@ class StatsRecorder(IModelListener):
             "avg_speed_bps": round(row[4]),
         }
 
-    def get_transfers(self, limit: int = 50) -> list[dict]:
-        if not self._available:
+    def get_transfers(self, limit: int = 50) -> list[dict[str, Any]]:
+        if not self._available or self._conn is None:
             return []
 
         with self._lock:
@@ -201,8 +206,8 @@ class StatsRecorder(IModelListener):
             for r in rows
         ]
 
-    def get_speed_history(self, hours: int = 24) -> list[dict]:
-        if not self._available:
+    def get_speed_history(self, hours: int = 24) -> list[dict[str, int]]:
+        if not self._available or self._conn is None:
             return []
 
         cutoff = time.time() - hours * 3600
@@ -219,7 +224,7 @@ class StatsRecorder(IModelListener):
 
         return [{"bucket_epoch": r[0], "bytes_per_sec": r[1]} for r in rows]
 
-    def shutdown(self, timeout: float = 5):
+    def shutdown(self, timeout: float = 5) -> None:
         if self._flush_thread is not None:
             self._stop_event.set()
             self._flush_thread.join(timeout=timeout)

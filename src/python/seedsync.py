@@ -240,7 +240,10 @@ class Seedsync:
             # Drain in-flight notifications
             webhook_notifier.shutdown()
             arr_notifier.shutdown()
-            stats_recorder.shutdown()
+            try:
+                stats_recorder.shutdown()
+            except Exception:
+                self.context.logger.exception("Stats recorder shutdown failed")
 
             # Last persist
             self.persist()

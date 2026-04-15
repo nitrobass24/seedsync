@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 from webtest import TestApp
 
-from common import Config, Status, overrides
+from common import Config, Status
 from controller import AutoQueuePersist
 from controller.stats_recorder import StatsRecorder
 from web import WebAppBuilder
@@ -46,7 +46,7 @@ class TestStatsHandler(unittest.TestCase):
     def test_summary_default_params(self):
         resp = self.test_app.get("/server/stats/summary")
         self.assertEqual(200, resp.status_int)
-        body = json.loads(str(resp.html))
+        body = json.loads(resp.text)
         self.assertIn("total_count", body)
         self.assertIn("success_count", body)
         self.assertIn("failed_count", body)
@@ -61,7 +61,7 @@ class TestStatsHandler(unittest.TestCase):
     def test_summary_invalid_days(self):
         resp = self.test_app.get("/server/stats/summary?days=abc", expect_errors=True)
         self.assertEqual(400, resp.status_int)
-        body = json.loads(str(resp.html))
+        body = json.loads(resp.text)
         self.assertIn("error", body)
 
     def test_summary_days_out_of_range(self):
@@ -71,7 +71,7 @@ class TestStatsHandler(unittest.TestCase):
     def test_transfers_default_params(self):
         resp = self.test_app.get("/server/stats/transfers")
         self.assertEqual(200, resp.status_int)
-        body = json.loads(str(resp.html))
+        body = json.loads(resp.text)
         self.assertIsInstance(body, list)
         self.assertEqual(len(body), 0)
 
@@ -90,7 +90,7 @@ class TestStatsHandler(unittest.TestCase):
     def test_speed_history_default_params(self):
         resp = self.test_app.get("/server/stats/speed-history")
         self.assertEqual(200, resp.status_int)
-        body = json.loads(str(resp.html))
+        body = json.loads(resp.text)
         self.assertIsInstance(body, list)
 
     def test_speed_history_with_hours(self):

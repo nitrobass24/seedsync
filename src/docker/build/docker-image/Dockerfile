@@ -45,7 +45,6 @@ RUN uv pip install --system --no-cache --strict \
         /usr/local/lib/python3.12/lib-dynload/_codecs_tw*.so \
         /usr/local/lib/python3.12/lib-dynload/_codecs_iso*.so \
         /usr/local/lib/python3.12/lib-dynload/_curses*.so \
-        /usr/local/lib/python3.12/lib-dynload/_sqlite3*.so \
         /usr/local/lib/python3.12/lib-dynload/_lzma*.so \
         /usr/local/lib/python3.12/lib-dynload/_bz2*.so \
         /usr/local/lib/python3.12/lib-dynload/_crypt*.so \
@@ -82,7 +81,8 @@ RUN apk add --no-cache \
         openssh-client \
         ca-certificates \
         setpriv \
-        libstdc++
+        libstdc++ \
+        sqlite-libs
 
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8 \
