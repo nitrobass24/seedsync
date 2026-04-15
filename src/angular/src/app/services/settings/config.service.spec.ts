@@ -12,7 +12,7 @@ import { Config } from "../../models/config";
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
-    general: { log_level: "INFO", verbose: false, exclude_patterns: "" },
+    general: { log_level: "INFO", verbose: false, exclude_patterns: "", stats_enabled: true },
     lftp: {
       remote_address: "host",
       remote_username: "user",

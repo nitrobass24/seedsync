@@ -3,10 +3,12 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { of } from 'rxjs';
+import { of, BehaviorSubject } from 'rxjs';
 
 import { StatsPageComponent } from './stats-page.component';
 import { StatsService } from '../../services/stats/stats.service';
+import { ConfigService } from '../../services/settings/config.service';
+import { Config, DEFAULT_CONFIG } from '../../models/config';
 import { EMPTY_SUMMARY } from '../../models/stats';
 
 const mockSummary = {
@@ -27,12 +29,21 @@ const mockSpeedHistory = [
   { bucket_epoch: 1700000060, bytes_per_sec: 3000000 },
 ];
 
+function makeEnabledConfig(): Config {
+  return { ...DEFAULT_CONFIG, general: { ...DEFAULT_CONFIG.general, stats_enabled: true } };
+}
+
+function makeDisabledConfig(): Config {
+  return { ...DEFAULT_CONFIG, general: { ...DEFAULT_CONFIG.general, stats_enabled: false } };
+}
+
 describe('StatsPageComponent', () => {
   let mockStatsService: {
     getSummary: ReturnType<typeof vi.fn>;
     getTransfers: ReturnType<typeof vi.fn>;
     getSpeedHistory: ReturnType<typeof vi.fn>;
   };
+  let configSubject: BehaviorSubject<Config | null>;
 
   beforeEach(() => {
     mockStatsService = {
@@ -41,12 +52,15 @@ describe('StatsPageComponent', () => {
       getSpeedHistory: vi.fn().mockReturnValue(of(mockSpeedHistory)),
     };
 
+    configSubject = new BehaviorSubject<Config | null>(makeEnabledConfig());
+
     TestBed.configureTestingModule({
       imports: [StatsPageComponent],
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: StatsService, useValue: mockStatsService },
+        { provide: ConfigService, useValue: { config$: configSubject.asObservable() } },
       ],
     });
   });
@@ -56,7 +70,7 @@ describe('StatsPageComponent', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it('should load data on init', () => {
+  it('should load data on init when enabled', () => {
     const fixture = TestBed.createComponent(StatsPageComponent);
     fixture.detectChanges();
 
@@ -132,5 +146,26 @@ describe('StatsPageComponent', () => {
     const badges = el.querySelectorAll('.badge');
     expect(badges[0].classList.contains('bg-success')).toBe(true);
     expect(badges[1].classList.contains('bg-danger')).toBe(true);
+  });
+
+  it('should show disabled message when stats_enabled is false', () => {
+    configSubject.next(makeDisabledConfig());
+
+    const fixture = TestBed.createComponent(StatsPageComponent);
+    fixture.detectChanges();
+
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('.stats-disabled')).toBeTruthy();
+    expect(el.textContent).toContain('disabled');
+    expect(el.querySelectorAll('.card-value').length).toBe(0);
+  });
+
+  it('should not load data when disabled', () => {
+    configSubject.next(makeDisabledConfig());
+
+    const fixture = TestBed.createComponent(StatsPageComponent);
+    fixture.detectChanges();
+
+    expect(mockStatsService.getSummary).not.toHaveBeenCalled();
   });
 });

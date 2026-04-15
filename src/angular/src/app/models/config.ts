@@ -7,6 +7,7 @@ export interface General {
   log_level: string | null;
   verbose: boolean | null;
   exclude_patterns: string | null;
+  stats_enabled: boolean | null;
 }
 
 export interface Lftp {
@@ -103,6 +104,7 @@ export const DEFAULT_GENERAL: General = {
   log_level: null,
   verbose: null,
   exclude_patterns: null,
+  stats_enabled: null,
 };
 
 export const DEFAULT_LFTP: Lftp = {

@@ -1,4 +1,13 @@
 <div id="stats">
+  @if (!statsEnabled) {
+    <div class="stats-disabled">
+      <h2>Transfer Statistics</h2>
+      <p>Statistics collection is disabled. Enable it in Settings to record transfer history.</p>
+      <p class="text-muted">
+        Disable this feature if your config volume is mounted via NFS, as SQLite does not support NFS reliably.
+      </p>
+    </div>
+  } @else {
   <div class="stats-header">
     <h2>Transfer Statistics</h2>
     <div class="day-filter">
@@ -97,4 +106,5 @@
       </div>
     }
   </div>
+  }
 </div>

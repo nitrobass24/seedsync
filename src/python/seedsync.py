@@ -158,10 +158,12 @@ class Seedsync:
         arr_notifier = ArrNotifier(self.context.config, self.context.path_pairs_config, self.context.logger)
         controller.add_model_listener(arr_notifier)
 
-        # Create stats recorder
-        stats_db_path = os.path.join(os.path.dirname(self.config_path), "stats.db")
-        stats_recorder = StatsRecorder(db_path=stats_db_path, logger=self.context.logger)
-        controller.add_model_listener(stats_recorder)
+        # Create stats recorder (disabled avoids SQLite — safe for NFS-mounted config volumes)
+        stats_recorder = None
+        if self.context.config.general.stats_enabled:
+            stats_db_path = os.path.join(os.path.dirname(self.config_path), "stats.db")
+            stats_recorder = StatsRecorder(db_path=stats_db_path, logger=self.context.logger)
+            controller.add_model_listener(stats_recorder)
 
         # Create auto queue
         auto_queue = AutoQueue(self.context, self.auto_queue_persist, controller)
@@ -240,10 +242,11 @@ class Seedsync:
             # Drain in-flight notifications
             webhook_notifier.shutdown()
             arr_notifier.shutdown()
-            try:
-                stats_recorder.shutdown()
-            except Exception:
-                self.context.logger.exception("Stats recorder shutdown failed")
+            if stats_recorder:
+                try:
+                    stats_recorder.shutdown()
+                except Exception:
+                    self.context.logger.exception("Stats recorder shutdown failed")
 
             # Last persist
             self.persist()
@@ -335,6 +338,7 @@ class Seedsync:
 
         config.general.log_level = "INFO"
         config.general.verbose = False
+        config.general.stats_enabled = True
 
         config.lftp.remote_address = Seedsync.__CONFIG_DUMMY_VALUE
         config.lftp.remote_username = Seedsync.__CONFIG_DUMMY_VALUE

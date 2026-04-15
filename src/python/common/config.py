@@ -251,12 +251,14 @@ class Config(Persist):
         log_level = PROP("log_level", Checkers.log_level_allowed, Converters.null)
         verbose = PROP("verbose", Checkers.null, Converters.bool)
         exclude_patterns = PROP("exclude_patterns", Checkers.string_allow_empty, Converters.null)
+        stats_enabled = PROP("stats_enabled", Checkers.null, Converters.bool)
 
         def __init__(self):
             super().__init__()
             self.log_level = "INFO"
             self.verbose = None
             self.exclude_patterns = ""
+            self.stats_enabled = True
 
     class Lftp(IC):
         remote_address = PROP("remote_address", Checkers.string_nonempty, Converters.null)

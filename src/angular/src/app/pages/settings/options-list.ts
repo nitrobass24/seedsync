@@ -456,6 +456,21 @@ export const OPTIONS_CONTEXT_INTEGRATIONS_RADARR: IOptionsContext = {
   ],
 };
 
+export const OPTIONS_CONTEXT_STATS: IOptionsContext = {
+  header: 'Transfer Statistics',
+  id: 'stats',
+  options: [
+    {
+      type: OptionType.Checkbox,
+      label: 'Enable transfer statistics dashboard',
+      valuePath: ['general', 'stats_enabled'],
+      description:
+        'Record transfer history to a local SQLite database. ' +
+        'Disable this if your config volume is on an NFS share, as SQLite does not support NFS reliably.',
+    },
+  ],
+};
+
 export const OPTIONS_CONTEXT_EXTRACT: IOptionsContext = {
   header: 'Archive Extraction',
   id: 'extraction',

@@ -13,6 +13,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe, DecimalPipe } from '@angular/common';
 
 import { StatsService } from '../../services/stats/stats.service';
+import { ConfigService } from '../../services/settings/config.service';
 import { StatsSummary, TransferRecord, SpeedSample, EMPTY_SUMMARY } from '../../models/stats';
 import { FileSizePipe } from '../../common/file-size.pipe';
 
@@ -26,19 +27,32 @@ import { FileSizePipe } from '../../common/file-size.pipe';
 })
 export class StatsPageComponent implements OnInit, AfterViewInit {
   private readonly statsService = inject(StatsService);
+  private readonly configService = inject(ConfigService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly destroyRef = inject(DestroyRef);
 
+  statsEnabled = true;
   summary: StatsSummary = EMPTY_SUMMARY;
   transfers: TransferRecord[] = [];
   speedHistory: SpeedSample[] = [];
   selectedDays = 7;
   private chartReady = false;
+  private dataLoaded = false;
 
   @ViewChild('speedCanvas') canvasRef!: ElementRef<HTMLCanvasElement>;
 
   ngOnInit(): void {
-    this.loadData();
+    this.configService.config$.pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((config) => {
+      if (!config) return;
+      this.statsEnabled = config.general.stats_enabled !== false;
+      if (this.statsEnabled && !this.dataLoaded) {
+        this.dataLoaded = true;
+        this.loadData();
+      }
+      this.cdr.markForCheck();
+    });
   }
 
   ngAfterViewInit(): void {

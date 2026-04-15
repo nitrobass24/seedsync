@@ -5,6 +5,20 @@
   max-width: 1200px;
   margin: 0 auto;
 
+  .stats-disabled {
+    text-align: center;
+    padding: 60px 20px;
+
+    h2 {
+      margin-bottom: 16px;
+    }
+
+    p {
+      max-width: 500px;
+      margin: 0 auto 8px;
+    }
+  }
+
   .stats-header {
     display: flex;
     justify-content: space-between;
