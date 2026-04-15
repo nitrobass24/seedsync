@@ -1,0 +1,100 @@
+<div id="stats">
+  <div class="stats-header">
+    <h2>Transfer Statistics</h2>
+    <div class="day-filter">
+      <label for="days-select" class="visually-hidden">Time range</label>
+      <select
+        id="days-select"
+        class="form-select form-select-sm"
+        [value]="selectedDays"
+        (change)="onDaysChange(+$any($event.target).value)">
+        <option [value]="7">Last 7 days</option>
+        <option [value]="30">Last 30 days</option>
+        <option [value]="90">Last 90 days</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="summary-cards">
+    <div class="card">
+      <div class="card-body">
+        <div class="card-label">Total Transfers</div>
+        <div class="card-value">{{ summary.total_count }}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="card-label">Successful</div>
+        <div class="card-value text-success">{{ summary.success_count }}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="card-label">Failed</div>
+        <div class="card-value text-danger">{{ summary.failed_count }}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="card-label">Total Downloaded</div>
+        <div class="card-value">{{ summary.total_bytes | fileSize }}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="card-label">Avg Speed</div>
+        <div class="card-value">{{ summary.avg_speed_bps | fileSize }}/s</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="card-label">Success Rate</div>
+        <div class="card-value">{{ successRate }}%</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-section">
+    <h3>Speed History (24h)</h3>
+    <canvas #speedCanvas aria-label="Transfer speed history chart"></canvas>
+  </div>
+
+  <div class="transfers-section">
+    <h3>Recent Transfers</h3>
+    @if (transfers.length === 0) {
+      <p class="text-muted">No transfers recorded yet.</p>
+    } @else {
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Filename</th>
+              <th>Size</th>
+              <th>Duration</th>
+              <th>Completed</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of transfers; track t.id) {
+              <tr>
+                <td class="filename-cell" [title]="t.filename">{{ t.filename }}</td>
+                <td>{{ t.size_bytes != null ? (t.size_bytes | fileSize) : '-' }}</td>
+                <td>{{ t.duration_seconds != null ? (t.duration_seconds | number:'1.1-1') + 's' : '-' }}</td>
+                <td>{{ t.completed_at * 1000 | date:'short' }}</td>
+                <td>
+                  <span
+                    class="badge"
+                    [class.bg-success]="t.status === 'success'"
+                    [class.bg-danger]="t.status === 'failed'">
+                    {{ t.status }}
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</div>

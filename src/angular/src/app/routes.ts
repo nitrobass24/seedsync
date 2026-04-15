@@ -3,6 +3,7 @@ import { Routes } from '@angular/router';
 import { FilesPageComponent } from './pages/files/files-page.component';
 import { SettingsPageComponent } from './pages/settings/settings-page.component';
 import { AutoQueuePageComponent } from './pages/autoqueue/autoqueue-page.component';
+import { StatsPageComponent } from './pages/stats/stats-page.component';
 import { LogsPageComponent } from './pages/logs/logs-page.component';
 import { AboutPageComponent } from './pages/about/about-page.component';
 
@@ -31,6 +32,12 @@ export const ROUTE_INFOS: RouteInfo[] = [
     name: 'AutoQueue',
     icon: 'assets/icons/autoqueue.svg',
     component: AutoQueuePageComponent
+  },
+  {
+    path: 'stats',
+    name: 'Stats',
+    icon: 'assets/icons/stats.svg',
+    component: StatsPageComponent
   },
   {
     path: 'logs',
@@ -63,6 +70,10 @@ export const ROUTES: Routes = [
   {
     path: 'autoqueue',
     component: AutoQueuePageComponent
+  },
+  {
+    path: 'stats',
+    component: StatsPageComponent
   },
   {
     path: 'logs',

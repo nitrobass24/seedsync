@@ -37,6 +37,7 @@ from common.json_formatter import JsonFormatter
 from controller import AutoQueue, AutoQueuePersist, Controller, ControllerJob, ControllerPersist
 from controller.arr_notifier import ArrNotifier
 from controller.notifier import WebhookNotifier
+from controller.stats_recorder import StatsRecorder
 from web import WebAppBuilder, WebAppJob
 
 T_Persist = TypeVar("T_Persist", bound=Persist)
@@ -157,11 +158,16 @@ class Seedsync:
         arr_notifier = ArrNotifier(self.context.config, self.context.path_pairs_config, self.context.logger)
         controller.add_model_listener(arr_notifier)
 
+        # Create stats recorder
+        stats_db_path = os.path.join(os.path.dirname(self.config_path), "stats.db")
+        stats_recorder = StatsRecorder(db_path=stats_db_path, logger=self.context.logger)
+        controller.add_model_listener(stats_recorder)
+
         # Create auto queue
         auto_queue = AutoQueue(self.context, self.auto_queue_persist, controller)
 
         # Create web app
-        web_app_builder = WebAppBuilder(self.context, controller, self.auto_queue_persist)
+        web_app_builder = WebAppBuilder(self.context, controller, self.auto_queue_persist, stats_recorder)
         web_app = web_app_builder.build()
 
         # Define child threads
@@ -234,6 +240,7 @@ class Seedsync:
             # Drain in-flight notifications
             webhook_notifier.shutdown()
             arr_notifier.shutdown()
+            stats_recorder.shutdown()
 
             # Last persist
             self.persist()

@@ -21,3 +21,4 @@ from .scan import (
     ScannerError as ScannerError,
 )
 from .validate import ValidateProcess as ValidateProcess, ValidateRequest as ValidateRequest
+from .stats_recorder import StatsRecorder as StatsRecorder

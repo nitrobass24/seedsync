@@ -4,6 +4,7 @@ import os
 
 from common import Constants, Context
 from controller import AutoQueuePersist, Controller
+from controller.stats_recorder import StatsRecorder
 
 from .handler.auto_queue import AutoQueueHandler
 from .handler.config import ConfigHandler
@@ -12,6 +13,7 @@ from .handler.integrations import IntegrationsHandler
 from .handler.logs import LogsHandler
 from .handler.path_pairs import PathPairsHandler
 from .handler.server import ServerHandler
+from .handler.stats import StatsHandler
 from .handler.status import StatusHandler
 from .handler.stream_log import LogStreamHandler
 from .handler.stream_model import ModelStreamHandler
@@ -25,7 +27,13 @@ class WebAppBuilder:
     Helper class to build WebApp with all the extensions
     """
 
-    def __init__(self, context: Context, controller: Controller, auto_queue_persist: AutoQueuePersist):
+    def __init__(
+        self,
+        context: Context,
+        controller: Controller,
+        auto_queue_persist: AutoQueuePersist,
+        stats_recorder: StatsRecorder | None = None,
+    ):
         self.__context = context
         self.__controller = controller
 
@@ -37,6 +45,7 @@ class WebAppBuilder:
         self.logs_handler = LogsHandler(logdir=context.args.logdir, service_name=Constants.SERVICE_NAME)
         self.path_pairs_handler = PathPairsHandler(context.path_pairs_config)
         self.integrations_handler = IntegrationsHandler(context.config)
+        self.stats_handler = StatsHandler(stats_recorder) if stats_recorder else None
 
     def build(self) -> WebApp:
         web_app = WebApp(context=self.__context, controller=self.__controller)
@@ -62,6 +71,8 @@ class WebAppBuilder:
         self.logs_handler.add_routes(web_app)
         self.path_pairs_handler.add_routes(web_app)
         self.integrations_handler.add_routes(web_app)
+        if self.stats_handler:
+            self.stats_handler.add_routes(web_app)
 
         web_app.add_default_routes()
 
