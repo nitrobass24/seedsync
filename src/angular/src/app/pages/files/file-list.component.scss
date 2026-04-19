@@ -4,11 +4,23 @@
     display: none;
 }
 
-/* Virtual scroll viewport — 160px accounts for navbar (56px) + header row (40px) + file-options bar (48px) + padding (16px) */
+/* Virtual scroll viewport — chrome height accounts for sticky elements above the scroll area.
+   Desktop (≥993px): navbar (56px) + column header (40px) + file-options bar (48px) + padding (16px) = 160px
+   Mobile  (<993px): navbar (56px) + title bar (~52px) + file-options bar (~76px) + padding (16px) = 200px
+   Uses dvh (dynamic viewport height) so the container adapts when Android browser chrome hides/shows. */
 $file-list-chrome-height: 160px;
+$file-list-chrome-height-mobile: 200px;
 .file-viewport {
     height: calc(100vh - $file-list-chrome-height);
+    height: calc(100dvh - $file-list-chrome-height);
     min-height: 200px;
+}
+
+@media only screen and (max-width: $medium-max-width) {
+    .file-viewport {
+        height: calc(100vh - $file-list-chrome-height-mobile);
+        height: calc(100dvh - $file-list-chrome-height-mobile);
+    }
 }
 
 /* striped rows — use template-driven .even class instead of :nth-child
