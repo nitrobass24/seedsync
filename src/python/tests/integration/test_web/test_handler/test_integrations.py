@@ -62,9 +62,7 @@ class TestIntegrationsHandler(BaseTestWebApp):
         """Exception text (host/port, reason) must not reach the HTTP response body."""
         self.context.config.integrations.sonarr_url = "http://192.168.1.100:8989"
         self.context.config.integrations.sonarr_api_key = "test-key"
-        mock_urlopen.side_effect = urllib.error.URLError(
-            "connection refused to 192.168.1.100:8989"
-        )
+        mock_urlopen.side_effect = urllib.error.URLError("connection refused to 192.168.1.100:8989")
         resp = self.test_app.get("/server/integrations/test/sonarr", expect_errors=True)
         self.assertEqual(502, resp.status_int)
         raw_body = str(resp.html)
