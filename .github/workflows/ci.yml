@@ -37,6 +37,10 @@ jobs:
         working-directory: src/angular
         run: npm ci
 
+      - name: Lint Angular
+        working-directory: src/angular
+        run: npx ng lint
+
       - name: Run tests
         working-directory: src/angular
         run: npx ng test

@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { TestBed } from "@angular/core/testing";
-import {
-  StreamDispatchService,
-  StreamEventHandler,
-} from "./stream-dispatch.service";
+import { StreamDispatchService } from "./stream-dispatch.service";
 import { LoggerService } from "../utils/logger.service";
 
 // --- Mock EventSource ---

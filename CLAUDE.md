@@ -181,6 +181,7 @@ make stop     # Stop container
 
 ### Testing
 ```bash
+cd src/angular && npx ng lint    # Angular ESLint
 cd src/angular && npx ng test    # Angular Vitest unit tests
 # Python tests run in Docker via CI (pytest in test-image)
 # CI also runs: Docker build, container startup, web UI accessibility
@@ -211,6 +212,7 @@ Every PR MUST include appropriate test changes. Tests are not optional — they 
 
 | Layer | Framework | Location | Runner |
 |-------|-----------|----------|--------|
+| Angular lint | ESLint (angular-eslint) | `src/angular/eslint.config.js` | `cd src/angular && npx ng lint` |
 | Angular unit tests | Vitest | `src/angular/src/**/*.spec.ts` | `cd src/angular && npx ng test` |
 | Python unit tests | unittest | `src/python/tests/unittests/` | pytest (in Docker test-image) |
 | Python integration tests | unittest + WebTest | `src/python/tests/integration/` | pytest (in Docker test-image) |
