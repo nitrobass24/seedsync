@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { modelFileFromJson, ModelFileState } from './model-file';
+import { modelFileFromJson, ModelFileJson, ModelFileState } from './model-file';
 
 describe('modelFileFromJson', () => {
-  function makeJson(overrides: Record<string, any> = {}) {
+  function makeJson(overrides: Partial<ModelFileJson> = {}): ModelFileJson {
     return {
       name: 'test.txt',
       is_dir: false,

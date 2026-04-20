@@ -7,6 +7,9 @@ import { RestService, WebReaction } from '../utils/rest.service';
 import { StreamDispatchService } from '../base/stream-dispatch.service';
 import { Config } from '../../models/config';
 
+/** Value a config field may take (matches OptionComponent's value shape). */
+export type ConfigValue = string | number | boolean | null;
+
 /** Sentinel value sent to the backend when the user clears a text field. */
 export const EMPTY_VALUE_SENTINEL = '__empty__';
 
@@ -40,10 +43,11 @@ export class ConfigService {
     });
   }
 
-  set(section: string, option: string, value: any): Observable<WebReaction> {
-    const valueStr: string = value;
+  set(section: string, option: string, value: ConfigValue): Observable<WebReaction> {
+    const valueStr = String(value ?? '');
     const currentConfig = this.configSubject.getValue();
-    if (!currentConfig || !(section in currentConfig) || !(option in (currentConfig as any)[section])) {
+    const configAsRecord = currentConfig as unknown as Record<string, Record<string, ConfigValue>> | null;
+    if (!currentConfig || !(section in currentConfig) || !configAsRecord || !(option in configAsRecord[section])) {
       return of({
         success: false,
         data: null,
@@ -61,7 +65,8 @@ export class ConfigService {
         if (reaction.success) {
           const config = this.configSubject.getValue();
           if (config) {
-            const newConfig = { ...config, [section]: { ...(config as any)[section], [option]: value } };
+            const sectionValues = (config as unknown as Record<string, Record<string, ConfigValue>>)[section];
+            const newConfig = { ...config, [section]: { ...sectionValues, [option]: value } };
             this.configSubject.next(newConfig);
             // Propagate API key changes to the SSE stream immediately
             if (section === 'web' && option === 'api_key') {

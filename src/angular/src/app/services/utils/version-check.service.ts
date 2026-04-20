@@ -26,11 +26,10 @@ export class VersionCheckService {
     this.restService.sendRequest(this.GITHUB_LATEST_RELEASE_URL).subscribe({
       next: (reaction) => {
         if (reaction.success) {
-          let jsonResponse: any;
           let latestVersion: string;
           let url: string;
           try {
-            jsonResponse = JSON.parse(reaction.data!);
+            const jsonResponse = JSON.parse(reaction.data!) as { tag_name: string; html_url: string };
             latestVersion = jsonResponse.tag_name;
             url = jsonResponse.html_url;
           } catch (e) {
