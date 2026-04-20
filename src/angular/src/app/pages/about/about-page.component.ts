@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 
 import packageJson from '../../../../package.json';
 
@@ -7,6 +7,7 @@ import packageJson from '../../../../package.json';
   standalone: true,
   templateUrl: './about-page.component.html',
   styleUrls: ['./about-page.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AboutPageComponent {
   readonly version = packageJson.version;

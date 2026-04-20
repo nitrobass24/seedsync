@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnInit, ViewChild, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 
 import { ROUTE_INFOS, RouteInfo } from './routes';
@@ -11,13 +11,14 @@ import { SidebarComponent } from './pages/main/sidebar.component';
   standalone: true,
   imports: [RouterOutlet, HeaderComponent, SidebarComponent],
   templateUrl: './app.html',
-  styleUrls: ['./app.scss']
+  styleUrls: ['./app.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App implements OnInit, AfterViewInit {
   @ViewChild('topHeader') topHeader!: ElementRef;
 
-  showSidebar = false;
-  activeRoute: RouteInfo | undefined;
+  readonly showSidebar = signal(false);
+  readonly activeRoute = signal<RouteInfo | undefined>(undefined);
 
   private _resizeObserver: ResizeObserver | null = null;
 
@@ -26,8 +27,8 @@ export class App implements OnInit, AfterViewInit {
     private _domService: DomService
   ) {
     router.events.subscribe(() => {
-      this.showSidebar = false;
-      this.activeRoute = ROUTE_INFOS.find(value => '/' + value.path === router.url);
+      this.showSidebar.set(false);
+      this.activeRoute.set(ROUTE_INFOS.find(value => '/' + value.path === router.url));
     });
   }
 

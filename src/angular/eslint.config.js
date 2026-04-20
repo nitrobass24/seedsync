@@ -2,9 +2,9 @@
 // TODO(#376): Many rules below are intentionally set to "warn" (not "error")
 // to keep the initial lint step non-fatal while the tooling PR lands. A
 // follow-up cleanup PR should graduate these to "error" and address the
-// accumulated findings (e.g. `ChangeDetectionStrategy.OnPush`, a11y on
-// interactive elements, <img> alt text, `any` casts, inject() migration,
-// ==/===, inferrable types, empty functions, Array<T> vs T[]).
+// accumulated findings (e.g. a11y on interactive elements, <img> alt text,
+// `any` casts, inject() migration, ==/===, inferrable types, empty
+// functions, Array<T> vs T[]).
 // See: https://github.com/nitrobass24/seedsync/issues/376
 const eslint = require("@eslint/js");
 const { defineConfig } = require("eslint/config");
@@ -39,7 +39,7 @@ module.exports = defineConfig([
         },
       ],
       // Rules required by #376, all "warn" for the initial PR:
-      "@angular-eslint/prefer-on-push-component-change-detection": "warn",
+      "@angular-eslint/prefer-on-push-component-change-detection": "error",
       "@angular-eslint/no-empty-lifecycle-method": "warn",
       "@typescript-eslint/no-explicit-any": "warn",
       // "no-unused-vars" is the one rule #376 asks to keep as "error":
