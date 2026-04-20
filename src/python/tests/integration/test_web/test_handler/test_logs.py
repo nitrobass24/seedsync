@@ -1,9 +1,11 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import builtins
 import json
 import os
 import tempfile
 import tracemalloc
+from unittest.mock import patch
 
 from common import Constants
 from tests.integration.test_web.test_web_app import BaseTestWebApp
@@ -128,6 +130,33 @@ class TestLogsHandler(BaseTestWebApp):
             [f"msg {i}" for i in range(5)],
             [x["message"] for x in entries],
         )
+
+    def test_files_past_before_cursor_are_not_opened(self):
+        """Once the pagination cursor is exhausted by an older file, newer
+        rotated files should not even be opened (I/O optimization)."""
+        # Oldest file (.log.2) saturates before=2 on its own.
+        with open(self._log_path("2"), "w", encoding="utf-8") as f:
+            f.write(_header(0, "INFO", "a"))
+            f.write(_header(1, "INFO", "b"))
+        # Newer files would contribute if scanned — prove we skip them.
+        for suffix in ("1", ""):
+            with open(self._log_path(suffix), "w", encoding="utf-8") as f:
+                f.write(_header(9, "INFO", "should-not-be-read"))
+
+        real_open = builtins.open
+        opened_log_files: list[str] = []
+
+        def tracking_open(path, *args, **kwargs):
+            if isinstance(path, str) and path.startswith(self.tmp_dir):
+                opened_log_files.append(path)
+            return real_open(path, *args, **kwargs)
+
+        with patch("web.handler.logs.open", side_effect=tracking_open, create=True):
+            resp = self.test_app.get("/server/logs?limit=500&before=2")
+
+        entries = json.loads(resp.text)
+        self.assertEqual(["a", "b"], [e["message"] for e in entries])
+        self.assertEqual([self._log_path("2")], opened_log_files)
 
     # ---- bounded-memory test ----------------------------------------------
 

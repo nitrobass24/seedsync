@@ -138,6 +138,11 @@ class LogsHandler(IHandler):
             if current_entry is not None:
                 flush(current_entry)
 
+            # Once the pagination cursor is exhausted, no further entry can
+            # contribute to the result — stop opening additional rotated files.
+            if before != 0 and global_entry_idx >= before:
+                break
+
         return list(matched)
 
     @staticmethod
