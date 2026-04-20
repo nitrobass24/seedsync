@@ -2,9 +2,9 @@
 // TODO(#376): Many rules below are intentionally set to "warn" (not "error")
 // to keep the initial lint step non-fatal while the tooling PR lands. A
 // follow-up cleanup PR should graduate these to "error" and address the
-// accumulated findings (e.g. `ChangeDetectionStrategy.OnPush`, a11y on
-// interactive elements, <img> alt text, `any` casts, inject() migration,
-// ==/===, inferrable types, empty functions, Array<T> vs T[]).
+// accumulated findings (e.g. `ChangeDetectionStrategy.OnPush`, `any` casts,
+// inject() migration, ==/===, inferrable types, empty functions,
+// Array<T> vs T[]).
 // See: https://github.com/nitrobass24/seedsync/issues/376
 const eslint = require("@eslint/js");
 const { defineConfig } = require("eslint/config");
@@ -64,12 +64,12 @@ module.exports = defineConfig([
       angular.configs.templateAccessibility,
     ],
     rules: {
-      // Required-by-#376 a11y rules, "warn" for the initial PR:
-      "@angular-eslint/template/click-events-have-key-events": "warn",
-      "@angular-eslint/template/interactive-supports-focus": "warn",
+      // A11y rules graduated to "error" in #380/#381 cleanup:
+      "@angular-eslint/template/click-events-have-key-events": "error",
+      "@angular-eslint/template/interactive-supports-focus": "error",
+      "@angular-eslint/template/alt-text": "error",
       // High-volume template findings — demoted to "warn" for this PR.
       // Follow-up cleanup tracked in #376.
-      "@angular-eslint/template/alt-text": "warn",
       "@angular-eslint/template/eqeqeq": "warn",
     },
   },

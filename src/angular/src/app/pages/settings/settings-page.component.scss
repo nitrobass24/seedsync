@@ -63,6 +63,11 @@
         .button {
             @extend %button;
 
+            /* Reset native <button> appearance */
+            appearance: none;
+            font: inherit;
+            outline: inherit;
+
             flex-direction: row;
             padding: 10px;
             margin-inline-end: 8px;

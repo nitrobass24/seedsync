@@ -35,7 +35,13 @@
       </ng-container>
 
       <div class="card">
-        <h3 class="card-header collapsible-header" (click)="toggleAdvancedLftp()">
+        <h3 class="card-header collapsible-header"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="!advancedLftpCollapsed"
+            (click)="toggleAdvancedLftp()"
+            (keyup.enter)="toggleAdvancedLftp()"
+            (keyup.space)="toggleAdvancedLftp(); $event.preventDefault()">
           {{ OPTIONS_CONTEXT_ADVANCED_LFTP.header }}
           <span class="collapse-indicator">{{ advancedLftpCollapsed ? '&#9654;' : '&#9660;' }}</span>
         </h3>
@@ -129,14 +135,15 @@
   </div>
 
   <div id="commands">
-    <div
+    <button
+      type="button"
       class="button"
       appClickStopPropagation
-      [attr.disabled]="commandsEnabled ? null : true"
+      [disabled]="!commandsEnabled"
       (click)="!commandsEnabled || onCommandRestart()">
-      <img src="assets/icons/refresh.svg" />
+      <img src="assets/icons/refresh.svg" alt="" aria-hidden="true" />
       <span class="text">Restart</span>
-    </div>
+    </button>
   </div>
 </div>
 

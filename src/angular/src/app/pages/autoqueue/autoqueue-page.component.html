@@ -18,24 +18,28 @@
   <div id="controls" [attr.disabled]="enabled && patternsOnly ? null : true">
     @for (pattern of patterns$ | async; track pattern.pattern) {
       <div class="pattern">
-        <div
+        <button
+          type="button"
           class="button"
           appClickStopPropagation
-          [attr.disabled]="enabled && patternsOnly ? null : true"
+          [attr.aria-label]="'Remove pattern ' + pattern.pattern"
+          [disabled]="!(enabled && patternsOnly)"
           (click)="!(enabled && patternsOnly) || onRemovePattern(pattern)">
           <span>&#8722;</span>
-        </div>
+        </button>
         <span class="text">{{ pattern.pattern }}</span>
       </div>
     }
     <div id="add-pattern">
-      <div
+      <button
+        type="button"
         class="button"
         appClickStopPropagation
+        aria-label="Add pattern"
         (click)="!(newPattern && enabled && patternsOnly) || onAddPattern()"
-        [attr.disabled]="newPattern && enabled && patternsOnly ? null : true">
+        [disabled]="!(newPattern && enabled && patternsOnly)">
         <span>&#43;</span>
-      </div>
+      </button>
       <label>
         <input
           type="search"
