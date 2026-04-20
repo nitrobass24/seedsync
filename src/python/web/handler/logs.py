@@ -114,7 +114,7 @@ class LogsHandler(IHandler):
             except OSError:
                 continue
             current_entry: dict[str, str] | None = None
-            try:
+            with f:
                 for line in f:
                     match = _LOG_PATTERN.match(line)
                     if match:
@@ -132,8 +132,6 @@ class LogsHandler(IHandler):
                     elif current_entry is not None:
                         # Continuation line (traceback, etc.) — append to current entry.
                         current_entry["message"] += "\n" + line.rstrip()
-            finally:
-                f.close()
 
             # End-of-file flush: preserves old behaviour of flushing each file's
             # final entry before moving on to the next rotated file.
