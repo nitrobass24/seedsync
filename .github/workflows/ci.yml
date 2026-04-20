@@ -37,13 +37,31 @@ jobs:
         working-directory: src/angular
         run: npm ci
 
-      - name: Lint Angular
-        working-directory: src/angular
-        run: npx ng lint
-
       - name: Run tests
         working-directory: src/angular
         run: npx ng test
+
+  angular-lint:
+    name: Angular Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/angular/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src/angular
+        run: npm ci
+
+      - name: Lint Angular
+        working-directory: src/angular
+        run: npx ng lint
 
   python-lint:
     name: Python Lint
