@@ -1,5 +1,6 @@
 import json
 import unittest
+import urllib.error
 from unittest.mock import MagicMock, patch
 
 from tests.integration.test_web.test_web_app import BaseTestWebApp
@@ -53,7 +54,29 @@ class TestIntegrationsHandler(BaseTestWebApp):
         resp = self.test_app.get("/server/integrations/test/sonarr", expect_errors=True)
         self.assertEqual(502, resp.status_int)
         body = json.loads(str(resp.html))
-        self.assertIn("Connection failed", body["error"])
+        self.assertIn("Sonarr connection failed", body["error"])
+        self.assertIn("server logs", body["error"])
+
+    @patch("web.handler.integrations.urllib.request.urlopen")
+    def test_test_sonarr_error_does_not_leak_exception_details(self, mock_urlopen):
+        """Exception text (host/port, reason) must not reach the HTTP response body."""
+        self.context.config.integrations.sonarr_url = "http://192.168.1.100:8989"
+        self.context.config.integrations.sonarr_api_key = "test-key"
+        mock_urlopen.side_effect = urllib.error.URLError(
+            "connection refused to 192.168.1.100:8989"
+        )
+        resp = self.test_app.get("/server/integrations/test/sonarr", expect_errors=True)
+        self.assertEqual(502, resp.status_int)
+        raw_body = str(resp.html)
+        body = json.loads(raw_body)
+        # Generic message present
+        self.assertIn("Sonarr connection failed", body["error"])
+        self.assertIn("server logs", body["error"])
+        # Sensitive bits absent
+        self.assertNotIn("192.168.1.100", raw_body)
+        self.assertNotIn("8989", raw_body)
+        self.assertNotIn("connection refused", raw_body)
+        self.assertNotIn("URLError", raw_body)
 
     @patch("web.handler.integrations.urllib.request.urlopen")
     def test_test_radarr_success(self, mock_urlopen):
