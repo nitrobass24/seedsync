@@ -600,9 +600,8 @@ class Controller:
         Returns a copy of all the model files
         :return:
         """
-        self.__model_lock.acquire()
-        model_files = self.__get_model_files()
-        self.__model_lock.release()
+        with self.__model_lock:
+            model_files = self.__get_model_files()
         return model_files
 
     def add_model_listener(self, listener: IModelListener):
@@ -611,9 +610,8 @@ class Controller:
         :param listener:
         :return:
         """
-        self.__model_lock.acquire()
-        self.__model.add_listener(listener)
-        self.__model_lock.release()
+        with self.__model_lock:
+            self.__model.add_listener(listener)
 
     def remove_model_listener(self, listener: IModelListener):
         """
@@ -621,9 +619,8 @@ class Controller:
         :param listener:
         :return:
         """
-        self.__model_lock.acquire()
-        self.__model.remove_listener(listener)
-        self.__model_lock.release()
+        with self.__model_lock:
+            self.__model.remove_listener(listener)
 
     def get_model_files_and_add_listener(self, listener: IModelListener):
         """
@@ -631,10 +628,9 @@ class Controller:
         :param listener:
         :return:
         """
-        self.__model_lock.acquire()
-        self.__model.add_listener(listener)
-        model_files = self.__get_model_files()
-        self.__model_lock.release()
+        with self.__model_lock:
+            self.__model.add_listener(listener)
+            model_files = self.__get_model_files()
         return model_files
 
     def queue_command(self, command: Command):
@@ -776,8 +772,7 @@ class Controller:
                     new_model.add_file(file)
                     seen_names_by_path[norm_path].add(file.name)
 
-            self.__model_lock.acquire()
-            try:
+            with self.__model_lock:
                 model_diff = ModelDiffUtil.diff_models(self.__model, new_model)
 
                 for diff in model_diff:
@@ -939,9 +934,6 @@ class Controller:
                         self.__persist.validated_file_names.difference_update(absent_keys)
                         self.__persist.corrupt_file_names.difference_update(absent_keys)
                         self._sync_persist_to_all_builders()
-
-            finally:
-                self.__model_lock.release()
 
         # Process extraction failures — mark as failed immediately
         for result in latest_failed_extractions:
