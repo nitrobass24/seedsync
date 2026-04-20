@@ -49,7 +49,7 @@ describe('modelFileFromJson', () => {
   });
 
   it('should map state strings to ModelFileState enum via toUpperCase', () => {
-    const states: Array<[string, ModelFileState]> = [
+    const states: [string, ModelFileState][] = [
       ['default', ModelFileState.DEFAULT],
       ['queued', ModelFileState.QUEUED],
       ['downloading', ModelFileState.DOWNLOADING],

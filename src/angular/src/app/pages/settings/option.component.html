@@ -1,5 +1,5 @@
 <div class="form-group"
-     [class.error]="value() == '<replace me>'">
+     [class.error]="value() === '<replace me>'">
 
   @switch (type()) {
     @case (OptionType.Text) {
@@ -7,7 +7,7 @@
         <span class="name">{{ label() }}</span>
         <input type="text"
                class="form-control"
-               [disabled]="disabled() || value() == null"
+               [disabled]="disabled() || value() === null || value() === undefined"
                [ngModel]="value()"
                (ngModelChange)="onChange($event)" />
         @if (description()) {
@@ -20,7 +20,7 @@
       <label>
         <input type="checkbox"
                class="form-check-input"
-               [disabled]="disabled() || value() == null"
+               [disabled]="disabled() || value() === null || value() === undefined"
                [ngModel]="value()"
                (ngModelChange)="onChange($event)" />
         <span class="name">{{ label() }}</span>
@@ -35,7 +35,7 @@
         <span class="name">{{ label() }}</span>
         <input type="password"
                class="form-control"
-               [disabled]="disabled() || value() == null"
+               [disabled]="disabled() || value() === null || value() === undefined"
                [ngModel]="value()"
                (ngModelChange)="onChange($event)" />
         @if (description()) {
@@ -48,7 +48,7 @@
       <label>
         <span class="name">{{ label() }}</span>
         <select class="form-select"
-                [disabled]="disabled() || value() == null"
+                [disabled]="disabled() || value() === null || value() === undefined"
                 [ngModel]="value()"
                 (ngModelChange)="onChange($event)">
           @for (option of effectiveChoices(); track option) {

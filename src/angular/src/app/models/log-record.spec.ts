@@ -14,7 +14,7 @@ describe('logRecordFromJson', () => {
   }
 
   it('should map level_name to LogLevel enum', () => {
-    const levels: Array<[string, LogLevel]> = [
+    const levels: [string, LogLevel][] = [
       ['DEBUG', LogLevel.DEBUG],
       ['INFO', LogLevel.INFO],
       ['WARNING', LogLevel.WARNING],

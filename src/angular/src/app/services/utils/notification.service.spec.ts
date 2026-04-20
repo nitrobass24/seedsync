@@ -6,7 +6,7 @@ function makeNotification(
   level: NotificationLevel,
   text: string,
   timestamp: number = Date.now(),
-  dismissible: boolean = false,
+  dismissible = false,
 ): Notification {
   return { level, text, timestamp, dismissible };
 }
