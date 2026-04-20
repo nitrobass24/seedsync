@@ -89,7 +89,7 @@ class TestLogsHandler(BaseTestWebApp):
         entries = json.loads(resp.text)
         self.assertEqual(3, len(entries))
         self.assertEqual(
-            ["newest", "middle", "oldest"],
+            ["oldest", "middle", "newest"],
             [e["message"] for e in entries],
         )
 

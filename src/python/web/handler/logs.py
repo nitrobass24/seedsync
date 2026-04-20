@@ -77,14 +77,19 @@ class LogsHandler(IHandler):
         assert self._logdir is not None
         base_path = os.path.join(self._logdir, "{}.log".format(self._service_name))
 
-        # Gather log file paths: .log, .log.1, .log.2, ... up to backup count
+        # Gather log file paths in oldest -> newest order.
+        # RotatingFileHandler convention: on rotation, the current .log is
+        # renamed to .log.1, previous .log.1 becomes .log.2, etc. So .log.N is
+        # the oldest surviving backup and .log is the currently-active file.
+        # Iterate rotated indices in reverse (N .. 1) then append .log last so
+        # the deque below naturally retains the *newest* `limit` entries.
         log_files: list[str] = []
-        if os.path.isfile(base_path):
-            log_files.append(base_path)
-        for i in range(1, Constants.LOG_BACKUP_COUNT + 1):
+        for i in range(Constants.LOG_BACKUP_COUNT, 0, -1):
             rotated = "{}.{}".format(base_path, i)
             if os.path.isfile(rotated):
                 log_files.append(rotated)
+        if os.path.isfile(base_path):
+            log_files.append(base_path)
 
         # Bounded buffer of the most recent `limit` matching entries. Ordering is
         # preserved (oldest first) across rotated files because log_files is
