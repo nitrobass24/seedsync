@@ -41,6 +41,31 @@ jobs:
         working-directory: src/angular
         run: npx ng test
 
+  angular-lint:
+    name: Angular Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/angular/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src/angular
+        run: npm ci
+
+      - name: Lint Angular
+        working-directory: src/angular
+        # Baseline is 138 warnings at the time of #376. Any new warning
+        # fails CI. When you fix warnings, lower this number by the same
+        # count in the same commit. See #378-#382 for cleanup tickets.
+        run: npx ng lint --max-warnings 138
+
   python-lint:
     name: Python Lint
     runs-on: ubuntu-latest
@@ -364,12 +389,13 @@ jobs:
       always() && !cancelled()
       && (startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/develop' && github.event_name == 'push') || github.event_name == 'workflow_dispatch')
       && needs.unit-test.result == 'success'
+      && needs.angular-lint.result == 'success'
       && needs.python-lint.result == 'success'
       && needs.python-typecheck.result == 'success'
       && needs.python-test.result == 'success'
       && needs.build-amd64.result == 'success'
       && needs.build-arm64.result == 'success'
-    needs: [unit-test, python-lint, python-typecheck, python-test, build-amd64, build-arm64]
+    needs: [unit-test, angular-lint, python-lint, python-typecheck, python-test, build-amd64, build-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: read

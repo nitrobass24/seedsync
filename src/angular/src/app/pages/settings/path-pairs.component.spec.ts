@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { BehaviorSubject, of } from 'rxjs';
+import { of } from 'rxjs';
 
 import { PathPair } from '../../models/path-pair';
 
