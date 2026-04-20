@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from collections import deque
 
 from bottle import HTTPResponse, request
 
@@ -61,61 +62,88 @@ class LogsHandler(IHandler):
         return HTTPResponse(body=json.dumps(entries), content_type="application/json")
 
     def _read_logs(self, search: str, min_level: int, limit: int, before: int) -> list[dict[str, str]]:
-        entries: list[dict[str, str]] = []
+        """
+        Read log entries from rotated log files without loading any file fully into memory.
+
+        Files are iterated line-by-line (constant memory per file). Only the trailing
+        ``limit`` matching entries are retained via a ``deque(maxlen=limit)``. The
+        current (in-progress) entry is held outside the deque so that continuation
+        lines (tracebacks, multi-line messages) can still be appended to its
+        ``message`` field until the next header line flushes it.
+
+        Peak memory is therefore O(limit x avg entry size) rather than
+        O(sum of all log file bytes).
+        """
         assert self._logdir is not None
         base_path = os.path.join(self._logdir, "{}.log".format(self._service_name))
 
-        # Gather log file paths: .log, .log.1, .log.2, ... up to backup count
+        # Gather log file paths in oldest -> newest order.
+        # RotatingFileHandler convention: on rotation, the current .log is
+        # renamed to .log.1, previous .log.1 becomes .log.2, etc. So .log.N is
+        # the oldest surviving backup and .log is the currently-active file.
+        # Iterate rotated indices in reverse (N .. 1) then append .log last so
+        # the deque below naturally retains the *newest* `limit` entries.
         log_files: list[str] = []
-        if os.path.isfile(base_path):
-            log_files.append(base_path)
-        for i in range(1, Constants.LOG_BACKUP_COUNT + 1):
+        for i in range(Constants.LOG_BACKUP_COUNT, 0, -1):
             rotated = "{}.{}".format(base_path, i)
             if os.path.isfile(rotated):
                 log_files.append(rotated)
+        if os.path.isfile(base_path):
+            log_files.append(base_path)
 
-        global_line_idx = 0
+        # Bounded buffer of the most recent `limit` matching entries. Ordering is
+        # preserved (oldest first) across rotated files because log_files is
+        # ordered oldest -> newest and files are streamed in order.
+        matched: deque[dict[str, str]] = deque(maxlen=limit)
+        # `global_entry_idx` counts EVERY completed entry seen (pre-filter). This
+        # matches the old implementation's `before` semantics (global index over
+        # running entries list, regardless of search/min_level filtering).
+        global_entry_idx = 0
+
+        def flush(entry: dict[str, str]) -> None:
+            nonlocal global_entry_idx
+            global_entry_idx += 1
+            if before != 0 and global_entry_idx > before:
+                return
+            if self._entry_matches(entry, search, min_level):
+                matched.append(entry)
+
         for log_file in log_files:
             try:
-                with open(log_file, encoding="utf-8", errors="replace") as f:
-                    lines = f.readlines()
+                f = open(log_file, encoding="utf-8", errors="replace")
             except OSError:
                 continue
+            current_entry: dict[str, str] | None = None
+            with f:
+                for line in f:
+                    match = _LOG_PATTERN.match(line)
+                    if match:
+                        # Header line: flush any previous entry, then start a new one.
+                        if current_entry is not None:
+                            flush(current_entry)
+                        current_entry = {
+                            "timestamp": match.group(1),
+                            "level": match.group(2),
+                            "logger": match.group(3),
+                            "process": match.group(4),
+                            "thread": match.group(5),
+                            "message": match.group(6),
+                        }
+                    elif current_entry is not None:
+                        # Continuation line (traceback, etc.) — append to current entry.
+                        current_entry["message"] += "\n" + line.rstrip()
 
-            current_entry = None
-            for line in lines:
-                match = _LOG_PATTERN.match(line)
-                if match:
-                    # Flush previous entry
-                    if current_entry is not None:
-                        global_line_idx += 1
-                        if before == 0 or global_line_idx <= before:
-                            if self._entry_matches(current_entry, search, min_level):
-                                entries.append(current_entry)
-                    current_entry = {
-                        "timestamp": match.group(1),
-                        "level": match.group(2),
-                        "logger": match.group(3),
-                        "process": match.group(4),
-                        "thread": match.group(5),
-                        "message": match.group(6),
-                    }
-                elif current_entry is not None:
-                    # Continuation line (traceback, etc.)
-                    current_entry["message"] += "\n" + line.rstrip()
-
-            # Flush last entry
+            # End-of-file flush: preserves old behaviour of flushing each file's
+            # final entry before moving on to the next rotated file.
             if current_entry is not None:
-                global_line_idx += 1
-                if before == 0 or global_line_idx <= before:
-                    if self._entry_matches(current_entry, search, min_level):
-                        entries.append(current_entry)
+                flush(current_entry)
 
-        # Return the most recent entries (last N)
-        if len(entries) > limit:
-            entries = entries[-limit:]
+            # Once the pagination cursor is exhausted, no further entry can
+            # contribute to the result — stop opening additional rotated files.
+            if before != 0 and global_entry_idx >= before:
+                break
 
-        return entries
+        return list(matched)
 
     @staticmethod
     def _entry_matches(entry: dict[str, str], search: str, min_level: int) -> bool:
