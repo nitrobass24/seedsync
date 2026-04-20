@@ -447,9 +447,11 @@ describe('FileListComponent', () => {
       document.documentElement.style.removeProperty('--file-list-chrome-height');
       topHeader.remove();
       fileOptions.remove();
-      if (originalResizeObserver) {
-        (globalThis as unknown as { ResizeObserver: typeof ResizeObserver }).ResizeObserver =
-          originalResizeObserver;
+      const g = globalThis as unknown as { ResizeObserver?: typeof ResizeObserver };
+      if (originalResizeObserver !== undefined) {
+        g.ResizeObserver = originalResizeObserver;
+      } else {
+        delete g.ResizeObserver;
       }
       window.requestAnimationFrame = originalRaf;
     });
