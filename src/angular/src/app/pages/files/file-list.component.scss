@@ -4,11 +4,23 @@
     display: none;
 }
 
-/* Virtual scroll viewport — 160px accounts for navbar (56px) + header row (40px) + file-options bar (48px) + padding (16px) */
+/* Virtual scroll viewport — chrome height accounts for sticky elements above the scroll area.
+   Desktop (≥993px): navbar (56px) + column header (40px) + file-options bar (48px) + padding (16px) = 160px
+   Mobile  (<993px): navbar (56px) + title bar (~52px) + file-options bar (~76px) + padding (16px) = 200px
+   Uses dvh (dynamic viewport height) so the container adapts when Android browser chrome hides/shows. */
 $file-list-chrome-height: 160px;
+$file-list-chrome-height-mobile: 200px;
 .file-viewport {
     height: calc(100vh - $file-list-chrome-height);
+    height: calc(100dvh - $file-list-chrome-height);
     min-height: 200px;
+}
+
+@media only screen and (max-width: $medium-max-width) {
+    .file-viewport {
+        height: calc(100vh - $file-list-chrome-height-mobile);
+        height: calc(100dvh - $file-list-chrome-height-mobile);
+    }
 }
 
 /* striped rows — use template-driven .even class instead of :nth-child
@@ -17,13 +29,13 @@ $file-list-chrome-height: 160px;
     background-color: var(--ss-primary-lighter);
 }
 
-/* list separator — use top-border so recycled rows always show a separator
-   regardless of DOM position (no :last-child needed) */
-.file-row + .file-row {border-top: 1px solid var(--ss-border);}
+/* list separator — inset box-shadow draws a top divider without adding
+   to the row height, so CDK virtual scroll's fixed itemSize stays accurate */
+.file-row + .file-row {box-shadow: inset 0 1px 0 var(--ss-border);}
 
 
-/* Medium and large screens */
-@media only screen and (min-width: $medium-min-width) {
+/* Large screens — column header aligns with desktop viewport height math (≥993px) */
+@media only screen and (min-width: $large-min-width) {
     #file-list #header {
         display: flex;
     }
@@ -62,7 +74,7 @@ $file-list-chrome-height: 160px;
     }
 
     .file-row + .file-row {
-        border-top-color: rgba(255, 255, 255, 0.04);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
 
     .file-row {
