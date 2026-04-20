@@ -16,13 +16,7 @@ def _header(ts_seconds: int, level: str, msg: str) -> str:
     ss = ts_seconds % 60
     mm = (ts_seconds // 60) % 60
     hh = (ts_seconds // 3600) % 24
-    return (
-        f"2024-01-15 {hh:02d}:{mm:02d}:{ss:02d},000"
-        f" - {level}"
-        f" - seedsync"
-        f" (MainProcess/MainThread)"
-        f" - {msg}\n"
-    )
+    return f"2024-01-15 {hh:02d}:{mm:02d}:{ss:02d},000 - {level} - seedsync (MainProcess/MainThread) - {msg}\n"
 
 
 class TestLogsHandler(BaseTestWebApp):
