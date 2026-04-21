@@ -405,6 +405,7 @@ describe('FileListComponent', () => {
     let observerState: FakeObserverState;
     let originalResizeObserver: typeof ResizeObserver | undefined;
     let originalRaf: typeof window.requestAnimationFrame;
+    let originalScrollYDescriptor: PropertyDescriptor | undefined;
     let rafCallbacks: FrameRequestCallback[];
     let topHeader: HTMLElement;
     let fileOptions: HTMLElement;
@@ -441,6 +442,12 @@ describe('FileListComponent', () => {
         rafCallbacks.push(cb);
         return rafCallbacks.length;
       }) as typeof window.requestAnimationFrame;
+
+      // Pin scrollY so chrome-height assertions are deterministic regardless
+      // of prior-test scroll state. Capture the original descriptor so we can
+      // restore JSDOM's live getter after the test.
+      originalScrollYDescriptor = Object.getOwnPropertyDescriptor(window, 'scrollY');
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
     });
 
     afterEach(() => {
@@ -454,6 +461,11 @@ describe('FileListComponent', () => {
         delete g.ResizeObserver;
       }
       window.requestAnimationFrame = originalRaf;
+      if (originalScrollYDescriptor) {
+        Object.defineProperty(window, 'scrollY', originalScrollYDescriptor);
+      } else {
+        delete (window as unknown as { scrollY?: number }).scrollY;
+      }
     });
 
     function flushRaf(): void {
@@ -484,7 +496,6 @@ describe('FileListComponent', () => {
         top: 137.4, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0,
         toJSON: () => ({}),
       } as DOMRect);
-      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
 
       // Trigger the observer callback and flush the rAF-scheduled update.
       observerState.callback?.([], {} as ResizeObserver);
