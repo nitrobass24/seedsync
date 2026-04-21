@@ -19,7 +19,7 @@
             </div>
             <div class="selection">
                 <!-- these divs only show the selected option -->
-                @if ((options | async)?.selectedStatusFilter == null) {
+                @if ((options | async)?.selectedStatusFilter === null || (options | async)?.selectedStatusFilter === undefined) {
                     <div class="sel-item" id="sel-item-all">
                         <div class="icon"></div>
                         <span class="text">All</span>
@@ -65,7 +65,7 @@
         </button>
         <div class="dropdown-menu">
             <div class="dropdown-item"
-                 [class.active]="(options | async)?.selectedStatusFilter == null"
+                 [class.active]="(options | async)?.selectedStatusFilter === null || (options | async)?.selectedStatusFilter === undefined"
                  (click)="onFilterByStatus(null)">
                 <div class="icon"></div>
                 <span class="text">All</span>

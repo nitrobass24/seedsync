@@ -42,9 +42,13 @@ export class LogService implements StreamEventHandler {
         this.logsSubject.next(logRecordFromJson(JSON.parse(data)));
     }
 
-    onConnected(): void {}
+    onConnected(): void {
+        // intentional no-op
+    }
 
-    onDisconnected(): void {}
+    onDisconnected(): void {
+        // intentional no-op
+    }
 
     fetchHistory(params: LogHistoryParams = {}): Observable<LogHistoryEntry[]> {
         let httpParams = new HttpParams();

@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 
 import { ROUTE_INFOS, RouteInfo } from './routes';
@@ -21,13 +21,13 @@ export class App implements OnInit, AfterViewInit {
 
   private _resizeObserver: ResizeObserver | null = null;
 
-  constructor(
-    private router: Router,
-    private _domService: DomService
-  ) {
-    router.events.subscribe(() => {
+  private readonly router = inject(Router);
+  private readonly _domService = inject(DomService);
+
+  constructor() {
+    this.router.events.subscribe(() => {
       this.showSidebar = false;
-      this.activeRoute = ROUTE_INFOS.find(value => '/' + value.path === router.url);
+      this.activeRoute = ROUTE_INFOS.find(value => '/' + value.path === this.router.url);
     });
   }
 
