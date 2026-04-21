@@ -12,8 +12,8 @@ reviews:
   commit_status: true
   collapse_walkthrough: true
   changed_files_summary: true
-  sequence_diagrams: true
-  poem: true
+  sequence_diagrams: false
+  poem: false
   in_progress_fortune: true
   suggested_labels: true
   auto_apply_labels: false
@@ -49,12 +49,11 @@ reviews:
 
   auto_review:
     enabled: true
-    auto_incremental_review: true
+    auto_incremental_review: false
     drafts: false
     base_branches:
       - "develop"
       - "master"
-      - "feat/v0.13.0"
 
   tools:
     shellcheck:
