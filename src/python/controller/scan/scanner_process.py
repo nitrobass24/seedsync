@@ -98,7 +98,7 @@ class ScannerProcess(AppProcess):
         delta_in_s = (datetime.now() - timestamp_start).total_seconds()
         delta_in_ms = int(delta_in_s * 1000)
         if self.verbose:
-            self.logger.debug("Scan took {:.3f}s".format(delta_in_s))
+            self.logger.debug(f"Scan took {delta_in_s:.3f}s")
 
         # Wait until the next interval, or until a wake event is fired
         if delta_in_ms < self.__interval_in_ms:

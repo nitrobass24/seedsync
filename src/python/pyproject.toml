@@ -41,7 +41,6 @@ ignore = [
     "E721",  # type comparison — existing pattern uses type() intentionally
     "E722",  # bare except — one instance in legacy e2e script
     "E741",  # ambiguous variable name — single-letter vars in context
-    "UP032", # f-string — too much churn for auto-fix PR, defer to PR 2
     "UP046", # non-pep695-generic-class — requires Python 3.12+ syntax migration
     "B904",  # raise-without-from — defer to PR 2
     "B905",  # zip-without-explicit-strict — defer to PR 2

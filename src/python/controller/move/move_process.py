@@ -48,10 +48,10 @@ class MoveProcess(AppOneShotProcess):
         dst = os.path.join(self.__dest_path, self.__file_name)
 
         if not os.path.exists(src):
-            self.logger.error("Move failed: source does not exist: {}".format(src))
+            self.logger.error(f"Move failed: source does not exist: {src}")
             return
 
-        self.logger.info("Moving {} -> {}".format(src, dst))
+        self.logger.info(f"Moving {src} -> {dst}")
 
         # Ensure destination parent directory exists
         os.makedirs(self.__dest_path, exist_ok=True)
@@ -59,7 +59,7 @@ class MoveProcess(AppOneShotProcess):
         # Try rename first (instant on same filesystem)
         try:
             os.rename(src, dst)
-            self.logger.info("Move completed via rename: {}".format(self.__file_name))
+            self.logger.info(f"Move completed via rename: {self.__file_name}")
             return
         except OSError as e:
             if e.errno == errno.EXDEV:
@@ -79,9 +79,7 @@ class MoveProcess(AppOneShotProcess):
 
         if source_size != dest_size:
             self.logger.error(
-                "Move size verification failed for {}: source={} dest={}. Source NOT deleted.".format(
-                    self.__file_name, source_size, dest_size
-                )
+                f"Move size verification failed for {self.__file_name}: source={source_size} dest={dest_size}. Source NOT deleted."
             )
             return
 
@@ -91,4 +89,4 @@ class MoveProcess(AppOneShotProcess):
         else:
             shutil.rmtree(src)
 
-        self.logger.info("Move completed via copy+delete: {}".format(self.__file_name))
+        self.logger.info(f"Move completed via copy+delete: {self.__file_name}")

@@ -64,5 +64,5 @@ class ActiveScanner(IScanner):
                 if "does not exist" in error_str:
                     self.logger.debug(error_str)
                 else:
-                    self.logger.warning("Unexpected scan error for '{}': {}".format(file_name, error_str))
+                    self.logger.warning(f"Unexpected scan error for '{file_name}': {error_str}")
         return result

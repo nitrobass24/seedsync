@@ -233,7 +233,7 @@ class TestPathPairsHandler(BaseTestWebApp):
             "remote_path": "/new/remote",
             "local_path": "/new/local",
         }
-        resp = self._put_json("/server/pathpairs/{}".format(pair.id), data)
+        resp = self._put_json(f"/server/pathpairs/{pair.id}", data)
         self.assertEqual(200, resp.status_int)
         body = json.loads(resp.text)
         self.assertEqual("New Name", body["name"])
@@ -249,7 +249,7 @@ class TestPathPairsHandler(BaseTestWebApp):
             name="Original", remote_path="/r/orig", local_path="/l/orig", enabled=True, auto_queue=True
         )
         data = {"name": "Updated"}
-        resp = self._put_json("/server/pathpairs/{}".format(pair.id), data)
+        resp = self._put_json(f"/server/pathpairs/{pair.id}", data)
         self.assertEqual(200, resp.status_int)
         body = json.loads(resp.text)
         self.assertEqual("Updated", body["name"])
@@ -262,7 +262,7 @@ class TestPathPairsHandler(BaseTestWebApp):
     def test_update_toggle_booleans(self):
         pair = self._add_pair(name="Test", enabled=True, auto_queue=True)
         data = {"enabled": False, "auto_queue": False}
-        resp = self._put_json("/server/pathpairs/{}".format(pair.id), data)
+        resp = self._put_json(f"/server/pathpairs/{pair.id}", data)
         self.assertEqual(200, resp.status_int)
         body = json.loads(resp.text)
         self.assertFalse(body["enabled"])
@@ -277,7 +277,7 @@ class TestPathPairsHandler(BaseTestWebApp):
         self._add_pair(name="Movies")
         p2 = self._add_pair(name="TV", remote_path="/r/tv", local_path="/l/tv")
         data = {"name": "Movies"}
-        resp = self._put_json("/server/pathpairs/{}".format(p2.id), data, expect_errors=True)
+        resp = self._put_json(f"/server/pathpairs/{p2.id}", data, expect_errors=True)
         self.assertEqual(409, resp.status_int)
         self.assertIn("already exists", resp.text.lower())
 
@@ -285,13 +285,13 @@ class TestPathPairsHandler(BaseTestWebApp):
         """Renaming a pair to its own name should succeed."""
         pair = self._add_pair(name="Movies")
         data = {"name": "Movies", "remote_path": "/new/r", "local_path": "/new/l"}
-        resp = self._put_json("/server/pathpairs/{}".format(pair.id), data)
+        resp = self._put_json(f"/server/pathpairs/{pair.id}", data)
         self.assertEqual(200, resp.status_int)
 
     def test_update_invalid_json(self):
         pair = self._add_pair(name="Test")
         resp = self.test_app.put(
-            "/server/pathpairs/{}".format(pair.id),
+            f"/server/pathpairs/{pair.id}",
             params="bad json",
             content_type="application/json",
             expect_errors=True,
@@ -301,7 +301,7 @@ class TestPathPairsHandler(BaseTestWebApp):
     def test_update_empty_name(self):
         pair = self._add_pair(name="Test")
         data = {"name": "  "}
-        resp = self._put_json("/server/pathpairs/{}".format(pair.id), data, expect_errors=True)
+        resp = self._put_json(f"/server/pathpairs/{pair.id}", data, expect_errors=True)
         self.assertEqual(400, resp.status_int)
 
     # ---------------------------------------------------------------
@@ -309,7 +309,7 @@ class TestPathPairsHandler(BaseTestWebApp):
     # ---------------------------------------------------------------
     def test_delete_valid(self):
         pair = self._add_pair(name="Delete Me")
-        resp = self.test_app.delete("/server/pathpairs/{}".format(pair.id))
+        resp = self.test_app.delete(f"/server/pathpairs/{pair.id}")
         self.assertEqual(204, resp.status_int)
         self.assertEqual(0, len(self.path_pairs_config.pairs))
 
@@ -321,7 +321,7 @@ class TestPathPairsHandler(BaseTestWebApp):
         """Deleting one pair should not affect others."""
         p1 = self._add_pair(name="Keep")
         p2 = self._add_pair(name="Remove", remote_path="/r2", local_path="/l2")
-        resp = self.test_app.delete("/server/pathpairs/{}".format(p2.id))
+        resp = self.test_app.delete(f"/server/pathpairs/{p2.id}")
         self.assertEqual(204, resp.status_int)
         remaining = self.path_pairs_config.pairs
         self.assertEqual(1, len(remaining))
@@ -352,7 +352,7 @@ class TestPathPairsHandler(BaseTestWebApp):
 
         # Update
         update_resp = self._put_json(
-            "/server/pathpairs/{}".format(pair_id),
+            f"/server/pathpairs/{pair_id}",
             {"name": "RoundTrip Updated", "enabled": False},
         )
         self.assertEqual(200, update_resp.status_int)
@@ -361,7 +361,7 @@ class TestPathPairsHandler(BaseTestWebApp):
         self.assertFalse(body["enabled"])
 
         # Delete
-        del_resp = self.test_app.delete("/server/pathpairs/{}".format(pair_id))
+        del_resp = self.test_app.delete(f"/server/pathpairs/{pair_id}")
         self.assertEqual(204, del_resp.status_int)
 
         # Confirm gone

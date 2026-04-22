@@ -124,7 +124,7 @@ class TestSshcp(unittest.TestCase):
     @timeout_decorator.timeout(5)
     def test_shell(self, _, password):
         sshcp = Sshcp(host=self.host, port=self.port, user=self.user, password=password)
-        out = sshcp.shell("cd {}; pwd".format(self.local_dir))
+        out = sshcp.shell(f"cd {self.local_dir}; pwd")
         out_str = out.decode().strip()
         self.assertEqual(self.local_dir, out_str)
 
@@ -135,19 +135,19 @@ class TestSshcp(unittest.TestCase):
 
         # single quotes
         _dir = os.path.join(self.remote_dir, "a a")
-        out = sshcp.shell("mkdir '{}' && cd '{}' && pwd".format(_dir, _dir))
+        out = sshcp.shell(f"mkdir '{_dir}' && cd '{_dir}' && pwd")
         out_str = out.decode().strip()
         self.assertEqual(_dir, out_str)
 
         # double quotes
         _dir = os.path.join(self.remote_dir, "a b")
-        out = sshcp.shell('mkdir "{}" && cd "{}" && pwd'.format(_dir, _dir))
+        out = sshcp.shell(f'mkdir "{_dir}" && cd "{_dir}" && pwd')
         out_str = out.decode().strip()
         self.assertEqual(_dir, out_str)
 
         # single and double quotes - should work
         _dir = os.path.join(self.remote_dir, "a c")
-        out = sshcp.shell("mkdir \"{}\" && cd '{}' && pwd".format(_dir, _dir))
+        out = sshcp.shell(f"mkdir \"{_dir}\" && cd '{_dir}' && pwd")
         out_str = out.decode().strip()
         self.assertEqual(_dir, out_str)
 
@@ -155,7 +155,7 @@ class TestSshcp(unittest.TestCase):
     def test_shell_error_bad_password(self):
         sshcp = Sshcp(host=self.host, port=self.port, user=self.user, password="wrong password")
         with self.assertRaises(SshcpError) as ctx:
-            sshcp.shell("cd {}; pwd".format(self.local_dir))
+            sshcp.shell(f"cd {self.local_dir}; pwd")
         self.assertEqual("Incorrect password", str(ctx.exception))
 
     @parameterized.expand(_PARAMS)
@@ -163,7 +163,7 @@ class TestSshcp(unittest.TestCase):
     def test_shell_error_bad_host(self, _, password):
         sshcp = Sshcp(host="badhost", port=self.port, user=self.user, password=password)
         with self.assertRaises(SshcpError) as ctx:
-            sshcp.shell("cd {}; pwd".format(self.local_dir))
+            sshcp.shell(f"cd {self.local_dir}; pwd")
         self.assertTrue("Bad hostname" in str(ctx.exception))
 
     @parameterized.expand(_PARAMS)
@@ -171,7 +171,7 @@ class TestSshcp(unittest.TestCase):
     def test_shell_error_bad_port(self, _, password):
         sshcp = Sshcp(host=self.host, port=6666, user=self.user, password=password)
         with self.assertRaises(SshcpError) as ctx:
-            sshcp.shell("cd {}; pwd".format(self.local_dir))
+            sshcp.shell(f"cd {self.local_dir}; pwd")
         self.assertTrue("Connection refused by server" in str(ctx.exception))
 
     @parameterized.expand(_PARAMS)

@@ -115,7 +115,7 @@ _KEY_SEP = "\x1f"
 
 def _persist_key(pair_id: str | None, name: str) -> str:
     """Build a namespaced persist key: 'pair_id<US>name' or plain 'name' for default pair."""
-    return "{}{}{}".format(pair_id, _KEY_SEP, name) if pair_id else name
+    return f"{pair_id}{_KEY_SEP}{name}" if pair_id else name
 
 
 def _strip_persist_key(key: str, pair_id: str | None) -> str:
@@ -128,7 +128,7 @@ def _strip_persist_key(key: str, pair_id: str | None) -> str:
         return key
     # Try the current separator first, then legacy colon
     for sep in (_KEY_SEP, ":"):
-        prefix = "{}{}".format(pair_id, sep)
+        prefix = f"{pair_id}{sep}"
         if key.startswith(prefix):
             return key[len(prefix) :]
     return key
@@ -315,7 +315,7 @@ class Controller:
         ]
         for field in lftp_fields:
             if getattr(config.lftp, field) is None:
-                missing.append("Lftp.{}".format(field))
+                missing.append(f"Lftp.{field}")
 
         # Controller required fields
         controller_fields = [
@@ -325,7 +325,7 @@ class Controller:
         ]
         for field in controller_fields:
             if getattr(config.controller, field) is None:
-                missing.append("Controller.{}".format(field))
+                missing.append(f"Controller.{field}")
 
         # General required fields
         if config.general.verbose is None:
@@ -368,8 +368,8 @@ class Controller:
                 ]
                 fields = ", ".join(missing)
                 raise ControllerError(
-                    "No path pairs configured and {} not set. "
-                    "Configure at least one path pair in Settings, or set {}.".format(fields, fields)
+                    f"No path pairs configured and {fields} not set. "
+                    f"Configure at least one path pair in Settings, or set {fields}."
                 )
             return [
                 self._create_pair_context(
@@ -395,7 +395,7 @@ class Controller:
         Create a fully wired _PairContext with its own LFTP, scanners, and model builder.
         """
         pair_label = name or pair_id or "default"
-        pair_logger = self.logger.getChild("Pair[{}]".format(pair_label))
+        pair_logger = self.logger.getChild(f"Pair[{pair_label}]")
 
         # Determine effective local path: use staging_path when staging is enabled
         # Each pair gets its own staging subdirectory to prevent cross-pair collisions
@@ -515,7 +515,7 @@ class Controller:
         validate_cfg = self.__context.config.validate
         if validate_cfg.xfer_verify:
             lftp.xfer_verify = True
-            lftp.xfer_verify_command = "{}sum".format(validate_cfg.algorithm)
+            lftp.xfer_verify_command = f"{validate_cfg.algorithm}sum"
         else:
             lftp.xfer_verify = False
         lftp.set_verbose_logging(self.__context.config.general.verbose)  # type: ignore[arg-type]
@@ -725,9 +725,7 @@ class Controller:
                 owner_pc = self._find_pair_by_id(result.pair_id)
                 if owner_pc is None:
                     self.logger.warning(
-                        "Ignoring extract completion for '{}': pair '{}' no longer exists".format(
-                            result.name, result.pair_id
-                        )
+                        f"Ignoring extract completion for '{result.name}': pair '{result.pair_id}' no longer exists"
                     )
                     continue
                 pkey = _persist_key(result.pair_id, result.name)
@@ -845,7 +843,7 @@ class Controller:
                             )
                             self.__validate_process.validate(req)
                             self.__pending_validation_keys.add(_persist_key(pc.pair_id, diff.new_file.name))
-                            self.logger.info("Auto-queued validation for '{}'".format(diff.new_file.name))
+                            self.logger.info(f"Auto-queued validation for '{diff.new_file.name}'")
 
                         if (
                             self.__context.config.controller.use_staging
@@ -909,7 +907,7 @@ class Controller:
                             except ModelError:
                                 pass
                 if remove_extracted_keys:
-                    self.logger.info("Removing from extracted list: {}".format(remove_extracted_keys))
+                    self.logger.info(f"Removing from extracted list: {remove_extracted_keys}")
                     self.__persist.extracted_file_names.difference_update(remove_extracted_keys)
                     self._sync_persist_to_all_builders()
 
@@ -927,7 +925,7 @@ class Controller:
                         if pkey not in model_keys and pkey not in self.__moved_file_keys:
                             absent_keys.add(pkey)
                     if absent_keys:
-                        self.logger.info("Persist cleanup (both absent): {}".format(absent_keys))
+                        self.logger.info(f"Persist cleanup (both absent): {absent_keys}")
                         self.__persist.downloaded_file_names.difference_update(absent_keys)
                         self.__persist.extracted_file_names.difference_update(absent_keys)
                         self.__persist.extract_failed_file_names.difference_update(absent_keys)
@@ -937,14 +935,14 @@ class Controller:
 
         # Process extraction failures — mark as failed immediately
         for result in latest_failed_extractions:
-            self.logger.error("Extraction failed for '{}'".format(result.name))
+            self.logger.error(f"Extraction failed for '{result.name}'")
             fail_key = _persist_key(result.pair_id, result.name)
             self.__persist.extract_failed_file_names.add(fail_key)
             self._sync_persist_to_all_builders()
 
         # Process validation completions — mark as validated
         for result in latest_validated_results:
-            self.logger.info("Validation passed for '{}'".format(result.name))
+            self.logger.info(f"Validation passed for '{result.name}'")
             pkey = _persist_key(result.pair_id, result.name)
             self.__pending_validation_keys.discard(pkey)
             self.__persist.validated_file_names.add(pkey)
@@ -955,7 +953,7 @@ class Controller:
 
         # Process validation failures
         for result in latest_failed_validations:
-            self.logger.error("Validation failed for '{}': {}".format(result.name, result.error_message))
+            self.logger.error(f"Validation failed for '{result.name}': {result.error_message}")
             pkey = _persist_key(result.pair_id, result.name)
             self.__pending_validation_keys.discard(pkey)
             if result.is_checksum_mismatch:
@@ -967,7 +965,7 @@ class Controller:
                 # Non-mismatch failure (SSH error, etc.) — don't mark corrupt,
                 # just log so the user can retry
                 self.logger.warning(
-                    "Validation error for '{}' (not marking corrupt): {}".format(result.name, result.error_message)
+                    f"Validation error for '{result.name}' (not marking corrupt): {result.error_message}"
                 )
             # Spawn deferred move regardless of failure type — validation is done
             self._spawn_deferred_move(result.pair_id, result.name)
@@ -1005,7 +1003,7 @@ class Controller:
         try:
             lftp_statuses = pc.lftp.status()
         except LftpError as e:
-            self.logger.warning("Caught lftp error (pair {}): {}".format(pc.name, str(e)))
+            self.logger.warning(f"Caught lftp error (pair {pc.name}): {str(e)}")
 
         if latest_remote_scan is not None:
             pc.remote_scan_received = True
@@ -1017,7 +1015,7 @@ class Controller:
             just_completed = pc.prev_downloading_file_names - current_downloading
             if just_completed:
                 for name in just_completed:
-                    self.logger.info("Download completed (LFTP job finished): {}".format(name))
+                    self.logger.info(f"Download completed (LFTP job finished): {name}")
                 self.__persist.downloaded_file_names.update(_persist_key(pc.pair_id, n) for n in just_completed)
                 self._sync_persist_to_all_builders()
                 pc.pending_completion.update(just_completed)
@@ -1119,7 +1117,7 @@ class Controller:
 
     def __process_commands(self):
         def _notify_failure(_command: Controller.Command, _msg: str):
-            self.logger.warning("Command failed. {}".format(_msg))
+            self.logger.warning(f"Command failed. {_msg}")
             for _callback in _command.callbacks:
                 _callback.on_failure(_msg)
 
@@ -1127,38 +1125,38 @@ class Controller:
 
         while not self.__command_queue.empty():
             command = self.__command_queue.get()
-            self.logger.info("Received command {} for file {}".format(str(command.action), command.filename))
+            self.logger.info(f"Received command {str(command.action)} for file {command.filename}")
 
             pc = self._get_pair_context_for_command(command)
             if pc is None:
-                _notify_failure(command, "No pair context found for pair_id '{}'".format(command.pair_id))
+                _notify_failure(command, f"No pair context found for pair_id '{command.pair_id}'")
                 continue
 
             try:
                 file = self.__model.get_file(command.filename, pair_id=pc.pair_id)
             except ModelError:
-                _notify_failure(command, "File '{}' not found".format(command.filename))
+                _notify_failure(command, f"File '{command.filename}' not found")
                 continue
 
             if command.action == Controller.Command.Action.QUEUE:
                 if file.remote_size is None:
-                    _notify_failure(command, "File '{}' does not exist remotely".format(command.filename))
+                    _notify_failure(command, f"File '{command.filename}' does not exist remotely")
                     continue
                 try:
                     exclude = parse_exclude_patterns(self.__context.config.general.exclude_patterns)
                     pc.lftp.queue(file.name, file.is_dir, exclude_patterns=exclude)
                 except LftpError as e:
-                    _notify_failure(command, "Lftp error: {}".format(str(e)))
+                    _notify_failure(command, f"Lftp error: {str(e)}")
                     continue
 
             elif command.action == Controller.Command.Action.STOP:
                 if file.state not in (ModelFile.State.DOWNLOADING, ModelFile.State.QUEUED):
-                    _notify_failure(command, "File '{}' is not Queued or Downloading".format(command.filename))
+                    _notify_failure(command, f"File '{command.filename}' is not Queued or Downloading")
                     continue
                 try:
                     pc.lftp.kill(file.name)
                 except LftpError as e:
-                    _notify_failure(command, "Lftp error: {}".format(str(e)))
+                    _notify_failure(command, f"Lftp error: {str(e)}")
                     continue
 
             elif command.action == Controller.Command.Action.EXTRACT:
@@ -1171,11 +1169,11 @@ class Controller:
                     ModelFile.State.CORRUPT,
                 ):
                     _notify_failure(
-                        command, "File '{}' in state {} cannot be extracted".format(command.filename, str(file.state))
+                        command, f"File '{command.filename}' in state {str(file.state)} cannot be extracted"
                     )
                     continue
                 elif file.local_size is None:
-                    _notify_failure(command, "File '{}' does not exist locally".format(command.filename))
+                    _notify_failure(command, f"File '{command.filename}' does not exist locally")
                     continue
                 else:
                     pkey = _persist_key(pc.pair_id, file.name)
@@ -1204,11 +1202,11 @@ class Controller:
                 ):
                     _notify_failure(
                         command,
-                        "Local file '{}' cannot be deleted in state {}".format(command.filename, str(file.state)),
+                        f"Local file '{command.filename}' cannot be deleted in state {str(file.state)}",
                     )
                     continue
                 elif file.local_size is None:
-                    _notify_failure(command, "File '{}' does not exist locally".format(command.filename))
+                    _notify_failure(command, f"File '{command.filename}' does not exist locally")
                     continue
                 else:
                     delete_path = pc.local_path
@@ -1254,11 +1252,11 @@ class Controller:
                 ):
                     _notify_failure(
                         command,
-                        "Remote file '{}' cannot be deleted in state {}".format(command.filename, str(file.state)),
+                        f"Remote file '{command.filename}' cannot be deleted in state {str(file.state)}",
                     )
                     continue
                 elif file.remote_size is None:
-                    _notify_failure(command, "File '{}' does not exist remotely".format(command.filename))
+                    _notify_failure(command, f"File '{command.filename}' does not exist remotely")
                     continue
                 else:
                     process = DeleteRemoteProcess(
@@ -1288,14 +1286,14 @@ class Controller:
                     ModelFile.State.CORRUPT,
                 ):
                     _notify_failure(
-                        command, "File '{}' in state {} cannot be validated".format(command.filename, str(file.state))
+                        command, f"File '{command.filename}' in state {str(file.state)} cannot be validated"
                     )
                     continue
                 elif file.local_size is None:
-                    _notify_failure(command, "File '{}' does not exist locally".format(command.filename))
+                    _notify_failure(command, f"File '{command.filename}' does not exist locally")
                     continue
                 elif file.remote_size is None:
-                    _notify_failure(command, "File '{}' does not exist remotely".format(command.filename))
+                    _notify_failure(command, f"File '{command.filename}' does not exist remotely")
                     continue
                 else:
                     pkey = _persist_key(pc.pair_id, file.name)
@@ -1336,7 +1334,7 @@ class Controller:
                 permanent_patterns = ["Login failed", "Access failed"]
                 if any(p in error_str for p in permanent_patterns):
                     raise AppError(error_str) from e
-                self.logger.warning("Caught lftp error: {}".format(error_str))
+                self.logger.warning(f"Caught lftp error: {error_str}")
             pc.active_scan_process.propagate_exception()
             pc.local_scan_process.propagate_exception()
             pc.remote_scan_process.propagate_exception()
@@ -1353,7 +1351,7 @@ class Controller:
             return
         pc = self._find_pair_by_id(pair_id)
         if pc is None:
-            self.logger.warning("Cannot spawn deferred move for '{}': pair '{}' not found".format(file_name, pair_id))
+            self.logger.warning(f"Cannot spawn deferred move for '{file_name}': pair '{pair_id}' not found")
             return
         self.__spawn_move_process(file_name, pc)
 
@@ -1364,7 +1362,7 @@ class Controller:
         pair_id = pc.pair_id
         move_key = _persist_key(pair_id, file_name)
         if move_key in self.__moved_file_keys:
-            self.logger.debug("Skipping move for {} - already moved".format(file_name))
+            self.logger.debug(f"Skipping move for {file_name} - already moved")
             return
 
         dest_path = pc.local_path
@@ -1377,7 +1375,7 @@ class Controller:
         # Skip if the file doesn't exist in staging (e.g. already moved in a prior session)
         staging_file = os.path.join(staging_source, file_name)
         if not os.path.exists(staging_file):
-            self.logger.debug("Skipping move for {} - not found in staging".format(file_name))
+            self.logger.debug(f"Skipping move for {file_name} - not found in staging")
             self.__moved_file_keys.add(move_key)
             return
 
@@ -1386,7 +1384,7 @@ class Controller:
         process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
         self.__active_move_processes.append(process)
         process.start()
-        self.logger.info("Spawned move process for {} (staging -> local)".format(file_name))
+        self.logger.info(f"Spawned move process for {file_name} (staging -> local)")
 
     def __cleanup_commands(self):
         """

@@ -169,9 +169,9 @@ class TestPersistBackup(unittest.TestCase):
 
         # Create _MAX_BACKUPS + 5 pre-existing backups with sequential timestamps
         for i in range(_MAX_BACKUPS + 5):
-            backup_name = "settings-2026-01-{:02d}T00-00-00-000000.cfg".format(i + 1)
+            backup_name = f"settings-2026-01-{i + 1:02d}T00-00-00-000000.cfg"
             with open(os.path.join(backup_dir, backup_name), "w") as f:
-                f.write("backup {}".format(i))
+                f.write(f"backup {i}")
 
         before_set = set(os.listdir(backup_dir))
 
@@ -207,7 +207,7 @@ class TestPersistBackup(unittest.TestCase):
 
         def unique_timestamp(*args, **kwargs):
             counter[0] += 1
-            return "2026-03-03T12-00-{:02d}-000000".format(counter[0])
+            return f"2026-03-03T12-00-{counter[0]:02d}-000000"
 
         with patch("common.persist.datetime") as mock_dt:
             mock_dt.now.return_value.strftime.side_effect = unique_timestamp
