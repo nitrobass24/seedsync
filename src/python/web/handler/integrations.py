@@ -34,17 +34,20 @@ class IntegrationsHandler(IHandler):
         if not url:
             return HTTPResponse(
                 body=json.dumps({"error": f"{service} URL is not configured"}),
-                status=400, headers={"Content-Type": "application/json"},
+                status=400,
+                headers={"Content-Type": "application/json"},
             )
         if not api_key:
             return HTTPResponse(
                 body=json.dumps({"error": f"{service} API key is not configured"}),
-                status=400, headers={"Content-Type": "application/json"},
+                status=400,
+                headers={"Content-Type": "application/json"},
             )
         if not url.startswith(("http://", "https://")):
             return HTTPResponse(
                 body=json.dumps({"error": f"{service} URL must start with http:// or https://"}),
-                status=400, headers={"Content-Type": "application/json"},
+                status=400,
+                headers={"Content-Type": "application/json"},
             )
 
         endpoint = url.rstrip("/") + "/api/v3/system/status"
@@ -59,11 +62,13 @@ class IntegrationsHandler(IHandler):
                 version = data.get("version", "unknown")
             return HTTPResponse(
                 body=json.dumps({"success": True, "version": version}),
-                status=200, headers={"Content-Type": "application/json"},
+                status=200,
+                headers={"Content-Type": "application/json"},
             )
         except Exception:
             self._logger.exception("%s connection test failed", service)
             return HTTPResponse(
                 body=json.dumps({"error": f"{service} connection failed. Check server logs for details."}),
-                status=502, headers={"Content-Type": "application/json"},
+                status=502,
+                headers={"Content-Type": "application/json"},
             )
