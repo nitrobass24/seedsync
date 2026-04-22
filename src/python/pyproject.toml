@@ -58,7 +58,7 @@ ignore = [
 "tests/**" = ["W291", "SIM117", "RUF059"]  # trailing whitespace in test data; nested with; structural unpacking
 "tests/**/test_job_status_parser.py" = ["E501"]  # long lines are lftp output test data
 "model/file.py" = ["E721"]  # intentional type() comparisons for enum-style state checks
-"scan_fs.py" = ["UP006", "UP035", "UP045"]  # must use typing.List/Optional for Python 3.5 compat on remote
+"scan_fs.py" = ["UP006", "UP032", "UP035", "UP045"]  # must use typing/format() for Python 3.5 compat on remote
 
 [tool.ruff.lint.isort]
 known-first-party = ["common", "controller", "model", "lftp", "ssh", "web", "system"]
