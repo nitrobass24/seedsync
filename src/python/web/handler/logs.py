@@ -61,7 +61,7 @@ class LogsHandler(IHandler):
 
         return HTTPResponse(body=json.dumps(entries), content_type="application/json")
 
-    def _read_logs(self, search: str, min_level: int, limit: int, before: int) -> list[dict[str, str]]:
+    def _read_logs(self, search: str, min_level: int, limit: int, before: int) -> list[dict[str, str]]:  # noqa: C901
         """
         Read log entries from rotated log files without loading any file fully into memory.
 

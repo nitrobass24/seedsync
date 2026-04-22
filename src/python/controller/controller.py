@@ -704,7 +704,7 @@ class Controller:
             out_dir_path_fallback=out_dir_path_fallback,
         )
 
-    def __update_model(self):
+    def __update_model(self):  # noqa: C901 — will be decomposed in #394
         # Grab the latest extract results (shared)
         latest_extract_statuses = self.__extract_process.pop_latest_statuses()
         latest_extracted_results = self.__extract_process.pop_completed()
@@ -979,7 +979,7 @@ class Controller:
                 if current is None or pc._latest_local_scan.timestamp > current:  # type: ignore[reportPrivateUsage]
                     self.__context.status.controller.latest_local_scan_time = pc._latest_local_scan.timestamp  # type: ignore[reportPrivateUsage]
 
-    def _update_pair_model_state(
+    def _update_pair_model_state(  # noqa: C901 — will be decomposed in #394
         self,
         pc: _PairContext,
         latest_extract_statuses: ExtractStatusResult | None,
@@ -1052,7 +1052,7 @@ class Controller:
             pair_validate_statuses = [s for s in latest_validate_statuses.statuses if s.pair_id == pc.pair_id]
             pc.model_builder.set_validate_statuses(pair_validate_statuses)
 
-    def _sync_persist_to_all_builders(self):
+    def _sync_persist_to_all_builders(self):  # noqa: C901 — will be decomposed in #394
         """Push current persist state to all pair model builders, filtered by pair_id."""
         namespaced_prefixes = tuple(
             f"{other_pc.pair_id}{sep}"
@@ -1111,7 +1111,7 @@ class Controller:
             pc.model_builder.set_validated_files(validated)
             pc.model_builder.set_corrupt_files(corrupt)
 
-    def __process_commands(self):
+    def __process_commands(self):  # noqa: C901 — will be decomposed in #394
         def _notify_failure(_command: Controller.Command, _msg: str):
             self.logger.warning(f"Command failed. {_msg}")
             for _callback in _command.callbacks:

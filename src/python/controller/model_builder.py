@@ -152,7 +152,7 @@ class ModelBuilder:
         """
         return self.__cached_model is None
 
-    def build_model(self) -> Model:
+    def build_model(self) -> Model:  # noqa: C901 — complexity 58, needs decomposition
         if self.__cached_model is not None:
             return self.__cached_model
 
@@ -188,7 +188,7 @@ class ModelBuilder:
             ):
                 raise ModelError("Mismatch in is_dir between sources")
 
-            def __fill_model_file(
+            def __fill_model_file(  # noqa: C901 — complexity 16, nested helper
                 _model_file: ModelFile,
                 _remote: SystemFile | None,
                 _local: SystemFile | None,

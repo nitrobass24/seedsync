@@ -243,7 +243,7 @@ class Sshcp:
             sp.close()
             raise SshcpError("SFTP timed out") from None
 
-    def __run_command(self, command: str, flags: str, args: str) -> bytes:
+    def __run_command(self, command: str, flags: str, args: str) -> bytes:  # noqa: C901 — complexity 19, pexpect state machine
 
         command_args = [command, flags]
 
