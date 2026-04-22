@@ -24,7 +24,7 @@ export class IntegrationsService {
     return this.http.get<{ success?: boolean; version?: string; error?: string }>(url).pipe(
       map((data) => ({
         success: true,
-        message: `${service} connected (v${data.version})`,
+        message: `${service} connected (v${data.version ?? 'unknown'})`,
       })),
       catchError((err: HttpErrorResponse) => {
         let message: string;

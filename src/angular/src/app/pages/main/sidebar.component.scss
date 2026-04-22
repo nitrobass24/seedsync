@@ -16,6 +16,12 @@
     text-align: start;
     border: none;
     outline: none;
+
+    &:focus-visible {
+      outline: 2px solid var(--ss-primary);
+      outline-offset: -2px;
+    }
+
     white-space: normal;
     float: none;
     cursor: default;

@@ -7,7 +7,7 @@
              [attr.aria-label]="'Toggle selection for ' + file().name"
              (click)="onCheck($event, file())"
              (keyup.enter)="onCheck($event, file())"
-             (keyup.space)="onCheck($event, file()); $event.preventDefault()">
+             (keydown.space)="$event.preventDefault(); onCheck($event, file())">
             <input type="checkbox" tabindex="-1" [checked]="file().isChecked" />
         </div>
         <div class="status">

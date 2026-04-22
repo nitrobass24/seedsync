@@ -79,6 +79,10 @@ reviews:
     actionlint:
       enabled: true
 
+pre_merge_checks:
+  docstring_coverage:
+    enabled: false
+
 chat:
   auto_reply: true
 
