@@ -46,8 +46,8 @@ export class ConfigService {
   set(section: string, option: string, value: ConfigValue): Observable<WebReaction> {
     const valueStr = String(value ?? '');
     const currentConfig = this.configSubject.getValue();
-    const configAsRecord = currentConfig as unknown as Record<string, Record<string, ConfigValue>> | null;
-    if (!currentConfig || !(section in currentConfig) || !configAsRecord || !(option in configAsRecord[section])) {
+    const configAsRecord = currentConfig as unknown as Record<string, Record<string, ConfigValue>>;
+    if (!currentConfig || !(section in currentConfig) || !(option in configAsRecord[section])) {
       return of({
         success: false,
         data: null,

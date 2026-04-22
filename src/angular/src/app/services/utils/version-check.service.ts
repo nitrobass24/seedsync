@@ -29,7 +29,11 @@ export class VersionCheckService {
           let latestVersion: string;
           let url: string;
           try {
-            const jsonResponse = JSON.parse(reaction.data!) as { tag_name: string; html_url: string };
+            const jsonResponse: unknown = JSON.parse(reaction.data!);
+            if (!isGitHubReleaseResponse(jsonResponse)) {
+              this.logger.error('Unexpected github response: %O', jsonResponse);
+              return;
+            }
             latestVersion = jsonResponse.tag_name;
             url = jsonResponse.html_url;
           } catch (e) {
@@ -49,6 +53,20 @@ export class VersionCheckService {
       },
     });
   }
+}
+
+interface GitHubReleaseResponse {
+  tag_name: string;
+  html_url: string;
+}
+
+function isGitHubReleaseResponse(value: unknown): value is GitHubReleaseResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as GitHubReleaseResponse).tag_name === 'string' &&
+    typeof (value as GitHubReleaseResponse).html_url === 'string'
+  );
 }
 
 function isVersionNewer(version: string): boolean {

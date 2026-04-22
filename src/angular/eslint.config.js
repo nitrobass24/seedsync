@@ -37,7 +37,7 @@ module.exports = defineConfig([
           style: "kebab-case",
         },
       ],
-      // Rules required by #376, all "warn" for the initial PR:
+      // Rules required by #376; most remain "warn" while targeted cleanups graduate to "error":
       "@angular-eslint/prefer-on-push-component-change-detection": "warn",
       "@angular-eslint/no-empty-lifecycle-method": "warn",
       "@typescript-eslint/no-explicit-any": "error",
