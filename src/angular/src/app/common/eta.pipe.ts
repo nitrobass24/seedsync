@@ -12,7 +12,7 @@ export class EtaPipe implements PipeTransform {
       "s": 1
   };
 
-  transform(seconds: number = 0): string {
+  transform(seconds = 0): string {
     if (isNaN(parseFloat(String(seconds))) || !isFinite(seconds)) { return "?"; }
     if (seconds === 0) { return "0s"; }
 

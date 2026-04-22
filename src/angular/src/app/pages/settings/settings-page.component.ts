@@ -14,7 +14,7 @@ import { Notification, NotificationLevel, createNotification } from '../../model
 import { Localization } from '../../models/localization';
 import { Config } from '../../models/config';
 import { ClickStopPropagationDirective } from '../../common/click-stop-propagation.directive';
-import { OptionComponent } from './option.component';
+import { OptionComponent, OptionValue } from './option.component';
 import { PathPairsComponent } from './path-pairs.component';
 import {
   IOptionsContext,
@@ -153,14 +153,14 @@ export class SettingsPageComponent implements OnInit {
     };
   }
 
-  getOptionValue(config: Config | null, valuePath: [string, string]): any {
+  getOptionValue(config: Config | null, valuePath: [string, string]): OptionValue {
     if (!config) return null;
-    const section = (config as any)[valuePath[0]];
+    const section = (config as unknown as Record<string, Record<string, OptionValue> | undefined>)[valuePath[0]];
     if (!section) return null;
     return section[valuePath[1]] ?? null;
   }
 
-  onSetConfig(section: string, option: string, value: any): void {
+  onSetConfig(section: string, option: string, value: OptionValue): void {
     this.configService.set(section, option, value).subscribe({
       next: (reaction) => {
         const notifKey = section + '.' + option;

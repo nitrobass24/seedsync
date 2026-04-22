@@ -61,10 +61,9 @@ jobs:
 
       - name: Lint Angular
         working-directory: src/angular
-        # Baseline is 138 warnings at the time of #376. Any new warning
-        # fails CI. When you fix warnings, lower this number by the same
-        # count in the same commit. See #378-#382 for cleanup tickets.
-        run: npx ng lint --max-warnings 138
+        # All lint rules are at "error" — zero warnings expected.
+        # See #376-#382 for the cleanup history.
+        run: npx ng lint --max-warnings 0
 
   python-lint:
     name: Python Lint

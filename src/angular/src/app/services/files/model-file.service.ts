@@ -4,7 +4,7 @@ import { BehaviorSubject, Observable } from 'rxjs';
 import { StreamEventHandler, StreamDispatchService } from '../base/stream-dispatch.service';
 import { LoggerService } from '../utils/logger.service';
 import { RestService, WebReaction } from '../utils/rest.service';
-import { ModelFile, modelFileFromJson } from '../../models/model-file';
+import { ModelFile, ModelFileJson, modelFileFromJson } from '../../models/model-file';
 import { fileKey } from './file-key';
 
 @Injectable({ providedIn: 'root' })
@@ -89,7 +89,7 @@ export class ModelFileService implements StreamEventHandler {
       let t1: number;
 
       t0 = performance.now();
-      const parsed: any[] = JSON.parse(data);
+      const parsed: ModelFileJson[] = JSON.parse(data);
       t1 = performance.now();
       this.logger.debug('Parsing took', (t1 - t0).toFixed(0), 'ms');
 
@@ -104,7 +104,7 @@ export class ModelFileService implements StreamEventHandler {
 
       this.filesSubject.next(newMap);
     } else if (name === this.EVENT_ADDED) {
-      const parsed: { new_file: any } = JSON.parse(data);
+      const parsed: { new_file: ModelFileJson } = JSON.parse(data);
       const file = modelFileFromJson(parsed.new_file);
       const key = fileKey(file.pair_id, file.name);
       if (currentFiles.has(key)) {
@@ -116,7 +116,7 @@ export class ModelFileService implements StreamEventHandler {
         this.logger.debug('Added file: %O', file);
       }
     } else if (name === this.EVENT_REMOVED) {
-      const parsed: { old_file: any } = JSON.parse(data);
+      const parsed: { old_file: ModelFileJson } = JSON.parse(data);
       const file = modelFileFromJson(parsed.old_file);
       const key = fileKey(file.pair_id, file.name);
       if (currentFiles.has(key)) {
@@ -128,7 +128,7 @@ export class ModelFileService implements StreamEventHandler {
         this.logger.error('Failed to find ModelFile named ' + key);
       }
     } else if (name === this.EVENT_UPDATED) {
-      const parsed: { new_file: any } = JSON.parse(data);
+      const parsed: { new_file: ModelFileJson } = JSON.parse(data);
       const file = modelFileFromJson(parsed.new_file);
       const key = fileKey(file.pair_id, file.name);
       if (currentFiles.has(key)) {

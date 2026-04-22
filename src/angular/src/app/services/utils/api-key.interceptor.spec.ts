@@ -12,11 +12,17 @@ import {
 
 import { apiKeyInterceptor } from "./api-key.interceptor";
 import { ConfigService } from "../settings/config.service";
+import { Web } from "../../models/config";
+
+// Shape used by the interceptor's partial-config tests. The interceptor only
+// looks at `config.web.api_key`, so tests set a minimal subset (Partial<Web>)
+// and the empty-object case simulates "missing web section".
+type MockConfigSnapshot = { web?: Partial<Web> } | Record<string, never> | null;
 
 describe("apiKeyInterceptor", () => {
   let http: HttpClient;
   let httpTesting: HttpTestingController;
-  let mockConfigService: { configSnapshot: any };
+  let mockConfigService: { configSnapshot: MockConfigSnapshot };
 
   beforeEach(() => {
     mockConfigService = { configSnapshot: null };

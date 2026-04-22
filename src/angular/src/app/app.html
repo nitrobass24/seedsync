@@ -4,7 +4,7 @@
 
   <div id="logo">
     <span class="image">
-      <img src="assets/logo.png" />
+      <img src="assets/logo.png" alt="" />
     </span>
     <span class="text"><b>Seed</b>Sync</span>
 
@@ -18,9 +18,14 @@
 
 <!-- Used for sidebar closing -->
 <div id="outside-sidebar"
+     role="button"
+     tabindex="0"
+     aria-label="Close sidebar"
      [class.outside-sidebar-show]="showSidebar()"
      [class.outside-sidebar-hide]="!showSidebar()"
-     (click)="showSidebar.set(false)">
+     (click)="showSidebar.set(false)"
+     (keyup.enter)="showSidebar.set(false)"
+     (keyup.space)="showSidebar.set(false); $event.preventDefault()">
 </div>
 
 <div id="top-content">

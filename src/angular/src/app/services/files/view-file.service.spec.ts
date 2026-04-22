@@ -8,6 +8,7 @@ import { LoggerService } from "../utils/logger.service";
 import { ModelFile, ModelFileState } from "../../models/model-file";
 import { PathPair } from "../../models/path-pair";
 import { ViewFile, ViewFileStatus } from "../../models/view-file";
+import { WebReaction } from "../utils/rest.service";
 import { fileKey } from "./file-key";
 
 function makeModelFile(
@@ -493,11 +494,11 @@ describe("ViewFileService", () => {
     );
 
     const vf = latestFiles()[0];
-    let result: any;
+    let result: WebReaction | undefined;
     service.queue(vf).subscribe((r) => (result = r));
 
     expect(mockModelFileService.queue).toHaveBeenCalledWith(mf);
-    expect(result.success).toBe(true);
+    expect(result!.success).toBe(true);
   });
 
   it("should return error reaction when file not found for queue()", () => {
@@ -506,10 +507,10 @@ describe("ViewFileService", () => {
     const fakeVf = {
       name: "nonexistent",
     } as ViewFile;
-    let result: any;
+    let result: WebReaction | undefined;
     service.queue(fakeVf).subscribe((r) => (result = r));
 
-    expect(result.success).toBe(false);
+    expect(result!.success).toBe(false);
   });
 
   // --- Composite key (pair_id:name) ---

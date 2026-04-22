@@ -1,4 +1,5 @@
 import json
+import logging
 import urllib.request
 
 from bottle import HTTPResponse
@@ -14,6 +15,7 @@ class IntegrationsHandler(IHandler):
 
     def __init__(self, config: Config):
         self.__config = config
+        self._logger = logging.getLogger(self.__class__.__name__)
 
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
@@ -28,8 +30,7 @@ class IntegrationsHandler(IHandler):
         cfg = self.__config.integrations
         return self.__test_arr_connection("Radarr", cfg.radarr_url, cfg.radarr_api_key)
 
-    @staticmethod
-    def __test_arr_connection(service: str, url: str, api_key: str) -> HTTPResponse:
+    def __test_arr_connection(self, service: str, url: str, api_key: str) -> HTTPResponse:
         if not url:
             return HTTPResponse(body=json.dumps({"error": f"{service} URL is not configured"}), status=400)
         if not api_key:
@@ -53,8 +54,9 @@ class IntegrationsHandler(IHandler):
                 body=json.dumps({"success": True, "version": version}),
                 status=200,
             )
-        except Exception as e:
+        except Exception:
+            self._logger.exception("%s connection test failed", service)
             return HTTPResponse(
-                body=json.dumps({"error": f"Connection failed: {str(e)}"}),
+                body=json.dumps({"error": f"{service} connection failed. Check server logs for details."}),
                 status=502,
             )

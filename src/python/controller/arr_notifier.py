@@ -134,5 +134,5 @@ class ArrNotifier(IModelListener):
             with urllib.request.urlopen(req, timeout=10):
                 pass
             self._logger.debug("%s scan triggered: %s", service, payload.get("path", ""))
-        except Exception as e:
-            self._logger.warning("%s scan failed: %s", service, str(e))
+        except Exception:
+            self._logger.exception("%s scan failed", service)

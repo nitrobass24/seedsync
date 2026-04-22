@@ -60,7 +60,8 @@ describe("StreamDispatchService", () => {
   beforeEach(() => {
     MockEventSource.instances = [];
     originalEventSource = globalThis.EventSource;
-    (globalThis as any).EventSource = MockEventSource;
+    (globalThis as unknown as { EventSource: typeof EventSource }).EventSource =
+      MockEventSource as unknown as typeof EventSource;
 
     TestBed.configureTestingModule({
       providers: [
@@ -81,7 +82,7 @@ describe("StreamDispatchService", () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    (globalThis as any).EventSource = originalEventSource;
+    (globalThis as unknown as { EventSource: typeof EventSource }).EventSource = originalEventSource;
   });
 
   function makeHandler(eventNames: string[] = []) {

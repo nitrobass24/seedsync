@@ -98,9 +98,10 @@ export class FileComponent implements OnChanges, OnDestroy {
     this.clearConfirmTimer();
   }
 
-  onCheck(event: MouseEvent, file: ViewFile): void {
+  onCheck(event: Event, file: ViewFile): void {
     event.stopPropagation();
-    this.checkEvent.emit({file, shiftKey: event.shiftKey});
+    const shiftKey = (event as MouseEvent | KeyboardEvent).shiftKey ?? false;
+    this.checkEvent.emit({file, shiftKey});
   }
 
   isQueueable(): boolean {

@@ -45,6 +45,14 @@
         user-select: none;
 
         .dropdown-item {
+            /* Reset native <button> appearance */
+            appearance: none;
+            background: none;
+            border: 0;
+            font: inherit;
+            text-align: inherit;
+            width: 100%;
+
             color: white;
             height: 32px;
 
@@ -63,7 +71,8 @@
                 background-color: var(--ss-primary);
             }
 
-            &.disabled {
+            &.disabled,
+            &[disabled] {
                 opacity: .65;
                 background-color: var(--ss-primary);
             }

@@ -12,6 +12,7 @@ import { ServerCommandService } from '../../services/server/server-command.servi
 import { ConnectedService } from '../../services/utils/connected.service';
 import { PathPairsService } from '../../services/settings/path-pairs.service';
 import { Config, DEFAULT_CONFIG } from '../../models/config';
+import { PathPair } from '../../models/path-pair';
 import {
   IOptionsContext,
   OPTIONS_CONTEXT_INTEGRATIONS_SONARR,
@@ -19,11 +20,17 @@ import {
 } from './options-list';
 
 // Access private static methods for unit testing
+interface SettingsPageStatics {
+  buildServerContext(hasEnabledPairs: boolean): IOptionsContext;
+  buildAutoqueueContext(hasEnabledPairs: boolean): IOptionsContext;
+  OVERRIDE_NOTE: string;
+}
+const settingsStatics = SettingsPageComponent as unknown as SettingsPageStatics;
 const buildServerContext = (hasEnabledPairs: boolean): IOptionsContext =>
-  (SettingsPageComponent as any).buildServerContext(hasEnabledPairs);
+  settingsStatics.buildServerContext(hasEnabledPairs);
 const buildAutoqueueContext = (hasEnabledPairs: boolean): IOptionsContext =>
-  (SettingsPageComponent as any).buildAutoqueueContext(hasEnabledPairs);
-const OVERRIDE_NOTE = (SettingsPageComponent as any).OVERRIDE_NOTE as string;
+  settingsStatics.buildAutoqueueContext(hasEnabledPairs);
+const OVERRIDE_NOTE = settingsStatics.OVERRIDE_NOTE;
 
 describe('SettingsPageComponent.buildServerContext', () => {
   it('should disable remote_path and local_path when pairs are enabled', () => {
@@ -132,13 +139,13 @@ describe('SettingsPageComponent integration tests', () => {
   let component: SettingsPageComponent;
   let configSubject: BehaviorSubject<Config | null>;
   let connectedSubject: BehaviorSubject<boolean>;
-  let pairsSubject: BehaviorSubject<any[]>;
+  let pairsSubject: BehaviorSubject<PathPair[]>;
   let mockIntegrationsService: { testSonarr: ReturnType<typeof vi.fn>; testRadarr: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     configSubject = new BehaviorSubject<Config | null>({ ...DEFAULT_CONFIG });
     connectedSubject = new BehaviorSubject<boolean>(true);
-    pairsSubject = new BehaviorSubject<any[]>([]);
+    pairsSubject = new BehaviorSubject<PathPair[]>([]);
     mockIntegrationsService = {
       testSonarr: vi.fn(),
       testRadarr: vi.fn(),

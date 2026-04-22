@@ -2,9 +2,7 @@
 // TODO(#376): Many rules below are intentionally set to "warn" (not "error")
 // to keep the initial lint step non-fatal while the tooling PR lands. A
 // follow-up cleanup PR should graduate these to "error" and address the
-// accumulated findings (e.g. a11y on interactive elements, <img> alt text,
-// `any` casts, inject() migration, ==/===, inferrable types, empty
-// functions, Array<T> vs T[]).
+// accumulated findings (e.g. `no-empty-lifecycle-method`).
 // See: https://github.com/nitrobass24/seedsync/issues/376
 const eslint = require("@eslint/js");
 const { defineConfig } = require("eslint/config");
@@ -38,23 +36,22 @@ module.exports = defineConfig([
           style: "kebab-case",
         },
       ],
-      // Rules required by #376, all "warn" for the initial PR:
+      // Rules required by #376; most graduated to "error" in targeted cleanup PRs:
       "@angular-eslint/prefer-on-push-component-change-detection": "error",
       "@angular-eslint/no-empty-lifecycle-method": "warn",
-      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-explicit-any": "error",
       // "no-unused-vars" is the one rule #376 asks to keep as "error":
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
-      // High-volume stylistic findings — demoted to "warn" per the task
-      // plan so CI stays green. Follow-up cleanup tracked in #376.
-      "@typescript-eslint/no-inferrable-types": "warn",
-      "@typescript-eslint/no-empty-function": "warn",
-      "@typescript-eslint/array-type": "warn",
-      "@typescript-eslint/consistent-indexed-object-style": "warn",
-      "@angular-eslint/prefer-inject": "warn",
-      "prefer-const": "warn",
+      // Graduated to "error" in #378 after the codebase was cleaned up.
+      "@typescript-eslint/no-inferrable-types": "error",
+      "@typescript-eslint/no-empty-function": "error",
+      "@typescript-eslint/array-type": "error",
+      "@typescript-eslint/consistent-indexed-object-style": "error",
+      "@angular-eslint/prefer-inject": "error",
+      "prefer-const": "error",
     },
   },
   {
@@ -64,13 +61,12 @@ module.exports = defineConfig([
       angular.configs.templateAccessibility,
     ],
     rules: {
-      // Required-by-#376 a11y rules, "warn" for the initial PR:
-      "@angular-eslint/template/click-events-have-key-events": "warn",
-      "@angular-eslint/template/interactive-supports-focus": "warn",
-      // High-volume template findings — demoted to "warn" for this PR.
-      // Follow-up cleanup tracked in #376.
-      "@angular-eslint/template/alt-text": "warn",
-      "@angular-eslint/template/eqeqeq": "warn",
+      // A11y rules graduated to "error" in #380/#381 cleanup:
+      "@angular-eslint/template/click-events-have-key-events": "error",
+      "@angular-eslint/template/interactive-supports-focus": "error",
+      "@angular-eslint/template/alt-text": "error",
+      // Graduated to "error" in #378 after the codebase was cleaned up.
+      "@angular-eslint/template/eqeqeq": "error",
     },
   },
 ]);
