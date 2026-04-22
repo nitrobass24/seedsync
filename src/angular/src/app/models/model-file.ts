@@ -48,7 +48,29 @@ const STATE_LOOKUP: Record<string, ModelFileState> = {
   CORRUPT:        ModelFileState.CORRUPT,
 };
 
-export function modelFileFromJson(json: any): ModelFile {
+/**
+ * Shape of a ModelFile as received in JSON from the backend.
+ * All fields are raw (timestamps in seconds, state as string).
+ */
+export interface ModelFileJson {
+  name: string;
+  pair_id?: string | null;
+  is_dir: boolean;
+  local_size: number | null;
+  remote_size: number | null;
+  state: string;
+  downloading_speed: number;
+  eta: number;
+  full_path: string;
+  is_extractable: boolean;
+  local_created_timestamp: number | null;
+  local_modified_timestamp: number | null;
+  remote_created_timestamp: number | null;
+  remote_modified_timestamp: number | null;
+  children: ModelFileJson[];
+}
+
+export function modelFileFromJson(json: ModelFileJson): ModelFile {
   const children: ModelFile[] = [];
   for (const child of json.children) {
     children.push(modelFileFromJson(child));

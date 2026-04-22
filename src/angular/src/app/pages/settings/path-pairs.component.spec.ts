@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { of } from 'rxjs';
+import { Observable, of } from 'rxjs';
 
 import { PathPair } from '../../models/path-pair';
+
+interface PathPairsServiceLike {
+  create(pair: Omit<PathPair, 'id'>): Observable<PathPair | null>;
+  update(pair: PathPair): Observable<PathPair | null>;
+  remove(pairId: string): Observable<boolean>;
+}
 
 function makePair(overrides: Partial<PathPair> = {}): PathPair {
   return {
@@ -33,7 +39,7 @@ class PathPairsLogic {
   confirmingDeleteId: string | null = null;
   private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private service: any) {}
+  constructor(private service: PathPairsServiceLike) {}
 
   onStartAdd(): void {
     this.cancelEdit();
@@ -48,7 +54,7 @@ class PathPairsLogic {
 
   onSaveAdd(): void {
     if (!this.addForm.name.trim()) return;
-    this.service.create(this.addForm).subscribe((created: any) => {
+    this.service.create(this.addForm).subscribe((created: PathPair | null) => {
       if (!created) return;
       this.adding = false;
       this.addForm = this.emptyForm();
@@ -75,7 +81,7 @@ class PathPairsLogic {
 
   onSaveEdit(): void {
     if (!this.editingId || !this.editForm.name.trim()) return;
-    this.service.update({ id: this.editingId, ...this.editForm }).subscribe((updated: any) => {
+    this.service.update({ id: this.editingId, ...this.editForm }).subscribe((updated: PathPair | null) => {
       if (!updated) return;
       this.editingId = null;
       this.editForm = this.emptyForm();
@@ -138,7 +144,11 @@ class PathPairsLogic {
 
 describe('PathPairsComponent logic', () => {
   let component: PathPairsLogic;
-  let mockService: any;
+  let mockService: {
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     mockService = {
@@ -146,7 +156,7 @@ describe('PathPairsComponent logic', () => {
       update: vi.fn().mockReturnValue(of(makePair({ enabled: false }))),
       remove: vi.fn().mockReturnValue(of(true)),
     };
-    component = new PathPairsLogic(mockService);
+    component = new PathPairsLogic(mockService as unknown as PathPairsServiceLike);
   });
 
   afterEach(() => {
