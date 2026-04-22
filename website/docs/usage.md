@@ -10,7 +10,7 @@ The best way to use SeedSync is with **hard links** and a dedicated completion d
 
 1. **Configure your torrent client** (qBittorrent, ruTorrent, etc.) to hard link completed downloads into a dedicated directory. For example, if your client downloads to `/downloads/tv`, have it hard link completed files to `/downloads/complete`.
 2. **Point SeedSync** at the completion directory (`/downloads/complete`).
-3. **Enable Auto-Queue** and turn on **"Delete remote file after syncing"** in Settings.
+3. **Enable Auto-Queue** and turn on **"Delete from remote after download"** in Settings.
 
 Hard links don't consume extra disk space on the seedbox — they create another reference to the same data on disk. When SeedSync finishes syncing and deletes from `/downloads/complete`, only the hard link is removed. The original file stays intact for seeding.
 
@@ -52,7 +52,7 @@ AutoQueue can automatically queue new files discovered on the remote server.
 
 - **Patterns only** lets you limit auto-queueing to specific matches.
 - **Auto extract** automatically extracts archives after download completes.
-- **Delete from remote** automatically removes files from the remote server after download, keeping your seedbox from filling up. When both auto-extract and delete-from-remote are enabled, extraction always runs before deletion.
+- **Delete from remote after download** automatically removes files from the remote server after download, keeping your seedbox from filling up. When both auto-extract and delete-from-remote are enabled, extraction always runs before deletion.
 - Patterns are managed from the AutoQueue page.
 
 ## Staging Directory

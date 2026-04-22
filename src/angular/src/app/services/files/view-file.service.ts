@@ -335,10 +335,17 @@ export class ViewFileService {
         observer.complete();
       } else {
         const modelFile = this.prevModelFiles.get(key)!;
-        action(modelFile).subscribe((reaction) => {
-          this.logger.debug('Received model reaction: %O', reaction);
-          observer.next(reaction);
-          observer.complete();
+        action(modelFile).subscribe({
+          next: (reaction) => {
+            this.logger.debug('Received model reaction: %O', reaction);
+            observer.next(reaction);
+            observer.complete();
+          },
+          error: (err) => {
+            this.logger.error('Action failed for file: ' + key, err);
+            observer.next({ success: false, data: null, errorMessage: String(err?.message ?? err) });
+            observer.complete();
+          },
         });
       }
     });

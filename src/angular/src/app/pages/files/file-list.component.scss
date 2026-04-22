@@ -35,6 +35,10 @@
         display: flex;
     }
 
+    .file-viewport {
+        height: calc(100vh - $file-list-chrome-height-md);
+    }
+
     /* width */
     /* NOTE: make sure this is in-sync with ".file .content" */
     #header .checkbox   {width: 30px; min-width: 30px; display: flex; align-items: center; justify-content: center;}
