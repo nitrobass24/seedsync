@@ -1,9 +1,5 @@
 // @ts-check
-// TODO(#376): Many rules below are intentionally set to "warn" (not "error")
-// to keep the initial lint step non-fatal while the tooling PR lands. A
-// follow-up cleanup PR should graduate these to "error" and address the
-// accumulated findings (e.g. `no-empty-lifecycle-method`).
-// See: https://github.com/nitrobass24/seedsync/issues/376
+// All rules are at "error". See #376-#382 for the cleanup history.
 const eslint = require("@eslint/js");
 const { defineConfig } = require("eslint/config");
 const tseslint = require("typescript-eslint");
@@ -38,7 +34,7 @@ module.exports = defineConfig([
       ],
       // Rules required by #376; most graduated to "error" in targeted cleanup PRs:
       "@angular-eslint/prefer-on-push-component-change-detection": "error",
-      "@angular-eslint/no-empty-lifecycle-method": "warn",
+      "@angular-eslint/no-empty-lifecycle-method": "error",
       "@typescript-eslint/no-explicit-any": "error",
       // "no-unused-vars" is the one rule #376 asks to keep as "error":
       "@typescript-eslint/no-unused-vars": [
