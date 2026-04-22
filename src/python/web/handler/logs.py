@@ -75,7 +75,7 @@ class LogsHandler(IHandler):
         O(sum of all log file bytes).
         """
         assert self._logdir is not None
-        base_path = os.path.join(self._logdir, "{}.log".format(self._service_name))
+        base_path = os.path.join(self._logdir, f"{self._service_name}.log")
 
         # Gather log file paths in oldest -> newest order.
         # RotatingFileHandler convention: on rotation, the current .log is
@@ -85,7 +85,7 @@ class LogsHandler(IHandler):
         # the deque below naturally retains the *newest* `limit` entries.
         log_files: list[str] = []
         for i in range(Constants.LOG_BACKUP_COUNT, 0, -1):
-            rotated = "{}.{}".format(base_path, i)
+            rotated = f"{base_path}.{i}"
             if os.path.isfile(rotated):
                 log_files.append(rotated)
         if os.path.isfile(base_path):

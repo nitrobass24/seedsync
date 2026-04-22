@@ -50,17 +50,17 @@ class PathPair:
         enabled = d.get("enabled", True)
         auto_queue = d.get("auto_queue", True)
         if not isinstance(pair_id, str):
-            raise TypeError("id must be a string, got {}".format(type(pair_id).__name__))
+            raise TypeError(f"id must be a string, got {type(pair_id).__name__}")
         if not isinstance(name, str):
-            raise TypeError("name must be a string, got {}".format(type(name).__name__))
+            raise TypeError(f"name must be a string, got {type(name).__name__}")
         if not isinstance(remote_path, str):
-            raise TypeError("remote_path must be a string, got {}".format(type(remote_path).__name__))
+            raise TypeError(f"remote_path must be a string, got {type(remote_path).__name__}")
         if not isinstance(local_path, str):
-            raise TypeError("local_path must be a string, got {}".format(type(local_path).__name__))
+            raise TypeError(f"local_path must be a string, got {type(local_path).__name__}")
         if not isinstance(enabled, bool):
-            raise TypeError("enabled must be a boolean, got {}".format(type(enabled).__name__))
+            raise TypeError(f"enabled must be a boolean, got {type(enabled).__name__}")
         if not isinstance(auto_queue, bool):
-            raise TypeError("auto_queue must be a boolean, got {}".format(type(auto_queue).__name__))
+            raise TypeError(f"auto_queue must be a boolean, got {type(auto_queue).__name__}")
         return PathPair(
             pair_id=pair_id,
             name=name,
@@ -76,7 +76,7 @@ class PathPair:
         return self.to_dict() == other.to_dict()
 
     def __repr__(self) -> str:
-        return "PathPair({})".format(self.to_dict())
+        return f"PathPair({self.to_dict()})"
 
 
 _CURRENT_VERSION = 1
@@ -112,9 +112,9 @@ class PathPairsConfig(Persist):
     def add_pair(self, pair: PathPair):
         with self._lock:
             if any(p.id == pair.id for p in self._pairs):
-                raise ValueError("PathPair with id '{}' already exists".format(pair.id))
+                raise ValueError(f"PathPair with id '{pair.id}' already exists")
             if any(p.name == pair.name for p in self._pairs):
-                raise ValueError("PathPair with name '{}' already exists".format(pair.name))
+                raise ValueError(f"PathPair with name '{pair.name}' already exists")
             self._pairs.append(pair)
 
     def update_pair(self, pair: PathPair):
@@ -122,16 +122,16 @@ class PathPairsConfig(Persist):
             for i, p in enumerate(self._pairs):
                 if p.id == pair.id:
                     if any(other.name == pair.name and other.id != pair.id for other in self._pairs):
-                        raise ValueError("PathPair with name '{}' already exists".format(pair.name))
+                        raise ValueError(f"PathPair with name '{pair.name}' already exists")
                     self._pairs[i] = pair
                     return
-            raise ValueError("PathPair with id '{}' not found".format(pair.id))
+            raise ValueError(f"PathPair with id '{pair.id}' not found")
 
     def remove_pair(self, pair_id: str):
         with self._lock:
             new_pairs = [p for p in self._pairs if p.id != pair_id]
             if len(new_pairs) == len(self._pairs):
-                raise ValueError("PathPair with id '{}' not found".format(pair_id))
+                raise ValueError(f"PathPair with id '{pair_id}' not found")
             self._pairs = new_pairs
 
     @classmethod
@@ -139,7 +139,7 @@ class PathPairsConfig(Persist):
         try:
             raw: Any = json.loads(content)
         except json.JSONDecodeError as e:
-            raise PersistError("Error parsing PathPairsConfig: {}".format(str(e))) from e
+            raise PersistError(f"Error parsing PathPairsConfig: {str(e)}") from e
 
         if not isinstance(raw, dict):
             raise PersistError("Expected JSON object in PathPairsConfig")
@@ -153,7 +153,7 @@ class PathPairsConfig(Persist):
             try:
                 config.add_pair(PathPair.from_dict(pair_dict))
             except (KeyError, TypeError, ValueError) as e:
-                raise PersistError("Malformed path pair entry: {}".format(e)) from e
+                raise PersistError(f"Malformed path pair entry: {e}") from e
         return config
 
     def to_str(self) -> str:

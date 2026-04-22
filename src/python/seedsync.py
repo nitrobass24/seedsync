@@ -71,7 +71,7 @@ class Seedsync:
                 if Seedsync._backfill_config_defaults(config):
                     config.to_file(self.config_path)
             except (ConfigError, PersistError) as e:
-                logging.warning("Failed to load config ({}), backing up and using defaults".format(str(e)))
+                logging.warning(f"Failed to load config ({str(e)}), backing up and using defaults")
                 Seedsync.__backup_file(self.config_path)
                 create_default_config = True
         else:
@@ -109,7 +109,7 @@ class Seedsync:
         web_access_logger = self._create_logger(
             name=Constants.WEB_ACCESS_LOG_NAME, log_level=effective_log_level, logdir=args.logdir, log_format=log_format
         )
-        logger.info("Log level: {}".format(effective_log_level))
+        logger.info(f"Log level: {effective_log_level}")
 
         # Create status
         status = Status()
@@ -144,7 +144,7 @@ class Seedsync:
 
     def run(self):
         self.context.logger.info("Starting SeedSync")
-        self.context.logger.info("Platform: {}".format(platform.machine()))
+        self.context.logger.info(f"Platform: {platform.machine()}")
 
         # Create controller
         controller = Controller(self.context, self.controller_persist)
@@ -254,7 +254,7 @@ class Seedsync:
     def signal(self, signum: int, _: FrameType | None) -> None:
         # noinspection PyUnresolvedReferences
         # Signals is a generated enum
-        self.context.logger.info("Caught signal {}".format(signal.Signals(signum).name))
+        self.context.logger.info(f"Caught signal {signal.Signals(signum).name}")
         raise ServiceExit()
 
     @staticmethod
@@ -299,7 +299,7 @@ class Seedsync:
         if logdir is not None:
             # Output logs to a file in the given directory
             handler = RotatingFileHandler(
-                "{}/{}.log".format(logdir, name),
+                f"{logdir}/{name}.log",
                 maxBytes=Constants.MAX_LOG_SIZE_IN_BYTES,
                 backupCount=Constants.LOG_BACKUP_COUNT,
             )
@@ -472,12 +472,12 @@ class Seedsync:
         file_dir = os.path.dirname(file_path)
         i = 1
         while True:
-            backup_path = os.path.join(file_dir, "{}.{}.bak".format(file_name, i))
+            backup_path = os.path.join(file_dir, f"{file_name}.{i}.bak")
             if not os.path.exists(backup_path):
                 break
             i += 1
         if Seedsync.logger:
-            Seedsync.logger.info("Backing up {} to {}".format(file_path, backup_path))
+            Seedsync.logger.info(f"Backing up {file_path} to {backup_path}")
         shutil.copy(file_path, backup_path)
 
 

@@ -44,8 +44,8 @@ class Extract:
         if result.stdout.strip():
             stdout_lines = result.stdout.strip().splitlines()
             stdout_tail = "\n".join(stdout_lines[-20:])
-            details = "{}\n--- stdout (last 20 lines) ---\n{}".format(details, stdout_tail)
-        return "{} (exit {}): {}".format(prefix, result.returncode, details)
+            details = f"{details}\n--- stdout (last 20 lines) ---\n{stdout_tail}"
+        return f"{prefix} (exit {result.returncode}): {details}"
 
     @staticmethod
     def verify_archive(archive_path: str):
@@ -54,20 +54,18 @@ class Extract:
         Raises ExtractError on failure.
         """
         if not os.path.isfile(archive_path):
-            raise ExtractError("Archive verification failed: file not found: {}".format(archive_path))
+            raise ExtractError(f"Archive verification failed: file not found: {archive_path}")
 
         file_size = os.path.getsize(archive_path)
         if file_size == 0:
-            raise ExtractError("Archive verification failed: empty file: {}".format(archive_path))
+            raise ExtractError(f"Archive verification failed: empty file: {archive_path}")
 
         try:
             result = subprocess.run(
                 ["7z", "t", "--", archive_path], capture_output=True, text=True, timeout=Extract._7Z_TIMEOUT_SECS
             )
         except subprocess.TimeoutExpired:
-            raise ExtractError(
-                "Archive verification timed out after {}s: {}".format(Extract._7Z_TIMEOUT_SECS, archive_path)
-            )
+            raise ExtractError(f"Archive verification timed out after {Extract._7Z_TIMEOUT_SECS}s: {archive_path}")
         except FileNotFoundError:
             raise ExtractError("7z binary not found; cannot verify archive")
 
@@ -123,11 +121,11 @@ class Extract:
         Supports all formats handled by 7z: zip, rar, 7z, tar, gz, bz2, xz, and more.
         """
         if not os.path.isfile(archive_path):
-            raise ExtractError("Path is not a valid archive: {}".format(archive_path))
+            raise ExtractError(f"Path is not a valid archive: {archive_path}")
 
         fmt = Extract._detect_format(archive_path)
         if fmt is None:
-            raise ExtractError("Path is not a valid archive: {}".format(archive_path))
+            raise ExtractError(f"Path is not a valid archive: {archive_path}")
 
         try:
             if not os.path.exists(out_dir_path):
@@ -161,9 +159,7 @@ class Extract:
                     common = None
                 if common != real_out_dir:
                     raise ExtractError(
-                        "Zip-slip detected: extracted path '{}' escapes target directory '{}'".format(
-                            full_path, real_out_dir
-                        )
+                        f"Zip-slip detected: extracted path '{full_path}' escapes target directory '{real_out_dir}'"
                     )
 
     @staticmethod
@@ -177,7 +173,7 @@ class Extract:
                 timeout=Extract._7Z_TIMEOUT_SECS,
             )
         except subprocess.TimeoutExpired:
-            raise ExtractError("7z timed out after {}s: {}".format(Extract._7Z_TIMEOUT_SECS, archive_path))
+            raise ExtractError(f"7z timed out after {Extract._7Z_TIMEOUT_SECS}s: {archive_path}")
         except FileNotFoundError:
             raise ExtractError("7z binary not found; cannot extract archive")
 

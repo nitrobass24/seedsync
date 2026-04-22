@@ -437,14 +437,10 @@ class ModelBuilder:
                     model_file.state = ModelFile.State.EXTRACTING
                 else:
                     if model_file.local_size is None:
-                        self.logger.warning(
-                            "File {} has extract status but doesn't exist locally!".format(model_file.name)
-                        )
+                        self.logger.warning(f"File {model_file.name} has extract status but doesn't exist locally!")
                     else:
                         self.logger.warning(
-                            "File {} has extract status but is in state {}".format(
-                                model_file.name, str(model_file.state)
-                            )
+                            f"File {model_file.name} has extract status but is in state {str(model_file.state)}"
                         )
 
             # next we check if root is Extracted
@@ -475,7 +471,7 @@ class ModelBuilder:
                     model_file.state = ModelFile.State.VALIDATING
                 else:
                     self.logger.warning(
-                        "File {} has validate status but is in state {}".format(model_file.name, str(model_file.state))
+                        f"File {model_file.name} has validate status but is in state {str(model_file.state)}"
                     )
 
             # next we check if root is Validated

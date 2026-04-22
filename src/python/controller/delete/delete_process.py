@@ -23,11 +23,11 @@ class DeleteLocalProcess(AppOneShotProcess):
         except ValueError:
             common = None
         if common != real_base or real_target == real_base:
-            self.logger.error("Path traversal blocked: {} escapes {}".format(real_target, real_base))
+            self.logger.error(f"Path traversal blocked: {real_target} escapes {real_base}")
             return
-        self.logger.debug("Deleting local file {}".format(self.__file_name))
+        self.logger.debug(f"Deleting local file {self.__file_name}")
         if not os.path.exists(file_path):
-            self.logger.error("Failed to delete non-existing file: {}".format(file_path))
+            self.logger.error(f"Failed to delete non-existing file: {file_path}")
         else:
             if os.path.isfile(file_path):
                 os.remove(file_path)
@@ -61,14 +61,14 @@ class DeleteRemoteProcess(AppOneShotProcess):
             or normalized.startswith(".." + os.sep)
             or os.path.isabs(normalized)
         ):
-            self.logger.error("Path traversal blocked in remote delete: {}".format(self.__file_name))
+            self.logger.error(f"Path traversal blocked in remote delete: {self.__file_name}")
             return
         file_path = os.path.join(self.__remote_path, self.__file_name)
-        self.logger.info("Deleting remote file: {}".format(self.__file_name))
+        self.logger.info(f"Deleting remote file: {self.__file_name}")
         if file_path.startswith("~"):
             escaped_path = escape_remote_path_double(file_path)
         else:
             escaped_path = escape_remote_path_single(file_path)
-        out = self.__ssh.shell("rm -rf {}".format(escaped_path))
-        self.logger.debug("Remote delete output: {}".format(out.decode()))
-        self.logger.info("Successfully deleted remote file: {}".format(self.__file_name))
+        out = self.__ssh.shell(f"rm -rf {escaped_path}")
+        self.logger.debug(f"Remote delete output: {out.decode()}")
+        self.logger.info(f"Successfully deleted remote file: {self.__file_name}")

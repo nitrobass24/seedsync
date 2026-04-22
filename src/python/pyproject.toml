@@ -37,7 +37,6 @@ select = [
     "UP",  # pyupgrade
 ]
 ignore = [
-    "UP032", # f-string — 305 auto-fixable occurrences, separate PR (#399 Phase 2)
     "UP046", # non-pep695-generic-class — requires Python 3.12+ syntax migration
     "B904",  # raise-without-from — 25 manual fixes, separate PR (#399 Phase 3)
     "B024",  # abstract-base-class-without-abstract-method — intentional pattern

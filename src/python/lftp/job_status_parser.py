@@ -47,15 +47,15 @@ class LftpJobStatusParser:
         """
         if size == "0":
             return 0
-        m = re.compile(r"(?P<number>\d+\.?\d*)\s*(?P<units>{})?".format(LftpJobStatusParser.__SIZE_UNITS_REGEX))
+        m = re.compile(rf"(?P<number>\d+\.?\d*)\s*(?P<units>{LftpJobStatusParser.__SIZE_UNITS_REGEX})?")
         result = m.search(size)
         if not result:
-            raise ValueError("String '{}' does not match the size pattern".format(size))
+            raise ValueError(f"String '{size}' does not match the size pattern")
         number = float(result.group("number"))
         unit = (result.group("units") or "b")[0].lower()
         multipliers = {"b": 1, "k": 1024, "m": 1024 * 1024, "g": 1024 * 1024 * 1024}
         if unit not in multipliers.keys():
-            raise ValueError("Unrecognized unit {} in size string '{}'".format(unit, size))
+            raise ValueError(f"Unrecognized unit {unit} in size string '{size}'")
         return int(number * multipliers[unit])
 
     @staticmethod
@@ -68,7 +68,7 @@ class LftpJobStatusParser:
         m = re.compile(LftpJobStatusParser.__TIME_UNITS_REGEX)
         result = m.search(eta)
         if not result:
-            raise ValueError("String '{}' does not match the eta pattern".format(eta))
+            raise ValueError(f"String '{eta}' does not match the eta pattern")
         # the [:-1] below remove the last character
         eta_d = int((result.group("eta_d") or "0d")[:-1])
         eta_h = int((result.group("eta_h") or "0h")[:-1])
@@ -113,8 +113,8 @@ class LftpJobStatusParser:
             statuses += self.__parse_queue(lines)
             statuses += self.__parse_jobs(lines)
         except ValueError as e:
-            self.logger.error("LftpJobStateParser error: {}".format(str(e)))
-            self.logger.error("Status:\n{}".format(output))
+            self.logger.error(f"LftpJobStateParser error: {str(e)}")
+            self.logger.error(f"Status:\n{output}")
             raise LftpJobStatusParserError("Error parsing lftp job status")
         return statuses
 
@@ -141,12 +141,12 @@ class LftpJobStatusParser:
             r"(?P<lq>['\"]|)(?P<remote>.+)(?P=lq)\s+"  # greedy on purpose
             r"(?P<rq>['\"]|)(?P<local>.+)(?P=rq)\s+"  # greedy on purpose
             r"--\s+"
-            r"(?P<szlocal>\d+\.?\d*\s?({sz})?)"  # size=0 has no units
+            rf"(?P<szlocal>\d+\.?\d*\s?({LftpJobStatusParser.__SIZE_UNITS_REGEX})?)"  # size=0 has no units
             r"\/"
-            r"(?P<szremote>\d+\.?\d*\s?({sz})?)\s+"  # size=0 has no units
+            rf"(?P<szremote>\d+\.?\d*\s?({LftpJobStatusParser.__SIZE_UNITS_REGEX})?)\s+"  # size=0 has no units
             r"\((?P<pctlocal>\d+)%\)"
-            r"(\s+(?P<speed>\d+\.?\d*\s?({sz}))\/s)?$"
-        ).format(sz=LftpJobStatusParser.__SIZE_UNITS_REGEX)
+            rf"(\s+(?P<speed>\d+\.?\d*\s?({LftpJobStatusParser.__SIZE_UNITS_REGEX}))\/s)?$"
+        )
         mirror_header_m = re.compile(mirror_header_pattern)
 
         # mirror header (connecting or receiving file list)
@@ -226,12 +226,9 @@ class LftpJobStatusParser:
         #   "3.0K/s eta:3m [Receiving data]"
         #   "10M/s eta:1h2m [Making data connection]"
         orphan_progress_pattern = (
-            r"^(?:\d+\.?\d*\s?({sz}))\/s\s+"
-            r"eta:({eta})\s+"
+            rf"^(?:\d+\.?\d*\s?({LftpJobStatusParser.__SIZE_UNITS_REGEX}))\/s\s+"
+            rf"eta:({LftpJobStatusParser.__TIME_UNITS_REGEX})\s+"
             r"\[.*\]$"
-        ).format(
-            sz=LftpJobStatusParser.__SIZE_UNITS_REGEX,
-            eta=LftpJobStatusParser.__TIME_UNITS_REGEX,
         )
         orphan_progress_m = re.compile(orphan_progress_pattern)
 
@@ -239,9 +236,9 @@ class LftpJobStatusParser:
         #   "/s eta:25m [Receiving data]"  (tail of "347.3K/s eta:25m ...")
         partial_progress_pattern = (
             r"^\/s\s+"
-            r"eta:({eta})\s+"
+            rf"eta:({LftpJobStatusParser.__TIME_UNITS_REGEX})\s+"
             r"\[.*\]$"
-        ).format(eta=LftpJobStatusParser.__TIME_UNITS_REGEX)
+        )
         partial_progress_m = re.compile(partial_progress_pattern)
 
         # Chunk line-wrap fragments: long filenames cause lftp chunk progress
@@ -252,12 +249,9 @@ class LftpJobStatusParser:
         chunk_wrap_pattern = (
             r"^(?:[^`\\].*)?'\s+at\s+\d+\s+"
             r"(?:\(\d+%\)\s+)?"
-            r"(?:(?:\d+\.?\d*\s?({sz}))\/s\s+)?"
-            r"(?:eta:({eta})\s+)?"
+            rf"(?:(?:\d+\.?\d*\s?({LftpJobStatusParser.__SIZE_UNITS_REGEX}))\/s\s+)?"
+            rf"(?:eta:({LftpJobStatusParser.__TIME_UNITS_REGEX})\s+)?"
             r"\s*\[.*\]$"
-        ).format(
-            sz=LftpJobStatusParser.__SIZE_UNITS_REGEX,
-            eta=LftpJobStatusParser.__TIME_UNITS_REGEX,
         )
         chunk_wrap_m = re.compile(chunk_wrap_pattern)
 
@@ -274,14 +268,14 @@ class LftpJobStatusParser:
                 if orphan_progress_m.match(line) or partial_progress_m.match(line) or chunk_wrap_m.match(line):
                     self.logger.warning("Skipping orphan lftp progress line: '%s'", line)
                     continue
-                raise ValueError("First line is not a matching header '{}'".format(line))
+                raise ValueError(f"First line is not a matching header '{line}'")
 
             # Search for pget header
             result = pget_header_m.search(line)
             if result:
                 # Next line must be the sftp line
                 if len(lines) < 1 or "sftp" not in lines[0]:
-                    raise ValueError("Missing the 'sftp' line for pget header '{}'".format(line))
+                    raise ValueError(f"Missing the 'sftp' line for pget header '{line}'")
                 lines.pop(0)  # pop the 'sftp' line
 
                 # Data line may not exist
@@ -334,9 +328,7 @@ class LftpJobStatusParser:
                 elif result_got:
                     got_group_basename = os.path.basename(os.path.normpath(result_got.group("name")))
                     if got_group_basename != name:
-                        raise ValueError(
-                            "Mismatch: filename '{}' but chunk data for '{}'".format(name, got_group_basename)
-                        )
+                        raise ValueError(f"Mismatch: filename '{name}' but chunk data for '{got_group_basename}'")
                     size_local = int(result_got.group("szlocal"))
                     size_remote = int(result_got.group("szremote"))
                     percent_local = int(result_got.group("pctlocal"))
@@ -409,7 +401,7 @@ class LftpJobStatusParser:
             if result:
                 name = result.group("name")
                 if not lines:
-                    raise ValueError("Missing chunk data for filename '{}'".format(name))
+                    raise ValueError(f"Missing chunk data for filename '{name}'")
                 line = lines.pop(0)
                 result_at = chunk_at_m.search(line)
                 result_at2 = chunk_at2_m.search(line)
@@ -458,7 +450,7 @@ class LftpJobStatusParser:
                     assert prev_job is not None
                     prev_job.add_active_file_transfer_state(name, file_status)
                 else:
-                    raise ValueError("Missing chunk data for filename '{}'".format(name))
+                    raise ValueError(f"Missing chunk data for filename '{name}'")
                 # Continue the outer loop
                 continue
 
@@ -479,7 +471,7 @@ class LftpJobStatusParser:
                     if (
                         "Getting file list" in lines[0]
                         or lines[0].startswith("cd ")
-                        or lines[0] == "{}:".format(name)
+                        or lines[0] == f"{name}:"
                         or lines[0].startswith("mkdir ")
                     ):
                         lines.pop(0)
@@ -501,14 +493,14 @@ class LftpJobStatusParser:
                 name = result.group("name")
                 # Also ignore the next one or two lines
                 if not lines or not lines[0].startswith("file:"):
-                    raise ValueError("Missing 'file:' line for chmod '{}'".format(name))
+                    raise ValueError(f"Missing 'file:' line for chmod '{name}'")
                 lines.pop(0)
                 if lines:
                     result_chmod = chmod_pattern_m.search(lines[0])
                     if result_chmod:
                         name_chmod = result_chmod.group("name")
                         if name != name_chmod:
-                            raise ValueError("Mismatch in names chmod '{}'".format(name))
+                            raise ValueError(f"Mismatch in names chmod '{name}'")
                         lines.pop(0)
                 # Continue the outer loop
                 continue
@@ -536,7 +528,7 @@ class LftpJobStatusParser:
 
             # Truly unrecognized line outside any job — raise so the caller
             # can track consecutive errors and decide whether to propagate
-            raise ValueError("Unable to parse line '{}'".format(line))
+            raise ValueError(f"Unable to parse line '{line}'")
         return jobs
 
     @staticmethod
@@ -555,9 +547,7 @@ class LftpJobStatusParser:
             if len(lines) < 2:
                 # Not enough lines for a valid queue header - return empty queue
                 return queue
-            header1_pattern = r"^\[\d+\] queue \(sftp://.*@.*\)(?:\s+--\s+(?:\d+\.\d+|\d+)\s({})\/s)?$".format(
-                LftpJobStatusParser.__SIZE_UNITS_REGEX
-            )
+            header1_pattern = rf"^\[\d+\] queue \(sftp://.*@.*\)(?:\s+--\s+(?:\d+\.\d+|\d+)\s({LftpJobStatusParser.__SIZE_UNITS_REGEX})\/s)?$"
             header2_pattern = "^sftp://.*@.*$"
             line = lines.pop(0)
             if not re.match(header1_pattern, line):
@@ -622,7 +612,7 @@ class LftpJobStatusParser:
                             type_ = LftpJobStatus.Type.MIRROR
                             result = result_mirror
                         else:
-                            raise ValueError("Failed to parse queue line: {}".format(line))
+                            raise ValueError(f"Failed to parse queue line: {line}")
                         id_ = int(result.group("id"))
                         name = os.path.basename(os.path.normpath(result.group("remote")))
                         flags = result.group("flags")

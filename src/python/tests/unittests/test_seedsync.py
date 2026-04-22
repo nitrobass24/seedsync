@@ -125,7 +125,7 @@ class TestSeedsync(unittest.TestCase):
         config_dict = config.as_dict()
         for section, inner_config in config_dict.items():
             for key in inner_config:
-                self.assertIsNotNone(inner_config[key], msg="{}.{} is uninitialized".format(section, key))
+                self.assertIsNotNone(inner_config[key], msg=f"{section}.{key} is uninitialized")
 
         # Test that default config is a valid config
         config_dict = config.as_dict()

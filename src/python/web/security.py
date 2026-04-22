@@ -99,7 +99,7 @@ def install_csrf_protection(app: bottle.Bottle):
         # the Origin header (or wsgi url_scheme) and the Host header.
         request_scheme = origin_t[0]  # trust the origin's scheme
         raw_host = bottle.request.get_header("Host", "")
-        request_t = _origin_tuple("{}://{}".format(request_scheme, raw_host)) if raw_host else None
+        request_t = _origin_tuple(f"{request_scheme}://{raw_host}") if raw_host else None
 
         if not request_t or origin_t != request_t:
             raise bottle.HTTPError(403, "CSRF validation failed: origin mismatch")

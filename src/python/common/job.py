@@ -31,12 +31,12 @@ class Job(threading.Thread, ABC):
 
     @overrides(threading.Thread)
     def run(self):
-        self.logger.debug("Thread {} started".format(self.name))
+        self.logger.debug(f"Thread {self.name} started")
 
         # ... Setup code here ...
-        self.logger.debug("Calling setup for {}".format(self.name))
+        self.logger.debug(f"Calling setup for {self.name}")
         self.setup()
-        self.logger.debug("Finished setup for {}".format(self.name))
+        self.logger.debug(f"Finished setup for {self.name}")
 
         while not self.shutdown_flag.is_set():
             # ... Job code here ...
@@ -45,7 +45,7 @@ class Job(threading.Thread, ABC):
                 self.execute()
             except Exception:
                 self.exc_info = sys.exc_info()
-                self.logger.exception("Caught exception in job {}".format(self.name))
+                self.logger.exception(f"Caught exception in job {self.name}")
                 # break out of run loop and proceed to cleanup
                 self.shutdown_flag.set()
                 break
@@ -53,11 +53,11 @@ class Job(threading.Thread, ABC):
             time.sleep(Job._DEFAULT_SLEEP_INTERVAL_IN_SECS)
 
         # ... Clean shutdown code here ...
-        self.logger.debug("Calling cleanup for {}".format(self.name))
+        self.logger.debug(f"Calling cleanup for {self.name}")
         self.cleanup()
-        self.logger.debug("Finished cleanup for {}".format(self.name))
+        self.logger.debug(f"Finished cleanup for {self.name}")
 
-        self.logger.debug("Thread {} stopped".format(self.name))
+        self.logger.debug(f"Thread {self.name} stopped")
 
     def terminate(self):
         """

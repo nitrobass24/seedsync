@@ -95,15 +95,13 @@ class Persist(Serializable):
         base_name = os.path.basename(file_path)
         name, ext = os.path.splitext(base_name)
         timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S-%f")
-        backup_name = "{}-{}{}".format(name, timestamp, ext)
+        backup_name = f"{name}-{timestamp}{ext}"
         backup_path = os.path.join(backup_dir, backup_name)
 
         shutil.copy2(file_path, backup_path)
 
         # Prune old backups, keeping only the most recent _MAX_BACKUPS
-        pattern = os.path.join(
-            backup_dir, "{}-????-??-??T??-??-??-??????{}".format(glob.escape(name), glob.escape(ext))
-        )
+        pattern = os.path.join(backup_dir, f"{glob.escape(name)}-????-??-??T??-??-??-??????{glob.escape(ext)}")
         backups = sorted(glob.glob(pattern))
         for old_backup in backups[:-_MAX_BACKUPS]:
             try:

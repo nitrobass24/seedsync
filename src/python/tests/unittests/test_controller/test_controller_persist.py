@@ -102,24 +102,24 @@ class TestControllerPersist(unittest.TestCase):
         uuid1 = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         content = json.dumps(
             {
-                "downloaded": ["{}:movie.mkv".format(uuid1), "plain_file.txt"],
-                "extracted": ["{}:archive.rar".format(uuid1)],
-                "extract_failed": ["{}:bad.zip".format(uuid1)],
+                "downloaded": [f"{uuid1}:movie.mkv", "plain_file.txt"],
+                "extracted": [f"{uuid1}:archive.rar"],
+                "extract_failed": [f"{uuid1}:bad.zip"],
             }
         )
         persist = ControllerPersist.from_str(content)
 
         sep = "\x1f"
         self.assertEqual(
-            {"{}{}movie.mkv".format(uuid1, sep), "plain_file.txt"},
+            {f"{uuid1}{sep}movie.mkv", "plain_file.txt"},
             persist.downloaded_file_names,
         )
         self.assertEqual(
-            {"{}{}archive.rar".format(uuid1, sep)},
+            {f"{uuid1}{sep}archive.rar"},
             persist.extracted_file_names,
         )
         self.assertEqual(
-            {"{}{}bad.zip".format(uuid1, sep)},
+            {f"{uuid1}{sep}bad.zip"},
             persist.extract_failed_file_names,
         )
 
@@ -128,7 +128,7 @@ class TestControllerPersist(unittest.TestCase):
         uuid1 = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         content = json.dumps(
             {
-                "downloaded": ["{}:movie:part1.mkv".format(uuid1)],
+                "downloaded": [f"{uuid1}:movie:part1.mkv"],
                 "extracted": [],
             }
         )
@@ -136,7 +136,7 @@ class TestControllerPersist(unittest.TestCase):
 
         sep = "\x1f"
         self.assertEqual(
-            {"{}{}movie:part1.mkv".format(uuid1, sep)},
+            {f"{uuid1}{sep}movie:part1.mkv"},
             persist.downloaded_file_names,
         )
 
@@ -160,13 +160,13 @@ class TestControllerPersist(unittest.TestCase):
         sep = "\x1f"
         content = json.dumps(
             {
-                "downloaded": ["{}{}movie.mkv".format(uuid1, sep)],
+                "downloaded": [f"{uuid1}{sep}movie.mkv"],
                 "extracted": [],
             }
         )
         persist = ControllerPersist.from_str(content)
         self.assertEqual(
-            {"{}{}movie.mkv".format(uuid1, sep)},
+            {f"{uuid1}{sep}movie.mkv"},
             persist.downloaded_file_names,
         )
 
@@ -203,17 +203,17 @@ class TestControllerPersist(unittest.TestCase):
             {
                 "downloaded": [],
                 "extracted": [],
-                "validated": ["{}:movie.mkv".format(uuid1)],
-                "corrupt": ["{}:bad.mkv".format(uuid1)],
+                "validated": [f"{uuid1}:movie.mkv"],
+                "corrupt": [f"{uuid1}:bad.mkv"],
             }
         )
         persist = ControllerPersist.from_str(content)
         sep = "\x1f"
         self.assertEqual(
-            {"{}{}movie.mkv".format(uuid1, sep)},
+            {f"{uuid1}{sep}movie.mkv"},
             persist.validated_file_names,
         )
         self.assertEqual(
-            {"{}{}bad.mkv".format(uuid1, sep)},
+            {f"{uuid1}{sep}bad.mkv"},
             persist.corrupt_file_names,
         )
