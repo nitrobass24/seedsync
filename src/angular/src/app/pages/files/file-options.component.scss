@@ -230,26 +230,10 @@
             }
         }
 
-        // Applies to both button and menu images
-        .icon {
-            img {
-                &.downloaded,
-                &.downloading {
-                    width: 20px;
-                }
-                &.stopped {
-                    width: 13px;
-                }
-            }
-        }
     }
 
     #sort-status {
         @extend %dropdown;
-
-        // Applies to both button and menu images
-        .icon {
-        }
     }
 
     #toggle-details {
