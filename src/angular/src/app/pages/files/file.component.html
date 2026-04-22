@@ -8,7 +8,7 @@
              (click)="onCheck($event, file())"
              (keyup.enter)="onCheck($event, file())"
              (keydown.space)="$event.preventDefault(); onCheck($event, file())">
-            <input type="checkbox" tabindex="-1" [checked]="file().isChecked" />
+            <input type="checkbox" tabindex="-1" aria-hidden="true" [checked]="file().isChecked" />
         </div>
         <div class="status">
             @if (file().status === ViewFileStatus.DEFAULT && file().remoteSize > 0) {
