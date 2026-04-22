@@ -8,7 +8,7 @@
     </span>
     <span class="text"><b>Seed</b>Sync</span>
 
-    <button id="sidebar-btn-close" class="sidebar-btn" (click)="showSidebar.set(false)">
+    <button type="button" id="sidebar-btn-close" class="sidebar-btn" (click)="showSidebar.set(false)">
       <span>&#10006;</span>
     </button>
   </div>
@@ -35,7 +35,7 @@
       <app-header></app-header>
 
       <div id="title-bar">
-        <button id="sidebar-btn-open" class="sidebar-btn" (click)="showSidebar.set(!showSidebar())">
+        <button type="button" id="sidebar-btn-open" class="sidebar-btn" (click)="showSidebar.set(!showSidebar())">
           &#9776;
         </button>
         <span id="title">{{ activeRoute()?.name }}</span>
