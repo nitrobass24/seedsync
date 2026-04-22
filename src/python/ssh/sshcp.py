@@ -107,13 +107,12 @@ class Sshcp:
                     "Fix by running on the remote server: "
                     f"sudo chsh -s {available_shells[0]} {self.__user}"
                 ) from e
-            else:
-                raise SshcpError(
-                    "Remote user's login shell not found and no common shells "
-                    "could be detected. Fix by running on the remote server: "
-                    f"sudo chsh -s /bin/sh {self.__user} OR "
-                    "sudo ln -s /usr/bin/bash /bin/bash"
-                ) from e
+            raise SshcpError(
+                "Remote user's login shell not found and no common shells "
+                "could be detected. Fix by running on the remote server: "
+                f"sudo chsh -s /bin/sh {self.__user} OR "
+                "sudo ln -s /usr/bin/bash /bin/bash"
+            ) from e
 
     def _run_shell_command(self, command: str) -> bytes:
         """
@@ -308,9 +307,9 @@ class Sshcp:
                     if isinstance(before_val, bytes) and before_val.decode(errors="replace").strip():
                         error_msg += " - " + before_val.decode(errors="replace").strip()
                     raise SshcpError(error_msg)
-                elif i == 3:
+                if i == 3:
                     raise SshcpError(f"Bad hostname: {self.__host}")
-                elif i in {2, 4}:
+                if i in {2, 4}:
                     error_msg = "Connection refused by server"
                     before_val = sp.before
                     if isinstance(before_val, bytes) and before_val.decode(errors="replace").strip():
@@ -336,9 +335,9 @@ class Sshcp:
                 self.logger.warning(f"Command failed: '{before} - {after}'")
             if i == 1:
                 raise SshcpError("Incorrect password")
-            elif i == 3:
+            if i == 3:
                 raise SshcpError(f"Bad hostname: {self.__host}")
-            elif i in {2, 4}:
+            if i in {2, 4}:
                 error_msg = "Connection refused by server"
                 before_val = sp.before
                 if isinstance(before_val, bytes) and before_val.decode(errors="replace").strip():

@@ -166,7 +166,7 @@ class ModelBuilder:
         )
         for name in all_file_names:
             remote = self.__remote_files.get(name, None)
-            local = effective_local.get(name, None)
+            local = effective_local.get(name)
             status = self.__lftp_statuses.get(name, None)
 
             if remote is None and local is None and status is None:
@@ -278,8 +278,8 @@ class ModelBuilder:
                 _local_children: dict[str, SystemFile] = {sf.name: sf for sf in _local.children} if _local else {}
                 _all_children_names: set[str] = set[str]().union(_remote_children.keys(), _local_children.keys())
                 for _child_name in _all_children_names:
-                    _remote_child = _remote_children.get(_child_name, None)
-                    _local_child = _local_children.get(_child_name, None)
+                    _remote_child = _remote_children.get(_child_name)
+                    _local_child = _local_children.get(_child_name)
                     _is_dir = (
                         _remote_child.is_dir if _remote_child else (_local_child.is_dir if _local_child else False)
                     )
@@ -361,7 +361,7 @@ class ModelBuilder:
                     else:
                         smoothed = raw_eta
                     self.__smoothed_etas[name] = smoothed
-                    model_file.eta = int(math.ceil(smoothed))
+                    model_file.eta = math.ceil(smoothed)
 
             # now we can determine if root is Downloaded
             # root is Downloaded if all child remote files are Downloaded
@@ -402,10 +402,7 @@ class ModelBuilder:
                 # Directory with incomplete children always stays DEFAULT
                 # (the children BFS check is authoritative; root-level size
                 # comparisons can be fooled by extra local files like extracted content)
-                if incomplete_children:
-                    pass  # Stay DEFAULT for re-download
-                # Partial file overrides persist — stay DEFAULT for re-download
-                elif (
+                if incomplete_children or (
                     model_file.local_size is not None
                     and model_file.remote_size is not None
                     and model_file.local_size < model_file.remote_size
@@ -440,7 +437,7 @@ class ModelBuilder:
                         self.logger.warning(f"File {model_file.name} has extract status but doesn't exist locally!")
                     else:
                         self.logger.warning(
-                            f"File {model_file.name} has extract status but is in state {str(model_file.state)}"
+                            f"File {model_file.name} has extract status but is in state {model_file.state!s}"
                         )
 
             # next we check if root is Extracted
@@ -471,7 +468,7 @@ class ModelBuilder:
                     model_file.state = ModelFile.State.VALIDATING
                 else:
                     self.logger.warning(
-                        f"File {model_file.name} has validate status but is in state {str(model_file.state)}"
+                        f"File {model_file.name} has validate status but is in state {model_file.state!s}"
                     )
 
             # next we check if root is Validated

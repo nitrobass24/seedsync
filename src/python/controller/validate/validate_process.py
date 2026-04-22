@@ -169,7 +169,7 @@ class ValidateProcess(AppProcess):
                 )
                 self.__completed_result_queue.put(completed)
             except ChecksumMismatchError as e:
-                self.logger.error(f"Checksum mismatch for {req.name}: {str(e)}")
+                self.logger.error(f"Checksum mismatch for {req.name}: {e!s}")
                 failed = ValidateFailedResult(
                     timestamp=datetime.datetime.now(),
                     name=req.name,
@@ -180,7 +180,7 @@ class ValidateProcess(AppProcess):
                 )
                 self.__failed_result_queue.put(failed)
             except Exception as e:
-                self.logger.error(f"Validation failed for {req.name}: {str(e)}")
+                self.logger.error(f"Validation failed for {req.name}: {e!s}")
                 failed = ValidateFailedResult(
                     timestamp=datetime.datetime.now(),
                     name=req.name,
@@ -261,7 +261,7 @@ class ValidateProcess(AppProcess):
                     rel = os.path.relpath(abs_path, req.remote_path)
                     remote_rel_paths.add(rel)
         except Exception as e:
-            raise ValueError(f"Failed to list remote directory {remote_dir}: {str(e)}") from e
+            raise ValueError(f"Failed to list remote directory {remote_dir}: {e!s}") from e
 
         # Validate the union of both sets
         all_paths = local_rel_paths | remote_rel_paths
@@ -325,12 +325,11 @@ class ValidateProcess(AppProcess):
         """Build the remote hash command for the given algorithm."""
         if algorithm == "md5":
             return f"md5sum {quoted_file}"
-        elif algorithm == "sha256":
+        if algorithm == "sha256":
             return f"sha256sum {quoted_file}"
-        elif algorithm == "sha1":
+        if algorithm == "sha1":
             return f"sha1sum {quoted_file}"
-        else:
-            raise ValueError(f"Unsupported algorithm: {algorithm}")
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
 
     def _hash_remote_file(self, req: ValidateRequest, rel_path: str, algorithm: str, sshcp: Sshcp) -> str:
         """Compute hash of a remote file via SSH."""

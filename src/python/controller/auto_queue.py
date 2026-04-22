@@ -103,12 +103,12 @@ class AutoQueuePersist(Persist):
                 persist.add_pattern(AutoQueuePattern.from_str(pattern))
             return persist
         except (json.decoder.JSONDecodeError, KeyError) as e:
-            raise PersistError(f"Error parsing AutoQueuePersist - {type(e).__name__}: {str(e)}") from e
+            raise PersistError(f"Error parsing AutoQueuePersist - {type(e).__name__}: {e!s}") from e
 
     @overrides(Persist)
     def to_str(self) -> str:
         dct: dict[str, list[str]] = {}
-        dct[AutoQueuePersist.__KEY_PATTERNS] = list(p.to_str() for p in self.__patterns)
+        dct[AutoQueuePersist.__KEY_PATTERNS] = [p.to_str() for p in self.__patterns]
         return json.dumps(dct, indent=Constants.JSON_PRETTY_PRINT_INDENT)
 
 

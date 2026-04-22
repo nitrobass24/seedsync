@@ -113,8 +113,7 @@ class Extract:
             file_ext = file_ext[1:]  # remove the dot
             # noinspection SpellCheckingInspection
             return file_ext in ["7z", "bz2", "gz", "lz", "xz", "rar", "tar", "tgz", "tbz2", "zip", "zipx"]
-        else:
-            return False
+        return False
 
     @staticmethod
     def extract_archive(archive_path: str, out_dir_path: str):

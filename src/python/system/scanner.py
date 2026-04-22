@@ -81,7 +81,7 @@ class SystemScanner:
         """
         if not os.path.exists(self.path_to_scan):
             raise SystemScannerError(f"Path does not exist: {self.path_to_scan}")
-        elif not os.path.isdir(self.path_to_scan):
+        if not os.path.isdir(self.path_to_scan):
             raise SystemScannerError(f"Path is not a directory: {self.path_to_scan}")
         return self.__create_children(self.path_to_scan)
 

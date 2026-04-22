@@ -71,7 +71,7 @@ class Seedsync:
                 if Seedsync._backfill_config_defaults(config):
                     config.to_file(self.config_path)
             except (ConfigError, PersistError) as e:
-                logging.warning(f"Failed to load config ({str(e)}), backing up and using defaults")
+                logging.warning(f"Failed to load config ({e!s}), backing up and using defaults")
                 Seedsync.__backup_file(self.config_path)
                 create_default_config = True
         else:
@@ -436,7 +436,7 @@ class Seedsync:
         config_dict = config.as_dict()
         for sec_name in config_dict:
             for key in config_dict[sec_name]:
-                if Seedsync.__CONFIG_DUMMY_VALUE == config_dict[sec_name][key]:
+                if config_dict[sec_name][key] == Seedsync.__CONFIG_DUMMY_VALUE:
                     return True
         return False
 

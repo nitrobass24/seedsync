@@ -58,12 +58,10 @@ class ModelStreamHandler(IStreamHandler):
             self.first_run = False
             assert self.initial_model_files is not None
             return self.serialize.model(self.initial_model_files)
-        else:
-            event = self.model_listener.get_next_event()
-            if event is not None:
-                return self.serialize.update_event(event)
-            else:
-                return None
+        event = self.model_listener.get_next_event()
+        if event is not None:
+            return self.serialize.update_event(event)
+        return None
 
     @overrides(IStreamHandler)
     def cleanup(self):

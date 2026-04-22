@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import contextlib
 import glob
 import logging
 import os
@@ -80,10 +81,8 @@ class Persist(Serializable):
                 os.fsync(f.fileno())
             os.replace(tmp_path, file_path)
         except BaseException:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(tmp_path)
-            except OSError:
-                pass
             raise
 
     @staticmethod
@@ -104,10 +103,8 @@ class Persist(Serializable):
         pattern = os.path.join(backup_dir, f"{glob.escape(name)}-????-??-??T??-??-??-??????{glob.escape(ext)}")
         backups = sorted(glob.glob(pattern))
         for old_backup in backups[:-_MAX_BACKUPS]:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(old_backup)
-            except OSError:
-                pass
 
     @classmethod
     @abstractmethod
