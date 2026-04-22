@@ -39,12 +39,10 @@ class StatusStreamHandler(IStreamHandler):
             self.first_run = False
             status = self.status.copy()
             return self.serialize.status(status)
-        else:
-            status = self.status_listener.get_next_event()
-            if status is not None:
-                return self.serialize.status(status)
-            else:
-                return None
+        status = self.status_listener.get_next_event()
+        if status is not None:
+            return self.serialize.status(status)
+        return None
 
     @overrides(IStreamHandler)
     def cleanup(self):

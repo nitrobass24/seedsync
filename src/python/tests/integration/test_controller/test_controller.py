@@ -451,7 +451,7 @@ class TestController(unittest.TestCase):
         self.assertEqual(len(self.initial_state.keys()), len(model_files))
         files_dict = {f.name: f for f in model_files}
         self.assertEqual(self.initial_state.keys(), files_dict.keys())
-        for filename in self.initial_state.keys():
+        for filename in self.initial_state:
             # Note: put items in a list for a better diff output
             self.assertEqual([self.initial_state[filename]], [files_dict[filename]], f"Mismatch in file: {filename}")
 

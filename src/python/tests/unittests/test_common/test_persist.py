@@ -81,9 +81,8 @@ class TestPersist(unittest.TestCase):
         persist.my_content = "new content"
 
         # Simulate an error during write by making os.fsync raise
-        with patch("os.fsync", side_effect=OSError("disk full")):
-            with self.assertRaises(OSError):
-                persist.to_file(file_path)
+        with patch("os.fsync", side_effect=OSError("disk full")), self.assertRaises(OSError):
+            persist.to_file(file_path)
 
         # Original file should be untouched
         with open(file_path) as f:
@@ -188,7 +187,7 @@ class TestPersistBackup(unittest.TestCase):
         new_file = (after_set - before_set).pop()
 
         # The kept files should be the most recent _MAX_BACKUPS by filename order
-        expected_kept = sorted(list(before_set) + [new_file])[-_MAX_BACKUPS:]
+        expected_kept = sorted([*list(before_set), new_file])[-_MAX_BACKUPS:]
         self.assertEqual(sorted(after_set), expected_kept)
 
     def test_multiple_saves_accumulate_backups(self):

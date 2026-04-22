@@ -66,7 +66,7 @@ class RemoteScanner(IScanner):
             data = json.loads(out)
             remote_files = [SystemFile.from_dict(d) for d in data]
         except (json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError) as err:
-            self.logger.error(f"JSON parse error: {str(err)}\n{out[:500]}")
+            self.logger.error(f"JSON parse error: {err!s}\n{out[:500]}")
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"), recoverable=False
             ) from err
@@ -90,13 +90,12 @@ class RemoteScanner(IScanner):
                         f"{_escape_remote_path_double(self.__remote_path_to_scan)}"
                     )
                     return self.__ssh.shell(cmd)
-                else:
-                    cmd = (
-                        f"{_escape_remote_path_single(self.__remote_python_cmd)} "
-                        f"{_escape_remote_path_single(self.__remote_path_to_scan_script)} "
-                        f"{_escape_remote_path_single(self.__remote_path_to_scan)}"
-                    )
-                    return self.__ssh.shell(cmd)
+                cmd = (
+                    f"{_escape_remote_path_single(self.__remote_python_cmd)} "
+                    f"{_escape_remote_path_single(self.__remote_path_to_scan_script)} "
+                    f"{_escape_remote_path_single(self.__remote_path_to_scan)}"
+                )
+                return self.__ssh.shell(cmd)
             except SshcpError as e:
                 last_error = e
                 error_str = str(e)
@@ -164,7 +163,7 @@ class RemoteScanner(IScanner):
                     self.logger.debug(f"Resolved script path '{self.__remote_path_to_scan_script}' -> '{expanded}'")
                     self.__remote_path_to_scan_script = expanded
             except SshcpError as e:
-                self.logger.warning(f"Could not resolve tilde in script path: {str(e)}")
+                self.logger.warning(f"Could not resolve tilde in script path: {e!s}")
 
         # Check md5sum on remote to see if we can skip installation
         with open(self.__local_path_to_scan_script, "rb") as f:
@@ -207,7 +206,7 @@ class RemoteScanner(IScanner):
                     recoverable=False,
                 )
         except SshcpError as e:
-            self.logger.warning(f"Could not check remote path type: {str(e)}")
+            self.logger.warning(f"Could not check remote path type: {e!s}")
 
         # Go ahead and install
         self.logger.info(
@@ -273,7 +272,7 @@ class RemoteScanner(IScanner):
                     recoverable=False,
                 )
         except SshcpError as e:
-            self.logger.warning(f"Could not check fallback path type: {str(e)}")
+            self.logger.warning(f"Could not check fallback path type: {e!s}")
 
         try:
             self.__ssh.copy(local_path=self.__local_path_to_scan_script, remote_path=fallback_path)

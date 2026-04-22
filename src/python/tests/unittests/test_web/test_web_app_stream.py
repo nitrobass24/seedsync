@@ -20,7 +20,7 @@ class TestWebStreamHeartbeat(unittest.TestCase):
         """Create a mock stream handler that returns values from a list, then None."""
         handler_cls = MagicMock()
         handler_instance = MagicMock()
-        handler_instance.get_value.side_effect = list(values) + [None]
+        handler_instance.get_value.side_effect = [*list(values), None]
         handler_cls.return_value = handler_instance
         return handler_cls, handler_instance
 
@@ -50,7 +50,7 @@ class TestWebStreamHeartbeat(unittest.TestCase):
                     call_count[0] += 1
                     if call_count[0] > stop_after:
                         self.app._stop_event.set()
-                    return None
+                    return
 
                 handler_instance.get_value.side_effect = side_effect_with_stop
 
@@ -103,7 +103,7 @@ class TestWebStreamHeartbeat(unittest.TestCase):
 
     def test_x_accel_buffering_header(self):
         """X-Accel-Buffering header should be set to 'no' to disable proxy buffering."""
-        handler_cls, handler_instance = self._make_handler([])
+        handler_cls, _handler_instance = self._make_handler([])
         self.app.add_streaming_handler(handler_cls)
 
         with patch("web.web_app.bottle") as mock_bottle:

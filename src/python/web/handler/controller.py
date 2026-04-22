@@ -30,10 +30,7 @@ def _validate_filename(file_name: str) -> bool:
         return False
     # Reject path traversal components
     parts = file_name.replace("\\", "/").split("/")
-    for part in parts:
-        if part == "..":
-            return False
-    return True
+    return all(part != ".." for part in parts)
 
 
 def _validate_pair_id(pair_id: str | None) -> str | None:
@@ -111,8 +108,7 @@ class ControllerHandler(IHandler):
         callback.wait()
         if callback.success:
             return HTTPResponse(body=success_msg.format(decoded))
-        else:
-            return HTTPResponse(body=callback.error or "Unknown error", status=400)
+        return HTTPResponse(body=callback.error or "Unknown error", status=400)
 
     def __handle_action_queue(self, file_name: str):
         return self.__dispatch_command(file_name, Controller.Command.Action.QUEUE, "Queued file '{}'")

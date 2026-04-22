@@ -254,10 +254,7 @@ class Lftp:
             "mirror: Access failed",
             "Login failed: Login incorrect",
         ]
-        for error in errors:
-            if error in out:
-                return True
-        return False
+        return any(error in out for error in errors)
 
     def __set(self, setting: str, value: str):
         """
@@ -286,10 +283,9 @@ class Lftp:
         # sets are taken from LFTP manual
         if value.lower() in {"true", "on", "yes", "1", "+"}:
             return True
-        elif value.lower() in {"false", "off", "no", "0", "-"}:
+        if value.lower() in {"false", "off", "no", "0", "-"}:
             return False
-        else:
-            raise LftpError(f"Cannot convert value '{value}' to boolean")
+        raise LftpError(f"Cannot convert value '{value}' to boolean")
 
     @property
     def num_connections_per_dir_file(self) -> int:
@@ -486,8 +482,7 @@ class Lftp:
             if self.__consecutive_status_errors < MAX_CONSECUTIVE_STATUS_ERRORS:
                 self.logger.warning(f"Ignoring status error (count={self.__consecutive_status_errors})")
                 return None
-            else:
-                raise
+            raise
         return statuses
 
     def queue(self, name: str, is_dir: bool, exclude_patterns: list[str] | None = None):
@@ -561,7 +556,7 @@ class Lftp:
             self.logger.debug(f"Killing queued job '{name}'...")
             self.__run_command(f"queue --delete {job_to_kill.id}")  # type: ignore[arg-type]
         else:
-            raise NotImplementedError(f"Unsupported state {str(job_to_kill.state)}")
+            raise NotImplementedError(f"Unsupported state {job_to_kill.state!s}")
         return True
 
     def kill_all(self):

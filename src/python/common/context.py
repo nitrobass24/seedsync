@@ -68,8 +68,8 @@ class Context:
         # Print the config
         self.logger.debug("Config:")
         config_dict = self.config.as_dict()
-        for section in config_dict.keys():
-            for option in config_dict[section].keys():
+        for section in config_dict:
+            for option in config_dict[section]:
                 value = config_dict[section][option]
                 if option == "remote_password":
                     value = "********" if value else ""

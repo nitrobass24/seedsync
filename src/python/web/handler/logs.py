@@ -151,6 +151,4 @@ class LogsHandler(IHandler):
             entry_level = _LEVEL_ORDER.get(entry["level"], 0)
             if entry_level < min_level:
                 return False
-        if search and search.lower() not in entry["message"].lower():
-            return False
-        return True
+        return not (search and search.lower() not in entry["message"].lower())

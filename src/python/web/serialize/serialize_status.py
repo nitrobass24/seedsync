@@ -22,15 +22,15 @@ class SerializeStatusJson:
 
     @staticmethod
     def status(status: Status) -> str:
-        json_dict: dict[str, Any] = dict()
+        json_dict: dict[str, Any] = {}
 
-        json_dict[SerializeStatusJson.__KEY_SERVER] = dict()
+        json_dict[SerializeStatusJson.__KEY_SERVER] = {}
         json_dict[SerializeStatusJson.__KEY_SERVER][SerializeStatusJson.__KEY_SERVER_UP] = status.server.up
         json_dict[SerializeStatusJson.__KEY_SERVER][SerializeStatusJson.__KEY_SERVER_ERROR_MSG] = (
             status.server.error_msg
         )
 
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER] = dict()
+        json_dict[SerializeStatusJson.__KEY_CONTROLLER] = {}
         json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_LATEST_LOCAL_SCAN_TIME] = (
             str(status.controller.latest_local_scan_time.timestamp())
             if status.controller.latest_local_scan_time

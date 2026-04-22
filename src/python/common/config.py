@@ -16,10 +16,9 @@ def _strtobool(val: str) -> bool:
     val = val.strip().lower()
     if val in ("y", "yes", "t", "true", "on", "1"):
         return True
-    elif val in ("n", "no", "f", "false", "off", "0"):
+    if val in ("n", "no", "f", "false", "off", "0"):
         return False
-    else:
-        raise ValueError(f"invalid truth value {val!r}")
+    raise ValueError(f"invalid truth value {val!r}")
 
 
 class ConfigError(AppError):
@@ -174,7 +173,7 @@ class InnerConfig(ABC):
         # noinspection PyCallingNonCallable
         inner_config = cls()
         property_map = {p: getattr(cls, p) for p in dir(cls) if isinstance(getattr(cls, p), property)}
-        for name, _prop in property_map.items():
+        for name in property_map:
             if name in config_dict:
                 value = config_dict[name]
                 # to_str() serializes None as "". When reading back, treat
@@ -203,7 +202,7 @@ class InnerConfig(ABC):
         # Prop map contains all properties of all config classes, so filtering is required
         all_properties = InnerConfig.__prop_addon_map.keys()
         for prop in all_properties:
-            if prop in my_property_to_name_map.keys():
+            if prop in my_property_to_name_map:
                 name = my_property_to_name_map[prop]
                 config_dict[name] = getattr(self, name)
         return config_dict
@@ -441,7 +440,7 @@ class Config(Persist):
         try:
             config_parser.read_string(content)
         except (configparser.MissingSectionHeaderError, configparser.ParsingError) as e:
-            raise PersistError(f"Error parsing Config - {type(e).__name__}: {str(e)}") from e
+            raise PersistError(f"Error parsing Config - {type(e).__name__}: {e!s}") from e
         config_dict: OuterConfigType = {}
         for section in config_parser.sections():
             config_dict[section] = {}
@@ -521,10 +520,7 @@ class Config(Persist):
         """
         sensitive = Config.sensitive_property_names()
         section_lower = section_name.lower()
-        for key, options in sensitive.items():
-            if key.lower() == section_lower and option_name in options:
-                return True
-        return False
+        return any(key.lower() == section_lower and option_name in options for key, options in sensitive.items())
 
     def has_section(self, name: str) -> bool:
         """

@@ -54,7 +54,7 @@ class LftpJobStatusParser:
         number = float(result.group("number"))
         unit = (result.group("units") or "b")[0].lower()
         multipliers = {"b": 1, "k": 1024, "m": 1024 * 1024, "g": 1024 * 1024 * 1024}
-        if unit not in multipliers.keys():
+        if unit not in multipliers:
             raise ValueError(f"Unrecognized unit {unit} in size string '{size}'")
         return int(number * multipliers[unit])
 
@@ -89,7 +89,7 @@ class LftpJobStatusParser:
         return ansi_pattern.sub("", text)
 
     def parse(self, output: str) -> list[LftpJobStatus]:
-        statuses: list[LftpJobStatus] = list()
+        statuses: list[LftpJobStatus] = []
         # Strip ANSI escape codes that may be present in terminal output
         output = self._strip_ansi_codes(output)
         # Phase 1: Strip junk before the first 'jobs -v' command echo.
@@ -113,7 +113,7 @@ class LftpJobStatusParser:
             statuses += self.__parse_queue(lines)
             statuses += self.__parse_jobs(lines)
         except ValueError as e:
-            self.logger.error(f"LftpJobStateParser error: {str(e)}")
+            self.logger.error(f"LftpJobStateParser error: {e!s}")
             self.logger.error(f"Status:\n{output}")
             raise LftpJobStatusParserError("Error parsing lftp job status") from e
         return statuses

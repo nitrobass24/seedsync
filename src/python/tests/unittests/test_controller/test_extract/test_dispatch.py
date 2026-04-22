@@ -23,11 +23,11 @@ from model import ModelFile
 
 class DummyExtractListener(ExtractListener):
     @overrides(ExtractListener)
-    def extract_completed(self, name: str, is_dir: bool, pair_id: str = None):
+    def extract_completed(self, name: str, is_dir: bool, pair_id: str | None = None):
         pass
 
     @overrides(ExtractListener)
-    def extract_failed(self, name: str, is_dir: bool, pair_id: str = None):
+    def extract_failed(self, name: str, is_dir: bool, pair_id: str | None = None):
         pass
 
 

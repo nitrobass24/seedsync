@@ -806,9 +806,7 @@ class Controller:
                         diff.change == ModelDiff.Change.ADDED
                         and diff.new_file is not None
                         and diff.new_file.state == ModelFile.State.DOWNLOADED
-                    ):
-                        downloaded = True
-                    elif (
+                    ) or (
                         diff.change == ModelDiff.Change.UPDATED
                         and diff.new_file is not None
                         and diff.new_file.state == ModelFile.State.DOWNLOADED
@@ -872,9 +870,7 @@ class Controller:
                             pc.pending_completion.discard(diff.new_file.name)
                         elif use_staging:
                             move_key = _persist_key(diff.new_file.pair_id, diff.new_file.name)
-                            if move_key in self.__moved_file_keys:
-                                pc.pending_completion.discard(diff.new_file.name)
-                            elif diff.new_file.state in (
+                            if move_key in self.__moved_file_keys or diff.new_file.state in (
                                 ModelFile.State.DELETED,
                                 ModelFile.State.EXTRACTED,
                                 ModelFile.State.EXTRACT_FAILED,
@@ -1003,7 +999,7 @@ class Controller:
         try:
             lftp_statuses = pc.lftp.status()
         except LftpError as e:
-            self.logger.warning(f"Caught lftp error (pair {pc.name}): {str(e)}")
+            self.logger.warning(f"Caught lftp error (pair {pc.name}): {e!s}")
 
         if latest_remote_scan is not None:
             pc.remote_scan_received = True
@@ -1011,7 +1007,7 @@ class Controller:
             pc.local_scan_received = True
 
         if lftp_statuses is not None:
-            current_downloading = set(s.name for s in lftp_statuses if s.state == LftpJobStatus.State.RUNNING)
+            current_downloading = {s.name for s in lftp_statuses if s.state == LftpJobStatus.State.RUNNING}
             just_completed = pc.prev_downloading_file_names - current_downloading
             if just_completed:
                 for name in just_completed:
@@ -1125,7 +1121,7 @@ class Controller:
 
         while not self.__command_queue.empty():
             command = self.__command_queue.get()
-            self.logger.info(f"Received command {str(command.action)} for file {command.filename}")
+            self.logger.info(f"Received command {command.action!s} for file {command.filename}")
 
             pc = self._get_pair_context_for_command(command)
             if pc is None:
@@ -1146,7 +1142,7 @@ class Controller:
                     exclude = parse_exclude_patterns(self.__context.config.general.exclude_patterns)
                     pc.lftp.queue(file.name, file.is_dir, exclude_patterns=exclude)
                 except LftpError as e:
-                    _notify_failure(command, f"Lftp error: {str(e)}")
+                    _notify_failure(command, f"Lftp error: {e!s}")
                     continue
 
             elif command.action == Controller.Command.Action.STOP:
@@ -1156,7 +1152,7 @@ class Controller:
                 try:
                     pc.lftp.kill(file.name)
                 except LftpError as e:
-                    _notify_failure(command, f"Lftp error: {str(e)}")
+                    _notify_failure(command, f"Lftp error: {e!s}")
                     continue
 
             elif command.action == Controller.Command.Action.EXTRACT:
@@ -1168,19 +1164,16 @@ class Controller:
                     ModelFile.State.VALIDATED,
                     ModelFile.State.CORRUPT,
                 ):
-                    _notify_failure(
-                        command, f"File '{command.filename}' in state {str(file.state)} cannot be extracted"
-                    )
+                    _notify_failure(command, f"File '{command.filename}' in state {file.state!s} cannot be extracted")
                     continue
-                elif file.local_size is None:
+                if file.local_size is None:
                     _notify_failure(command, f"File '{command.filename}' does not exist locally")
                     continue
-                else:
-                    pkey = _persist_key(pc.pair_id, file.name)
-                    self.__persist.extract_failed_file_names.discard(pkey)
-                    self._sync_persist_to_all_builders()
-                    req = self._build_extract_request(file, pc)
-                    self.__extract_process.extract(req)
+                pkey = _persist_key(pc.pair_id, file.name)
+                self.__persist.extract_failed_file_names.discard(pkey)
+                self._sync_persist_to_all_builders()
+                req = self._build_extract_request(file, pc)
+                self.__extract_process.extract(req)
 
             elif command.action == Controller.Command.Action.DELETE_LOCAL:
                 if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
@@ -1202,34 +1195,33 @@ class Controller:
                 ):
                     _notify_failure(
                         command,
-                        f"Local file '{command.filename}' cannot be deleted in state {str(file.state)}",
+                        f"Local file '{command.filename}' cannot be deleted in state {file.state!s}",
                     )
                     continue
-                elif file.local_size is None:
+                if file.local_size is None:
                     _notify_failure(command, f"File '{command.filename}' does not exist locally")
                     continue
-                else:
-                    delete_path = pc.local_path
-                    if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-                        pair_staging = (
-                            os.path.join(self.__context.config.controller.staging_path, pc.pair_id)  # type: ignore[arg-type]
-                            if pc.pair_id
-                            else self.__context.config.controller.staging_path  # type: ignore[arg-type]
-                        )
-                        staging_file = os.path.join(pair_staging, file.name)  # type: ignore[arg-type]
-                        if os.path.exists(staging_file):
-                            delete_path = pair_staging
-                    process = DeleteLocalProcess(local_path=delete_path, file_name=file.name)
-                    process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
+                delete_path = pc.local_path
+                if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
+                    pair_staging = (
+                        os.path.join(self.__context.config.controller.staging_path, pc.pair_id)  # type: ignore[arg-type]
+                        if pc.pair_id
+                        else self.__context.config.controller.staging_path  # type: ignore[arg-type]
+                    )
+                    staging_file = os.path.join(pair_staging, file.name)  # type: ignore[arg-type]
+                    if os.path.exists(staging_file):
+                        delete_path = pair_staging
+                process = DeleteLocalProcess(local_path=delete_path, file_name=file.name)
+                process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
-                    def post_callback(delete_path: str = delete_path, _pc: _PairContext = pc) -> None:
-                        _pc.local_scan_process.force_scan()
-                        if delete_path != _pc.local_path:
-                            _pc.active_scan_process.force_scan()
+                def post_callback(delete_path: str = delete_path, _pc: _PairContext = pc) -> None:
+                    _pc.local_scan_process.force_scan()
+                    if delete_path != _pc.local_path:
+                        _pc.active_scan_process.force_scan()
 
-                    command_wrapper = Controller.CommandProcessWrapper(process=process, post_callback=post_callback)
-                    self.__active_command_processes.append(command_wrapper)
-                    command_wrapper.process.start()
+                command_wrapper = Controller.CommandProcessWrapper(process=process, post_callback=post_callback)
+                self.__active_command_processes.append(command_wrapper)
+                command_wrapper.process.start()
 
             elif command.action == Controller.Command.Action.DELETE_REMOTE:
                 if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
@@ -1252,27 +1244,26 @@ class Controller:
                 ):
                     _notify_failure(
                         command,
-                        f"Remote file '{command.filename}' cannot be deleted in state {str(file.state)}",
+                        f"Remote file '{command.filename}' cannot be deleted in state {file.state!s}",
                     )
                     continue
-                elif file.remote_size is None:
+                if file.remote_size is None:
                     _notify_failure(command, f"File '{command.filename}' does not exist remotely")
                     continue
-                else:
-                    process = DeleteRemoteProcess(
-                        remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
-                        remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
-                        remote_password=self.__password,
-                        remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
-                        remote_path=pc.remote_path,
-                        file_name=file.name,
-                    )
-                    process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
-                    command_wrapper = Controller.CommandProcessWrapper(
-                        process=process, post_callback=pc.remote_scan_process.force_scan
-                    )
-                    self.__active_command_processes.append(command_wrapper)
-                    command_wrapper.process.start()
+                process = DeleteRemoteProcess(
+                    remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
+                    remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
+                    remote_password=self.__password,
+                    remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
+                    remote_path=pc.remote_path,
+                    file_name=file.name,
+                )
+                process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
+                command_wrapper = Controller.CommandProcessWrapper(
+                    process=process, post_callback=pc.remote_scan_process.force_scan
+                )
+                self.__active_command_processes.append(command_wrapper)
+                command_wrapper.process.start()
 
             elif command.action == Controller.Command.Action.VALIDATE:
                 if not self.__context.config.validate.enabled:
@@ -1285,35 +1276,32 @@ class Controller:
                     ModelFile.State.VALIDATED,
                     ModelFile.State.CORRUPT,
                 ):
-                    _notify_failure(
-                        command, f"File '{command.filename}' in state {str(file.state)} cannot be validated"
-                    )
+                    _notify_failure(command, f"File '{command.filename}' in state {file.state!s} cannot be validated")
                     continue
-                elif file.local_size is None:
+                if file.local_size is None:
                     _notify_failure(command, f"File '{command.filename}' does not exist locally")
                     continue
-                elif file.remote_size is None:
+                if file.remote_size is None:
                     _notify_failure(command, f"File '{command.filename}' does not exist remotely")
                     continue
-                else:
-                    pkey = _persist_key(pc.pair_id, file.name)
-                    self.__persist.validated_file_names.discard(pkey)
-                    self.__persist.corrupt_file_names.discard(pkey)
-                    self._sync_persist_to_all_builders()
-                    req = ValidateRequest(
-                        name=file.name,
-                        is_dir=file.is_dir,
-                        pair_id=pc.pair_id,
-                        local_path=pc.effective_local_path,
-                        remote_path=pc.remote_path,
-                        algorithm=self.__context.config.validate.algorithm,  # type: ignore[arg-type]
-                        remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
-                        remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
-                        remote_password=self.__password,
-                        remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
-                    )
-                    self.__validate_process.validate(req)
-                    self.__pending_validation_keys.add(pkey)
+                pkey = _persist_key(pc.pair_id, file.name)
+                self.__persist.validated_file_names.discard(pkey)
+                self.__persist.corrupt_file_names.discard(pkey)
+                self._sync_persist_to_all_builders()
+                req = ValidateRequest(
+                    name=file.name,
+                    is_dir=file.is_dir,
+                    pair_id=pc.pair_id,
+                    local_path=pc.effective_local_path,
+                    remote_path=pc.remote_path,
+                    algorithm=self.__context.config.validate.algorithm,  # type: ignore[arg-type]
+                    remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
+                    remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
+                    remote_password=self.__password,
+                    remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
+                )
+                self.__validate_process.validate(req)
+                self.__pending_validation_keys.add(pkey)
 
             for callback in command.callbacks:
                 callback.on_success()
