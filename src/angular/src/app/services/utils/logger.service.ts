@@ -14,24 +14,32 @@ export class LoggerService {
   get debug() {
     return this.level >= LogLevel.DEBUG
       ? console.debug.bind(console)
-      : () => {};
+      : () => {
+          // intentional no-op
+        };
   }
 
   get info() {
     return this.level >= LogLevel.INFO
       ? console.log.bind(console)
-      : () => {};
+      : () => {
+          // intentional no-op
+        };
   }
 
   get warn() {
     return this.level >= LogLevel.WARN
       ? console.warn.bind(console)
-      : () => {};
+      : () => {
+          // intentional no-op
+        };
   }
 
   get error() {
     return this.level >= LogLevel.ERROR
       ? console.error.bind(console)
-      : () => {};
+      : () => {
+          // intentional no-op
+        };
   }
 }

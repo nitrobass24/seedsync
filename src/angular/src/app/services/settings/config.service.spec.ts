@@ -61,6 +61,14 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
       notify_on_extraction_failed: false,
       notify_on_delete_complete: false,
     },
+    integrations: {
+      sonarr_url: null,
+      sonarr_api_key: null,
+      sonarr_enabled: false,
+      radarr_url: null,
+      radarr_api_key: null,
+      radarr_enabled: false,
+    },
     validate: {
       enabled: false,
       algorithm: "md5",
@@ -340,6 +348,64 @@ describe("ConfigService", () => {
     service.set("web", "api_key", "new-key");
 
     expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith("new-key");
+  });
+
+  it("should encode boolean true as 'true' in the URL", () => {
+    const config = makeConfig();
+    mockRestService.sendRequest
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
+        of({ success: true, data: null, errorMessage: null }),
+      );
+    connectedSubject.next(true);
+
+    service.set("autoqueue", "enabled", true);
+
+    const encoded = encodeURIComponent(encodeURIComponent("true"));
+    expect(mockRestService.sendRequest).toHaveBeenCalledWith(
+      `/server/config/set/autoqueue/enabled/${encoded}`,
+    );
+    expect(service.configSnapshot!.autoqueue.enabled).toBe(true);
+  });
+
+  it("should encode boolean false as 'false' in the URL", () => {
+    const config = makeConfig();
+    mockRestService.sendRequest
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
+        of({ success: true, data: null, errorMessage: null }),
+      );
+    connectedSubject.next(true);
+
+    service.set("autoqueue", "enabled", false);
+
+    const encoded = encodeURIComponent(encodeURIComponent("false"));
+    expect(mockRestService.sendRequest).toHaveBeenCalledWith(
+      `/server/config/set/autoqueue/enabled/${encoded}`,
+    );
+    expect(service.configSnapshot!.autoqueue.enabled).toBe(false);
+  });
+
+  it("should use __empty__ sentinel for null value", () => {
+    const config = makeConfig();
+    mockRestService.sendRequest
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
+        of({ success: true, data: null, errorMessage: null }),
+      );
+    connectedSubject.next(true);
+
+    service.set("lftp", "net_limit_rate", null);
+
+    expect(mockRestService.sendRequest).toHaveBeenCalledWith(
+      `/server/config/set/lftp/net_limit_rate/${EMPTY_VALUE_SENTINEL}`,
+    );
   });
 
   it("should not sync API key when setting a non-api_key option", () => {

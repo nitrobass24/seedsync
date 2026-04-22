@@ -181,6 +181,7 @@ make stop     # Stop container
 
 ### Testing
 ```bash
+cd src/angular && npx ng lint    # Angular ESLint
 cd src/angular && npx ng test    # Angular Vitest unit tests
 # Python tests run in Docker via CI (pytest in test-image)
 # CI also runs: Docker build, container startup, web UI accessibility
@@ -211,6 +212,7 @@ Every PR MUST include appropriate test changes. Tests are not optional — they 
 
 | Layer | Framework | Location | Runner |
 |-------|-----------|----------|--------|
+| Angular lint | ESLint (angular-eslint) | `src/angular/eslint.config.js` | `cd src/angular && npx ng lint` |
 | Angular unit tests | Vitest | `src/angular/src/**/*.spec.ts` | `cd src/angular && npx ng test` |
 | Python unit tests | unittest | `src/python/tests/unittests/` | pytest (in Docker test-image) |
 | Python integration tests | unittest + WebTest | `src/python/tests/integration/` | pytest (in Docker test-image) |
@@ -220,6 +222,43 @@ Every PR MUST include appropriate test changes. Tests are not optional — they 
 - **Python**: Use `unittest.TestCase`. Use `unittest.mock.MagicMock`/`patch` for mocking. Integration tests for web handlers use `webtest.TestApp` with `BaseTestWebApp`.
 - **Naming**: Test files mirror source files — `foo.service.ts` → `foo.service.spec.ts`, `controller.py` → `test_controller.py`.
 - **No flaky tests**: Avoid `time.sleep` in tests where possible. Use `threading.Event` or barriers for synchronization. Use `timeout_decorator` for tests that might hang.
+
+## Code Health
+
+These are guidelines, not hard caps. Their real job is to slow you down and ask "is this still one concern?" Cross them when the code is clearer for it — flag in the PR body when you do.
+
+### Soft size targets
+
+| Unit | Target | When to pause |
+|------|--------|---------------|
+| File | ≤ 500 lines | At 400, ask "one concern or several?" |
+| Class | ≤ 300 lines | If state covers > 2 concerns, extract |
+| Function / method | ≤ 40 lines | Longer is OK when linear; deep nesting is not |
+| Cyclomatic complexity (per function) | ≤ 12 | Hard limit once `C901` is enabled in CI |
+
+Cyclomatic complexity is the one number that actually predicts pain — a 200-line linear function is fine; a 40-line function with 5 nested conditionals is dangerous. Use `ruff check --select C901` locally to measure.
+
+### The "before adding" rule
+
+Before adding a method to an existing class, ask:
+1. Does this belong in a sibling module/class instead?
+2. Does the class already span multiple concerns (auth + persistence + validation, etc.)? If so, extracting first is usually worth the overhead.
+3. Prefer composition over accretion — reach for a new collaborator, not a bigger class.
+
+### Signals that you should split
+
+- A focused unit test needs `cls.__new__(cls)` or broad mocking just to exercise one method.
+- The constructor initializes unrelated state (e.g., both a model and a command queue and a logger facade).
+- One method dominates the file's line count.
+- Changes in separate features keep conflicting in the same file.
+
+When you see these, open an issue for the extraction rather than working around them silently.
+
+### Enforcement
+
+- **Qualitative checks**: code review. Reviewers should push back on "this file is getting unwieldy" even without a hard rule.
+- **Mechanical checks** (Python): ruff's `C901` (cyclomatic complexity) with `max-complexity = 12`. Tracked for rollout in a follow-up issue — not yet enabled globally.
+- **Ratchet pattern**: when a bound exists but the codebase has outliers, set the threshold just above the worst and drop it over time (same pattern we use for `--max-warnings` in `ng lint`).
 
 ## GitHub Repository
 

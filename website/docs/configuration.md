@@ -149,9 +149,83 @@ These settings are collapsed by default under **Advanced LFTP** in the Settings 
 - **Reconnect Interval Base (s)**: Base delay in seconds before reconnecting after a failure. (`net:reconnect-interval-base`)
 - **Reconnect Interval Multiplier**: Multiplier applied to the reconnect delay after each consecutive failure. (`net:reconnect-interval-multiplier`)
 
+## Integrations (Sonarr / Radarr)
+
+SeedSync can notify Sonarr and Radarr when a download completes, triggering an automatic import scan so your media library updates immediately.
+
+### Setup
+
+1. Go to **Settings → Integrations**
+2. Enable the integration (Sonarr, Radarr, or both)
+3. Enter the base URL (e.g. `http://sonarr:8989` or `http://radarr:7878`)
+4. Enter the API key (found in the Arr app under **Settings → General → API Key**)
+5. Click **Test Connection** to verify
+
+### How it works
+
+When a file transitions to the **Downloaded** state, SeedSync sends a `POST` to the Arr app's command API:
+
+| App | Endpoint | Command |
+| --- | --- | --- |
+| Sonarr | `POST /api/v3/command` | `DownloadedEpisodesScan` |
+| Radarr | `POST /api/v3/command` | `DownloadedMoviesScan` |
+
+The request includes the absolute local path of the downloaded file, so the Arr app scans only that path instead of the entire download directory.
+
+Notifications are fire-and-forget — they run in background threads and never block the download pipeline. Failed notifications are logged as warnings.
+
+:::tip
+If you run SeedSync and Arr apps in Docker, use the Docker service name as the host (e.g. `http://sonarr:8989`) and make sure all containers share a Docker network.
+:::
+
+:::note
+The local path sent to the Arr app is the path **inside the SeedSync container**. If your Arr app sees a different mount path for the same files, configure a [remote path mapping](https://wiki.servarr.com/sonarr/settings#remote-path-mappings) in the Arr app.
+:::
+
+### Configuration reference
+
+| Setting | Description |
+| --- | --- |
+| **Enable Sonarr/Radarr integration** | Toggle notifications on or off |
+| **URL** | Base URL of the Arr app (e.g. `http://localhost:8989`) |
+| **API Key** | Arr app API key (masked in the UI) |
+
 ## Webhooks
 
-SeedSync can send HTTP POST notifications when file events occur (download complete, extraction complete, etc.). Configure the webhook URL in Settings under **Notifications**.
+SeedSync can send HTTP POST notifications when file events occur. Configure the webhook URL in Settings under **Notifications**.
+
+### Events
+
+| Event | Trigger |
+| --- | --- |
+| `download_complete` | File finished downloading |
+| `extraction_complete` | Archive extraction succeeded |
+| `extraction_failed` | Archive extraction failed |
+| `delete_complete` | File deleted |
+
+Each event can be individually enabled or disabled via the checkboxes in Settings.
+
+### Payload
+
+Webhook requests are `POST` with `Content-Type: application/json`:
+
+```json
+{
+  "event_type": "download_complete",
+  "filename": "Movie.2024.mkv",
+  "timestamp": "2024-01-15T12:34:56.789012+00:00",
+  "pair_id": "abc123",
+  "path": "Movie.2024.mkv"
+}
+```
+
+| Field | Description |
+| --- | --- |
+| `event_type` | One of the event types above |
+| `filename` | Name of the file or directory |
+| `timestamp` | UTC ISO 8601 timestamp |
+| `pair_id` | Path pair ID (omitted if not using path pairs) |
+| `path` | Relative file path within the download directory |
 
 ## Advanced config file
 

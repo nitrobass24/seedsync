@@ -18,6 +18,7 @@ This is the modernized fork of `ipsingh06/seedsync`, with updated dependencies a
 - **Multi-select** — bulk queue, stop, or delete files
 - Extract archives after download
 - Stage downloads on a fast disk, then move to final location
+- **Sonarr/Radarr integration** — trigger import scans on download completion
 - **Webhook notifications** — HTTP POST on download/extract events
 - Manage local and remote deletes
 - Monitor transfer status from the web UI

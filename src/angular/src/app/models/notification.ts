@@ -15,7 +15,7 @@ export enum NotificationLevel {
 export function createNotification(
   level: NotificationLevel,
   text: string,
-  dismissible: boolean = false,
+  dismissible = false,
 ): Notification {
   return {
     level,

@@ -45,6 +45,14 @@
         user-select: none;
 
         .dropdown-item {
+            /* Reset native <button> appearance */
+            appearance: none;
+            background: none;
+            border: 0;
+            font: inherit;
+            text-align: inherit;
+            width: 100%;
+
             color: white;
             height: 32px;
 
@@ -63,7 +71,8 @@
                 background-color: var(--ss-primary);
             }
 
-            &.disabled {
+            &.disabled,
+            &[disabled] {
                 opacity: .65;
                 background-color: var(--ss-primary);
             }
@@ -221,26 +230,10 @@
             }
         }
 
-        // Applies to both button and menu images
-        .icon {
-            img {
-                &.downloaded,
-                &.downloading {
-                    width: 20px;
-                }
-                &.stopped {
-                    width: 13px;
-                }
-            }
-        }
     }
 
     #sort-status {
         @extend %dropdown;
-
-        // Applies to both button and menu images
-        .icon {
-        }
     }
 
     #toggle-details {
@@ -353,7 +346,8 @@
                     color: #0F1115;
                 }
 
-                &.disabled {
+                &.disabled,
+                &[disabled] {
                     background-color: #1D222B;
                     color: #525A6B;
                 }

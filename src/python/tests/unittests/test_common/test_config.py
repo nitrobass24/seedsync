@@ -670,6 +670,14 @@ class TestConfig(unittest.TestCase):
         notify_on_extraction_failed = True
         notify_on_delete_complete = True
 
+        [Integrations]
+        sonarr_url =
+        sonarr_api_key =
+        sonarr_enabled = False
+        radarr_url =
+        radarr_api_key =
+        radarr_enabled = False
+
         [Validate]
         enabled = False
         algorithm = md5

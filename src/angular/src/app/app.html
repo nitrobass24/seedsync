@@ -1,14 +1,14 @@
 <div id="top-sidebar"
-     [class.top-sidebar-open]="showSidebar"
-     [class.top-sidebar-closed]="!showSidebar">
+     [class.top-sidebar-open]="showSidebar()"
+     [class.top-sidebar-closed]="!showSidebar()">
 
   <div id="logo">
     <span class="image">
-      <img src="assets/logo.png" />
+      <img src="assets/logo.png" alt="" />
     </span>
     <span class="text"><b>Seed</b>Sync</span>
 
-    <button id="sidebar-btn-close" class="sidebar-btn" (click)="showSidebar=false">
+    <button type="button" id="sidebar-btn-close" class="sidebar-btn" (click)="showSidebar.set(false)">
       <span>&#10006;</span>
     </button>
   </div>
@@ -18,9 +18,14 @@
 
 <!-- Used for sidebar closing -->
 <div id="outside-sidebar"
-     [class.outside-sidebar-show]="showSidebar"
-     [class.outside-sidebar-hide]="!showSidebar"
-     (click)="showSidebar=false">
+     role="button"
+     tabindex="0"
+     aria-label="Close sidebar"
+     [class.outside-sidebar-show]="showSidebar()"
+     [class.outside-sidebar-hide]="!showSidebar()"
+     (click)="showSidebar.set(false)"
+     (keyup.enter)="showSidebar.set(false)"
+     (keyup.space)="showSidebar.set(false); $event.preventDefault()">
 </div>
 
 <div id="top-content">
@@ -30,10 +35,10 @@
       <app-header></app-header>
 
       <div id="title-bar">
-        <button id="sidebar-btn-open" class="sidebar-btn" (click)="showSidebar=!showSidebar">
+        <button type="button" id="sidebar-btn-open" class="sidebar-btn" (click)="showSidebar.set(!showSidebar())">
           &#9776;
         </button>
-        <span id="title">{{ activeRoute?.name }}</span>
+        <span id="title">{{ activeRoute()?.name }}</span>
       </div>
 
     </div>

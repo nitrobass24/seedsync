@@ -10,6 +10,9 @@ export enum OptionType {
   Select,
 }
 
+/** Value emitted by OptionComponent — matches the possible config value types. */
+export type OptionValue = string | number | boolean | null;
+
 @Component({
   selector: 'app-option',
   standalone: true,
@@ -21,12 +24,12 @@ export enum OptionType {
 export class OptionComponent implements OnInit, OnDestroy {
   readonly type = input<OptionType>(OptionType.Text);
   readonly label = input<string>('');
-  readonly value = input<any>(null);
+  readonly value = input<OptionValue>(null);
   readonly description = input<string | null>(null);
   readonly disabled = input<boolean>(false);
   readonly choices = input<string[]>([]);
 
-  readonly changeEvent = output<any>();
+  readonly changeEvent = output<OptionValue>();
 
   readonly OptionType = OptionType;
 
@@ -41,7 +44,7 @@ export class OptionComponent implements OnInit, OnDestroy {
   });
 
   private readonly DEBOUNCE_TIME_MS = 1000;
-  private readonly newValue = new Subject<any>();
+  private readonly newValue = new Subject<OptionValue>();
   private subscription?: Subscription;
 
   ngOnInit(): void {
@@ -54,7 +57,7 @@ export class OptionComponent implements OnInit, OnDestroy {
     this.subscription?.unsubscribe();
   }
 
-  onChange(value: any): void {
+  onChange(value: OptionValue): void {
     // Don't send updates for password fields when the value is the redacted sentinel.
     // The server returns "********" for sensitive fields; sending it back would
     // overwrite the real password with the sentinel.

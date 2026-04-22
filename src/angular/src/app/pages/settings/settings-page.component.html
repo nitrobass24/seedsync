@@ -35,7 +35,13 @@
       </ng-container>
 
       <div class="card">
-        <h3 class="card-header collapsible-header" (click)="toggleAdvancedLftp()">
+        <h3 class="card-header collapsible-header"
+            role="button"
+            tabindex="0"
+            [attr.aria-expanded]="!advancedLftpCollapsed"
+            (click)="toggleAdvancedLftp()"
+            (keyup.enter)="toggleAdvancedLftp()"
+            (keyup.space)="toggleAdvancedLftp(); $event.preventDefault()">
           {{ OPTIONS_CONTEXT_ADVANCED_LFTP.header }}
           <span class="collapse-indicator">{{ advancedLftpCollapsed ? '&#9654;' : '&#9660;' }}</span>
         </h3>
@@ -68,18 +74,76 @@
       <ng-container
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_NOTIFICATIONS">
       </ng-container>
+
+      <div class="card">
+        <h3 class="card-header">Integrations</h3>
+        <div class="card-body">
+          <h5>Sonarr</h5>
+          @for (option of OPTIONS_CONTEXT_INTEGRATIONS_SONARR.options; track option.label) {
+            <div>
+              <app-option
+                [type]="option.type"
+                [label]="option.label"
+                [description]="option.description"
+                [disabled]="!!option.disabled"
+                [choices]="option.choices || []"
+                [value]="getOptionValue(config$ | async, option.valuePath)"
+                (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
+              </app-option>
+            </div>
+          }
+          <div class="test-connection">
+            <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="sonarrTesting" (click)="onTestSonarr()">
+              {{ sonarrTesting ? 'Testing...' : 'Test Connection' }}
+            </button>
+            @if (sonarrTestResult) {
+              <span class="test-result" aria-live="polite" aria-atomic="true" [class.text-success]="sonarrTestResult.success" [class.text-danger]="!sonarrTestResult.success">
+                {{ sonarrTestResult.message }}
+              </span>
+            }
+          </div>
+
+          <hr />
+
+          <h5>Radarr</h5>
+          @for (option of OPTIONS_CONTEXT_INTEGRATIONS_RADARR.options; track option.label) {
+            <div>
+              <app-option
+                [type]="option.type"
+                [label]="option.label"
+                [description]="option.description"
+                [disabled]="!!option.disabled"
+                [choices]="option.choices || []"
+                [value]="getOptionValue(config$ | async, option.valuePath)"
+                (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
+              </app-option>
+            </div>
+          }
+          <div class="test-connection">
+            <button type="button" class="btn btn-sm btn-outline-secondary" [disabled]="radarrTesting" (click)="onTestRadarr()">
+              {{ radarrTesting ? 'Testing...' : 'Test Connection' }}
+            </button>
+            @if (radarrTestResult) {
+              <span class="test-result" aria-live="polite" aria-atomic="true" [class.text-success]="radarrTestResult.success" [class.text-danger]="!radarrTestResult.success">
+                {{ radarrTestResult.message }}
+              </span>
+            }
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
   <div id="commands">
-    <div
+    <button
+      type="button"
       class="button"
       appClickStopPropagation
-      [attr.disabled]="commandsEnabled ? null : true"
+      [disabled]="!commandsEnabled"
       (click)="!commandsEnabled || onCommandRestart()">
-      <img src="assets/icons/refresh.svg" />
+      <img src="assets/icons/refresh.svg" alt="" aria-hidden="true" />
       <span class="text">Restart</span>
-    </div>
+    </button>
   </div>
 </div>
 

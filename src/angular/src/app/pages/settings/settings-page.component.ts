@@ -5,6 +5,7 @@ import { distinctUntilChanged, map } from 'rxjs';
 
 import { LoggerService } from '../../services/utils/logger.service';
 import { ConfigService } from '../../services/settings/config.service';
+import { IntegrationsService } from '../../services/settings/integrations.service';
 import { NotificationService } from '../../services/utils/notification.service';
 import { ServerCommandService } from '../../services/server/server-command.service';
 import { ConnectedService } from '../../services/utils/connected.service';
@@ -13,7 +14,7 @@ import { Notification, NotificationLevel, createNotification } from '../../model
 import { Localization } from '../../models/localization';
 import { Config } from '../../models/config';
 import { ClickStopPropagationDirective } from '../../common/click-stop-propagation.directive';
-import { OptionComponent } from './option.component';
+import { OptionComponent, OptionValue } from './option.component';
 import { PathPairsComponent } from './path-pairs.component';
 import {
   IOptionsContext,
@@ -28,6 +29,8 @@ import {
   OPTIONS_CONTEXT_ADVANCED_LFTP,
   OPTIONS_CONTEXT_LOGGING,
   OPTIONS_CONTEXT_NOTIFICATIONS,
+  OPTIONS_CONTEXT_INTEGRATIONS_SONARR,
+  OPTIONS_CONTEXT_INTEGRATIONS_RADARR,
 } from './options-list';
 
 @Component({
@@ -50,8 +53,14 @@ export class SettingsPageComponent implements OnInit {
   readonly OPTIONS_CONTEXT_ADVANCED_LFTP = OPTIONS_CONTEXT_ADVANCED_LFTP;
   readonly OPTIONS_CONTEXT_LOGGING = OPTIONS_CONTEXT_LOGGING;
   readonly OPTIONS_CONTEXT_NOTIFICATIONS = OPTIONS_CONTEXT_NOTIFICATIONS;
+  readonly OPTIONS_CONTEXT_INTEGRATIONS_SONARR = OPTIONS_CONTEXT_INTEGRATIONS_SONARR;
+  readonly OPTIONS_CONTEXT_INTEGRATIONS_RADARR = OPTIONS_CONTEXT_INTEGRATIONS_RADARR;
 
   advancedLftpCollapsed = true;
+  sonarrTestResult: { success: boolean; message: string } | null = null;
+  radarrTestResult: { success: boolean; message: string } | null = null;
+  sonarrTesting = false;
+  radarrTesting = false;
 
   private readonly logger = inject(LoggerService);
   private readonly configService = inject(ConfigService);
@@ -59,6 +68,7 @@ export class SettingsPageComponent implements OnInit {
   private readonly commandService = inject(ServerCommandService);
   private readonly connectedService = inject(ConnectedService);
   private readonly pathPairsService = inject(PathPairsService);
+  private readonly integrationsService = inject(IntegrationsService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -143,14 +153,14 @@ export class SettingsPageComponent implements OnInit {
     };
   }
 
-  getOptionValue(config: Config | null, valuePath: [string, string]): any {
+  getOptionValue(config: Config | null, valuePath: [string, string]): OptionValue {
     if (!config) return null;
-    const section = (config as any)[valuePath[0]];
+    const section = (config as unknown as Record<string, Record<string, OptionValue> | undefined>)[valuePath[0]];
     if (!section) return null;
     return section[valuePath[1]] ?? null;
   }
 
-  onSetConfig(section: string, option: string, value: any): void {
+  onSetConfig(section: string, option: string, value: OptionValue): void {
     this.configService.set(section, option, value).subscribe({
       next: (reaction) => {
         const notifKey = section + '.' + option;
@@ -183,6 +193,30 @@ export class SettingsPageComponent implements OnInit {
 
   toggleAdvancedLftp(): void {
     this.advancedLftpCollapsed = !this.advancedLftpCollapsed;
+  }
+
+  onTestSonarr(): void {
+    this.sonarrTesting = true;
+    this.sonarrTestResult = null;
+    this.integrationsService.testSonarr().subscribe({
+      next: (result) => {
+        this.sonarrTestResult = result;
+        this.sonarrTesting = false;
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  onTestRadarr(): void {
+    this.radarrTesting = true;
+    this.radarrTestResult = null;
+    this.integrationsService.testRadarr().subscribe({
+      next: (result) => {
+        this.radarrTestResult = result;
+        this.radarrTesting = false;
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   onCommandRestart(): void {

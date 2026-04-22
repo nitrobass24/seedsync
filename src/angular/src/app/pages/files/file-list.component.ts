@@ -1,4 +1,14 @@
-import { Component, ChangeDetectionStrategy, DestroyRef, inject } from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  NgZone,
+  OnDestroy,
+  ViewChild,
+  inject,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AsyncPipe } from '@angular/common';
 import { Observable } from 'rxjs';
@@ -22,19 +32,85 @@ import { BulkActionBarComponent } from './bulk-action-bar.component';
   styleUrls: ['./file-list.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class FileListComponent {
+export class FileListComponent implements AfterViewInit, OnDestroy {
+  @ViewChild(CdkVirtualScrollViewport) viewport?: CdkVirtualScrollViewport;
+
   private readonly logger = inject(LoggerService);
   private readonly viewFileService = inject(ViewFileService);
   private readonly viewFileOptionsService = inject(ViewFileOptionsService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly elRef = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly zone = inject(NgZone);
+
+  private resizeObserver: ResizeObserver | null = null;
+  private pendingFrame: number | null = null;
 
   files: Observable<ViewFile[]> = this.viewFileService.filteredFiles$;
   options: Observable<ViewFileOptions> = this.viewFileOptionsService.options$;
   checked$ = this.viewFileService.checked$;
   identify = FileListComponent.identify;
 
-  static identify(index: number, item: ViewFile): string {
+  static identify(_index: number, item: ViewFile): string {
     return fileKey(item.pairId, item.name);
+  }
+
+  ngAfterViewInit(): void {
+    this.installChromeHeightObserver();
+  }
+
+  ngOnDestroy(): void {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    if (this.pendingFrame !== null) {
+      cancelAnimationFrame(this.pendingFrame);
+      this.pendingFrame = null;
+    }
+    document.documentElement.style.removeProperty('--file-list-chrome-height');
+  }
+
+  // The virtual-scroll viewport's height must equal
+  //   100dvh − (sticky top header + file-options bar + column header + bulk-action-bar)
+  // Hardcoding those heights breaks whenever a breakpoint shifts, a notification
+  // banner appears, or the browser's own chrome changes between iOS Safari/Chrome
+  // and Android Chrome/Firefox. Instead, measure the viewport's page-Y position
+  // (everything stacked above it flows into that offset) and expose it to CSS.
+  private installChromeHeightObserver(): void {
+    if (typeof ResizeObserver === 'undefined') return;
+    const viewportEl = this.viewport?.elementRef.nativeElement as HTMLElement | undefined;
+    if (!viewportEl) return;
+
+    this.zone.runOutsideAngular(() => {
+      const update = (): void => {
+        this.pendingFrame = null;
+        const top = viewportEl.getBoundingClientRect().top + window.scrollY;
+        const chrome = Math.max(0, Math.ceil(top));
+        document.documentElement.style.setProperty(
+          '--file-list-chrome-height', `${chrome}px`,
+        );
+        this.viewport?.checkViewportSize();
+      };
+
+      const schedule = (): void => {
+        if (this.pendingFrame !== null) return;
+        this.pendingFrame = requestAnimationFrame(update);
+      };
+
+      this.resizeObserver = new ResizeObserver(schedule);
+
+      // Observe the elements whose size contributes to the chrome above the
+      // list. The #file-list host covers the column header and bulk-action-bar
+      // because they live inside it above .file-viewport.
+      const targets: (Element | null)[] = [
+        document.querySelector('#top-header'),
+        document.querySelector('#file-options'),
+        this.elRef.nativeElement,
+      ];
+      for (const t of targets) {
+        if (t) this.resizeObserver!.observe(t);
+      }
+
+      schedule();
+    });
   }
 
   onSelect(file: ViewFile): void {

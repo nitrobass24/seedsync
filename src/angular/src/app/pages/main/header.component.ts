@@ -1,20 +1,29 @@
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { Observable } from 'rxjs';
 
 import { LoggerService } from '../../services/utils/logger.service';
 import { ServerStatusService } from '../../services/server/server-status.service';
+import { ServerStatus } from '../../models/server-status';
 import { Notification, NotificationLevel, createNotification } from '../../models/notification';
 import { NotificationService } from '../../services/utils/notification.service';
 import { Localization } from '../../models/localization';
+
+interface NotificationRule {
+  key: string;
+  shouldShow: (status: ServerStatus) => boolean;
+  level: (status: ServerStatus) => NotificationLevel;
+  text: (status: ServerStatus) => string;
+}
 
 @Component({
   selector: 'app-header',
   standalone: true,
   imports: [CommonModule],
   templateUrl: './header.component.html',
-  styleUrls: ['./header.component.scss']
+  styleUrls: ['./header.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HeaderComponent implements OnInit {
   public NotificationLevel = NotificationLevel;
@@ -26,10 +35,38 @@ export class HeaderComponent implements OnInit {
   private readonly _notificationService = inject(NotificationService);
   private readonly _destroyRef = inject(DestroyRef);
 
-  private _prevServerNotification: Notification | null = null;
-  private _prevWaitingForRemoteScanNotification: Notification | null = null;
-  private _prevRemoteServerErrorNotification: Notification | null = null;
-  private _prevNoEnabledPairsNotification: Notification | null = null;
+  private _activeNotifications = new Map<string, Notification>();
+
+  private readonly _rules: NotificationRule[] = [
+    {
+      key: 'server',
+      shouldShow: status => !status.server.up,
+      level: () => NotificationLevel.DANGER,
+      text: status => status.server.errorMessage ?? '',
+    },
+    {
+      key: 'waitingForRemoteScan',
+      shouldShow: status =>
+        status.server.up && status.controller.latestRemoteScanTime == null && !status.controller.noEnabledPairs,
+      level: () => NotificationLevel.INFO,
+      text: () => Localization.Notification.STATUS_REMOTE_SCAN_WAITING,
+    },
+    {
+      key: 'remoteServerError',
+      shouldShow: status =>
+        status.server.up && status.controller.latestRemoteScanFailed === true && !status.controller.noEnabledPairs,
+      level: () => NotificationLevel.WARNING,
+      text: status => Localization.Notification.STATUS_REMOTE_SERVER_ERROR(
+        status.controller.latestRemoteScanError ?? ''
+      ),
+    },
+    {
+      key: 'noEnabledPairs',
+      shouldShow: status => status.server.up && status.controller.noEnabledPairs,
+      level: () => NotificationLevel.WARNING,
+      text: () => Localization.Notification.STATUS_NO_ENABLED_PAIRS,
+    },
+  ];
 
   constructor() {
     this.notifications$ = this._notificationService.notifications$;
@@ -40,106 +77,39 @@ export class HeaderComponent implements OnInit {
   }
 
   ngOnInit() {
-    // Set up a subscriber to show server status notifications
     this._serverStatusService.status$.pipe(
       takeUntilDestroyed(this._destroyRef),
     ).subscribe({
       next: status => {
-        if (status.server.up) {
-          if (this._prevServerNotification != null) {
-            this._notificationService.hide(this._prevServerNotification);
-            this._prevServerNotification = null;
-          }
-        } else {
-          const notification = createNotification(
-            NotificationLevel.DANGER,
-            status.server.errorMessage ?? ''
-          );
-          if (
-            this._prevServerNotification == null ||
-            this._prevServerNotification.text !== notification.text
-          ) {
-            if (this._prevServerNotification != null) {
-              this._notificationService.hide(this._prevServerNotification);
-            }
-            this._prevServerNotification = notification;
-            this._notificationService.show(this._prevServerNotification);
-            this._logger.debug('New server notification: %O', this._prevServerNotification);
-          }
+        for (const rule of this._rules) {
+          this._applyRule(rule, status);
         }
       }
     });
+  }
 
-    // Set up a subscriber to show waiting for remote scan notification
-    this._serverStatusService.status$.pipe(
-      takeUntilDestroyed(this._destroyRef),
-    ).subscribe({
-      next: status => {
-        if (status.server.up && status.controller.latestRemoteScanTime == null && !status.controller.noEnabledPairs) {
-          if (this._prevWaitingForRemoteScanNotification == null) {
-            this._prevWaitingForRemoteScanNotification = createNotification(
-              NotificationLevel.INFO,
-              Localization.Notification.STATUS_REMOTE_SCAN_WAITING
-            );
-            this._notificationService.show(this._prevWaitingForRemoteScanNotification);
-          }
-        } else {
-          if (this._prevWaitingForRemoteScanNotification != null) {
-            this._notificationService.hide(this._prevWaitingForRemoteScanNotification);
-            this._prevWaitingForRemoteScanNotification = null;
-          }
-        }
-      }
-    });
+  private _applyRule(rule: NotificationRule, status: ServerStatus): void {
+    const prev = this._activeNotifications.get(rule.key) ?? null;
 
-    // Set up a subscriber to show remote server error notifications
-    this._serverStatusService.status$.pipe(
-      takeUntilDestroyed(this._destroyRef),
-    ).subscribe({
-      next: status => {
-        if (status.server.up && status.controller.latestRemoteScanFailed === true && !status.controller.noEnabledPairs) {
-          const level = NotificationLevel.WARNING;
-          const text = Localization.Notification.STATUS_REMOTE_SERVER_ERROR(
-            status.controller.latestRemoteScanError ?? ''
-          );
-          if (this._prevRemoteServerErrorNotification != null
-            && this._prevRemoteServerErrorNotification.text !== text) {
-            this._notificationService.hide(this._prevRemoteServerErrorNotification);
-            this._prevRemoteServerErrorNotification = null;
-          }
-          if (this._prevRemoteServerErrorNotification == null) {
-            this._prevRemoteServerErrorNotification = createNotification(level, text);
-            this._notificationService.show(this._prevRemoteServerErrorNotification);
-          }
-        } else {
-          if (this._prevRemoteServerErrorNotification != null) {
-            this._notificationService.hide(this._prevRemoteServerErrorNotification);
-            this._prevRemoteServerErrorNotification = null;
-          }
-        }
+    if (rule.shouldShow(status)) {
+      const text = rule.text(status);
+      if (prev != null && prev.text === text) {
+        return;
       }
-    });
-
-    // Set up a subscriber to show no-enabled-pairs notification
-    this._serverStatusService.status$.pipe(
-      takeUntilDestroyed(this._destroyRef),
-    ).subscribe({
-      next: status => {
-        if (status.server.up && status.controller.noEnabledPairs) {
-          if (this._prevNoEnabledPairsNotification == null) {
-            this._prevNoEnabledPairsNotification = createNotification(
-              NotificationLevel.WARNING,
-              Localization.Notification.STATUS_NO_ENABLED_PAIRS
-            );
-            this._notificationService.show(this._prevNoEnabledPairsNotification);
-          }
-        } else {
-          if (this._prevNoEnabledPairsNotification != null) {
-            this._notificationService.hide(this._prevNoEnabledPairsNotification);
-            this._prevNoEnabledPairsNotification = null;
-          }
-        }
+      if (prev != null) {
+        this._notificationService.hide(prev);
       }
-    });
+      const notification = createNotification(rule.level(status), text);
+      this._activeNotifications.set(rule.key, notification);
+      this._notificationService.show(notification);
+      if (rule.key === 'server') {
+        this._logger.debug('New server notification: %O', notification);
+      }
+    } else {
+      if (prev != null) {
+        this._notificationService.hide(prev);
+        this._activeNotifications.delete(rule.key);
+      }
+    }
   }
 }

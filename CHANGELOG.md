@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.16.0] - 2026-04-22
+
+### Added
+
+- **Sonarr/Radarr integration** — Test connection buttons in Settings to verify Sonarr and Radarr API connectivity (#328, #362)
+- **Angular ESLint enforced in CI** — All 17 lint rules at `error` with `--max-warnings 0`; covers OnPush, a11y, type safety, and code style (#376-#382, #389-#392)
+
+### Fixed
+
+- **Mobile file list scrolling** — Fixed items skipping during scroll on Android/iOS by correcting virtual scroll `itemSize` (50→82) and switching to dynamic viewport height measurement via ResizeObserver (#370, #371, #396)
+- **Log streaming memory** — Stream log files line-by-line instead of `readlines()` to avoid loading entire log into memory (#385)
+- **Controller deadlock on exception** — Use `with` statement on model lock to prevent deadlock when exception occurs during model update (#373, #384)
+- **Integrations error leaking details** — Strip internal exception details from Sonarr/Radarr error responses (#386)
+
+### Changed
+
+- **Accessibility** — 55 template a11y violations fixed: `<div>`/`<a>` click targets converted to `<button>`, keyboard navigation added, decorative images marked with `alt="" aria-hidden="true"` (#391)
+- **OnPush change detection** — All components now use `ChangeDetectionStrategy.OnPush` with Angular signals (#392)
+- **Type safety** — Replaced 50 `no-explicit-any` violations with proper types; added `ModelFileJson`, `ConfigValue`, `OptionValue` interfaces (#390)
+- **Dependency updates** — Angular group (8 packages), follow-redirects, hono, vitest, ruff, pytest, pexpect, tblib, Docusaurus (#347-#368, #388)
+
+### Security
+
+- **npm audit fixes** — Resolved high-severity vulnerabilities in Angular dependencies (#388)
+
 ## [0.15.0] - 2026-04-08
 
 ### Added

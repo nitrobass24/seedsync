@@ -8,6 +8,7 @@ from controller import AutoQueuePersist, Controller
 from .handler.auto_queue import AutoQueueHandler
 from .handler.config import ConfigHandler
 from .handler.controller import ControllerHandler
+from .handler.integrations import IntegrationsHandler
 from .handler.logs import LogsHandler
 from .handler.path_pairs import PathPairsHandler
 from .handler.server import ServerHandler
@@ -35,6 +36,7 @@ class WebAppBuilder:
         self.status_handler = StatusHandler(context.status)
         self.logs_handler = LogsHandler(logdir=context.args.logdir, service_name=Constants.SERVICE_NAME)
         self.path_pairs_handler = PathPairsHandler(context.path_pairs_config)
+        self.integrations_handler = IntegrationsHandler(context.config)
 
     def build(self) -> WebApp:
         web_app = WebApp(context=self.__context, controller=self.__controller)
@@ -59,6 +61,7 @@ class WebAppBuilder:
         self.status_handler.add_routes(web_app)
         self.logs_handler.add_routes(web_app)
         self.path_pairs_handler.add_routes(web_app)
+        self.integrations_handler.add_routes(web_app)
 
         web_app.add_default_routes()
 

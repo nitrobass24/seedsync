@@ -5,7 +5,7 @@ import { mergeMap, toArray } from 'rxjs/operators';
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
 import { PathPairsService } from '../settings/path-pairs.service';
-import { RestService, WebReaction } from '../utils/rest.service';
+import { WebReaction } from '../utils/rest.service';
 import { ModelFile, ModelFileState } from '../../models/model-file';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
 import { fileKey } from './file-key';
@@ -72,7 +72,7 @@ export class ViewFileService {
   }
 
   setSelected(file: ViewFile): void {
-    let viewFiles = [...this.files];
+    const viewFiles = [...this.files];
     const unSelectIndex = viewFiles.findIndex((v) => v.isSelected);
     const key = viewFileKey(file);
 
@@ -209,7 +209,7 @@ export class ViewFileService {
   private bulkAction(
     filter: (f: ViewFile) => boolean,
     action: (f: ViewFile) => Observable<WebReaction>,
-    concurrency: number = Infinity
+    concurrency = Infinity
   ): Observable<WebReaction[]> {
     const checked = this.files.filter(f => this.checkedSet.has(viewFileKey(f)) && filter(f));
     if (checked.length === 0) {
@@ -230,7 +230,7 @@ export class ViewFileService {
     this.sortComparator = comparator;
 
     this.logger.debug('Re-sorting view files');
-    let newViewFiles = [...this.files];
+    const newViewFiles = [...this.files];
     if (this.sortComparator != null) {
       newViewFiles.sort(this.sortComparator);
     }
@@ -244,7 +244,7 @@ export class ViewFileService {
   private buildViewFromModelFiles(modelFiles: Map<string, ModelFile>): void {
     this.logger.debug('Received next model files');
 
-    let newViewFiles = [...this.files];
+    const newViewFiles = [...this.files];
 
     const addedKeys: string[] = [];
     const removedKeys: string[] = [];
@@ -377,7 +377,7 @@ function modelFilesEqual(a: ModelFile, b: ModelFile): boolean {
   );
 }
 
-function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, isSelected: boolean = false): ViewFile {
+function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, isSelected = false): ViewFile {
   const localSize = modelFile.local_size ?? 0;
   const remoteSize = modelFile.remote_size ?? 0;
   let percentDownloaded: number;

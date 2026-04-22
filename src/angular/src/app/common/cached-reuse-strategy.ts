@@ -8,9 +8,9 @@ import { ActivatedRouteSnapshot, DetachedRouteHandle, RouteReuseStrategy } from 
  */
 export class CachedReuseStrategy implements RouteReuseStrategy {
 
-    handlers: {[key: string]: DetachedRouteHandle} = {};
+    handlers: Record<string, DetachedRouteHandle> = {};
 
-    shouldDetach(route: ActivatedRouteSnapshot): boolean {
+    shouldDetach(_route: ActivatedRouteSnapshot): boolean {
         return true;
     }
 

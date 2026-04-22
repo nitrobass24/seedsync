@@ -41,6 +41,10 @@ class AutoQueuePattern(Serializable):
         return AutoQueuePattern(pattern=dct[AutoQueuePattern.__KEY_PATTERN])
 
 
+# (filename, pair_id, matched_pattern)
+_Candidate = tuple[str, str | None, AutoQueuePattern | None]
+
+
 class IAutoQueuePersistListener(ABC):
     """Listener for receiving AutoQueuePersist events"""
 
@@ -201,150 +205,114 @@ class AutoQueue:
         if not any_auto_feature:
             return
 
-        ###
-        # Queue (only when auto-queue is enabled)
-        ###
-        files_to_queue: list[tuple[str, str | None, AutoQueuePattern | None]] = []
+        files_to_queue = self.__gather_queue_candidates() if self.__enabled else []
+        files_to_extract = self.__gather_extract_candidates() if self.__auto_extract_enabled else []
+        files_to_delete_remote = self.__gather_delete_remote_candidates() if self.__auto_delete_remote_enabled else []
 
-        if self.__enabled:
-            queue_candidate_files: list[ModelFile] = []
-
-            # Candidate all new files
-            queue_candidate_files += self.__model_listener.new_files
-
-            # Candidate modified files where the remote size changed
-            for old_file, new_file in self.__model_listener.modified_files:
-                if old_file.remote_size != new_file.remote_size:
-                    queue_candidate_files.append(new_file)
-
-            files_to_queue = self.__filter_candidates(
-                candidates=queue_candidate_files,
-                accept=lambda f: (
-                    f.remote_size is not None
-                    and f.state == ModelFile.State.DEFAULT
-                    and self._is_auto_queue_enabled_for_file(f)
-                ),
-            )
-
-        ###
-        # Extract
-        ###
-        files_to_extract: list[tuple[str, str | None, AutoQueuePattern | None]] = []
-
-        if self.__auto_extract_enabled:
-            extract_candidate_files: list[ModelFile] = []
-
-            # Candidate all new files
-            extract_candidate_files += self.__model_listener.new_files
-
-            # Candidate modified files that just became DOWNLOADED
-            # But not files that went EXTRACTING -> DOWNLOADED (failed extraction)
-            for old_file, new_file in self.__model_listener.modified_files:
-                if (
-                    old_file.state != ModelFile.State.DOWNLOADED
-                    and old_file.state != ModelFile.State.EXTRACTING
-                    and new_file.state == ModelFile.State.DOWNLOADED
-                ):
-                    extract_candidate_files.append(new_file)
-
-            files_to_extract = self.__filter_candidates(
-                candidates=extract_candidate_files,
-                accept=lambda f: (
-                    f.state == ModelFile.State.DOWNLOADED
-                    and f.local_size is not None
-                    and f.local_size > 0
-                    and f.is_extractable
-                ),
-            )
-
-        ###
-        # Delete Remote
-        ###
-        files_to_delete_remote: list[tuple[str, str | None, AutoQueuePattern | None]] = []
-
-        if self.__auto_delete_remote_enabled:
-            delete_remote_candidate_files: list[ModelFile] = []
-
-            # Candidate all new files
-            delete_remote_candidate_files += self.__model_listener.new_files
-
-            # Candidate modified files that just became DOWNLOADED or EXTRACTED
-            for old_file, new_file in self.__model_listener.modified_files:
-                if old_file.state != new_file.state and new_file.state in (
-                    ModelFile.State.DOWNLOADED,
-                    ModelFile.State.EXTRACTED,
-                ):
-                    delete_remote_candidate_files.append(new_file)
-
-            files_to_delete_remote = self.__filter_candidates(
-                candidates=delete_remote_candidate_files,
-                accept=lambda f: (
-                    f.remote_size is not None
-                    and (
-                        f.state == ModelFile.State.EXTRACTED
-                        or (
-                            f.state == ModelFile.State.DOWNLOADED
-                            and (not self.__auto_extract_enabled or not f.is_extractable)
-                        )
-                    )
-                ),
-            )
-
-        ###
-        # Send commands
-        ###
-
-        # Send the queue commands
-        for filename, pair_id, pattern in files_to_queue:
-            self.logger.info(
-                "Auto queueing '{}'".format(filename) + (" for pattern '{}'".format(pattern.pattern) if pattern else "")
-            )
-            command = Controller.Command(Controller.Command.Action.QUEUE, filename, pair_id=pair_id)
-            self.__controller.queue_command(command)
-
-        # Send the extract commands
-        for filename, pair_id, pattern in files_to_extract:
-            self.logger.info(
-                "Auto extracting '{}'".format(filename)
-                + (" for pattern '{}'".format(pattern.pattern) if pattern else "")
-            )
-            command = Controller.Command(Controller.Command.Action.EXTRACT, filename, pair_id=pair_id)
-            self.__controller.queue_command(command)
-
-        # Send the delete remote commands (after extract so extraction happens first)
-        for filename, pair_id, pattern in files_to_delete_remote:
-            self.logger.info(
-                "Auto deleting remote '{}'".format(filename)
-                + (" for pattern '{}'".format(pattern.pattern) if pattern else "")
-            )
-            command = Controller.Command(Controller.Command.Action.DELETE_REMOTE, filename, pair_id=pair_id)
-            self.__controller.queue_command(command)
+        # Send commands (order matters: queue, extract, then delete remote)
+        self.__send_commands(files_to_queue, Controller.Command.Action.QUEUE, "Auto queueing")
+        self.__send_commands(files_to_extract, Controller.Command.Action.EXTRACT, "Auto extracting")
+        self.__send_commands(files_to_delete_remote, Controller.Command.Action.DELETE_REMOTE, "Auto deleting remote")
 
         # Retry delete-remote for DELETED files where remote still exists
-        RETRY_INTERVAL = 20  # cycles between retries
         if self.__auto_delete_remote_enabled:
-            already_sent = {(name, pid) for name, pid, _ in files_to_delete_remote}
-            model_files = self.__controller.get_model_files()
-            new_retry_cycles = {}
-            for file in model_files:
-                if file.state == ModelFile.State.DELETED and file.remote_size is not None:
-                    retry_key = (file.name, file.pair_id)
-                    count = self.__delete_remote_retry_cycles.get(retry_key, RETRY_INTERVAL)
-                    if retry_key not in already_sent and count >= RETRY_INTERVAL:
-                        command = Controller.Command(
-                            Controller.Command.Action.DELETE_REMOTE, file.name, pair_id=file.pair_id
-                        )
-                        self.__controller.queue_command(command)
-                        new_retry_cycles[retry_key] = 0
-                    else:
-                        new_retry_cycles[retry_key] = count + 1
-            self.__delete_remote_retry_cycles = new_retry_cycles
+            self.__retry_delete_remote(files_to_delete_remote)
 
         # Clear the processed files
         self.__model_listener.new_files.clear()
         self.__model_listener.modified_files.clear()
         # Clear the new patterns
         self.__persist_listener.new_patterns.clear()
+
+    def __gather_queue_candidates(self) -> list[_Candidate]:
+        candidates: list[ModelFile] = list(self.__model_listener.new_files)
+        for old_file, new_file in self.__model_listener.modified_files:
+            if old_file.remote_size != new_file.remote_size:
+                candidates.append(new_file)
+        return self.__filter_candidates(
+            candidates=candidates,
+            accept=lambda f: (
+                f.remote_size is not None
+                and f.state == ModelFile.State.DEFAULT
+                and self._is_auto_queue_enabled_for_file(f)
+            ),
+        )
+
+    def __gather_extract_candidates(self) -> list[_Candidate]:
+        candidates: list[ModelFile] = list(self.__model_listener.new_files)
+        # Candidate modified files that just became DOWNLOADED
+        # But not files that went EXTRACTING -> DOWNLOADED (failed extraction)
+        for old_file, new_file in self.__model_listener.modified_files:
+            if (
+                old_file.state != ModelFile.State.DOWNLOADED
+                and old_file.state != ModelFile.State.EXTRACTING
+                and new_file.state == ModelFile.State.DOWNLOADED
+            ):
+                candidates.append(new_file)
+        return self.__filter_candidates(
+            candidates=candidates,
+            accept=lambda f: (
+                f.state == ModelFile.State.DOWNLOADED
+                and f.local_size is not None
+                and f.local_size > 0
+                and f.is_extractable
+            ),
+        )
+
+    def __gather_delete_remote_candidates(self) -> list[_Candidate]:
+        candidates: list[ModelFile] = list(self.__model_listener.new_files)
+        for old_file, new_file in self.__model_listener.modified_files:
+            if old_file.state != new_file.state and new_file.state in (
+                ModelFile.State.DOWNLOADED,
+                ModelFile.State.EXTRACTED,
+            ):
+                candidates.append(new_file)
+        return self.__filter_candidates(
+            candidates=candidates,
+            accept=lambda f: (
+                f.remote_size is not None
+                and (
+                    f.state == ModelFile.State.EXTRACTED
+                    or (
+                        f.state == ModelFile.State.DOWNLOADED
+                        and (not self.__auto_extract_enabled or not f.is_extractable)
+                    )
+                )
+            ),
+        )
+
+    def __send_commands(
+        self,
+        files: list[_Candidate],
+        action: Controller.Command.Action,
+        log_prefix: str,
+    ) -> None:
+        for filename, pair_id, pattern in files:
+            self.logger.info(
+                "{} '{}'".format(log_prefix, filename)
+                + (" for pattern '{}'".format(pattern.pattern) if pattern else "")
+            )
+            command = Controller.Command(action, filename, pair_id=pair_id)
+            self.__controller.queue_command(command)
+
+    def __retry_delete_remote(self, files_to_delete_remote: list[_Candidate]) -> None:
+        RETRY_INTERVAL = 20  # cycles between retries
+        already_sent = {(name, pid) for name, pid, _ in files_to_delete_remote}
+        model_files = self.__controller.get_model_files()
+        new_retry_cycles: dict[tuple[str, str | None], int] = {}
+        for file in model_files:
+            if file.state == ModelFile.State.DELETED and file.remote_size is not None:
+                retry_key = (file.name, file.pair_id)
+                count = self.__delete_remote_retry_cycles.get(retry_key, RETRY_INTERVAL)
+                if retry_key not in already_sent and count >= RETRY_INTERVAL:
+                    command = Controller.Command(
+                        Controller.Command.Action.DELETE_REMOTE, file.name, pair_id=file.pair_id
+                    )
+                    self.__controller.queue_command(command)
+                    new_retry_cycles[retry_key] = 0
+                else:
+                    new_retry_cycles[retry_key] = count + 1
+        self.__delete_remote_retry_cycles = new_retry_cycles
 
     def _is_auto_queue_enabled_for_file(self, file: ModelFile) -> bool:
         """Check if auto-queue is enabled for a specific file based on its pair_id.
@@ -363,9 +331,7 @@ class AutoQueue:
             return self.__pair_auto_queue.get(file.pair_id, False)
         return True
 
-    def __filter_candidates(
-        self, candidates: list[ModelFile], accept: Callable[[ModelFile], bool]
-    ) -> list[tuple[str, str | None, AutoQueuePattern | None]]:
+    def __filter_candidates(self, candidates: list[ModelFile], accept: Callable[[ModelFile], bool]) -> list[_Candidate]:
         """
         Given a list of candidate files, filter out those that match the accept criteria
         Also takes into consideration new patterns that were added

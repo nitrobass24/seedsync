@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
@@ -13,13 +13,14 @@ import { ThemeService, Theme } from '../../services/utils/theme.service';
   standalone: true,
   imports: [RouterLink, RouterLinkActive],
   templateUrl: './sidebar.component.html',
-  styleUrls: ['./sidebar.component.scss']
+  styleUrls: ['./sidebar.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SidebarComponent implements OnInit {
   routeInfos = ROUTE_INFOS;
 
-  public commandsEnabled = false;
-  public theme: Theme = 'light';
+  public readonly commandsEnabled = signal(false);
+  public readonly theme = signal<Theme>('light');
 
   private readonly _logger = inject(LoggerService);
   private readonly _connectedService = inject(ConnectedService);
@@ -32,7 +33,7 @@ export class SidebarComponent implements OnInit {
       takeUntilDestroyed(this._destroyRef),
     ).subscribe({
       next: (connected: boolean) => {
-        this.commandsEnabled = connected;
+        this.commandsEnabled.set(connected);
       }
     });
 
@@ -40,7 +41,7 @@ export class SidebarComponent implements OnInit {
       takeUntilDestroyed(this._destroyRef),
     ).subscribe({
       next: (theme: Theme) => {
-        this.theme = theme;
+        this.theme.set(theme);
       }
     });
   }
