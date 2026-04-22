@@ -23,6 +23,10 @@
             .button {
                 @extend %button;
 
+                /* Reset native <button> appearance */
+                appearance: none;
+                font: inherit;
+
                 flex-grow: 0;
                 flex-direction: row;
                 padding: 8px;

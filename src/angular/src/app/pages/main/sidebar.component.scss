@@ -2,6 +2,10 @@
 
 #sidebar {
   .button {
+    /* Reset native <button> appearance (applies to both <a> and <button>) */
+    appearance: none;
+    font: inherit;
+
     background-color: inherit;
     color: inherit;
     text-decoration: none;

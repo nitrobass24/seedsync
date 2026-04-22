@@ -17,11 +17,10 @@ export class SidebarPage {
     this.autoqueueLink = page.locator('a[href="/autoqueue"]');
     this.logsLink = page.locator('a[href="/logs"]');
     this.aboutLink = page.locator('a[href="/about"]');
-    // Restart and theme toggle are <a class="button"> not <button>
-    this.restartButton = page.locator("#sidebar a.button", {
+    this.restartButton = page.locator("#sidebar button.button", {
       hasText: "Restart",
     });
-    this.themeToggle = page.locator("#sidebar a.button", {
+    this.themeToggle = page.locator("#sidebar button.button", {
       hasText: /Dark Mode|Light Mode/,
     });
   }
