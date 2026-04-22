@@ -69,7 +69,7 @@ class RemoteScanner(IScanner):
             self.logger.error("JSON parse error: {}\n{}".format(str(err), out[:500]))
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"), recoverable=False
-            )
+            ) from err
 
         self.__first_run = False
         return remote_files
@@ -112,18 +112,18 @@ class RemoteScanner(IScanner):
                         "outside your sync tree (e.g. '~' or '~/.local') and remove the "
                         "conflicting directory from the remote server.".format(self.__remote_path_to_scan_script),
                         recoverable=False,
-                    )
+                    ) from e
 
                 if "SystemScannerError" in error_str:
                     raise ScannerError(
                         Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()), recoverable=False
-                    )
+                    ) from e
 
                 # Config errors on first run are non-recoverable
                 if self.__first_run and not self._is_transient_error(error_str):
                     raise ScannerError(
                         Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()), recoverable=False
-                    )
+                    ) from e
 
                 # Retry transient errors
                 if attempt < self._SCAN_MAX_RETRIES:
@@ -148,7 +148,9 @@ class RemoteScanner(IScanner):
         except SshcpError as e:
             self.logger.exception("Shell detection failed")
             recoverable = self._is_transient_error(str(e))
-            raise ScannerError(Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable)
+            raise ScannerError(
+                Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
+            ) from e
 
         # Resolve tilde in the script path to an absolute path.
         # SCP expands ~ natively, but the path is shell-quoted for md5sum
@@ -184,7 +186,9 @@ class RemoteScanner(IScanner):
         except SshcpError as e:
             self.logger.exception("Caught SSH exception during md5sum check")
             recoverable = self._is_transient_error(str(e))
-            raise ScannerError(Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable)
+            raise ScannerError(
+                Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
+            ) from e
 
         # Guard: if the target path is already a directory on the remote, the
         # copy would succeed (scp deposits the file inside the dir) but
@@ -234,7 +238,7 @@ class RemoteScanner(IScanner):
                 recoverable = self._is_transient_error(str(e))
                 raise ScannerError(
                     Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
-                )
+                ) from e
 
     def _install_scanfs_with_home_fallback(self, original_error: str):
         """
@@ -297,4 +301,4 @@ class RemoteScanner(IScanner):
                     )
                 ),
                 recoverable=False,
-            )
+            ) from fallback_e

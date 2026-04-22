@@ -36,5 +36,5 @@ class LocalScanner(IScanner):
             result = self.__scanner.scan()
         except SystemScannerError:
             self.logger.exception("Caught SystemScannerError")
-            raise ScannerError(Localization.Error.LOCAL_SERVER_SCAN, recoverable=False)
+            raise ScannerError(Localization.Error.LOCAL_SERVER_SCAN, recoverable=False) from None
         return result

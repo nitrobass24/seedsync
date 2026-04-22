@@ -67,9 +67,9 @@ class Extract:
         except subprocess.TimeoutExpired:
             raise ExtractError(
                 "Archive verification timed out after {}s: {}".format(Extract._7Z_TIMEOUT_SECS, archive_path)
-            )
+            ) from None
         except FileNotFoundError:
-            raise ExtractError("7z binary not found; cannot verify archive")
+            raise ExtractError("7z binary not found; cannot verify archive") from None
 
         if result.returncode != 0:
             raise ExtractError(Extract._format_7z_error(result, "Archive verification failed"))
@@ -177,9 +177,9 @@ class Extract:
                 timeout=Extract._7Z_TIMEOUT_SECS,
             )
         except subprocess.TimeoutExpired:
-            raise ExtractError("7z timed out after {}s: {}".format(Extract._7Z_TIMEOUT_SECS, archive_path))
+            raise ExtractError("7z timed out after {}s: {}".format(Extract._7Z_TIMEOUT_SECS, archive_path)) from None
         except FileNotFoundError:
-            raise ExtractError("7z binary not found; cannot extract archive")
+            raise ExtractError("7z binary not found; cannot extract archive") from None
 
         if result.returncode != 0:
             raise ExtractError(Extract._format_7z_error(result, "7z failed"))

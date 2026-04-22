@@ -106,14 +106,14 @@ class Sshcp:
                     "Available shells on the remote server: {}. "
                     "Fix by running on the remote server: "
                     "sudo chsh -s {} {}".format(shells_str, available_shells[0], self.__user)
-                )
+                ) from e
             else:
                 raise SshcpError(
                     "Remote user's login shell not found and no common shells "
                     "could be detected. Fix by running on the remote server: "
                     "sudo chsh -s /bin/sh {} OR "
                     "sudo ln -s /usr/bin/bash /bin/bash".format(self.__user)
-                )
+                ) from e
 
     def _run_shell_command(self, command: str) -> bytes:
         """
@@ -242,7 +242,7 @@ class Sshcp:
 
         except pexpect.exceptions.TIMEOUT:
             sp.close()
-            raise SshcpError("SFTP timed out")
+            raise SshcpError("SFTP timed out") from None
 
     def __run_command(self, command: str, flags: str, args: str) -> bytes:
 
@@ -359,7 +359,7 @@ class Sshcp:
                 "Timed out after {:.0f}s (limit: {}s). Command: {}".format(elapsed, self.__TIMEOUT_SECS, command)
             )
             self.logger.error("Command output before timeout: {}".format(sp.before if sp.before else b"(none)"))
-            raise SshcpError("Timed out after {:.0f}s".format(elapsed))
+            raise SshcpError("Timed out after {:.0f}s".format(elapsed)) from None
         finally:
             sp.close()
 

@@ -18,4 +18,4 @@ def pytest_configure(config):
             raise RuntimeError(
                 f"Cannot set multiprocessing start method to 'spawn'; "
                 f"current method is '{current}'. Tests require spawn."
-            )
+            ) from None

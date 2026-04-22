@@ -115,7 +115,7 @@ class LftpJobStatusParser:
         except ValueError as e:
             self.logger.error("LftpJobStateParser error: {}".format(str(e)))
             self.logger.error("Status:\n{}".format(output))
-            raise LftpJobStatusParserError("Error parsing lftp job status")
+            raise LftpJobStatusParserError("Error parsing lftp job status") from e
         return statuses
 
     def __parse_jobs(self, lines: list[str]) -> list[LftpJobStatus]:
