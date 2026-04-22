@@ -367,6 +367,7 @@ describe("ConfigService", () => {
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
       `/server/config/set/autoqueue/enabled/${encoded}`,
     );
+    expect(service.configSnapshot!.autoqueue.enabled).toBe(true);
   });
 
   it("should encode boolean false as 'false' in the URL", () => {
@@ -386,6 +387,7 @@ describe("ConfigService", () => {
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
       `/server/config/set/autoqueue/enabled/${encoded}`,
     );
+    expect(service.configSnapshot!.autoqueue.enabled).toBe(false);
   });
 
   it("should use __empty__ sentinel for null value", () => {
