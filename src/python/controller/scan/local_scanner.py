@@ -30,7 +30,7 @@ class LocalScanner(IScanner):
         # If the scan path doesn't exist yet (e.g. staging directory not created),
         # return empty results instead of crashing the scanner process
         if not os.path.isdir(self.__local_path):
-            self.logger.warning("Scan path does not exist: {}".format(self.__local_path))
+            self.logger.warning(f"Scan path does not exist: {self.__local_path}")
             return []
         try:
             result = self.__scanner.scan()

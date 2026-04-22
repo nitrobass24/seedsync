@@ -7,7 +7,7 @@ def escape_remote_path_single(path: str) -> str:
     Single quotes within the path are escaped using the shell '\\'' trick.
     """
     escaped = path.replace("'", "'\\''")
-    return "'{}'".format(escaped)
+    return f"'{escaped}'"
 
 
 def escape_remote_path_double(path: str) -> str:
@@ -17,4 +17,4 @@ def escape_remote_path_double(path: str) -> str:
     """
     if path.startswith("~"):
         path = "$HOME" + path[1:]
-    return '"{}"'.format(path)
+    return f'"{path}"'

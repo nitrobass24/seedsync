@@ -42,7 +42,7 @@ class ControllerPersist(Persist):
         for key in keys:
             m = _LEGACY_KEY_RE.match(key)
             if m:
-                migrated.add("{}{}{}".format(m.group(1), _KEY_SEP, m.group(2)))
+                migrated.add(f"{m.group(1)}{_KEY_SEP}{m.group(2)}")
             else:
                 migrated.add(key)
         return migrated
@@ -68,7 +68,7 @@ class ControllerPersist(Persist):
             persist.corrupt_file_names = ControllerPersist._migrate_legacy_keys(persist.corrupt_file_names)
             return persist
         except (json.decoder.JSONDecodeError, KeyError) as e:
-            raise PersistError("Error parsing ControllerPersist - {}: {}".format(type(e).__name__, str(e))) from e
+            raise PersistError(f"Error parsing ControllerPersist - {type(e).__name__}: {str(e)}") from e
 
     @overrides(Persist)
     def to_str(self) -> str:

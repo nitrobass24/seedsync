@@ -70,7 +70,7 @@ class WebApp(bottle.Bottle):
         self.__controller = controller
         self.__html_path = context.args.html_path
         self.__status = context.status
-        self.logger.info("Html path set to: {}".format(self.__html_path))
+        self.logger.info(f"Html path set to: {self.__html_path}")
         self._stop_event = threading.Event()
         self._streaming_handlers: list[tuple[type[IStreamHandler], dict[str, Any]]] = []
 

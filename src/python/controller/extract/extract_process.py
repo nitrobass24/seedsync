@@ -51,14 +51,14 @@ class ExtractProcess(AppProcess):
             self.failed_queue = failed_queue
 
         def extract_completed(self, name: str, is_dir: bool, pair_id: str | None = None):
-            self.logger.info("Extraction completed for {}".format(name))
+            self.logger.info(f"Extraction completed for {name}")
             completed_result = ExtractCompletedResult(
                 timestamp=datetime.now(), name=name, is_dir=is_dir, pair_id=pair_id
             )
             self.completed_queue.put(completed_result)
 
         def extract_failed(self, name: str, is_dir: bool, pair_id: str | None = None):
-            self.logger.error("Extraction failed for {}".format(name))
+            self.logger.error(f"Extraction failed for {name}")
             failed_result = ExtractFailedResult(timestamp=datetime.now(), name=name, is_dir=is_dir, pair_id=pair_id)
             self.failed_queue.put(failed_result)
 

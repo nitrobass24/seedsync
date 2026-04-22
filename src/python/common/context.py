@@ -73,7 +73,7 @@ class Context:
                 value = config_dict[section][option]
                 if option == "remote_password":
                     value = "********" if value else ""
-                self.logger.debug("  {}.{}: {}".format(section, option, value))
+                self.logger.debug(f"  {section}.{option}: {value}")
 
         # Print path pairs
         if self.path_pairs_config and self.path_pairs_config.pairs:
@@ -91,4 +91,4 @@ class Context:
 
         self.logger.debug("Args:")
         for name, value in self.args.as_dict().items():
-            self.logger.debug("  {}: {}".format(name, value))
+            self.logger.debug(f"  {name}: {value}")

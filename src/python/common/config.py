@@ -19,7 +19,7 @@ def _strtobool(val: str) -> bool:
     elif val in ("n", "no", "f", "false", "off", "0"):
         return False
     else:
-        raise ValueError("invalid truth value %r" % (val,))
+        raise ValueError(f"invalid truth value {val!r}")
 
 
 class ConfigError(AppError):
@@ -46,25 +46,21 @@ class Converters:
     @staticmethod
     def int(cls: T, name: str, value: str) -> int:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if not value:
-            raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} is empty")
         try:
             val = int(value)
         except ValueError:
-            raise ConfigError(
-                "Bad config: {}.{} ({}) must be an integer value".format(cls.__name__, name, value)
-            ) from None
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be an integer value") from None
         return val
 
     @staticmethod
     def bool(cls: T, name: str, value: str) -> bool:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if not value:
-            raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} is empty")
         try:
             val = bool(_strtobool(value))
         except ValueError:
-            raise ConfigError(
-                "Bad config: {}.{} ({}) must be a boolean value".format(cls.__name__, name, value)
-            ) from None
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be a boolean value") from None
         return val
 
 
@@ -76,7 +72,7 @@ class Checkers:
     @staticmethod
     def string_nonempty(cls: T, name: str, value: str) -> str:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if not value or not value.strip():
-            raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} is empty")
         return value
 
     @staticmethod
@@ -86,13 +82,13 @@ class Checkers:
     @staticmethod
     def int_non_negative(cls: T, name: str, value: int) -> int:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if value < 0:
-            raise ConfigError("Bad config: {}.{} ({}) must be zero or greater".format(cls.__name__, name, value))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be zero or greater")
         return value
 
     @staticmethod
     def int_positive(cls: T, name: str, value: int) -> int:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if value < 1:
-            raise ConfigError("Bad config: {}.{} ({}) must be greater than 0".format(cls.__name__, name, value))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be greater than 0")
         return value
 
     @staticmethod
@@ -428,7 +424,7 @@ class Config(Persist):
     @staticmethod
     def _check_section(dct: OuterConfigType, name: str) -> InnerConfigType:
         if name not in dct:
-            raise ConfigError("Missing config section: {}".format(name))
+            raise ConfigError(f"Missing config section: {name}")
         val = dct[name]
         del dct[name]
         return val
@@ -445,7 +441,7 @@ class Config(Persist):
         try:
             config_parser.read_string(content)
         except (configparser.MissingSectionHeaderError, configparser.ParsingError) as e:
-            raise PersistError("Error parsing Config - {}: {}".format(type(e).__name__, str(e))) from e
+            raise PersistError(f"Error parsing Config - {type(e).__name__}: {str(e)}") from e
         config_dict: OuterConfigType = {}
         for section in config_parser.sections():
             config_dict[section] = {}
