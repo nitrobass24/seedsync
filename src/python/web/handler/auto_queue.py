@@ -21,6 +21,8 @@ class AutoQueueHandler(IHandler):
         web_app.add_handler("/server/autoqueue/add/<pattern>", self.__handle_add_autoqueue)
         web_app.add_handler("/server/autoqueue/remove/<pattern>", self.__handle_remove_autoqueue)
 
+    _TEXT_HEADERS = {"X-Content-Type-Options": "nosniff"}
+
     def __handle_get_autoqueue(self):
         patterns = list(self.__auto_queue_persist.patterns)
         patterns.sort(key=lambda p: p.pattern)
@@ -34,12 +36,26 @@ class AutoQueueHandler(IHandler):
         aqp = AutoQueuePattern(pattern=pattern)
 
         if aqp in self.__auto_queue_persist.patterns:
-            return HTTPResponse(body=f"Auto-queue pattern '{pattern}' already exists.", status=400)
+            return HTTPResponse(
+                body=f"Auto-queue pattern '{pattern}' already exists.",
+                status=400,
+                content_type="text/plain",
+                headers=self._TEXT_HEADERS,
+            )
         try:
             self.__auto_queue_persist.add_pattern(aqp)
-            return HTTPResponse(body=f"Added auto-queue pattern '{pattern}'.")
+            return HTTPResponse(
+                body=f"Added auto-queue pattern '{pattern}'.",
+                content_type="text/plain",
+                headers=self._TEXT_HEADERS,
+            )
         except ValueError as e:
-            return HTTPResponse(body=str(e), status=400)
+            return HTTPResponse(
+                body=str(e),
+                status=400,
+                content_type="text/plain",
+                headers=self._TEXT_HEADERS,
+            )
 
     def __handle_remove_autoqueue(self, pattern: str):
         # value is double encoded
@@ -48,6 +64,15 @@ class AutoQueueHandler(IHandler):
         aqp = AutoQueuePattern(pattern=pattern)
 
         if aqp not in self.__auto_queue_persist.patterns:
-            return HTTPResponse(body=f"Auto-queue pattern '{pattern}' doesn't exist.", status=400)
+            return HTTPResponse(
+                body=f"Auto-queue pattern '{pattern}' doesn't exist.",
+                status=400,
+                content_type="text/plain",
+                headers=self._TEXT_HEADERS,
+            )
         self.__auto_queue_persist.remove_pattern(aqp)
-        return HTTPResponse(body=f"Removed auto-queue pattern '{pattern}'.")
+        return HTTPResponse(
+            body=f"Removed auto-queue pattern '{pattern}'.",
+            content_type="text/plain",
+            headers=self._TEXT_HEADERS,
+        )
