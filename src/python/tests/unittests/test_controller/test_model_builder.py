@@ -1872,7 +1872,7 @@ class TestSharedLocalDeduplication(unittest.TestCase):
         aggregate = Model()
         aggregate.set_base_logger(logging.getLogger("test"))
 
-        for builder, lp in zip(builders, local_paths, strict=False):
+        for builder, lp in zip(builders, local_paths, strict=True):
             norm_path = os.path.normpath(os.path.abspath(lp))
             if norm_path not in seen_names_by_path:
                 seen_names_by_path[norm_path] = set()

@@ -80,7 +80,7 @@ class LftpJobStatus:
         Returns list of pairs (filename, transfer state)
         :return:
         """
-        return list(zip(self.__active_files_state.keys(), self.__active_files_state.values(), strict=False))
+        return list(self.__active_files_state.items())
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, LftpJobStatus):
