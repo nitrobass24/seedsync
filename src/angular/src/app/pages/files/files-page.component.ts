@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 
 import { FileOptionsComponent } from './file-options.component';
 import { FileListComponent } from './file-list.component';
@@ -10,6 +10,7 @@ import { FileListComponent } from './file-list.component';
   template: `
     <app-file-options></app-file-options>
     <app-file-list></app-file-list>
-  `
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FilesPageComponent {}

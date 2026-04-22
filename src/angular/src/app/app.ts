@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 
 import { ROUTE_INFOS, RouteInfo } from './routes';
@@ -11,13 +11,14 @@ import { SidebarComponent } from './pages/main/sidebar.component';
   standalone: true,
   imports: [RouterOutlet, HeaderComponent, SidebarComponent],
   templateUrl: './app.html',
-  styleUrls: ['./app.scss']
+  styleUrls: ['./app.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class App implements OnInit, AfterViewInit {
+export class App implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('topHeader') topHeader!: ElementRef;
 
-  showSidebar = false;
-  activeRoute: RouteInfo | undefined;
+  readonly showSidebar = signal(false);
+  readonly activeRoute = signal<RouteInfo | undefined>(undefined);
 
   private _resizeObserver: ResizeObserver | null = null;
 
@@ -26,8 +27,8 @@ export class App implements OnInit, AfterViewInit {
 
   constructor() {
     this.router.events.subscribe(() => {
-      this.showSidebar = false;
-      this.activeRoute = ROUTE_INFOS.find(value => '/' + value.path === this.router.url);
+      this.showSidebar.set(false);
+      this.activeRoute.set(ROUTE_INFOS.find(value => '/' + value.path === this.router.url));
     });
   }
 
@@ -45,5 +46,10 @@ export class App implements OnInit, AfterViewInit {
       this._domService.setHeaderHeight(this.topHeader.nativeElement.clientHeight);
     });
     this._resizeObserver.observe(this.topHeader.nativeElement);
+  }
+
+  ngOnDestroy() {
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = null;
   }
 }

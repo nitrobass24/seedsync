@@ -11,14 +11,14 @@
   <hr>
 
   <button type="button" class="button"
-     [disabled]="!commandsEnabled"
-     (click)="!commandsEnabled || onCommandRestart()">
+     [disabled]="!commandsEnabled()"
+     (click)="!commandsEnabled() || onCommandRestart()">
     <img src="assets/icons/refresh.svg" alt="" aria-hidden="true" />
     <span class="text">Restart</span>
   </button>
 
   <button type="button" class="button" (click)="onToggleTheme()">
-    <i class="fa-icon" [class.fa-solid]="true" [class.fa-moon]="theme === 'light'" [class.fa-sun]="theme === 'dark'"></i>
-    <span class="text">{{ theme === 'light' ? 'Dark Mode' : 'Light Mode' }}</span>
+    <i class="fa-icon" [class.fa-solid]="true" [class.fa-moon]="theme() === 'light'" [class.fa-sun]="theme() === 'dark'"></i>
+    <span class="text">{{ theme() === 'light' ? 'Dark Mode' : 'Light Mode' }}</span>
   </button>
 </div>
