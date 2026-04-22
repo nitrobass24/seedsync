@@ -154,7 +154,7 @@ class Lftp:
                 try:
                     inst.__restart_process()
                 except Exception:
-                    raise LftpError("lftp process is not running and restart failed")
+                    raise LftpError("lftp process is not running and restart failed") from None
             return method(inst, *args, **kwargs)
 
         return wrapper

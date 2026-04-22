@@ -50,7 +50,7 @@ class Converters:
         try:
             val = int(value)
         except ValueError:
-            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be an integer value")
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be an integer value") from None
         return val
 
     @staticmethod
@@ -60,7 +60,7 @@ class Converters:
         try:
             val = bool(_strtobool(value))
         except ValueError:
-            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be a boolean value")
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be a boolean value") from None
         return val
 
 
@@ -441,7 +441,7 @@ class Config(Persist):
         try:
             config_parser.read_string(content)
         except (configparser.MissingSectionHeaderError, configparser.ParsingError) as e:
-            raise PersistError(f"Error parsing Config - {type(e).__name__}: {str(e)}")
+            raise PersistError(f"Error parsing Config - {type(e).__name__}: {str(e)}") from e
         config_dict: OuterConfigType = {}
         for section in config_parser.sections():
             config_dict[section] = {}
