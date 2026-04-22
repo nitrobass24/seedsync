@@ -84,13 +84,19 @@ class RemoteScanner(IScanner):
                 # Use consistent quoting: double quotes if scan path has tilde
                 # (for $HOME expansion), single quotes otherwise
                 if self.__remote_path_to_scan.startswith("~"):
-                    return self.__ssh.shell(
-                        f"{_escape_remote_path_double(self.__remote_python_cmd)} {_escape_remote_path_double(self.__remote_path_to_scan_script)} {_escape_remote_path_double(self.__remote_path_to_scan)}"
+                    cmd = (
+                        f"{_escape_remote_path_double(self.__remote_python_cmd)} "
+                        f"{_escape_remote_path_double(self.__remote_path_to_scan_script)} "
+                        f"{_escape_remote_path_double(self.__remote_path_to_scan)}"
                     )
+                    return self.__ssh.shell(cmd)
                 else:
-                    return self.__ssh.shell(
-                        f"{_escape_remote_path_single(self.__remote_python_cmd)} {_escape_remote_path_single(self.__remote_path_to_scan_script)} {_escape_remote_path_single(self.__remote_path_to_scan)}"
+                    cmd = (
+                        f"{_escape_remote_path_single(self.__remote_python_cmd)} "
+                        f"{_escape_remote_path_single(self.__remote_path_to_scan_script)} "
+                        f"{_escape_remote_path_single(self.__remote_path_to_scan)}"
                     )
+                    return self.__ssh.shell(cmd)
             except SshcpError as e:
                 last_error = e
                 error_str = str(e)
@@ -99,7 +105,8 @@ class RemoteScanner(IScanner):
                 # Non-recoverable errors: don't retry
                 if "Is a directory" in error_str:
                     raise ScannerError(
-                        f"Server Script Path '{self.__remote_path_to_scan_script}' is a directory on the remote server. "
+                        f"Server Script Path '{self.__remote_path_to_scan_script}' "
+                        "is a directory on the remote server. "
                         "Change the 'Server Script Path' setting to a writable location "
                         "outside your sync tree (e.g. '~' or '~/.local') and remove the "
                         "conflicting directory from the remote server.",
@@ -180,7 +187,8 @@ class RemoteScanner(IScanner):
         try:
             result = (
                 self.__ssh.shell(
-                    f"[ -d {_escape_remote_path_single(self.__remote_path_to_scan_script)} ] && echo IS_DIRECTORY || echo OK"
+                    f"[ -d {_escape_remote_path_single(self.__remote_path_to_scan_script)} ] "
+                    "&& echo IS_DIRECTORY || echo OK"
                 )
                 .decode()
                 .strip()
@@ -239,7 +247,8 @@ class RemoteScanner(IScanner):
             pass
 
         self.logger.warning(
-            f"Script path '{self.__remote_path_to_scan_script}' is not writable (Permission denied). Retrying with home directory: '{fallback_path}'"
+            f"Script path '{self.__remote_path_to_scan_script}' is not writable (Permission denied). "
+            f"Retrying with home directory: '{fallback_path}'"
         )
         self.logger.warning("Update 'Server Script Path' in Settings to '~' to avoid this fallback on restart.")
 
@@ -269,7 +278,9 @@ class RemoteScanner(IScanner):
         except SshcpError as fallback_e:
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(
-                    f"Could not install scanner to '{self.__remote_path_to_scan_script}' ({original_error.strip()}), fallback to '{fallback_path}' also failed: {str(fallback_e).strip()}"
+                    f"Could not install scanner to '{self.__remote_path_to_scan_script}' "
+                    f"({original_error.strip()}), fallback to '{fallback_path}' "
+                    f"also failed: {str(fallback_e).strip()}"
                 ),
                 recoverable=False,
             )

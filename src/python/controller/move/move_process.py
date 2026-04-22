@@ -79,7 +79,8 @@ class MoveProcess(AppOneShotProcess):
 
         if source_size != dest_size:
             self.logger.error(
-                f"Move size verification failed for {self.__file_name}: source={source_size} dest={dest_size}. Source NOT deleted."
+                f"Move size verification failed for {self.__file_name}: "
+                f"source={source_size} dest={dest_size}. Source NOT deleted."
             )
             return
 
