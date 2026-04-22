@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { BehaviorSubject, Observable, of, EMPTY } from 'rxjs';
 import { ScrollingModule } from '@angular/cdk/scrolling';
@@ -389,5 +389,133 @@ describe('FileListComponent', () => {
     component.onBulkStop();
 
     expect(logger.info).toHaveBeenCalledWith('stopped');
+  });
+
+  // --- Dynamic chrome-height observer ---
+
+  describe('chrome-height observer', () => {
+    // Capture the ResizeObserver callback so the test can trigger it on demand,
+    // and record which elements were observed/unobserved.
+    interface FakeObserverState {
+      callback: ResizeObserverCallback | null;
+      observed: Element[];
+      disconnected: boolean;
+    }
+
+    let observerState: FakeObserverState;
+    let originalResizeObserver: typeof ResizeObserver | undefined;
+    let originalRaf: typeof window.requestAnimationFrame;
+    let originalScrollYDescriptor: PropertyDescriptor | undefined;
+    let rafCallbacks: FrameRequestCallback[];
+    let topHeader: HTMLElement;
+    let fileOptions: HTMLElement;
+
+    beforeEach(() => {
+      // The outer beforeEach already built a fixture with the real ResizeObserver.
+      // Destroy it so we can rebuild under a fake and get deterministic behaviour.
+      fixture?.destroy();
+      document.documentElement.style.removeProperty('--file-list-chrome-height');
+
+      // Extra chrome elements above the file list — the observer queries the
+      // document for these so they have to live in the real DOM.
+      topHeader = document.createElement('div');
+      topHeader.id = 'top-header';
+      fileOptions = document.createElement('div');
+      fileOptions.id = 'file-options';
+      document.body.prepend(fileOptions);
+      document.body.prepend(topHeader);
+
+      observerState = { callback: null, observed: [], disconnected: false };
+      originalResizeObserver = (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+      (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
+        class FakeResizeObserver {
+          constructor(cb: ResizeObserverCallback) { observerState.callback = cb; }
+          observe(el: Element): void { observerState.observed.push(el); }
+          unobserve(): void { /* noop */ }
+          disconnect(): void { observerState.disconnected = true; }
+        };
+
+      // Run any queued rAF callbacks synchronously for deterministic assertions.
+      rafCallbacks = [];
+      originalRaf = window.requestAnimationFrame;
+      window.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+        rafCallbacks.push(cb);
+        return rafCallbacks.length;
+      }) as typeof window.requestAnimationFrame;
+
+      // Pin scrollY so chrome-height assertions are deterministic regardless
+      // of prior-test scroll state. Capture the original descriptor so we can
+      // restore JSDOM's live getter after the test.
+      originalScrollYDescriptor = Object.getOwnPropertyDescriptor(window, 'scrollY');
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+    });
+
+    afterEach(() => {
+      document.documentElement.style.removeProperty('--file-list-chrome-height');
+      topHeader.remove();
+      fileOptions.remove();
+      const g = globalThis as unknown as { ResizeObserver?: typeof ResizeObserver };
+      if (originalResizeObserver !== undefined) {
+        g.ResizeObserver = originalResizeObserver;
+      } else {
+        delete g.ResizeObserver;
+      }
+      window.requestAnimationFrame = originalRaf;
+      if (originalScrollYDescriptor) {
+        Object.defineProperty(window, 'scrollY', originalScrollYDescriptor);
+      } else {
+        delete (window as unknown as { scrollY?: number }).scrollY;
+      }
+    });
+
+    function flushRaf(): void {
+      const pending = rafCallbacks;
+      rafCallbacks = [];
+      pending.forEach(cb => cb(performance.now()));
+    }
+
+    it('observes top-header, file-options, and the host element', () => {
+      // Re-create the fixture so ngAfterViewInit runs with our fake observer.
+      fixture = TestBed.createComponent(FileListComponent);
+      (fixture.nativeElement as HTMLElement).style.height = '400px';
+      fixture.detectChanges();
+
+      expect(observerState.observed).toContain(topHeader);
+      expect(observerState.observed).toContain(fileOptions);
+      expect(observerState.observed).toContain(fixture.nativeElement);
+    });
+
+    it('sets --file-list-chrome-height from the viewport element position', () => {
+      fixture = TestBed.createComponent(FileListComponent);
+      (fixture.nativeElement as HTMLElement).style.height = '400px';
+      fixture.detectChanges();
+
+      const viewportEl = fixture.nativeElement.querySelector('cdk-virtual-scroll-viewport') as HTMLElement;
+      // Pin a known top offset — the observer should round it up and expose it.
+      vi.spyOn(viewportEl, 'getBoundingClientRect').mockReturnValue({
+        top: 137.4, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      // Trigger the observer callback and flush the rAF-scheduled update.
+      observerState.callback?.([], {} as ResizeObserver);
+      flushRaf();
+
+      expect(document.documentElement.style.getPropertyValue('--file-list-chrome-height'))
+        .toBe('138px');
+    });
+
+    it('disconnects the observer and clears the CSS var on destroy', () => {
+      fixture = TestBed.createComponent(FileListComponent);
+      (fixture.nativeElement as HTMLElement).style.height = '400px';
+      fixture.detectChanges();
+
+      document.documentElement.style.setProperty('--file-list-chrome-height', '123px');
+      fixture.destroy();
+
+      expect(observerState.disconnected).toBe(true);
+      expect(document.documentElement.style.getPropertyValue('--file-list-chrome-height'))
+        .toBe('');
+    });
   });
 });

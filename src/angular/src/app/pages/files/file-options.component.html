@@ -19,7 +19,7 @@
             </div>
             <div class="selection">
                 <!-- these divs only show the selected option -->
-                @if ((options | async)?.selectedStatusFilter == null) {
+                @if ((options | async)?.selectedStatusFilter === null || (options | async)?.selectedStatusFilter === undefined) {
                     <div class="sel-item" id="sel-item-all">
                         <div class="icon"></div>
                         <span class="text">All</span>
@@ -65,7 +65,7 @@
         </button>
         <div class="dropdown-menu">
             <button type="button" class="dropdown-item"
-                 [class.active]="(options | async)?.selectedStatusFilter == null"
+                 [class.active]="(options | async)?.selectedStatusFilter === null || (options | async)?.selectedStatusFilter === undefined"
                  (click)="onFilterByStatus(null)">
                 <div class="icon"></div>
                 <span class="text">All</span>
@@ -138,25 +138,25 @@
                 }
                 @if ((options | async)?.sortMethod === SortMethod.NAME_ASC) {
                     <div class="sel-item">
-                        <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" alt="Sort ascending" /></div>
+                        <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" alt="" aria-hidden="true" /></div>
                         <span class="text">Name A&#8594;Z</span>
                     </div>
                 }
                 @if ((options | async)?.sortMethod === SortMethod.NAME_DESC) {
                     <div class="sel-item">
-                        <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" alt="Sort descending" /></div>
+                        <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" alt="" aria-hidden="true" /></div>
                         <span class="text">Name Z&#8594;A</span>
                     </div>
                 }
                 @if ((options | async)?.sortMethod === SortMethod.SIZE_ASC) {
                     <div class="sel-item">
-                        <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" alt="Sort ascending" /></div>
+                        <div class="icon"><img src="assets/icons/sort-asc.svg" class="sort-asc" alt="" aria-hidden="true" /></div>
                         <span class="text">Size S&#8594;L</span>
                     </div>
                 }
                 @if ((options | async)?.sortMethod === SortMethod.SIZE_DESC) {
                     <div class="sel-item">
-                        <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" alt="Sort descending" /></div>
+                        <div class="icon"><img src="assets/icons/sort-desc.svg" class="sort-desc" alt="" aria-hidden="true" /></div>
                         <span class="text">Size L&#8594;S</span>
                     </div>
                 }

@@ -2,9 +2,7 @@
 // TODO(#376): Many rules below are intentionally set to "warn" (not "error")
 // to keep the initial lint step non-fatal while the tooling PR lands. A
 // follow-up cleanup PR should graduate these to "error" and address the
-// accumulated findings (e.g. `ChangeDetectionStrategy.OnPush`,
-// inject() migration, ==/===, inferrable types, empty functions,
-// Array<T> vs T[]).
+// accumulated findings (e.g. `ChangeDetectionStrategy.OnPush`).
 // See: https://github.com/nitrobass24/seedsync/issues/376
 const eslint = require("@eslint/js");
 const { defineConfig } = require("eslint/config");
@@ -47,14 +45,13 @@ module.exports = defineConfig([
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
-      // High-volume stylistic findings — demoted to "warn" per the task
-      // plan so CI stays green. Follow-up cleanup tracked in #376.
-      "@typescript-eslint/no-inferrable-types": "warn",
-      "@typescript-eslint/no-empty-function": "warn",
-      "@typescript-eslint/array-type": "warn",
-      "@typescript-eslint/consistent-indexed-object-style": "warn",
-      "@angular-eslint/prefer-inject": "warn",
-      "prefer-const": "warn",
+      // Graduated to "error" in #378 after the codebase was cleaned up.
+      "@typescript-eslint/no-inferrable-types": "error",
+      "@typescript-eslint/no-empty-function": "error",
+      "@typescript-eslint/array-type": "error",
+      "@typescript-eslint/consistent-indexed-object-style": "error",
+      "@angular-eslint/prefer-inject": "error",
+      "prefer-const": "error",
     },
   },
   {
@@ -68,9 +65,8 @@ module.exports = defineConfig([
       "@angular-eslint/template/click-events-have-key-events": "error",
       "@angular-eslint/template/interactive-supports-focus": "error",
       "@angular-eslint/template/alt-text": "error",
-      // High-volume template findings — demoted to "warn" for this PR.
-      // Follow-up cleanup tracked in #376.
-      "@angular-eslint/template/eqeqeq": "warn",
+      // Graduated to "error" in #378 after the codebase was cleaned up.
+      "@angular-eslint/template/eqeqeq": "error",
     },
   },
 ]);

@@ -1,3 +1,4 @@
+import { Type } from '@angular/core';
 import { Routes } from '@angular/router';
 
 import { FilesPageComponent } from './pages/files/files-page.component';
@@ -10,7 +11,7 @@ export interface RouteInfo {
   path: string;
   name: string;
   icon: string;
-  component: any;
+  component: Type<unknown>;
 }
 
 export const ROUTE_INFOS: RouteInfo[] = [
