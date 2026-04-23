@@ -9,7 +9,7 @@ controller.py as part of the controller decomposition (#394 Phase 2D).
 from __future__ import annotations
 
 import copy
-from threading import Lock
+from threading import RLock
 
 from model import IModelListener, Model, ModelDiff, ModelDiffUtil, ModelFile
 
@@ -27,7 +27,7 @@ class ModelRegistry:
 
     def __init__(self, model: Model):
         self._model = model
-        self._lock = Lock()
+        self._lock = RLock()
 
     # --- Thread-safe public API (used by external callers) ---
 
