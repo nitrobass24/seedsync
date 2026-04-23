@@ -27,6 +27,7 @@ from .exclude_patterns import filter_excluded_files, parse_exclude_patterns
 from .extract import ExtractProcess, ExtractRequest, ExtractStatus, ExtractStatusResult
 from .model_builder import ModelBuilder
 from .move import MoveProcess
+from .persist_keys import KEY_SEP, persist_key, strip_persist_key
 from .scan import ActiveScanner, LocalScanner, RemoteScanner, ScannerProcess, ScannerResult
 from .validate import ValidateProcess, ValidateRequest, ValidateStatusResult
 
@@ -37,31 +38,6 @@ class ControllerError(AppError):
     """
 
     pass
-
-
-# ASCII Unit Separator – safe composite-key delimiter that cannot appear in filenames
-_KEY_SEP = "\x1f"
-
-
-def _persist_key(pair_id: str | None, name: str) -> str:
-    """Build a namespaced persist key: 'pair_id<US>name' or plain 'name' for default pair."""
-    return f"{pair_id}{_KEY_SEP}{name}" if pair_id else name
-
-
-def _strip_persist_key(key: str, pair_id: str | None) -> str:
-    """Strip pair_id prefix from a persist key to get the bare file name.
-
-    Handles both the current unit-separator (\\x1f) and the legacy colon (':')
-    delimiter so that old persisted keys are still correctly parsed.
-    """
-    if not pair_id:
-        return key
-    # Try the current separator first, then legacy colon
-    for sep in (_KEY_SEP, ":"):
-        prefix = f"{pair_id}{sep}"
-        if key.startswith(prefix):
-            return key[len(prefix) :]
-    return key
 
 
 class _PairContext:
@@ -658,7 +634,7 @@ class Controller:
                         f"Ignoring extract completion for '{result.name}': pair '{result.pair_id}' no longer exists"
                     )
                     continue
-                pkey = _persist_key(result.pair_id, result.name)
+                pkey = persist_key(result.pair_id, result.name)
                 self.__persist.extracted_file_names.add(pkey)
                 if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
                     if pkey not in self.__pending_validation_keys:
@@ -722,7 +698,7 @@ class Controller:
                         ModelFile.State.QUEUED,
                         ModelFile.State.DOWNLOADING,
                     ):
-                        pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
+                        pkey = persist_key(diff.new_file.pair_id, diff.new_file.name)
                         self.__moved_file_keys.discard(pkey)
                         self.__persist.downloaded_file_names.discard(pkey)
                         self.__persist.extracted_file_names.discard(pkey)
@@ -747,7 +723,7 @@ class Controller:
                     if downloaded:
                         assert diff.new_file is not None
                         assert pc is not None
-                        pkey = _persist_key(diff.new_file.pair_id, diff.new_file.name)
+                        pkey = persist_key(diff.new_file.pair_id, diff.new_file.name)
                         self.__persist.downloaded_file_names.add(pkey)
                         self._sync_persist_to_all_builders()
 
@@ -770,7 +746,7 @@ class Controller:
                                 remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
                             )
                             self.__validate_process.validate(req)
-                            self.__pending_validation_keys.add(_persist_key(pc.pair_id, diff.new_file.name))
+                            self.__pending_validation_keys.add(persist_key(pc.pair_id, diff.new_file.name))
                             self.logger.info(f"Auto-queued validation for '{diff.new_file.name}'")
 
                         if (
@@ -799,7 +775,7 @@ class Controller:
                         if diff.new_file.state == ModelFile.State.DEFAULT and diff.new_file.local_size is None:
                             pc.pending_completion.discard(diff.new_file.name)
                         elif use_staging:
-                            move_key = _persist_key(diff.new_file.pair_id, diff.new_file.name)
+                            move_key = persist_key(diff.new_file.pair_id, diff.new_file.name)
                             if move_key in self.__moved_file_keys or diff.new_file.state in (
                                 ModelFile.State.DELETED,
                                 ModelFile.State.EXTRACTED,
@@ -824,7 +800,7 @@ class Controller:
                 for pkey in self.__persist.extracted_file_names:
                     # Find the file in the model by checking each pair
                     for _pc in self.__pair_contexts:
-                        bare_name = _strip_persist_key(pkey, _pc.pair_id)
+                        bare_name = strip_persist_key(pkey, _pc.pair_id)
                         if bare_name != pkey or _pc.pair_id is None:
                             try:
                                 file = self.__model.get_file(bare_name, pair_id=_pc.pair_id)
@@ -845,7 +821,7 @@ class Controller:
                     # Build a set of all composite keys present in the model
                     model_keys: set[str] = set()
                     for f in self.__model.get_all_files():
-                        model_keys.add(_persist_key(f.pair_id, f.name))
+                        model_keys.add(persist_key(f.pair_id, f.name))
                     absent_keys: set[str] = set()
                     for pkey in self.__persist.downloaded_file_names:
                         if pkey not in model_keys and pkey not in self.__moved_file_keys:
@@ -862,14 +838,14 @@ class Controller:
         # Process extraction failures — mark as failed immediately
         for result in latest_failed_extractions:
             self.logger.error(f"Extraction failed for '{result.name}'")
-            fail_key = _persist_key(result.pair_id, result.name)
+            fail_key = persist_key(result.pair_id, result.name)
             self.__persist.extract_failed_file_names.add(fail_key)
             self._sync_persist_to_all_builders()
 
         # Process validation completions — mark as validated
         for result in latest_validated_results:
             self.logger.info(f"Validation passed for '{result.name}'")
-            pkey = _persist_key(result.pair_id, result.name)
+            pkey = persist_key(result.pair_id, result.name)
             self.__pending_validation_keys.discard(pkey)
             self.__persist.validated_file_names.add(pkey)
             self.__persist.corrupt_file_names.discard(pkey)
@@ -880,7 +856,7 @@ class Controller:
         # Process validation failures
         for result in latest_failed_validations:
             self.logger.error(f"Validation failed for '{result.name}': {result.error_message}")
-            pkey = _persist_key(result.pair_id, result.name)
+            pkey = persist_key(result.pair_id, result.name)
             self.__pending_validation_keys.discard(pkey)
             if result.is_checksum_mismatch:
                 # Checksum mismatch — mark as corrupt
@@ -942,7 +918,7 @@ class Controller:
             if just_completed:
                 for name in just_completed:
                     self.logger.info(f"Download completed (LFTP job finished): {name}")
-                self.__persist.downloaded_file_names.update(_persist_key(pc.pair_id, n) for n in just_completed)
+                self.__persist.downloaded_file_names.update(persist_key(pc.pair_id, n) for n in just_completed)
                 self._sync_persist_to_all_builders()
                 pc.pending_completion.update(just_completed)
                 pc.local_scan_process.force_scan()
@@ -957,7 +933,7 @@ class Controller:
                 for s in latest_extract_statuses.statuses
                 if s.pair_id == pc.pair_id
                 and s.state == ExtractStatus.State.EXTRACTING
-                and _persist_key(pc.pair_id, s.name) in self.__persist.downloaded_file_names
+                and persist_key(pc.pair_id, s.name) in self.__persist.downloaded_file_names
             ]
 
         active_files = pc.active_downloading_file_names + pc.active_extracting_file_names
@@ -990,10 +966,10 @@ class Controller:
             f"{other_pc.pair_id}{sep}"
             for other_pc in self.__pair_contexts
             if other_pc.pair_id
-            for sep in (_KEY_SEP, ":")
+            for sep in (KEY_SEP, ":")
         )
         for pc in self.__pair_contexts:
-            prefix = f"{pc.pair_id}{_KEY_SEP}" if pc.pair_id else ""
+            prefix = f"{pc.pair_id}{KEY_SEP}" if pc.pair_id else ""
             # Defense-in-depth: from_str() migrates colon keys at load time,
             # but we check both separators here in case of incomplete migration.
             legacy_prefix = f"{pc.pair_id}:" if pc.pair_id else ""
@@ -1101,7 +1077,7 @@ class Controller:
                 if file.local_size is None:
                     _notify_failure(command, f"File '{command.filename}' does not exist locally")
                     continue
-                pkey = _persist_key(pc.pair_id, file.name)
+                pkey = persist_key(pc.pair_id, file.name)
                 self.__persist.extract_failed_file_names.discard(pkey)
                 self._sync_persist_to_all_builders()
                 req = self._build_extract_request(file, pc)
@@ -1216,7 +1192,7 @@ class Controller:
                 if file.remote_size is None:
                     _notify_failure(command, f"File '{command.filename}' does not exist remotely")
                     continue
-                pkey = _persist_key(pc.pair_id, file.name)
+                pkey = persist_key(pc.pair_id, file.name)
                 self.__persist.validated_file_names.discard(pkey)
                 self.__persist.corrupt_file_names.discard(pkey)
                 self._sync_persist_to_all_builders()
@@ -1280,7 +1256,7 @@ class Controller:
         Spawn a MoveProcess to move a file from staging to the final local_path
         """
         pair_id = pc.pair_id
-        move_key = _persist_key(pair_id, file_name)
+        move_key = persist_key(pair_id, file_name)
         if move_key in self.__moved_file_keys:
             self.logger.debug(f"Skipping move for {file_name} - already moved")
             return
@@ -1332,7 +1308,7 @@ class Controller:
                     move_process.propagate_exception()
                 except Exception:
                     self.logger.warning("Move process failed: %s", move_process.name, exc_info=True)
-                    move_key = _persist_key(move_process.pair_id, move_process.file_name)
+                    move_key = persist_key(move_process.pair_id, move_process.file_name)
                     self.__moved_file_keys.discard(move_key)
                 for pc in self.__pair_contexts:
                     pc.local_scan_process.force_scan()

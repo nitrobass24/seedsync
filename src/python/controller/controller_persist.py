@@ -5,15 +5,14 @@ import re
 
 from common import Constants, Persist, PersistError, overrides
 
+from .persist_keys import KEY_SEP
+
 # Matches a UUID-style pair_id followed by the legacy ':' separator.
 # Used to migrate old persist keys from 'pair_id:name' to 'pair_id\x1fname'.
 _LEGACY_KEY_RE = re.compile(
     r"^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):(.*)",
     re.IGNORECASE,
 )
-
-# The new separator (ASCII Unit Separator) used by _persist_key in controller.py
-_KEY_SEP = "\x1f"
 
 
 class ControllerPersist(Persist):
@@ -42,7 +41,7 @@ class ControllerPersist(Persist):
         for key in keys:
             m = _LEGACY_KEY_RE.match(key)
             if m:
-                migrated.add(f"{m.group(1)}{_KEY_SEP}{m.group(2)}")
+                migrated.add(f"{m.group(1)}{KEY_SEP}{m.group(2)}")
             else:
                 migrated.add(key)
         return migrated
