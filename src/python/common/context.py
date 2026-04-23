@@ -68,10 +68,12 @@ class Context:
         # Print the config
         self.logger.debug("Config:")
         config_dict = self.config.as_dict()
+        sensitive = Config.sensitive_property_names()
         for section in config_dict:
+            sensitive_options = sensitive.get(section, set())
             for option in config_dict[section]:
                 value = config_dict[section][option]
-                if option == "remote_password":
+                if option in sensitive_options:
                     value = "********" if value else ""
                 self.logger.debug(f"  {section}.{option}: {value}")
 
