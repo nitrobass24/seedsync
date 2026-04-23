@@ -7,25 +7,23 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from enum import Enum
-from queue import Queue
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     pass
 
-from common import AppError, AppOneShotProcess, Constants, Context, MultiprocessingLogger
+from common import AppOneShotProcess, Constants, Context, MultiprocessingLogger
 from lftp import Lftp, LftpError, LftpJobStatus
 from model import IModelListener, Model, ModelDiff, ModelError, ModelFile
 
+from .command_pipeline import CommandPipeline
 from .controller_persist import ControllerPersist
-from .delete import DeleteLocalProcess, DeleteRemoteProcess
 
 # my libs
-from .exclude_patterns import filter_excluded_files, parse_exclude_patterns
-from .extract import ExtractProcess, ExtractRequest, ExtractStatus, ExtractStatusResult
+from .exclude_patterns import filter_excluded_files
+from .extract import ExtractProcess, ExtractStatus, ExtractStatusResult
 from .model_builder import ModelBuilder
 from .model_registry import ModelRegistry
-from .move import MoveProcess
 from .pair_context import ControllerError, PairContext, configure_lftp, validate_config
 from .persist_keys import KEY_SEP, persist_key, strip_persist_key
 from .scan import ActiveScanner, LocalScanner, RemoteScanner, ScannerProcess
@@ -97,9 +95,6 @@ class Controller:
         # Validate required config fields before building anything
         self._validate_config()
 
-        # The command queue
-        self.__command_queue: Queue[Controller.Command] = Queue()
-
         # The model registry (shared across all pairs, thread-safe)
         _model = Model()
         _model.set_base_logger(self.logger)
@@ -120,18 +115,19 @@ class Controller:
         self.__validate_process = ValidateProcess()
         self.__validate_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
-        # Keep track of active command processes (shared)
-        self.__active_command_processes: list[Controller.CommandProcessWrapper] = []
-
-        # Keep track of active move processes (staging -> final, shared)
-        self.__active_move_processes: list[MoveProcess] = []
-        # Use composite keys (pair_id:name) to avoid collisions across pairs
-        self.__moved_file_keys: set[str] = set()
-
-        # Track files with pending validation so extraction-completion doesn't race the move
-        self.__pending_validation_keys: set[str] = set()
-
-        # Track extraction retry counts by composite key (in-memory, resets on restart)
+        # Command pipeline owns the queue, active processes, and move state
+        self.__pipeline = CommandPipeline(
+            pair_contexts=self.__pair_contexts,
+            registry=self.__registry,
+            persist=self.__persist,
+            context=self.__context,
+            password=self.__password,
+            mp_logger=self.__mp_logger,
+            extract_process=self.__extract_process,
+            validate_process=self.__validate_process,
+            logger=self.logger,
+            sync_persist_callback=self._sync_persist_to_all_builders,
+        )
 
         self.__started = False
 
@@ -309,9 +305,9 @@ class Controller:
         """
         if not self.__started:
             raise ControllerError("Cannot process, controller is not started")
-        self.__propagate_exceptions()
-        self.__cleanup_commands()
-        self.__process_commands()
+        self.__pipeline.propagate_exceptions()
+        self.__pipeline.cleanup()
+        self.__pipeline.step()
         self.__update_model()
 
     def exit(self):
@@ -324,9 +320,9 @@ class Controller:
                 pc.remote_scan_process.terminate()
             self.__extract_process.terminate()
             self.__validate_process.terminate()
-            for cp in self.__active_command_processes:
+            for cp in self.__pipeline.active_command_processes:
                 cp.process.terminate()
-            for mp in self.__active_move_processes:
+            for mp in self.__pipeline.active_move_processes:
                 mp.terminate()
             for pc in self.__pair_contexts:
                 pc.active_scan_process.join()
@@ -334,9 +330,9 @@ class Controller:
                 pc.remote_scan_process.join()
             self.__extract_process.join()
             self.__validate_process.join()
-            for cp in self.__active_command_processes:
+            for cp in self.__pipeline.active_command_processes:
                 cp.process.join()
-            for mp in self.__active_move_processes:
+            for mp in self.__pipeline.active_move_processes:
                 mp.join()
             self.__mp_logger.stop()
 
@@ -350,12 +346,12 @@ class Controller:
                 pc.active_scanner.close()
             self.__extract_process.close_queues()
             self.__validate_process.close_queues()
-            for cp in self.__active_command_processes:
+            for cp in self.__pipeline.active_command_processes:
                 cp.process.close_queues()
-            for mp in self.__active_move_processes:
+            for mp in self.__pipeline.active_move_processes:
                 mp.close_queues()
-            self.__active_command_processes.clear()
-            self.__active_move_processes.clear()
+            self.__pipeline.active_command_processes.clear()
+            self.__pipeline.active_move_processes.clear()
 
             self.__started = False
             self.logger.info("Exited controller")
@@ -373,69 +369,7 @@ class Controller:
         return self.__registry.get_files_and_add_listener(listener)
 
     def queue_command(self, command: Command):
-        self.__command_queue.put(command)
-
-    def _get_pair_context_for_command(self, command: Command) -> PairContext | None:
-        """Find the pair context for a command based on pair_id."""
-        if command.pair_id:
-            for pc in self.__pair_contexts:
-                if pc.pair_id == command.pair_id:
-                    return pc
-            return None
-        return self.__pair_contexts[0] if self.__pair_contexts else None
-
-    def _get_pair_context_for_file(self, file: ModelFile) -> PairContext | None:
-        """Find the pair context that owns a ModelFile based on its pair_id."""
-        for pc in self.__pair_contexts:
-            if pc.pair_id == file.pair_id:
-                return pc
-        return None
-
-    def _find_pair_by_id(self, pair_id: str | None) -> PairContext | None:
-        """Find the pair context by pair_id.
-        Returns default (first) pair when pair_id is None.
-        Returns None when pair_id is provided but not found.
-        """
-        if pair_id:
-            for pc in self.__pair_contexts:
-                if pc.pair_id == pair_id:
-                    return pc
-            return None
-        return self.__pair_contexts[0] if self.__pair_contexts else None
-
-    def _build_extract_request(self, file: ModelFile, pc: PairContext) -> ExtractRequest:
-        """Build an ExtractRequest with the correct pair-specific paths."""
-        # Determine output directory
-        if self.__context.config.controller.use_local_path_as_extract_path:
-            extract_out_dir = pc.local_path
-        else:
-            extract_out_dir = self.__context.config.controller.extract_path  # type: ignore[assignment]
-
-        # When staging is enabled, archives live in the staging subdir
-        if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-            pair_staging = (
-                os.path.join(self.__context.config.controller.staging_path, pc.pair_id)  # type: ignore[arg-type]
-                if pc.pair_id
-                else self.__context.config.controller.staging_path  # type: ignore[arg-type]
-            )
-            out_dir_path = pair_staging
-            out_dir_path_fallback = extract_out_dir
-        else:
-            out_dir_path = extract_out_dir
-            out_dir_path_fallback = None
-
-        local_path_fallback = None
-        if pc.effective_local_path != pc.local_path:
-            local_path_fallback = pc.local_path
-
-        return ExtractRequest(
-            model_file=file,
-            local_path=pc.effective_local_path,
-            out_dir_path=out_dir_path,  # type: ignore[arg-type]
-            pair_id=pc.pair_id,
-            local_path_fallback=local_path_fallback,
-            out_dir_path_fallback=out_dir_path_fallback,
-        )
+        self.__pipeline.queue(command)
 
     def __update_model(self):  # noqa: C901 — will be decomposed in #394
         # Grab the latest extract results (shared)
@@ -455,7 +389,7 @@ class Controller:
         # Process extraction completions once (shared across all pairs)
         if latest_extracted_results:
             for result in latest_extracted_results:
-                owner_pc = self._find_pair_by_id(result.pair_id)
+                owner_pc = self.__pipeline._find_pair_by_id(result.pair_id)
                 if owner_pc is None:
                     self.logger.warning(
                         f"Ignoring extract completion for '{result.name}': pair '{result.pair_id}' no longer exists"
@@ -464,8 +398,8 @@ class Controller:
                 pkey = persist_key(result.pair_id, result.name)
                 self.__persist.extracted_file_names.add(pkey)
                 if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-                    if pkey not in self.__pending_validation_keys:
-                        self.__spawn_move_process(result.name, owner_pc)
+                    if pkey not in self.__pipeline.pending_validation_keys:
+                        self.__pipeline._spawn_move_process(result.name, owner_pc)
             self._sync_persist_to_all_builders()
 
         # Build an aggregate new model from all pairs
@@ -508,14 +442,14 @@ class Controller:
             for diff in model_diff:
                 diff_file = diff.new_file or diff.old_file
                 assert diff_file is not None
-                pc = self._get_pair_context_for_file(diff_file)
+                pc = self.__pipeline._get_pair_context_for_file(diff_file)
 
                 if diff.new_file is not None and diff.new_file.state in (
                     ModelFile.State.QUEUED,
                     ModelFile.State.DOWNLOADING,
                 ):
                     pkey = persist_key(diff.new_file.pair_id, diff.new_file.name)
-                    self.__moved_file_keys.discard(pkey)
+                    self.__pipeline.moved_file_keys.discard(pkey)
                     self.__persist.downloaded_file_names.discard(pkey)
                     self.__persist.extracted_file_names.discard(pkey)
                     self.__persist.extract_failed_file_names.discard(pkey)
@@ -562,7 +496,7 @@ class Controller:
                             remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
                         )
                         self.__validate_process.validate(req)
-                        self.__pending_validation_keys.add(persist_key(pc.pair_id, diff.new_file.name))
+                        self.__pipeline.pending_validation_keys.add(persist_key(pc.pair_id, diff.new_file.name))
                         self.logger.info(f"Auto-queued validation for '{diff.new_file.name}'")
 
                     if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
@@ -575,7 +509,7 @@ class Controller:
                             and diff.new_file.remote_size is not None
                         )
                         if not will_auto_extract and not will_auto_validate:
-                            self.__spawn_move_process(diff.new_file.name, pc)
+                            self.__pipeline._spawn_move_process(diff.new_file.name, pc)
 
                 if diff.new_file is not None and pc is not None and diff.new_file.name in pc.pending_completion:
                     use_staging = (
@@ -588,7 +522,7 @@ class Controller:
                         pc.pending_completion.discard(diff.new_file.name)
                     elif use_staging:
                         move_key = persist_key(diff.new_file.pair_id, diff.new_file.name)
-                        if move_key in self.__moved_file_keys or diff.new_file.state in (
+                        if move_key in self.__pipeline.moved_file_keys or diff.new_file.state in (
                             ModelFile.State.DELETED,
                             ModelFile.State.EXTRACTED,
                             ModelFile.State.EXTRACT_FAILED,
@@ -634,7 +568,7 @@ class Controller:
                 model_keys.add(persist_key(f.pair_id, f.name))
             absent_keys: set[str] = set()
             for pkey in self.__persist.downloaded_file_names:
-                if pkey not in model_keys and pkey not in self.__moved_file_keys:
+                if pkey not in model_keys and pkey not in self.__pipeline.moved_file_keys:
                     absent_keys.add(pkey)
             if absent_keys:
                 self.logger.info(f"Persist cleanup (both absent): {absent_keys}")
@@ -656,18 +590,18 @@ class Controller:
         for result in latest_validated_results:
             self.logger.info(f"Validation passed for '{result.name}'")
             pkey = persist_key(result.pair_id, result.name)
-            self.__pending_validation_keys.discard(pkey)
+            self.__pipeline.pending_validation_keys.discard(pkey)
             self.__persist.validated_file_names.add(pkey)
             self.__persist.corrupt_file_names.discard(pkey)
             self._sync_persist_to_all_builders()
             # If staging is active, spawn the move process now that validation finished
-            self._spawn_deferred_move(result.pair_id, result.name)
+            self.__pipeline.spawn_deferred_move(result.pair_id, result.name)
 
         # Process validation failures
         for result in latest_failed_validations:
             self.logger.error(f"Validation failed for '{result.name}': {result.error_message}")
             pkey = persist_key(result.pair_id, result.name)
-            self.__pending_validation_keys.discard(pkey)
+            self.__pipeline.pending_validation_keys.discard(pkey)
             if result.is_checksum_mismatch:
                 # Checksum mismatch — mark as corrupt
                 self.__persist.corrupt_file_names.add(pkey)
@@ -680,7 +614,7 @@ class Controller:
                     f"Validation error for '{result.name}' (not marking corrupt): {result.error_message}"
                 )
             # Spawn deferred move regardless of failure type — validation is done
-            self._spawn_deferred_move(result.pair_id, result.name)
+            self.__pipeline.spawn_deferred_move(result.pair_id, result.name)
 
         # Update the controller status (use most recent across all pairs)
         for pc in self.__pair_contexts:
@@ -828,298 +762,3 @@ class Controller:
             pc.model_builder.set_extract_failed_files(extract_failed)
             pc.model_builder.set_validated_files(validated)
             pc.model_builder.set_corrupt_files(corrupt)
-
-    def __process_commands(self):  # noqa: C901 — will be decomposed in #394
-        def _notify_failure(_command: Controller.Command, _msg: str):
-            self.logger.warning(f"Command failed. {_msg}")
-            for _callback in _command.callbacks:
-                _callback.on_failure(_msg)
-
-        deferred: list[Controller.Command] = []
-
-        while not self.__command_queue.empty():
-            command = self.__command_queue.get()
-            self.logger.info(f"Received command {command.action!s} for file {command.filename}")
-
-            pc = self._get_pair_context_for_command(command)
-            if pc is None:
-                _notify_failure(command, f"No pair context found for pair_id '{command.pair_id}'")
-                continue
-
-            try:
-                file = self.__registry.get_file(command.filename, pair_id=pc.pair_id)
-            except ModelError:
-                _notify_failure(command, f"File '{command.filename}' not found")
-                continue
-
-            if command.action == Controller.Command.Action.QUEUE:
-                if file.remote_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist remotely")
-                    continue
-                try:
-                    exclude = parse_exclude_patterns(self.__context.config.general.exclude_patterns)
-                    pc.lftp.queue(file.name, file.is_dir, exclude_patterns=exclude)
-                except LftpError as e:
-                    _notify_failure(command, f"Lftp error: {e!s}")
-                    continue
-
-            elif command.action == Controller.Command.Action.STOP:
-                if file.state not in (ModelFile.State.DOWNLOADING, ModelFile.State.QUEUED):
-                    _notify_failure(command, f"File '{command.filename}' is not Queued or Downloading")
-                    continue
-                try:
-                    pc.lftp.kill(file.name)
-                except LftpError as e:
-                    _notify_failure(command, f"Lftp error: {e!s}")
-                    continue
-
-            elif command.action == Controller.Command.Action.EXTRACT:
-                if file.state not in (
-                    ModelFile.State.DEFAULT,
-                    ModelFile.State.DOWNLOADED,
-                    ModelFile.State.EXTRACTED,
-                    ModelFile.State.EXTRACT_FAILED,
-                    ModelFile.State.VALIDATED,
-                    ModelFile.State.CORRUPT,
-                ):
-                    _notify_failure(command, f"File '{command.filename}' in state {file.state!s} cannot be extracted")
-                    continue
-                if file.local_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist locally")
-                    continue
-                pkey = persist_key(pc.pair_id, file.name)
-                self.__persist.extract_failed_file_names.discard(pkey)
-                self._sync_persist_to_all_builders()
-                req = self._build_extract_request(file, pc)
-                self.__extract_process.extract(req)
-
-            elif command.action == Controller.Command.Action.DELETE_LOCAL:
-                if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
-                    self.logger.debug(
-                        "Deferring %s for '%s': %d active processes at cap",
-                        command.action,
-                        command.filename,
-                        len(self.__active_command_processes),
-                    )
-                    deferred.append(command)
-                    continue
-                if file.state not in (
-                    ModelFile.State.DEFAULT,
-                    ModelFile.State.DOWNLOADED,
-                    ModelFile.State.EXTRACTED,
-                    ModelFile.State.EXTRACT_FAILED,
-                    ModelFile.State.VALIDATED,
-                    ModelFile.State.CORRUPT,
-                ):
-                    _notify_failure(
-                        command,
-                        f"Local file '{command.filename}' cannot be deleted in state {file.state!s}",
-                    )
-                    continue
-                if file.local_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist locally")
-                    continue
-                delete_path = pc.local_path
-                if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
-                    pair_staging = (
-                        os.path.join(self.__context.config.controller.staging_path, pc.pair_id)  # type: ignore[arg-type]
-                        if pc.pair_id
-                        else self.__context.config.controller.staging_path  # type: ignore[arg-type]
-                    )
-                    staging_file = os.path.join(pair_staging, file.name)  # type: ignore[arg-type]
-                    if os.path.exists(staging_file):
-                        delete_path = pair_staging
-                process = DeleteLocalProcess(local_path=delete_path, file_name=file.name)
-                process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
-
-                def post_callback(delete_path: str = delete_path, _pc: PairContext = pc) -> None:
-                    _pc.local_scan_process.force_scan()
-                    if delete_path != _pc.local_path:
-                        _pc.active_scan_process.force_scan()
-
-                command_wrapper = Controller.CommandProcessWrapper(process=process, post_callback=post_callback)
-                self.__active_command_processes.append(command_wrapper)
-                command_wrapper.process.start()
-
-            elif command.action == Controller.Command.Action.DELETE_REMOTE:
-                if len(self.__active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
-                    self.logger.debug(
-                        "Deferring %s for '%s': %d active processes at cap",
-                        command.action,
-                        command.filename,
-                        len(self.__active_command_processes),
-                    )
-                    deferred.append(command)
-                    continue
-                if file.state not in (
-                    ModelFile.State.DEFAULT,
-                    ModelFile.State.DOWNLOADED,
-                    ModelFile.State.EXTRACTED,
-                    ModelFile.State.EXTRACT_FAILED,
-                    ModelFile.State.VALIDATED,
-                    ModelFile.State.CORRUPT,
-                    ModelFile.State.DELETED,
-                ):
-                    _notify_failure(
-                        command,
-                        f"Remote file '{command.filename}' cannot be deleted in state {file.state!s}",
-                    )
-                    continue
-                if file.remote_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist remotely")
-                    continue
-                process = DeleteRemoteProcess(
-                    remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
-                    remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
-                    remote_password=self.__password,
-                    remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
-                    remote_path=pc.remote_path,
-                    file_name=file.name,
-                )
-                process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
-                command_wrapper = Controller.CommandProcessWrapper(
-                    process=process, post_callback=pc.remote_scan_process.force_scan
-                )
-                self.__active_command_processes.append(command_wrapper)
-                command_wrapper.process.start()
-
-            elif command.action == Controller.Command.Action.VALIDATE:
-                if not self.__context.config.validate.enabled:
-                    _notify_failure(command, "Validation is not enabled in config")
-                    continue
-                if file.state not in (
-                    ModelFile.State.DOWNLOADED,
-                    ModelFile.State.EXTRACTED,
-                    ModelFile.State.EXTRACT_FAILED,
-                    ModelFile.State.VALIDATED,
-                    ModelFile.State.CORRUPT,
-                ):
-                    _notify_failure(command, f"File '{command.filename}' in state {file.state!s} cannot be validated")
-                    continue
-                if file.local_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist locally")
-                    continue
-                if file.remote_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist remotely")
-                    continue
-                pkey = persist_key(pc.pair_id, file.name)
-                self.__persist.validated_file_names.discard(pkey)
-                self.__persist.corrupt_file_names.discard(pkey)
-                self._sync_persist_to_all_builders()
-                req = ValidateRequest(
-                    name=file.name,
-                    is_dir=file.is_dir,
-                    pair_id=pc.pair_id,
-                    local_path=pc.effective_local_path,
-                    remote_path=pc.remote_path,
-                    algorithm=self.__context.config.validate.algorithm,  # type: ignore[arg-type]
-                    remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
-                    remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
-                    remote_password=self.__password,
-                    remote_port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
-                )
-                self.__validate_process.validate(req)
-                self.__pending_validation_keys.add(pkey)
-
-            for callback in command.callbacks:
-                callback.on_success()
-
-        for cmd in deferred:
-            self.__command_queue.put(cmd)
-
-    def __propagate_exceptions(self):
-        """
-        Propagate any exceptions from child processes/threads to this thread
-        :return:
-        """
-        for pc in self.__pair_contexts:
-            try:
-                pc.lftp.raise_pending_error()
-            except LftpError as e:
-                error_str = str(e)
-                permanent_patterns = ["Login failed", "Access failed"]
-                if any(p in error_str for p in permanent_patterns):
-                    raise AppError(error_str) from e
-                self.logger.warning(f"Caught lftp error: {error_str}")
-            pc.active_scan_process.propagate_exception()
-            pc.local_scan_process.propagate_exception()
-            pc.remote_scan_process.propagate_exception()
-        self.__mp_logger.propagate_exception()
-        self.__extract_process.propagate_exception()
-        self.__validate_process.propagate_exception()
-
-    def _spawn_deferred_move(self, pair_id: str | None, file_name: str):
-        """Spawn the staging→final move for a file whose validation just finished.
-
-        Only acts when staging is enabled; looks up the owning pair context by pair_id.
-        """
-        if not (self.__context.config.controller.use_staging and self.__context.config.controller.staging_path):
-            return
-        pc = self._find_pair_by_id(pair_id)
-        if pc is None:
-            self.logger.warning(f"Cannot spawn deferred move for '{file_name}': pair '{pair_id}' not found")
-            return
-        self.__spawn_move_process(file_name, pc)
-
-    def __spawn_move_process(self, file_name: str, pc: PairContext):
-        """
-        Spawn a MoveProcess to move a file from staging to the final local_path
-        """
-        pair_id = pc.pair_id
-        move_key = persist_key(pair_id, file_name)
-        if move_key in self.__moved_file_keys:
-            self.logger.debug(f"Skipping move for {file_name} - already moved")
-            return
-
-        dest_path = pc.local_path
-        # Use per-pair staging subdirectory
-        # All callers guard with `use_staging and staging_path` so this is safe
-        staging_path = self.__context.config.controller.staging_path
-        assert isinstance(staging_path, str)
-        staging_source: str = os.path.join(staging_path, pair_id) if pair_id else staging_path
-
-        # Skip if the file doesn't exist in staging (e.g. already moved in a prior session)
-        staging_file = os.path.join(staging_source, file_name)
-        if not os.path.exists(staging_file):
-            self.logger.debug(f"Skipping move for {file_name} - not found in staging")
-            self.__moved_file_keys.add(move_key)
-            return
-
-        self.__moved_file_keys.add(move_key)
-        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name, pair_id=pair_id)
-        process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
-        self.__active_move_processes.append(process)
-        process.start()
-        self.logger.info(f"Spawned move process for {file_name} (staging -> local)")
-
-    def __cleanup_commands(self):
-        """
-        Cleanup the list of active commands and do any callbacks
-        :return:
-        """
-        still_active_processes: list[Controller.CommandProcessWrapper] = []
-        for command_process in self.__active_command_processes:
-            if command_process.process.is_alive():
-                still_active_processes.append(command_process)
-            else:
-                command_process.post_callback()
-                try:
-                    command_process.process.propagate_exception()
-                except Exception:
-                    self.logger.warning("Command process failed: %s", command_process.process.name, exc_info=True)
-        self.__active_command_processes = still_active_processes
-
-        still_active_moves: list[MoveProcess] = []
-        for move_process in self.__active_move_processes:
-            if move_process.is_alive():
-                still_active_moves.append(move_process)
-            else:
-                try:
-                    move_process.propagate_exception()
-                except Exception:
-                    self.logger.warning("Move process failed: %s", move_process.name, exc_info=True)
-                    move_key = persist_key(move_process.pair_id, move_process.file_name)
-                    self.__moved_file_keys.discard(move_key)
-                for pc in self.__pair_contexts:
-                    pc.local_scan_process.force_scan()
-        self.__active_move_processes = still_active_moves
