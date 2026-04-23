@@ -342,6 +342,9 @@ class CommandPipeline:
 
         Only acts when staging is enabled; looks up the owning pair context by pair_id.
         """
+        cfg = self._context.config.controller
+        if not (cfg.use_staging and cfg.staging_path):
+            return
         pc = self.find_pair_by_id(pair_id)
         if pc is None:
             self._logger.warning(f"Cannot spawn deferred move for '{file_name}': pair '{pair_id}' not found")
@@ -361,7 +364,7 @@ class CommandPipeline:
         dest_path = pc.local_path
         staging_source = self._pair_staging_dir(pc)
         if staging_source is None:
-            self._logger.warning(f"Skipping move for {file_name} - staging is not enabled")
+            self._logger.debug(f"Skipping move for {file_name} - staging is not enabled")
             return
 
         # Skip if the file doesn't exist in staging (e.g. already moved in a prior session)
