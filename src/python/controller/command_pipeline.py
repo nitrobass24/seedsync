@@ -16,7 +16,7 @@ from queue import Queue
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    pass
+    from .controller import Controller
 
 from common import AppError, Context, MultiprocessingLogger
 from lftp import LftpError
@@ -78,7 +78,7 @@ class CommandPipeline:
         # Track files with pending validation so extraction-completion doesn't race the move
         self.pending_validation_keys: set[str] = set()
 
-    def queue(self, command) -> None:
+    def queue(self, command: Controller.Command) -> None:
         """Put a command on the queue for processing."""
         self.command_queue.put(command)
 
@@ -181,13 +181,9 @@ class CommandPipeline:
                     _notify_failure(command, f"File '{command.filename}' does not exist locally")
                     continue
                 delete_path = pc.local_path
-                if self._context.config.controller.use_staging and self._context.config.controller.staging_path:
-                    pair_staging = (
-                        os.path.join(self._context.config.controller.staging_path, pc.pair_id)  # type: ignore[arg-type]
-                        if pc.pair_id
-                        else self._context.config.controller.staging_path  # type: ignore[arg-type]
-                    )
-                    staging_file = os.path.join(pair_staging, file.name)  # type: ignore[arg-type]
+                pair_staging = self._pair_staging_dir(pc)
+                if pair_staging:
+                    staging_file = os.path.join(pair_staging, file.name)
                     if os.path.exists(staging_file):
                         delete_path = pair_staging
                 process = DeleteLocalProcess(local_path=delete_path, file_name=file.name)
@@ -293,7 +289,7 @@ class CommandPipeline:
         Cleanup the list of active commands and do any callbacks
         :return:
         """
-        from .controller import Controller
+        from .controller import Controller  # noqa: F401 — used in type annotation below
 
         still_active_processes: list[Controller.CommandProcessWrapper] = []
         for command_process in self.active_command_processes:
@@ -348,8 +344,6 @@ class CommandPipeline:
 
         Only acts when staging is enabled; looks up the owning pair context by pair_id.
         """
-        if not (self._context.config.controller.use_staging and self._context.config.controller.staging_path):
-            return
         pc = self._find_pair_by_id(pair_id)
         if pc is None:
             self._logger.warning(f"Cannot spawn deferred move for '{file_name}': pair '{pair_id}' not found")
@@ -367,11 +361,10 @@ class CommandPipeline:
             return
 
         dest_path = pc.local_path
-        # Use per-pair staging subdirectory
-        # All callers guard with `use_staging and staging_path` so this is safe
-        staging_path = self._context.config.controller.staging_path
-        assert isinstance(staging_path, str)
-        staging_source: str = os.path.join(staging_path, pair_id) if pair_id else staging_path
+        staging_source = self._pair_staging_dir(pc)
+        if staging_source is None:
+            self._logger.warning(f"Skipping move for {file_name} - staging is not enabled")
+            return
 
         # Skip if the file doesn't exist in staging (e.g. already moved in a prior session)
         staging_file = os.path.join(staging_source, file_name)
@@ -387,14 +380,9 @@ class CommandPipeline:
         process.start()
         self._logger.info(f"Spawned move process for {file_name} (staging -> local)")
 
-    def _get_pair_context_for_command(self, command) -> PairContext | None:
+    def _get_pair_context_for_command(self, command: Controller.Command) -> PairContext | None:
         """Find the pair context for a command based on pair_id."""
-        if command.pair_id:
-            for pc in self._pair_contexts:
-                if pc.pair_id == command.pair_id:
-                    return pc
-            return None
-        return self._pair_contexts[0] if self._pair_contexts else None
+        return self._find_pair_by_id(command.pair_id)
 
     def _get_pair_context_for_file(self, file: ModelFile) -> PairContext | None:
         """Find the pair context that owns a ModelFile based on its pair_id."""
@@ -415,6 +403,13 @@ class CommandPipeline:
             return None
         return self._pair_contexts[0] if self._pair_contexts else None
 
+    def _pair_staging_dir(self, pc: PairContext) -> str | None:
+        """Return the per-pair staging directory, or None if staging is disabled."""
+        cfg = self._context.config.controller
+        if not (cfg.use_staging and cfg.staging_path):
+            return None
+        return os.path.join(cfg.staging_path, pc.pair_id) if pc.pair_id else cfg.staging_path  # type: ignore[arg-type]
+
     def _build_extract_request(self, file: ModelFile, pc: PairContext) -> ExtractRequest:
         """Build an ExtractRequest with the correct pair-specific paths."""
         # Determine output directory
@@ -424,12 +419,8 @@ class CommandPipeline:
             extract_out_dir = self._context.config.controller.extract_path  # type: ignore[assignment]
 
         # When staging is enabled, archives live in the staging subdir
-        if self._context.config.controller.use_staging and self._context.config.controller.staging_path:
-            pair_staging = (
-                os.path.join(self._context.config.controller.staging_path, pc.pair_id)  # type: ignore[arg-type]
-                if pc.pair_id
-                else self._context.config.controller.staging_path  # type: ignore[arg-type]
-            )
+        pair_staging = self._pair_staging_dir(pc)
+        if pair_staging:
             out_dir_path = pair_staging
             out_dir_path_fallback = extract_out_dir
         else:
