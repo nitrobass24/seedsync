@@ -57,6 +57,8 @@ def _make_config(skip_lftp=None, skip_controller=None, skip_general_verbose=Fals
     for field, value in _CONTROLLER_REQUIRED.items():
         if field not in skip_controller:
             setattr(config.controller, field, value)
+    if "use_local_path_as_extract_path" not in skip_controller:
+        config.controller.use_local_path_as_extract_path = True
 
     # General
     if not skip_general_verbose:
@@ -195,6 +197,20 @@ class TestBackwardCompatValidation(unittest.TestCase):
         with self.assertRaises(ControllerError) as cm:
             Controller(context, persist)
         self.assertIn("remote_path", str(cm.exception))
+
+    @patch.object(Controller, "_build_pair_contexts", return_value=[])
+    @patch.object(Controller, "_sync_persist_to_all_builders")
+    def test_missing_extract_path_when_not_using_local(self, _mock_sync, _mock_build):
+        """When use_local_path_as_extract_path is False and extract_path is None, should raise."""
+        config = _make_config(skip_controller={"use_local_path_as_extract_path"})
+        config.controller.use_local_path_as_extract_path = False
+        # extract_path defaults to None
+        args = _make_args()
+        context = _make_context(config, args)
+        persist = MagicMock(spec=ControllerPersist)
+        with self.assertRaises(ControllerError) as cm:
+            Controller(context, persist)
+        self.assertIn("Controller.extract_path", str(cm.exception))
 
     @patch.object(Controller, "_validate_config")
     @patch.object(Controller, "_sync_persist_to_all_builders")
