@@ -1,7 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from .controller import (
-    Controller as Controller,
+from .controller import Controller as Controller
+from .exclude_patterns import (
     filter_excluded_files as filter_excluded_files,
     parse_exclude_patterns as parse_exclude_patterns,
 )
