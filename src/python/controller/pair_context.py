@@ -127,7 +127,7 @@ def validate_config(context: Context) -> None:
         missing.append("Args.local_path_to_scanfs")
 
     if missing:
-        raise ControllerError("Required config fields are not set: {}".format(", ".join(missing)))
+        raise ControllerError(f"Required config fields are not set: {', '.join(missing)}")
 
 
 def configure_lftp(lftp: Lftp, config: Config) -> None:
