@@ -108,6 +108,12 @@ def validate_config(context: Context) -> None:
         if getattr(config.controller, field) is None:
             missing.append(f"Controller.{field}")
 
+    # Extract path: when use_local_path_as_extract_path is False, extract_path must be set
+    if config.controller.use_local_path_as_extract_path is None:
+        missing.append("Controller.use_local_path_as_extract_path")
+    elif not config.controller.use_local_path_as_extract_path and not config.controller.extract_path:
+        missing.append("Controller.extract_path")
+
     # General required fields
     if config.general.verbose is None:
         missing.append("General.verbose")
