@@ -141,7 +141,7 @@ class Controller:
             logger=self.logger,
         )
         # Now wire the real callback into the pipeline
-        self.__pipeline._sync_persist_callback = self.__updater.sync_persist_to_all_builders
+        self.__pipeline.sync_persist_callback = self.__updater.sync_persist_to_all_builders
 
         # Seed each builder with filtered persist state
         self.__updater.sync_persist_to_all_builders()
