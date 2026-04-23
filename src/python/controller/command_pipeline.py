@@ -65,10 +65,10 @@ class CommandPipeline:
         self._sync_persist_callback = sync_persist_callback
 
         # The command queue
-        self.command_queue: Queue = Queue()
+        self.command_queue: Queue[Controller.Command] = Queue()
 
         # Keep track of active command processes (shared)
-        self.active_command_processes: list = []
+        self.active_command_processes: list[Controller.CommandProcessWrapper] = []
 
         # Keep track of active move processes (staging -> final, shared)
         self.active_move_processes: list[MoveProcess] = []
