@@ -36,8 +36,7 @@ class TestSyncPersistToAllBuilders(unittest.TestCase):
         )
         return updater
 
-    def _make_persist(self, downloaded=None, extracted=None, extract_failed=None,
-                      validated=None, corrupt=None):
+    def _make_persist(self, downloaded=None, extracted=None, extract_failed=None, validated=None, corrupt=None):
         """Create a mock persist object with the given file name sets."""
         persist = MagicMock()
         persist.downloaded_file_names = downloaded or set()
