@@ -40,6 +40,7 @@ select = [
     "RET",  # flake8-return
     "PERF", # perflint
     "RUF",  # ruff-specific
+    "C",    # mccabe complexity
 ]
 ignore = [
     "UP046",  # non-pep695-generic-class — requires Python 3.12+ syntax migration
@@ -55,10 +56,13 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "I001"]  # re-exports, import order is load-order sensitive
-"tests/**" = ["W291", "SIM117", "RUF059"]  # trailing whitespace in test data; nested with; structural unpacking
+"tests/**" = ["W291", "SIM117", "RUF059", "C901"]  # trailing whitespace; nested with; structural unpacking; test complexity
 "tests/**/test_job_status_parser.py" = ["E501"]  # long lines are lftp output test data
 "model/file.py" = ["E721"]  # intentional type() comparisons for enum-style state checks
 "scan_fs.py" = ["UP006", "UP032", "UP035", "UP045"]  # must use typing/format() for Python 3.5 compat on remote
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
 
 [tool.ruff.lint.isort]
 known-first-party = ["common", "controller", "model", "lftp", "ssh", "web", "system"]

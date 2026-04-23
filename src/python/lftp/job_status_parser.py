@@ -118,7 +118,7 @@ class LftpJobStatusParser:
             raise LftpJobStatusParserError("Error parsing lftp job status") from e
         return statuses
 
-    def __parse_jobs(self, lines: list[str]) -> list[LftpJobStatus]:
+    def __parse_jobs(self, lines: list[str]) -> list[LftpJobStatus]:  # noqa: C901 — complexity 48, lftp output parser
         jobs: list[LftpJobStatus] = []
 
         # Header patterns
@@ -532,7 +532,7 @@ class LftpJobStatusParser:
         return jobs
 
     @staticmethod
-    def __parse_queue(lines: list[str]) -> list[LftpJobStatus]:
+    def __parse_queue(lines: list[str]) -> list[LftpJobStatus]:  # noqa: C901 — complexity 19, lftp output parser
         queue: list[LftpJobStatus] = []
 
         queue_done_m = re.compile(LftpJobStatusParser.__QUEUE_DONE_REGEX)
