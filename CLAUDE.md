@@ -234,7 +234,7 @@ These are guidelines, not hard caps. Their real job is to slow you down and ask 
 | File | ≤ 500 lines | At 400, ask "one concern or several?" |
 | Class | ≤ 300 lines | If state covers > 2 concerns, extract |
 | Function / method | ≤ 40 lines | Longer is OK when linear; deep nesting is not |
-| Cyclomatic complexity (per function) | ≤ 12 | Hard limit once `C901` is enabled in CI |
+| Cyclomatic complexity (per function) | ≤ 12 | Enforced in CI via ruff `C901` (`max-complexity = 12`) |
 
 Cyclomatic complexity is the one number that actually predicts pain — a 200-line linear function is fine; a 40-line function with 5 nested conditionals is dangerous. Use `ruff check --select C901` locally to measure.
 
