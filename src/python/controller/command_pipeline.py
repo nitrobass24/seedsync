@@ -86,7 +86,7 @@ class CommandPipeline:
         """Process commands from queue.
 
         References Controller.Command, Controller.Command.Action,
-        Controller._MAX_CONCURRENT_COMMAND_PROCESSES, and
+        Controller.MAX_CONCURRENT_COMMAND_PROCESSES, and
         Controller.CommandProcessWrapper which remain in Controller.
         """
         from .controller import Controller
@@ -155,7 +155,7 @@ class CommandPipeline:
                 self._extract_process.extract(req)
 
             elif command.action == Controller.Command.Action.DELETE_LOCAL:
-                if len(self.active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
+                if len(self.active_command_processes) >= Controller.MAX_CONCURRENT_COMMAND_PROCESSES:
                     self._logger.debug(
                         "Deferring %s for '%s': %d active processes at cap",
                         command.action,
@@ -199,7 +199,7 @@ class CommandPipeline:
                 command_wrapper.process.start()
 
             elif command.action == Controller.Command.Action.DELETE_REMOTE:
-                if len(self.active_command_processes) >= Controller._MAX_CONCURRENT_COMMAND_PROCESSES:
+                if len(self.active_command_processes) >= Controller.MAX_CONCURRENT_COMMAND_PROCESSES:
                     self._logger.debug(
                         "Deferring %s for '%s': %d active processes at cap",
                         command.action,
@@ -289,8 +289,6 @@ class CommandPipeline:
         Cleanup the list of active commands and do any callbacks
         :return:
         """
-        from .controller import Controller  # noqa: F401 — used in type annotation below
-
         still_active_processes: list[Controller.CommandProcessWrapper] = []
         for command_process in self.active_command_processes:
             if command_process.process.is_alive():
@@ -344,13 +342,13 @@ class CommandPipeline:
 
         Only acts when staging is enabled; looks up the owning pair context by pair_id.
         """
-        pc = self._find_pair_by_id(pair_id)
+        pc = self.find_pair_by_id(pair_id)
         if pc is None:
             self._logger.warning(f"Cannot spawn deferred move for '{file_name}': pair '{pair_id}' not found")
             return
-        self._spawn_move_process(file_name, pc)
+        self.spawn_move_process(file_name, pc)
 
-    def _spawn_move_process(self, file_name: str, pc: PairContext):
+    def spawn_move_process(self, file_name: str, pc: PairContext):
         """
         Spawn a MoveProcess to move a file from staging to the final local_path
         """
@@ -382,16 +380,16 @@ class CommandPipeline:
 
     def _get_pair_context_for_command(self, command: Controller.Command) -> PairContext | None:
         """Find the pair context for a command based on pair_id."""
-        return self._find_pair_by_id(command.pair_id)
+        return self.find_pair_by_id(command.pair_id)
 
-    def _get_pair_context_for_file(self, file: ModelFile) -> PairContext | None:
+    def get_pair_context_for_file(self, file: ModelFile) -> PairContext | None:
         """Find the pair context that owns a ModelFile based on its pair_id."""
         for pc in self._pair_contexts:
             if pc.pair_id == file.pair_id:
                 return pc
         return None
 
-    def _find_pair_by_id(self, pair_id: str | None) -> PairContext | None:
+    def find_pair_by_id(self, pair_id: str | None) -> PairContext | None:
         """Find the pair context by pair_id.
         Returns default (first) pair when pair_id is None.
         Returns None when pair_id is provided but not found.

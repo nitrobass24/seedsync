@@ -82,7 +82,7 @@ class Controller:
             self.process = process
             self.post_callback = post_callback
 
-    _MAX_CONCURRENT_COMMAND_PROCESSES = 8
+    MAX_CONCURRENT_COMMAND_PROCESSES = 8
 
     def __init__(self, context: Context, persist: ControllerPersist):
         self.__context = context
@@ -389,7 +389,7 @@ class Controller:
         # Process extraction completions once (shared across all pairs)
         if latest_extracted_results:
             for result in latest_extracted_results:
-                owner_pc = self.__pipeline._find_pair_by_id(result.pair_id)
+                owner_pc = self.__pipeline.find_pair_by_id(result.pair_id)
                 if owner_pc is None:
                     self.logger.warning(
                         f"Ignoring extract completion for '{result.name}': pair '{result.pair_id}' no longer exists"
@@ -399,7 +399,7 @@ class Controller:
                 self.__persist.extracted_file_names.add(pkey)
                 if self.__context.config.controller.use_staging and self.__context.config.controller.staging_path:
                     if pkey not in self.__pipeline.pending_validation_keys:
-                        self.__pipeline._spawn_move_process(result.name, owner_pc)
+                        self.__pipeline.spawn_move_process(result.name, owner_pc)
             self._sync_persist_to_all_builders()
 
         # Build an aggregate new model from all pairs
@@ -442,7 +442,7 @@ class Controller:
             for diff in model_diff:
                 diff_file = diff.new_file or diff.old_file
                 assert diff_file is not None
-                pc = self.__pipeline._get_pair_context_for_file(diff_file)
+                pc = self.__pipeline.get_pair_context_for_file(diff_file)
 
                 if diff.new_file is not None and diff.new_file.state in (
                     ModelFile.State.QUEUED,
@@ -509,7 +509,7 @@ class Controller:
                             and diff.new_file.remote_size is not None
                         )
                         if not will_auto_extract and not will_auto_validate:
-                            self.__pipeline._spawn_move_process(diff.new_file.name, pc)
+                            self.__pipeline.spawn_move_process(diff.new_file.name, pc)
 
                 if diff.new_file is not None and pc is not None and diff.new_file.name in pc.pending_completion:
                     use_staging = (
