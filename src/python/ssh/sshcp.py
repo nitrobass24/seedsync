@@ -351,8 +351,8 @@ class Sshcp:
         if i == 1:
             if eof_error is not None:
                 msg = eof_error
-                if isinstance(before_val, bytes) and before_val.decode(errors="replace").strip():
-                    msg += " - " + before_val.decode(errors="replace").strip()
+                if before:
+                    msg += " - " + before
                 raise SshcpError(msg)
             if password_error is not None:
                 raise SshcpError(password_error)
@@ -360,8 +360,8 @@ class Sshcp:
             raise SshcpError(f"Bad hostname: {self.__host}")
         if i in {2, 4}:
             msg = "Connection refused by server"
-            if isinstance(before_val, bytes) and before_val.decode(errors="replace").strip():
-                msg += " - " + before_val.decode(errors="replace").strip()
+            if before:
+                msg += " - " + before
             raise SshcpError(msg)
 
     def _check_shell_not_found(self, output: str) -> None:
