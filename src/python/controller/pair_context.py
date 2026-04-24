@@ -67,9 +67,9 @@ class PairContext:
         self.remote_scan_received: bool = False
         self.local_scan_received: bool = False
 
-        # Temporary storage for latest scan results (set during _update_pair_model_state)
-        self._latest_remote_scan: ScannerResult | None = None
-        self._latest_local_scan: ScannerResult | None = None
+        # Temporary storage for latest scan results (set during ModelUpdater._update_pair_model_state)
+        self.latest_remote_scan: ScannerResult | None = None
+        self.latest_local_scan: ScannerResult | None = None
 
 
 def validate_config(context: Context) -> None:

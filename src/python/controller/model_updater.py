@@ -299,17 +299,18 @@ class ModelUpdater:
             self._pipeline.spawn_deferred_move(result.pair_id, result.name)
 
         # Update the controller status (use most recent across all pairs)
+        # Note: remote scans set failed/error fields; local scans don't surface errors
         for pc in self._pair_contexts:
-            if pc._latest_remote_scan is not None:  # type: ignore[reportPrivateUsage]
+            if pc.latest_remote_scan is not None:
                 current = self._context.status.controller.latest_remote_scan_time
-                if current is None or pc._latest_remote_scan.timestamp > current:  # type: ignore[reportPrivateUsage]
-                    self._context.status.controller.latest_remote_scan_time = pc._latest_remote_scan.timestamp  # type: ignore[reportPrivateUsage]
-                    self._context.status.controller.latest_remote_scan_failed = pc._latest_remote_scan.failed  # type: ignore[reportPrivateUsage]
-                    self._context.status.controller.latest_remote_scan_error = pc._latest_remote_scan.error_message  # type: ignore[reportPrivateUsage]
-            if pc._latest_local_scan is not None:  # type: ignore[reportPrivateUsage]
+                if current is None or pc.latest_remote_scan.timestamp > current:
+                    self._context.status.controller.latest_remote_scan_time = pc.latest_remote_scan.timestamp
+                    self._context.status.controller.latest_remote_scan_failed = pc.latest_remote_scan.failed
+                    self._context.status.controller.latest_remote_scan_error = pc.latest_remote_scan.error_message
+            if pc.latest_local_scan is not None:
                 current = self._context.status.controller.latest_local_scan_time
-                if current is None or pc._latest_local_scan.timestamp > current:  # type: ignore[reportPrivateUsage]
-                    self._context.status.controller.latest_local_scan_time = pc._latest_local_scan.timestamp  # type: ignore[reportPrivateUsage]
+                if current is None or pc.latest_local_scan.timestamp > current:
+                    self._context.status.controller.latest_local_scan_time = pc.latest_local_scan.timestamp
 
     def _update_pair_model_state(  # noqa: C901 — will be decomposed in #394
         self,
@@ -324,8 +325,8 @@ class ModelUpdater:
         latest_local_scan = pc.local_scan_process.pop_latest_result()
         latest_active_scan = pc.active_scan_process.pop_latest_result()
 
-        pc._latest_remote_scan = latest_remote_scan  # type: ignore[reportPrivateUsage]
-        pc._latest_local_scan = latest_local_scan  # type: ignore[reportPrivateUsage]
+        pc.latest_remote_scan = latest_remote_scan
+        pc.latest_local_scan = latest_local_scan
 
         lftp_statuses = None
         try:
