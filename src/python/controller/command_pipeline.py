@@ -62,7 +62,7 @@ class CommandPipeline:
         self._extract_process = extract_process
         self._validate_process = validate_process
         self._logger = logger
-        self._sync_persist_callback = sync_persist_callback
+        self.sync_persist_callback = sync_persist_callback
 
         # The command queue
         self.command_queue: Queue[Controller.Command] = Queue()
@@ -150,7 +150,7 @@ class CommandPipeline:
                     continue
                 pkey = persist_key(pc.pair_id, file.name)
                 self._persist.extract_failed_file_names.discard(pkey)
-                self._sync_persist_callback()
+                self.sync_persist_callback()
                 req = self._build_extract_request(file, pc)
                 self._extract_process.extract(req)
 
@@ -262,7 +262,7 @@ class CommandPipeline:
                 pkey = persist_key(pc.pair_id, file.name)
                 self._persist.validated_file_names.discard(pkey)
                 self._persist.corrupt_file_names.discard(pkey)
-                self._sync_persist_callback()
+                self.sync_persist_callback()
                 req = ValidateRequest(
                     name=file.name,
                     is_dir=file.is_dir,

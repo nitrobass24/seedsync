@@ -234,7 +234,7 @@ These are guidelines, not hard caps. Their real job is to slow you down and ask 
 | File | ≤ 500 lines | At 400, ask "one concern or several?" |
 | Class | ≤ 300 lines | If state covers > 2 concerns, extract |
 | Function / method | ≤ 40 lines | Longer is OK when linear; deep nesting is not |
-| Cyclomatic complexity (per function) | ≤ 12 | Hard limit once `C901` is enabled in CI |
+| Cyclomatic complexity (per function) | ≤ 12 | Enforced in CI via ruff `C901` (`max-complexity = 12`) |
 
 Cyclomatic complexity is the one number that actually predicts pain — a 200-line linear function is fine; a 40-line function with 5 nested conditionals is dangerous. Use `ruff check --select C901` locally to measure.
 
@@ -257,7 +257,7 @@ When you see these, open an issue for the extraction rather than working around 
 ### Enforcement
 
 - **Qualitative checks**: code review. Reviewers should push back on "this file is getting unwieldy" even without a hard rule.
-- **Mechanical checks** (Python): ruff's `C901` (cyclomatic complexity) with `max-complexity = 12`. Tracked for rollout in a follow-up issue — not yet enabled globally.
+- **Mechanical checks** (Python): ruff's `C901` (cyclomatic complexity) with `max-complexity = 12`. Enforced in CI; existing outliers are annotated with `# noqa: C901`. Test files (`tests/**`) are excluded via `per-file-ignores` in `pyproject.toml`.
 - **Ratchet pattern**: when a bound exists but the codebase has outliers, set the threshold just above the worst and drop it over time (same pattern we use for `--max-warnings` in `ng lint`).
 
 ## GitHub Repository
