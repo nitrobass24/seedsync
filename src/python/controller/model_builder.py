@@ -297,80 +297,80 @@ class ModelBuilder:
 
     @staticmethod
     def _fill_model_file(
-        _model_file: ModelFile,
-        _remote: SystemFile | None,
-        _local: SystemFile | None,
-        _transfer_state: LftpJobStatus.TransferState | None,
+        model_file: ModelFile,
+        remote: SystemFile | None,
+        local: SystemFile | None,
+        transfer_state: LftpJobStatus.TransferState | None,
     ):
         # set local and remote sizes
-        if _remote:
-            _model_file.remote_size = _remote.size
-        if _local:
-            _model_file.local_size = _local.size
+        if remote:
+            model_file.remote_size = remote.size
+        if local:
+            model_file.local_size = local.size
 
         # Note: no longer use lftp's file sizes
         #       they represent remaining size for resumed downloads
 
         # set the downloading speed and eta
-        if _transfer_state:
-            _model_file.downloading_speed = _transfer_state.speed
-            _model_file.eta = _transfer_state.eta
+        if transfer_state:
+            model_file.downloading_speed = transfer_state.speed
+            model_file.eta = transfer_state.eta
 
         # set the transferred size (only if file or dir exists on both ends)
-        if _local and _remote:
-            ModelBuilder._update_transferred_size(_model_file, _remote, _local)
+        if local and remote:
+            ModelBuilder._update_transferred_size(model_file, remote, local)
 
         # set the is_extractable flag
-        ModelBuilder._update_extractable_flag(_model_file)
+        ModelBuilder._update_extractable_flag(model_file)
 
         # set the timestamps
-        ModelBuilder._update_timestamps(_model_file, _remote, _local)
+        ModelBuilder._update_timestamps(model_file, remote, local)
 
     @staticmethod
     def _update_transferred_size(
-        _model_file: ModelFile,
-        _remote: SystemFile,
-        _local: SystemFile,
+        model_file: ModelFile,
+        remote: SystemFile,
+        local: SystemFile,
     ):
-        if _model_file.is_dir:
+        if model_file.is_dir:
             # dir transferred size is updated by child files
-            _model_file.transferred_size = 0
+            model_file.transferred_size = 0
         else:
-            _model_file.transferred_size = min(_local.size, _remote.size)
+            model_file.transferred_size = min(local.size, remote.size)
 
             # also update all parent directories
-            _parent_file = _model_file.parent
-            while _parent_file is not None:
-                if _parent_file.transferred_size is not None and _model_file.transferred_size is not None:  # type: ignore[reportUnnecessaryComparison]
-                    _parent_file.transferred_size += _model_file.transferred_size
-                _parent_file = _parent_file.parent
+            parent_file = model_file.parent
+            while parent_file is not None:
+                if parent_file.transferred_size is not None and model_file.transferred_size is not None:  # type: ignore[reportUnnecessaryComparison]
+                    parent_file.transferred_size += model_file.transferred_size
+                parent_file = parent_file.parent
 
     @staticmethod
-    def _update_extractable_flag(_model_file: ModelFile):
-        if not _model_file.is_dir and Extract.is_archive_fast(_model_file.name):
-            _model_file.is_extractable = True
+    def _update_extractable_flag(model_file: ModelFile):
+        if not model_file.is_dir and Extract.is_archive_fast(model_file.name):
+            model_file.is_extractable = True
             # Also set the flag for all of its parents
-            _parent_file = _model_file.parent
-            while _parent_file is not None:
-                _parent_file.is_extractable = True
-                _parent_file = _parent_file.parent
+            parent_file = model_file.parent
+            while parent_file is not None:
+                parent_file.is_extractable = True
+                parent_file = parent_file.parent
 
     @staticmethod
     def _update_timestamps(
-        _model_file: ModelFile,
-        _remote: SystemFile | None,
-        _local: SystemFile | None,
+        model_file: ModelFile,
+        remote: SystemFile | None,
+        local: SystemFile | None,
     ):
-        if _local:
-            if _local.timestamp_created:
-                _model_file.local_created_timestamp = _local.timestamp_created
-            if _local.timestamp_modified:
-                _model_file.local_modified_timestamp = _local.timestamp_modified
-        if _remote:
-            if _remote.timestamp_created:
-                _model_file.remote_created_timestamp = _remote.timestamp_created
-            if _remote.timestamp_modified:
-                _model_file.remote_modified_timestamp = _remote.timestamp_modified
+        if local:
+            if local.timestamp_created:
+                model_file.local_created_timestamp = local.timestamp_created
+            if local.timestamp_modified:
+                model_file.local_modified_timestamp = local.timestamp_modified
+        if remote:
+            if remote.timestamp_created:
+                model_file.remote_created_timestamp = remote.timestamp_created
+            if remote.timestamp_modified:
+                model_file.remote_modified_timestamp = remote.timestamp_modified
 
     def _estimate_eta(self, model_file: ModelFile, name: str, status: LftpJobStatus | None):
         # estimate the ETA for the root if it's not available
