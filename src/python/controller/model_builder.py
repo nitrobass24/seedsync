@@ -227,7 +227,7 @@ class ModelBuilder:
         remote: SystemFile | None,
         local: SystemFile | None,
         status: LftpJobStatus | None,
-        model_file: ModelFile,
+        root_model_file: ModelFile,
     ):
         # Traverse SystemFile children tree in BFS order
         # Store (remote, local, status, model_file) tuple in traversal frontier where remote and local
@@ -238,7 +238,7 @@ class ModelBuilder:
         #       merely used for traversing children
         frontier: list[tuple[SystemFile | None, SystemFile | None, LftpJobStatus | None, ModelFile]] = []
         if remote or local:
-            frontier.append((remote, local, status, model_file))
+            frontier.append((remote, local, status, root_model_file))
         while frontier:
             _remote, _local, _status, _model_file = frontier.pop(0)
             _remote_children: dict[str, SystemFile] = {sf.name: sf for sf in _remote.children} if _remote else {}
@@ -285,7 +285,7 @@ class ModelBuilder:
                     _child_model_file.state = ModelFile.State.DOWNLOADING
                 elif _remote_child and _local_child and _local_child.size >= _remote_child.size:
                     _child_model_file.state = ModelFile.State.DOWNLOADED
-                elif _remote_child and model_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
+                elif _remote_child and root_model_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
                     _child_model_file.state = ModelFile.State.QUEUED
                 else:
                     _child_model_file.state = ModelFile.State.DEFAULT
