@@ -494,10 +494,10 @@ class ModelBuilder:
             and model_file.remote_size is not None
             and model_file.local_size < model_file.remote_size
         ):
-            pass  # Stay DEFAULT for re-download
+            return  # Stay DEFAULT for re-download
         # Persist authority — applies when auto_delete_remote OFF,
         # or when remote is already gone (auto_delete_remote ON, delete succeeded)
-        elif not self.__auto_delete_remote or model_file.remote_size is None:
+        if not self.__auto_delete_remote or model_file.remote_size is None:
             if model_file.local_size is not None:
                 model_file.state = ModelFile.State.DOWNLOADED
             else:
