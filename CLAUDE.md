@@ -257,7 +257,7 @@ When you see these, open an issue for the extraction rather than working around 
 ### Enforcement
 
 - **Qualitative checks**: code review. Reviewers should push back on "this file is getting unwieldy" even without a hard rule.
-- **Mechanical checks** (Python): ruff's `C901` (cyclomatic complexity) with `max-complexity = 12`. Tracked for rollout in a follow-up issue — not yet enabled globally.
+- **Mechanical checks** (Python): ruff's `C901` (cyclomatic complexity) with `max-complexity = 12`. Enforced in CI; existing outliers are annotated with `# noqa: C901`.
 - **Ratchet pattern**: when a bound exists but the codebase has outliers, set the threshold just above the worst and drop it over time (same pattern we use for `--max-warnings` in `ng lint`).
 
 ## GitHub Repository

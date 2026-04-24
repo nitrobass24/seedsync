@@ -4,7 +4,7 @@
 
 Owns the per-cycle model-update loop that was formerly Controller.__update_model.
 Extracted from controller.py as part of the controller decomposition
-(#394 Phase F).
+(#394 Phase 3F).
 """
 
 from __future__ import annotations
@@ -386,58 +386,47 @@ class ModelUpdater:
             pair_validate_statuses = [s for s in latest_validate_statuses.statuses if s.pair_id == pc.pair_id]
             pc.model_builder.set_validate_statuses(pair_validate_statuses)
 
-    def sync_persist_to_all_builders(self):  # noqa: C901 — will be decomposed in #394
+    def sync_persist_to_all_builders(self):
         """Push current persist state to all pair model builders, filtered by pair_id."""
         namespaced_prefixes = tuple(
             f"{other_pc.pair_id}{sep}" for other_pc in self._pair_contexts if other_pc.pair_id for sep in (KEY_SEP, ":")
         )
         for pc in self._pair_contexts:
-            prefix = f"{pc.pair_id}{KEY_SEP}" if pc.pair_id else ""
-            # Defense-in-depth: from_str() migrates colon keys at load time,
-            # but we check both separators here in case of incomplete migration.
-            legacy_prefix = f"{pc.pair_id}:" if pc.pair_id else ""
-            downloaded: set[str] = set()
-            extracted: set[str] = set()
-            extract_failed: set[str] = set()
-            validated: set[str] = set()
-            corrupt: set[str] = set()
-            for key in self._persist.downloaded_file_names:
-                if prefix and key.startswith(prefix):
-                    downloaded.add(key[len(prefix) :])
-                elif prefix and legacy_prefix and key.startswith(legacy_prefix):
-                    downloaded.add(key[len(legacy_prefix) :])
-                elif not prefix and not key.startswith(namespaced_prefixes):
-                    downloaded.add(key)
-            for key in self._persist.extracted_file_names:
-                if prefix and key.startswith(prefix):
-                    extracted.add(key[len(prefix) :])
-                elif prefix and legacy_prefix and key.startswith(legacy_prefix):
-                    extracted.add(key[len(legacy_prefix) :])
-                elif not prefix and not key.startswith(namespaced_prefixes):
-                    extracted.add(key)
-            for key in self._persist.extract_failed_file_names:
-                if prefix and key.startswith(prefix):
-                    extract_failed.add(key[len(prefix) :])
-                elif prefix and legacy_prefix and key.startswith(legacy_prefix):
-                    extract_failed.add(key[len(legacy_prefix) :])
-                elif not prefix and not key.startswith(namespaced_prefixes):
-                    extract_failed.add(key)
-            for key in self._persist.validated_file_names:
-                if prefix and key.startswith(prefix):
-                    validated.add(key[len(prefix) :])
-                elif prefix and legacy_prefix and key.startswith(legacy_prefix):
-                    validated.add(key[len(legacy_prefix) :])
-                elif not prefix and not key.startswith(namespaced_prefixes):
-                    validated.add(key)
-            for key in self._persist.corrupt_file_names:
-                if prefix and key.startswith(prefix):
-                    corrupt.add(key[len(prefix) :])
-                elif prefix and legacy_prefix and key.startswith(legacy_prefix):
-                    corrupt.add(key[len(legacy_prefix) :])
-                elif not prefix and not key.startswith(namespaced_prefixes):
-                    corrupt.add(key)
-            pc.model_builder.set_downloaded_files(downloaded)
-            pc.model_builder.set_extracted_files(extracted)
-            pc.model_builder.set_extract_failed_files(extract_failed)
-            pc.model_builder.set_validated_files(validated)
-            pc.model_builder.set_corrupt_files(corrupt)
+            pc.model_builder.set_downloaded_files(
+                self._filter_keys_for_pair(self._persist.downloaded_file_names, pc.pair_id, namespaced_prefixes)
+            )
+            pc.model_builder.set_extracted_files(
+                self._filter_keys_for_pair(self._persist.extracted_file_names, pc.pair_id, namespaced_prefixes)
+            )
+            pc.model_builder.set_extract_failed_files(
+                self._filter_keys_for_pair(self._persist.extract_failed_file_names, pc.pair_id, namespaced_prefixes)
+            )
+            pc.model_builder.set_validated_files(
+                self._filter_keys_for_pair(self._persist.validated_file_names, pc.pair_id, namespaced_prefixes)
+            )
+            pc.model_builder.set_corrupt_files(
+                self._filter_keys_for_pair(self._persist.corrupt_file_names, pc.pair_id, namespaced_prefixes)
+            )
+
+    @staticmethod
+    def _filter_keys_for_pair(keys: set[str], pair_id: str | None, namespaced_prefixes: tuple[str, ...]) -> set[str]:
+        """Filter and strip persist keys that belong to a specific pair.
+
+        For pairs with a pair_id, matches keys with the current separator or
+        legacy colon prefix. For the default pair (pair_id=None), matches keys
+        that don't start with any other pair's prefix.
+        """
+        result: set[str] = set()
+        if pair_id:
+            prefix = f"{pair_id}{KEY_SEP}"
+            legacy_prefix = f"{pair_id}:"
+            for key in keys:
+                if key.startswith(prefix):
+                    result.add(key[len(prefix) :])
+                elif key.startswith(legacy_prefix):
+                    result.add(key[len(legacy_prefix) :])
+        else:
+            for key in keys:
+                if not key.startswith(namespaced_prefixes):
+                    result.add(key)
+        return result

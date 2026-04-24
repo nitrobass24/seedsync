@@ -269,7 +269,7 @@ class Controller:
         # Model builder
         model_builder = ModelBuilder(pair_id=pair_id)
         model_builder.set_base_logger(pair_logger)
-        # Persist state is filtered per-pair by _sync_persist_to_all_builders()
+        # Persist state is filtered per-pair by ModelUpdater.sync_persist_to_all_builders()
         # called after all pair contexts are built. Initialize with empty sets.
         model_builder.set_downloaded_files(set())
         model_builder.set_extracted_files(set())

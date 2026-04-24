@@ -98,6 +98,22 @@ class TestSyncPersistToAllBuilders(unittest.TestCase):
         pc_abc.model_builder.set_downloaded_files.assert_called_once_with({"legacy_file.mkv"})
         pc_abc.model_builder.set_extracted_files.assert_called_once_with({"legacy_file.mkv"})
 
+    def test_default_pair_excludes_legacy_colon_keys(self):
+        pc_default = self._make_pair_context(None)
+        pc_abc = self._make_pair_context("abc")
+
+        persist = self._make_persist(
+            downloaded={"abc:legacy.mkv", "plain.txt"},
+        )
+
+        updater = self._make_updater([pc_default, pc_abc], persist)
+        updater.sync_persist_to_all_builders()
+
+        # Default pair should NOT get the legacy-colon-prefixed key
+        pc_default.model_builder.set_downloaded_files.assert_called_once_with({"plain.txt"})
+        # abc pair should get it stripped
+        pc_abc.model_builder.set_downloaded_files.assert_called_once_with({"legacy.mkv"})
+
     def test_all_persist_categories_are_distributed(self):
         pc_abc = self._make_pair_context("abc")
 
