@@ -61,7 +61,7 @@ class ModelUpdater:
         self._password = password
         self._logger = logger
 
-    def update(self):
+    def update(self) -> None:
         # Grab the latest extract results (shared)
         latest_extract_statuses = self._extract_process.pop_latest_statuses()
         latest_extracted_results = self._extract_process.pop_completed()
