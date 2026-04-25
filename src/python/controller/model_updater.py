@@ -19,11 +19,17 @@ from model import Model, ModelDiff, ModelError, ModelFile
 from .command_pipeline import CommandPipeline
 from .controller_persist import ControllerPersist
 from .exclude_patterns import filter_excluded_files
-from .extract import ExtractProcess, ExtractStatus, ExtractStatusResult
+from .extract import ExtractCompletedResult, ExtractFailedResult, ExtractProcess, ExtractStatus, ExtractStatusResult
 from .model_registry import ModelRegistry
 from .pair_context import PairContext
 from .persist_keys import KEY_SEP, persist_key, strip_persist_key
-from .validate import ValidateProcess, ValidateRequest, ValidateStatusResult
+from .validate import (
+    ValidateCompletedResult,
+    ValidateFailedResult,
+    ValidateProcess,
+    ValidateRequest,
+    ValidateStatusResult,
+)
 
 
 class ModelUpdater:
@@ -82,7 +88,7 @@ class ModelUpdater:
         self._process_validation_results(latest_validated_results, latest_failed_validations)
         self._update_controller_status()
 
-    def _process_extraction_completions(self, latest_extracted_results: list) -> None:
+    def _process_extraction_completions(self, latest_extracted_results: list[ExtractCompletedResult]) -> None:
         """Process extraction completions once (shared across all pairs)."""
         if not latest_extracted_results:
             return
@@ -165,13 +171,9 @@ class ModelUpdater:
             self._persist.corrupt_file_names.discard(pkey)
             self.sync_persist_to_all_builders()
 
-    def _handle_downloaded_file(self, diff: ModelDiff, pc: PairContext | None) -> bool:
-        """Handle a newly downloaded file: persist, auto-validate, staging move.
-
-        Returns True if the file was just downloaded.
-        """
-        downloaded = False
-        if (
+    def _handle_downloaded_file(self, diff: ModelDiff, pc: PairContext | None) -> None:
+        """Handle a newly downloaded file: persist, auto-validate, staging move."""
+        is_newly_downloaded = (
             diff.change == ModelDiff.Change.ADDED
             and diff.new_file is not None
             and diff.new_file.state == ModelFile.State.DOWNLOADED
@@ -181,10 +183,9 @@ class ModelUpdater:
             and diff.new_file.state == ModelFile.State.DOWNLOADED
             and diff.old_file is not None
             and diff.old_file.state != ModelFile.State.DOWNLOADED
-        ):
-            downloaded = True
-        if not downloaded:
-            return False
+        )
+        if not is_newly_downloaded:
+            return
 
         assert diff.new_file is not None
         assert pc is not None
@@ -193,11 +194,12 @@ class ModelUpdater:
         self.sync_persist_to_all_builders()
 
         # Auto-validate if enabled
-        if (
+        will_auto_validate = (
             self._context.config.validate.enabled
             and self._context.config.validate.auto_validate
             and diff.new_file.remote_size is not None
-        ):
+        )
+        if will_auto_validate:
             req = ValidateRequest(
                 name=diff.new_file.name,
                 is_dir=diff.new_file.is_dir,
@@ -216,15 +218,8 @@ class ModelUpdater:
 
         if self._context.config.controller.use_staging and self._context.config.controller.staging_path:
             will_auto_extract = self._context.config.autoqueue.auto_extract and diff.new_file.is_extractable
-            will_auto_validate = (
-                self._context.config.validate.enabled
-                and self._context.config.validate.auto_validate
-                and diff.new_file.remote_size is not None
-            )
             if not will_auto_extract and not will_auto_validate:
                 self._pipeline.spawn_move_process(diff.new_file.name, pc)
-
-        return True
 
     def _handle_pending_completion(self, diff: ModelDiff, pc: PairContext | None) -> None:
         """Track pending_completion state for a diff."""
@@ -258,10 +253,13 @@ class ModelUpdater:
 
     def _prune_stale_persist(self) -> None:
         """Prune extracted files list and remove persist entries for absent files."""
-        # Prune the extracted files list of any files that were deleted locally
+        self._prune_extracted_files()
+        self._prune_absent_persist_entries()
+
+    def _prune_extracted_files(self) -> None:
+        """Remove extracted-file entries for files that were deleted locally."""
         remove_extracted_keys: set[str] = set()
         for pkey in self._persist.extracted_file_names:
-            # Find the file in the model by checking each pair
             for _pc in self._pair_contexts:
                 bare_name = strip_persist_key(pkey, _pc.pair_id)
                 if bare_name != pkey or _pc.pair_id is None:
@@ -276,27 +274,28 @@ class ModelUpdater:
             self._persist.extracted_file_names.difference_update(remove_extracted_keys)
             self.sync_persist_to_all_builders()
 
-        # Persist cleanup: remove entries for files absent from all sources
+    def _prune_absent_persist_entries(self) -> None:
+        """Remove persist entries for files absent from all sources."""
         all_scans_received = all(_pc.remote_scan_received and _pc.local_scan_received for _pc in self._pair_contexts)
-        if all_scans_received:
-            # Build a set of all composite keys present in the model
-            model_keys: set[str] = set()
-            for f in self._registry.get_all_files():
-                model_keys.add(persist_key(f.pair_id, f.name))
-            absent_keys: set[str] = set()
-            for pkey in self._persist.downloaded_file_names:
-                if pkey not in model_keys and pkey not in self._pipeline.moved_file_keys:
-                    absent_keys.add(pkey)
-            if absent_keys:
-                self._logger.info(f"Persist cleanup (both absent): {absent_keys}")
-                self._persist.downloaded_file_names.difference_update(absent_keys)
-                self._persist.extracted_file_names.difference_update(absent_keys)
-                self._persist.extract_failed_file_names.difference_update(absent_keys)
-                self._persist.validated_file_names.difference_update(absent_keys)
-                self._persist.corrupt_file_names.difference_update(absent_keys)
-                self.sync_persist_to_all_builders()
+        if not all_scans_received:
+            return
+        model_keys: set[str] = set()
+        for f in self._registry.get_all_files():
+            model_keys.add(persist_key(f.pair_id, f.name))
+        absent_keys: set[str] = set()
+        for pkey in self._persist.downloaded_file_names:
+            if pkey not in model_keys and pkey not in self._pipeline.moved_file_keys:
+                absent_keys.add(pkey)
+        if absent_keys:
+            self._logger.info(f"Persist cleanup (both absent): {absent_keys}")
+            self._persist.downloaded_file_names.difference_update(absent_keys)
+            self._persist.extracted_file_names.difference_update(absent_keys)
+            self._persist.extract_failed_file_names.difference_update(absent_keys)
+            self._persist.validated_file_names.difference_update(absent_keys)
+            self._persist.corrupt_file_names.difference_update(absent_keys)
+            self.sync_persist_to_all_builders()
 
-    def _process_extraction_failures(self, latest_failed_extractions: list) -> None:
+    def _process_extraction_failures(self, latest_failed_extractions: list[ExtractFailedResult]) -> None:
         """Process extraction failures -- mark as failed immediately."""
         for result in latest_failed_extractions:
             self._logger.error(f"Extraction failed for '{result.name}'")
@@ -304,7 +303,11 @@ class ModelUpdater:
             self._persist.extract_failed_file_names.add(fail_key)
             self.sync_persist_to_all_builders()
 
-    def _process_validation_results(self, latest_validated_results: list, latest_failed_validations: list) -> None:
+    def _process_validation_results(
+        self,
+        latest_validated_results: list[ValidateCompletedResult],
+        latest_failed_validations: list[ValidateFailedResult],
+    ) -> None:
         """Process validation completions and failures."""
         # Process validation completions -- mark as validated
         for result in latest_validated_results:
