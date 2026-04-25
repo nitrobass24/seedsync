@@ -312,7 +312,7 @@ class ModelUpdater:
                 if current is None or pc.latest_local_scan.timestamp > current:
                     self._context.status.controller.latest_local_scan_time = pc.latest_local_scan.timestamp
 
-    def _update_pair_model_state(  # noqa: C901 — will be decomposed in #394
+    def _update_pair_model_state(
         self,
         pc: PairContext,
         latest_extract_statuses: ExtractStatusResult | None,
@@ -339,19 +339,7 @@ class ModelUpdater:
         if latest_local_scan is not None:
             pc.local_scan_received = True
 
-        if lftp_statuses is not None:
-            current_downloading = {s.name for s in lftp_statuses if s.state == LftpJobStatus.State.RUNNING}
-            just_completed = pc.prev_downloading_file_names - current_downloading
-            if just_completed:
-                for name in just_completed:
-                    self._logger.info(f"Download completed (LFTP job finished): {name}")
-                self._persist.downloaded_file_names.update(persist_key(pc.pair_id, n) for n in just_completed)
-                self.sync_persist_to_all_builders()
-                pc.pending_completion.update(just_completed)
-                pc.local_scan_process.force_scan()
-
-            pc.active_downloading_file_names = list(current_downloading)
-            pc.prev_downloading_file_names = current_downloading
+        self._detect_lftp_completions(pc, lftp_statuses)
 
         if latest_extract_statuses is not None:
             # Only include extract statuses for files that belong to this pair
@@ -386,6 +374,22 @@ class ModelUpdater:
         if latest_validate_statuses is not None:
             pair_validate_statuses = [s for s in latest_validate_statuses.statuses if s.pair_id == pc.pair_id]
             pc.model_builder.set_validate_statuses(pair_validate_statuses)
+
+    def _detect_lftp_completions(self, pc: PairContext, lftp_statuses: list[LftpJobStatus] | None) -> None:
+        """Detect LFTP download completions and update persist/pending state."""
+        if lftp_statuses is not None:
+            current_downloading = {s.name for s in lftp_statuses if s.state == LftpJobStatus.State.RUNNING}
+            just_completed = pc.prev_downloading_file_names - current_downloading
+            if just_completed:
+                for name in just_completed:
+                    self._logger.info(f"Download completed (LFTP job finished): {name}")
+                self._persist.downloaded_file_names.update(persist_key(pc.pair_id, n) for n in just_completed)
+                self.sync_persist_to_all_builders()
+                pc.pending_completion.update(just_completed)
+                pc.local_scan_process.force_scan()
+
+            pc.active_downloading_file_names = list(current_downloading)
+            pc.prev_downloading_file_names = current_downloading
 
     def sync_persist_to_all_builders(self):
         """Push current persist state to all pair model builders, filtered by pair_id."""

@@ -82,7 +82,7 @@ class CommandPipeline:
         """Put a command on the queue for processing."""
         self.command_queue.put(command)
 
-    def step(self):  # noqa: C901
+    def step(self):
         """Process commands from queue.
 
         References Controller.Command, Controller.Command.Action,
@@ -113,176 +113,261 @@ class CommandPipeline:
                 _notify_failure(command, f"File '{command.filename}' not found")
                 continue
 
-            if command.action == Controller.Command.Action.QUEUE:
-                if file.remote_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist remotely")
-                    continue
-                try:
-                    exclude = parse_exclude_patterns(self._context.config.general.exclude_patterns)
-                    pc.lftp.queue(file.name, file.is_dir, exclude_patterns=exclude)
-                except LftpError as e:
-                    _notify_failure(command, f"Lftp error: {e!s}")
-                    continue
+            success = self._dispatch_command(command, file, pc, deferred, _notify_failure, Controller)
 
-            elif command.action == Controller.Command.Action.STOP:
-                if file.state not in (ModelFile.State.DOWNLOADING, ModelFile.State.QUEUED):
-                    _notify_failure(command, f"File '{command.filename}' is not Queued or Downloading")
-                    continue
-                try:
-                    pc.lftp.kill(file.name)
-                except LftpError as e:
-                    _notify_failure(command, f"Lftp error: {e!s}")
-                    continue
-
-            elif command.action == Controller.Command.Action.EXTRACT:
-                if file.state not in (
-                    ModelFile.State.DEFAULT,
-                    ModelFile.State.DOWNLOADED,
-                    ModelFile.State.EXTRACTED,
-                    ModelFile.State.EXTRACT_FAILED,
-                    ModelFile.State.VALIDATED,
-                    ModelFile.State.CORRUPT,
-                ):
-                    _notify_failure(command, f"File '{command.filename}' in state {file.state!s} cannot be extracted")
-                    continue
-                if file.local_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist locally")
-                    continue
-                pkey = persist_key(pc.pair_id, file.name)
-                self._persist.extract_failed_file_names.discard(pkey)
-                self.sync_persist_callback()
-                req = self._build_extract_request(file, pc)
-                self._extract_process.extract(req)
-
-            elif command.action == Controller.Command.Action.DELETE_LOCAL:
-                if len(self.active_command_processes) >= Controller.MAX_CONCURRENT_COMMAND_PROCESSES:
-                    self._logger.debug(
-                        "Deferring %s for '%s': %d active processes at cap",
-                        command.action,
-                        command.filename,
-                        len(self.active_command_processes),
-                    )
-                    deferred.append(command)
-                    continue
-                if file.state not in (
-                    ModelFile.State.DEFAULT,
-                    ModelFile.State.DOWNLOADED,
-                    ModelFile.State.EXTRACTED,
-                    ModelFile.State.EXTRACT_FAILED,
-                    ModelFile.State.VALIDATED,
-                    ModelFile.State.CORRUPT,
-                ):
-                    _notify_failure(
-                        command,
-                        f"Local file '{command.filename}' cannot be deleted in state {file.state!s}",
-                    )
-                    continue
-                if file.local_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist locally")
-                    continue
-                delete_path = pc.local_path
-                pair_staging = self._pair_staging_dir(pc)
-                if pair_staging:
-                    staging_file = os.path.join(pair_staging, file.name)
-                    if os.path.exists(staging_file):
-                        delete_path = pair_staging
-                process = DeleteLocalProcess(local_path=delete_path, file_name=file.name)
-                process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
-
-                def post_callback(delete_path: str = delete_path, _pc: PairContext = pc) -> None:
-                    _pc.local_scan_process.force_scan()
-                    if delete_path != _pc.local_path:
-                        _pc.active_scan_process.force_scan()
-
-                command_wrapper = Controller.CommandProcessWrapper(process=process, post_callback=post_callback)
-                self.active_command_processes.append(command_wrapper)
-                command_wrapper.process.start()
-
-            elif command.action == Controller.Command.Action.DELETE_REMOTE:
-                if len(self.active_command_processes) >= Controller.MAX_CONCURRENT_COMMAND_PROCESSES:
-                    self._logger.debug(
-                        "Deferring %s for '%s': %d active processes at cap",
-                        command.action,
-                        command.filename,
-                        len(self.active_command_processes),
-                    )
-                    deferred.append(command)
-                    continue
-                if file.state not in (
-                    ModelFile.State.DEFAULT,
-                    ModelFile.State.DOWNLOADED,
-                    ModelFile.State.EXTRACTED,
-                    ModelFile.State.EXTRACT_FAILED,
-                    ModelFile.State.VALIDATED,
-                    ModelFile.State.CORRUPT,
-                    ModelFile.State.DELETED,
-                ):
-                    _notify_failure(
-                        command,
-                        f"Remote file '{command.filename}' cannot be deleted in state {file.state!s}",
-                    )
-                    continue
-                if file.remote_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist remotely")
-                    continue
-                process = DeleteRemoteProcess(
-                    remote_address=self._context.config.lftp.remote_address,  # type: ignore[arg-type]
-                    remote_username=self._context.config.lftp.remote_username,  # type: ignore[arg-type]
-                    remote_password=self._password,
-                    remote_port=self._context.config.lftp.remote_port,  # type: ignore[arg-type]
-                    remote_path=pc.remote_path,
-                    file_name=file.name,
-                )
-                process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
-                command_wrapper = Controller.CommandProcessWrapper(
-                    process=process, post_callback=pc.remote_scan_process.force_scan
-                )
-                self.active_command_processes.append(command_wrapper)
-                command_wrapper.process.start()
-
-            elif command.action == Controller.Command.Action.VALIDATE:
-                if not self._context.config.validate.enabled:
-                    _notify_failure(command, "Validation is not enabled in config")
-                    continue
-                if file.state not in (
-                    ModelFile.State.DOWNLOADED,
-                    ModelFile.State.EXTRACTED,
-                    ModelFile.State.EXTRACT_FAILED,
-                    ModelFile.State.VALIDATED,
-                    ModelFile.State.CORRUPT,
-                ):
-                    _notify_failure(command, f"File '{command.filename}' in state {file.state!s} cannot be validated")
-                    continue
-                if file.local_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist locally")
-                    continue
-                if file.remote_size is None:
-                    _notify_failure(command, f"File '{command.filename}' does not exist remotely")
-                    continue
-                pkey = persist_key(pc.pair_id, file.name)
-                self._persist.validated_file_names.discard(pkey)
-                self._persist.corrupt_file_names.discard(pkey)
-                self.sync_persist_callback()
-                req = ValidateRequest(
-                    name=file.name,
-                    is_dir=file.is_dir,
-                    pair_id=pc.pair_id,
-                    local_path=pc.effective_local_path,
-                    remote_path=pc.remote_path,
-                    algorithm=self._context.config.validate.algorithm,  # type: ignore[arg-type]
-                    remote_address=self._context.config.lftp.remote_address,  # type: ignore[arg-type]
-                    remote_username=self._context.config.lftp.remote_username,  # type: ignore[arg-type]
-                    remote_password=self._password,
-                    remote_port=self._context.config.lftp.remote_port,  # type: ignore[arg-type]
-                )
-                self._validate_process.validate(req)
-                self.pending_validation_keys.add(pkey)
+            if not success:
+                continue
 
             for callback in command.callbacks:
                 callback.on_success()
 
         for cmd in deferred:
             self.command_queue.put(cmd)
+
+    def _dispatch_command(
+        self,
+        command: Controller.Command,
+        file: ModelFile,
+        pc: PairContext,
+        deferred: list[Controller.Command],
+        _notify_failure: Callable[[Controller.Command, str], None],
+        controller_cls: type[Controller],
+    ) -> bool:
+        """Dispatch a command to the appropriate handler. Returns True on success."""
+        Action = controller_cls.Command.Action
+        handlers = {
+            Action.QUEUE: lambda: self._handle_queue(command, file, pc, _notify_failure),
+            Action.STOP: lambda: self._handle_stop(command, file, pc, _notify_failure),
+            Action.EXTRACT: lambda: self._handle_extract(command, file, pc, _notify_failure),
+            Action.DELETE_LOCAL: lambda: self._handle_delete_local(
+                command, file, pc, deferred, _notify_failure, controller_cls
+            ),
+            Action.DELETE_REMOTE: lambda: self._handle_delete_remote(
+                command, file, pc, deferred, _notify_failure, controller_cls
+            ),
+            Action.VALIDATE: lambda: self._handle_validate(command, file, pc, _notify_failure),
+        }
+        handler = handlers.get(command.action)
+        if handler is None:
+            return False
+        return handler()
+
+    def _handle_queue(
+        self,
+        command: Controller.Command,
+        file: ModelFile,
+        pc: PairContext,
+        _notify_failure: Callable[[Controller.Command, str], None],
+    ) -> bool:
+        """Handle the QUEUE action. Returns True on success, False on failure."""
+        if file.remote_size is None:
+            _notify_failure(command, f"File '{command.filename}' does not exist remotely")
+            return False
+        try:
+            exclude = parse_exclude_patterns(self._context.config.general.exclude_patterns)
+            pc.lftp.queue(file.name, file.is_dir, exclude_patterns=exclude)
+        except LftpError as e:
+            _notify_failure(command, f"Lftp error: {e!s}")
+            return False
+        return True
+
+    def _handle_stop(
+        self,
+        command: Controller.Command,
+        file: ModelFile,
+        pc: PairContext,
+        _notify_failure: Callable[[Controller.Command, str], None],
+    ) -> bool:
+        """Handle the STOP action. Returns True on success, False on failure."""
+        if file.state not in (ModelFile.State.DOWNLOADING, ModelFile.State.QUEUED):
+            _notify_failure(command, f"File '{command.filename}' is not Queued or Downloading")
+            return False
+        try:
+            pc.lftp.kill(file.name)
+        except LftpError as e:
+            _notify_failure(command, f"Lftp error: {e!s}")
+            return False
+        return True
+
+    def _handle_extract(
+        self,
+        command: Controller.Command,
+        file: ModelFile,
+        pc: PairContext,
+        _notify_failure: Callable[[Controller.Command, str], None],
+    ) -> bool:
+        """Handle the EXTRACT action. Returns True on success, False on failure."""
+        if file.state not in (
+            ModelFile.State.DEFAULT,
+            ModelFile.State.DOWNLOADED,
+            ModelFile.State.EXTRACTED,
+            ModelFile.State.EXTRACT_FAILED,
+            ModelFile.State.VALIDATED,
+            ModelFile.State.CORRUPT,
+        ):
+            _notify_failure(command, f"File '{command.filename}' in state {file.state!s} cannot be extracted")
+            return False
+        if file.local_size is None:
+            _notify_failure(command, f"File '{command.filename}' does not exist locally")
+            return False
+        pkey = persist_key(pc.pair_id, file.name)
+        self._persist.extract_failed_file_names.discard(pkey)
+        self.sync_persist_callback()
+        req = self._build_extract_request(file, pc)
+        self._extract_process.extract(req)
+        return True
+
+    def _handle_delete_local(
+        self,
+        command: Controller.Command,
+        file: ModelFile,
+        pc: PairContext,
+        deferred: list[Controller.Command],
+        _notify_failure: Callable[[Controller.Command, str], None],
+        controller_cls: type[Controller],
+    ) -> bool:
+        """Handle the DELETE_LOCAL action. Returns True on success, False on failure/deferred."""
+        if len(self.active_command_processes) >= controller_cls.MAX_CONCURRENT_COMMAND_PROCESSES:
+            self._logger.debug(
+                "Deferring %s for '%s': %d active processes at cap",
+                command.action,
+                command.filename,
+                len(self.active_command_processes),
+            )
+            deferred.append(command)
+            return False
+        if file.state not in (
+            ModelFile.State.DEFAULT,
+            ModelFile.State.DOWNLOADED,
+            ModelFile.State.EXTRACTED,
+            ModelFile.State.EXTRACT_FAILED,
+            ModelFile.State.VALIDATED,
+            ModelFile.State.CORRUPT,
+        ):
+            _notify_failure(
+                command,
+                f"Local file '{command.filename}' cannot be deleted in state {file.state!s}",
+            )
+            return False
+        if file.local_size is None:
+            _notify_failure(command, f"File '{command.filename}' does not exist locally")
+            return False
+        delete_path = pc.local_path
+        pair_staging = self._pair_staging_dir(pc)
+        if pair_staging:
+            staging_file = os.path.join(pair_staging, file.name)
+            if os.path.exists(staging_file):
+                delete_path = pair_staging
+        process = DeleteLocalProcess(local_path=delete_path, file_name=file.name)
+        process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
+
+        def post_callback(delete_path: str = delete_path, _pc: PairContext = pc) -> None:
+            _pc.local_scan_process.force_scan()
+            if delete_path != _pc.local_path:
+                _pc.active_scan_process.force_scan()
+
+        command_wrapper = controller_cls.CommandProcessWrapper(process=process, post_callback=post_callback)
+        self.active_command_processes.append(command_wrapper)
+        command_wrapper.process.start()
+        return True
+
+    def _handle_delete_remote(
+        self,
+        command: Controller.Command,
+        file: ModelFile,
+        pc: PairContext,
+        deferred: list[Controller.Command],
+        _notify_failure: Callable[[Controller.Command, str], None],
+        controller_cls: type[Controller],
+    ) -> bool:
+        """Handle the DELETE_REMOTE action. Returns True on success, False on failure/deferred."""
+        if len(self.active_command_processes) >= controller_cls.MAX_CONCURRENT_COMMAND_PROCESSES:
+            self._logger.debug(
+                "Deferring %s for '%s': %d active processes at cap",
+                command.action,
+                command.filename,
+                len(self.active_command_processes),
+            )
+            deferred.append(command)
+            return False
+        if file.state not in (
+            ModelFile.State.DEFAULT,
+            ModelFile.State.DOWNLOADED,
+            ModelFile.State.EXTRACTED,
+            ModelFile.State.EXTRACT_FAILED,
+            ModelFile.State.VALIDATED,
+            ModelFile.State.CORRUPT,
+            ModelFile.State.DELETED,
+        ):
+            _notify_failure(
+                command,
+                f"Remote file '{command.filename}' cannot be deleted in state {file.state!s}",
+            )
+            return False
+        if file.remote_size is None:
+            _notify_failure(command, f"File '{command.filename}' does not exist remotely")
+            return False
+        process = DeleteRemoteProcess(
+            remote_address=self._context.config.lftp.remote_address,  # type: ignore[arg-type]
+            remote_username=self._context.config.lftp.remote_username,  # type: ignore[arg-type]
+            remote_password=self._password,
+            remote_port=self._context.config.lftp.remote_port,  # type: ignore[arg-type]
+            remote_path=pc.remote_path,
+            file_name=file.name,
+        )
+        process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
+        command_wrapper = controller_cls.CommandProcessWrapper(
+            process=process, post_callback=pc.remote_scan_process.force_scan
+        )
+        self.active_command_processes.append(command_wrapper)
+        command_wrapper.process.start()
+        return True
+
+    def _handle_validate(
+        self,
+        command: Controller.Command,
+        file: ModelFile,
+        pc: PairContext,
+        _notify_failure: Callable[[Controller.Command, str], None],
+    ) -> bool:
+        """Handle the VALIDATE action. Returns True on success, False on failure."""
+        if not self._context.config.validate.enabled:
+            _notify_failure(command, "Validation is not enabled in config")
+            return False
+        if file.state not in (
+            ModelFile.State.DOWNLOADED,
+            ModelFile.State.EXTRACTED,
+            ModelFile.State.EXTRACT_FAILED,
+            ModelFile.State.VALIDATED,
+            ModelFile.State.CORRUPT,
+        ):
+            _notify_failure(command, f"File '{command.filename}' in state {file.state!s} cannot be validated")
+            return False
+        if file.local_size is None:
+            _notify_failure(command, f"File '{command.filename}' does not exist locally")
+            return False
+        if file.remote_size is None:
+            _notify_failure(command, f"File '{command.filename}' does not exist remotely")
+            return False
+        pkey = persist_key(pc.pair_id, file.name)
+        self._persist.validated_file_names.discard(pkey)
+        self._persist.corrupt_file_names.discard(pkey)
+        self.sync_persist_callback()
+        req = ValidateRequest(
+            name=file.name,
+            is_dir=file.is_dir,
+            pair_id=pc.pair_id,
+            local_path=pc.effective_local_path,
+            remote_path=pc.remote_path,
+            algorithm=self._context.config.validate.algorithm,  # type: ignore[arg-type]
+            remote_address=self._context.config.lftp.remote_address,  # type: ignore[arg-type]
+            remote_username=self._context.config.lftp.remote_username,  # type: ignore[arg-type]
+            remote_password=self._password,
+            remote_port=self._context.config.lftp.remote_port,  # type: ignore[arg-type]
+        )
+        self._validate_process.validate(req)
+        self.pending_validation_keys.add(pkey)
+        return True
 
     def cleanup(self):
         """
