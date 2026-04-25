@@ -55,7 +55,7 @@ class ModelUpdater:
         self._password = password
         self._logger = logger
 
-    def update(self):  # noqa: C901 — will be decomposed in #394
+    def update(self):
         # Grab the latest extract results (shared)
         latest_extract_statuses = self._extract_process.pop_latest_statuses()
         latest_extracted_results = self._extract_process.pop_completed()
@@ -70,159 +70,194 @@ class ModelUpdater:
         for pc in self._pair_contexts:
             self._update_pair_model_state(pc, latest_extract_statuses, latest_validate_statuses)
 
-        # Process extraction completions once (shared across all pairs)
-        if latest_extracted_results:
-            for result in latest_extracted_results:
-                owner_pc = self._pipeline.find_pair_by_id(result.pair_id)
-                if owner_pc is None:
-                    self._logger.warning(
-                        f"Ignoring extract completion for '{result.name}': pair '{result.pair_id}' no longer exists"
-                    )
-                    continue
-                pkey = persist_key(result.pair_id, result.name)
-                self._persist.extracted_file_names.add(pkey)
-                if self._context.config.controller.use_staging and self._context.config.controller.staging_path:
-                    if pkey not in self._pipeline.pending_validation_keys:
-                        self._pipeline.spawn_move_process(result.name, owner_pc)
-            self.sync_persist_to_all_builders()
+        self._process_extraction_completions(latest_extracted_results)
 
-        # Build an aggregate new model from all pairs
+        new_model = self._build_aggregate_model()
+        if new_model is not None:
+            model_diff = self._registry.apply_diff(new_model)
+            self._process_model_diffs(model_diff)
+
+        self._prune_stale_persist()
+        self._process_extraction_failures(latest_failed_extractions)
+        self._process_validation_results(latest_validated_results, latest_failed_validations)
+        self._update_controller_status()
+
+    def _process_extraction_completions(self, latest_extracted_results: list) -> None:
+        """Process extraction completions once (shared across all pairs)."""
+        if not latest_extracted_results:
+            return
+        for result in latest_extracted_results:
+            owner_pc = self._pipeline.find_pair_by_id(result.pair_id)
+            if owner_pc is None:
+                self._logger.warning(
+                    f"Ignoring extract completion for '{result.name}': pair '{result.pair_id}' no longer exists"
+                )
+                continue
+            pkey = persist_key(result.pair_id, result.name)
+            self._persist.extracted_file_names.add(pkey)
+            if self._context.config.controller.use_staging and self._context.config.controller.staging_path:
+                if pkey not in self._pipeline.pending_validation_keys:
+                    self._pipeline.spawn_move_process(result.name, owner_pc)
+        self.sync_persist_to_all_builders()
+
+    def _build_aggregate_model(self) -> Model | None:
+        """Build an aggregate new model from all pairs, or None if no changes."""
         any_pair_has_changes = any(pc.model_builder.has_changes() for pc in self._pair_contexts)
+        if not any_pair_has_changes:
+            return None
 
-        if any_pair_has_changes:
-            new_model = Model()
-            _dummy = logging.getLogger("dummy")
-            _dummy.propagate = False
-            new_model.set_base_logger(_dummy)  # silence logs for temp model
+        new_model = Model()
+        _dummy = logging.getLogger("dummy")
+        _dummy.propagate = False
+        new_model.set_base_logger(_dummy)  # silence logs for temp model
 
-            # When multiple pairs share the same local directory, a file that
-            # exists only locally (no remote counterpart) would appear in every
-            # pair's model.  Deduplicate by scoping per normalized local path:
-            #   1) adding all "managed" files first (have a remote, or non-DEFAULT state),
-            #   2) then adding local-only files only if no other pair with the
-            #      same local directory already claims a file with that name.
-            seen_names_by_path: dict[str, set[str]] = {}
-            deferred_local_only: list[tuple[ModelFile, str]] = []
-            for pc in self._pair_contexts:
-                norm_path = os.path.normpath(os.path.abspath(pc.local_path))
-                if norm_path not in seen_names_by_path:
-                    seen_names_by_path[norm_path] = set()
-                pair_model = pc.model_builder.build_model()
-                for file in pair_model.get_all_files():
-                    is_local_only = file.remote_size is None and file.state == ModelFile.State.DEFAULT
-                    if is_local_only:
-                        deferred_local_only.append((file, norm_path))
-                    else:
-                        new_model.add_file(file)
-                        seen_names_by_path[norm_path].add(file.name)
-
-            for file, norm_path in deferred_local_only:
-                if file.name not in seen_names_by_path[norm_path]:
+        # When multiple pairs share the same local directory, a file that
+        # exists only locally (no remote counterpart) would appear in every
+        # pair's model.  Deduplicate by scoping per normalized local path:
+        #   1) adding all "managed" files first (have a remote, or non-DEFAULT state),
+        #   2) then adding local-only files only if no other pair with the
+        #      same local directory already claims a file with that name.
+        seen_names_by_path: dict[str, set[str]] = {}
+        deferred_local_only: list[tuple[ModelFile, str]] = []
+        for pc in self._pair_contexts:
+            norm_path = os.path.normpath(os.path.abspath(pc.local_path))
+            if norm_path not in seen_names_by_path:
+                seen_names_by_path[norm_path] = set()
+            pair_model = pc.model_builder.build_model()
+            for file in pair_model.get_all_files():
+                is_local_only = file.remote_size is None and file.state == ModelFile.State.DEFAULT
+                if is_local_only:
+                    deferred_local_only.append((file, norm_path))
+                else:
                     new_model.add_file(file)
                     seen_names_by_path[norm_path].add(file.name)
 
-            model_diff = self._registry.apply_diff(new_model)
+        for file, norm_path in deferred_local_only:
+            if file.name not in seen_names_by_path[norm_path]:
+                new_model.add_file(file)
+                seen_names_by_path[norm_path].add(file.name)
 
-            for diff in model_diff:
-                diff_file = diff.new_file or diff.old_file
-                assert diff_file is not None
-                pc = self._pipeline.get_pair_context_for_file(diff_file)
+        return new_model
 
-                if diff.new_file is not None and diff.new_file.state in (
-                    ModelFile.State.QUEUED,
-                    ModelFile.State.DOWNLOADING,
-                ):
-                    pkey = persist_key(diff.new_file.pair_id, diff.new_file.name)
-                    self._pipeline.moved_file_keys.discard(pkey)
-                    self._persist.downloaded_file_names.discard(pkey)
-                    self._persist.extracted_file_names.discard(pkey)
-                    self._persist.extract_failed_file_names.discard(pkey)
-                    self._persist.validated_file_names.discard(pkey)
-                    self._persist.corrupt_file_names.discard(pkey)
-                    self.sync_persist_to_all_builders()
+    def _process_model_diffs(self, model_diff: list[ModelDiff]) -> None:
+        """Process each diff: update persist state, auto-validate, staging moves, pending completion."""
+        for diff in model_diff:
+            diff_file = diff.new_file or diff.old_file
+            assert diff_file is not None
+            pc = self._pipeline.get_pair_context_for_file(diff_file)
 
-                downloaded = False
-                if (
-                    diff.change == ModelDiff.Change.ADDED
-                    and diff.new_file is not None
-                    and diff.new_file.state == ModelFile.State.DOWNLOADED
-                ) or (
-                    diff.change == ModelDiff.Change.UPDATED
-                    and diff.new_file is not None
-                    and diff.new_file.state == ModelFile.State.DOWNLOADED
-                    and diff.old_file is not None
-                    and diff.old_file.state != ModelFile.State.DOWNLOADED
-                ):
-                    downloaded = True
-                if downloaded:
-                    assert diff.new_file is not None
-                    assert pc is not None
-                    pkey = persist_key(diff.new_file.pair_id, diff.new_file.name)
-                    self._persist.downloaded_file_names.add(pkey)
-                    self.sync_persist_to_all_builders()
+            self._handle_requeued_file(diff)
+            self._handle_downloaded_file(diff, pc)
+            self._handle_pending_completion(diff, pc)
 
-                    # Auto-validate if enabled
-                    if (
-                        self._context.config.validate.enabled
-                        and self._context.config.validate.auto_validate
-                        and diff.new_file.remote_size is not None
-                    ):
-                        req = ValidateRequest(
-                            name=diff.new_file.name,
-                            is_dir=diff.new_file.is_dir,
-                            pair_id=pc.pair_id,
-                            local_path=pc.effective_local_path,
-                            remote_path=pc.remote_path,
-                            algorithm=self._context.config.validate.algorithm,  # type: ignore[arg-type]
-                            remote_address=self._context.config.lftp.remote_address,  # type: ignore[arg-type]
-                            remote_username=self._context.config.lftp.remote_username,  # type: ignore[arg-type]
-                            remote_password=self._password,
-                            remote_port=self._context.config.lftp.remote_port,  # type: ignore[arg-type]
-                        )
-                        self._validate_process.validate(req)
-                        self._pipeline.pending_validation_keys.add(persist_key(pc.pair_id, diff.new_file.name))
-                        self._logger.info(f"Auto-queued validation for '{diff.new_file.name}'")
+    def _handle_requeued_file(self, diff: ModelDiff) -> None:
+        """Clear persist state when a file goes back to QUEUED/DOWNLOADING."""
+        if diff.new_file is not None and diff.new_file.state in (
+            ModelFile.State.QUEUED,
+            ModelFile.State.DOWNLOADING,
+        ):
+            pkey = persist_key(diff.new_file.pair_id, diff.new_file.name)
+            self._pipeline.moved_file_keys.discard(pkey)
+            self._persist.downloaded_file_names.discard(pkey)
+            self._persist.extracted_file_names.discard(pkey)
+            self._persist.extract_failed_file_names.discard(pkey)
+            self._persist.validated_file_names.discard(pkey)
+            self._persist.corrupt_file_names.discard(pkey)
+            self.sync_persist_to_all_builders()
 
-                    if self._context.config.controller.use_staging and self._context.config.controller.staging_path:
-                        will_auto_extract = self._context.config.autoqueue.auto_extract and diff.new_file.is_extractable
-                        will_auto_validate = (
-                            self._context.config.validate.enabled
-                            and self._context.config.validate.auto_validate
-                            and diff.new_file.remote_size is not None
-                        )
-                        if not will_auto_extract and not will_auto_validate:
-                            self._pipeline.spawn_move_process(diff.new_file.name, pc)
+    def _handle_downloaded_file(self, diff: ModelDiff, pc: PairContext | None) -> bool:
+        """Handle a newly downloaded file: persist, auto-validate, staging move.
 
-                if diff.new_file is not None and pc is not None and diff.new_file.name in pc.pending_completion:
-                    use_staging = (
-                        self._context.config.controller.use_staging and self._context.config.controller.staging_path
-                    )
-                    # A file with no local presence and DEFAULT state means
-                    # it was deleted locally (e.g. stopped download whose files
-                    # were removed). Nothing left to track.
-                    if diff.new_file.state == ModelFile.State.DEFAULT and diff.new_file.local_size is None:
-                        pc.pending_completion.discard(diff.new_file.name)
-                    elif use_staging:
-                        move_key = persist_key(diff.new_file.pair_id, diff.new_file.name)
-                        if move_key in self._pipeline.moved_file_keys or diff.new_file.state in (
-                            ModelFile.State.DELETED,
-                            ModelFile.State.EXTRACTED,
-                            ModelFile.State.EXTRACT_FAILED,
-                            ModelFile.State.VALIDATED,
-                            ModelFile.State.CORRUPT,
-                        ):
-                            pc.pending_completion.discard(diff.new_file.name)
-                    else:
-                        if diff.new_file.state in (
-                            ModelFile.State.DOWNLOADED,
-                            ModelFile.State.EXTRACTED,
-                            ModelFile.State.EXTRACT_FAILED,
-                            ModelFile.State.VALIDATED,
-                            ModelFile.State.CORRUPT,
-                            ModelFile.State.DELETED,
-                        ):
-                            pc.pending_completion.discard(diff.new_file.name)
+        Returns True if the file was just downloaded.
+        """
+        downloaded = False
+        if (
+            diff.change == ModelDiff.Change.ADDED
+            and diff.new_file is not None
+            and diff.new_file.state == ModelFile.State.DOWNLOADED
+        ) or (
+            diff.change == ModelDiff.Change.UPDATED
+            and diff.new_file is not None
+            and diff.new_file.state == ModelFile.State.DOWNLOADED
+            and diff.old_file is not None
+            and diff.old_file.state != ModelFile.State.DOWNLOADED
+        ):
+            downloaded = True
+        if not downloaded:
+            return False
 
+        assert diff.new_file is not None
+        assert pc is not None
+        pkey = persist_key(diff.new_file.pair_id, diff.new_file.name)
+        self._persist.downloaded_file_names.add(pkey)
+        self.sync_persist_to_all_builders()
+
+        # Auto-validate if enabled
+        if (
+            self._context.config.validate.enabled
+            and self._context.config.validate.auto_validate
+            and diff.new_file.remote_size is not None
+        ):
+            req = ValidateRequest(
+                name=diff.new_file.name,
+                is_dir=diff.new_file.is_dir,
+                pair_id=pc.pair_id,
+                local_path=pc.effective_local_path,
+                remote_path=pc.remote_path,
+                algorithm=self._context.config.validate.algorithm,  # type: ignore[arg-type]
+                remote_address=self._context.config.lftp.remote_address,  # type: ignore[arg-type]
+                remote_username=self._context.config.lftp.remote_username,  # type: ignore[arg-type]
+                remote_password=self._password,
+                remote_port=self._context.config.lftp.remote_port,  # type: ignore[arg-type]
+            )
+            self._validate_process.validate(req)
+            self._pipeline.pending_validation_keys.add(persist_key(pc.pair_id, diff.new_file.name))
+            self._logger.info(f"Auto-queued validation for '{diff.new_file.name}'")
+
+        if self._context.config.controller.use_staging and self._context.config.controller.staging_path:
+            will_auto_extract = self._context.config.autoqueue.auto_extract and diff.new_file.is_extractable
+            will_auto_validate = (
+                self._context.config.validate.enabled
+                and self._context.config.validate.auto_validate
+                and diff.new_file.remote_size is not None
+            )
+            if not will_auto_extract and not will_auto_validate:
+                self._pipeline.spawn_move_process(diff.new_file.name, pc)
+
+        return True
+
+    def _handle_pending_completion(self, diff: ModelDiff, pc: PairContext | None) -> None:
+        """Track pending_completion state for a diff."""
+        if diff.new_file is None or pc is None or diff.new_file.name not in pc.pending_completion:
+            return
+        use_staging = self._context.config.controller.use_staging and self._context.config.controller.staging_path
+        # A file with no local presence and DEFAULT state means
+        # it was deleted locally (e.g. stopped download whose files
+        # were removed). Nothing left to track.
+        if diff.new_file.state == ModelFile.State.DEFAULT and diff.new_file.local_size is None:
+            pc.pending_completion.discard(diff.new_file.name)
+        elif use_staging:
+            move_key = persist_key(diff.new_file.pair_id, diff.new_file.name)
+            if move_key in self._pipeline.moved_file_keys or diff.new_file.state in (
+                ModelFile.State.DELETED,
+                ModelFile.State.EXTRACTED,
+                ModelFile.State.EXTRACT_FAILED,
+                ModelFile.State.VALIDATED,
+                ModelFile.State.CORRUPT,
+            ):
+                pc.pending_completion.discard(diff.new_file.name)
+        elif diff.new_file.state in (
+            ModelFile.State.DOWNLOADED,
+            ModelFile.State.EXTRACTED,
+            ModelFile.State.EXTRACT_FAILED,
+            ModelFile.State.VALIDATED,
+            ModelFile.State.CORRUPT,
+            ModelFile.State.DELETED,
+        ):
+            pc.pending_completion.discard(diff.new_file.name)
+
+    def _prune_stale_persist(self) -> None:
+        """Prune extracted files list and remove persist entries for absent files."""
         # Prune the extracted files list of any files that were deleted locally
         remove_extracted_keys: set[str] = set()
         for pkey in self._persist.extracted_file_names:
@@ -261,14 +296,17 @@ class ModelUpdater:
                 self._persist.corrupt_file_names.difference_update(absent_keys)
                 self.sync_persist_to_all_builders()
 
-        # Process extraction failures — mark as failed immediately
+    def _process_extraction_failures(self, latest_failed_extractions: list) -> None:
+        """Process extraction failures -- mark as failed immediately."""
         for result in latest_failed_extractions:
             self._logger.error(f"Extraction failed for '{result.name}'")
             fail_key = persist_key(result.pair_id, result.name)
             self._persist.extract_failed_file_names.add(fail_key)
             self.sync_persist_to_all_builders()
 
-        # Process validation completions — mark as validated
+    def _process_validation_results(self, latest_validated_results: list, latest_failed_validations: list) -> None:
+        """Process validation completions and failures."""
+        # Process validation completions -- mark as validated
         for result in latest_validated_results:
             self._logger.info(f"Validation passed for '{result.name}'")
             pkey = persist_key(result.pair_id, result.name)
@@ -285,21 +323,24 @@ class ModelUpdater:
             pkey = persist_key(result.pair_id, result.name)
             self._pipeline.pending_validation_keys.discard(pkey)
             if result.is_checksum_mismatch:
-                # Checksum mismatch — mark as corrupt
+                # Checksum mismatch -- mark as corrupt
                 self._persist.corrupt_file_names.add(pkey)
                 self._persist.validated_file_names.discard(pkey)
                 self.sync_persist_to_all_builders()
             else:
-                # Non-mismatch failure (SSH error, etc.) — don't mark corrupt,
+                # Non-mismatch failure (SSH error, etc.) -- don't mark corrupt,
                 # just log so the user can retry
                 self._logger.warning(
                     f"Validation error for '{result.name}' (not marking corrupt): {result.error_message}"
                 )
-            # Spawn deferred move regardless of failure type — validation is done
+            # Spawn deferred move regardless of failure type -- validation is done
             self._pipeline.spawn_deferred_move(result.pair_id, result.name)
 
-        # Update the controller status (use most recent across all pairs)
-        # Note: remote scans set failed/error fields; local scans don't surface errors
+    def _update_controller_status(self) -> None:
+        """Update the controller status (use most recent across all pairs).
+
+        Note: remote scans set failed/error fields; local scans don't surface errors.
+        """
         for pc in self._pair_contexts:
             if pc.latest_remote_scan is not None:
                 current = self._context.status.controller.latest_remote_scan_time
