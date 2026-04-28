@@ -1,15 +1,11 @@
 @use '../../common/common' as *;
 
 .integrations {
-  .header {
+  .integrations-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 80%;
-    font-weight: 500;
-    padding: 10px 15px;
-    background-color: var(--ss-header-bg);
-    border-bottom: 1px solid var(--ss-border);
+    margin: 0;
 
     .add-buttons {
       display: flex;
@@ -237,12 +233,6 @@
 // Dark mode
 :host-context([data-bs-theme="dark"]) {
   .integrations {
-    .header {
-      background-color: #161A21;
-      border-color: #252C37;
-      color: #8A93A6;
-    }
-
     .instance-form {
       input[type="text"],
       input[type="password"],

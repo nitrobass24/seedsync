@@ -12,10 +12,6 @@ from .persist import Persist, PersistError
 _logger = logging.getLogger(__name__)
 
 
-PathPairDictValue = str | bool | list[str]
-PathPairDict = dict[str, PathPairDictValue]
-
-
 class PathPair:
     """Represents a single remote-to-local directory mapping."""
 
@@ -37,7 +33,7 @@ class PathPair:
         self.auto_queue = auto_queue
         self.arr_target_ids: list[str] = list(arr_target_ids) if arr_target_ids else []
 
-    def to_dict(self) -> PathPairDict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
@@ -49,7 +45,7 @@ class PathPair:
         }
 
     @staticmethod
-    def from_dict(d: PathPairDict) -> "PathPair":
+    def from_dict(d: dict[str, Any]) -> "PathPair":
         pair_id = d["id"]
         name = d.get("name", "")
         remote_path = d["remote_path"]
@@ -71,9 +67,11 @@ class PathPair:
             raise TypeError(f"auto_queue must be a boolean, got {type(auto_queue).__name__}")
         if not isinstance(arr_target_ids, list):
             raise TypeError(f"arr_target_ids must be a list, got {type(arr_target_ids).__name__}")
-        for tid in arr_target_ids:
+        validated_ids: list[str] = []
+        for tid in cast(list[Any], arr_target_ids):
             if not isinstance(tid, str):
                 raise TypeError(f"arr_target_ids entries must be strings, got {type(tid).__name__}")
+            validated_ids.append(tid)
         return PathPair(
             pair_id=pair_id,
             name=name,
@@ -81,7 +79,7 @@ class PathPair:
             local_path=local_path,
             enabled=enabled,
             auto_queue=auto_queue,
-            arr_target_ids=list(arr_target_ids),
+            arr_target_ids=validated_ids,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -172,7 +170,7 @@ class PathPairsConfig(Persist):
         raw_pairs = data.get("path_pairs", [])
         if not isinstance(raw_pairs, list):
             raise PersistError("Expected 'path_pairs' to be a list")
-        pairs_list = cast(list[PathPairDict], raw_pairs)
+        pairs_list = cast(list[dict[str, Any]], raw_pairs)
         for pair_dict in pairs_list:
             try:
                 config.add_pair(PathPair.from_dict(pair_dict))

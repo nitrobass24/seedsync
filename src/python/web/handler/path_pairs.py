@@ -26,7 +26,10 @@ class PathPairsHandler(IHandler):
         return HTTPResponse(body=json.dumps(pairs), headers={"Content-Type": "application/json"})
 
     @staticmethod
-    def __validate_pair_params(data: dict[str, Any], defaults: PathPair | None = None):
+    def __validate_pair_params(
+        data: dict[str, Any],
+        defaults: PathPair | None = None,
+    ) -> "HTTPResponse | tuple[str, str, str, bool, bool, list[str]]":
         """Validate and extract path pair parameters from request data.
 
         Returns (name, remote_path, local_path, enabled, auto_queue, arr_target_ids)
@@ -39,13 +42,18 @@ class PathPairsHandler(IHandler):
         local_path = data.get("local_path", d.local_path if d else "")
         enabled = data.get("enabled", d.enabled if d else True)
         auto_queue = data.get("auto_queue", d.auto_queue if d else True)
-        arr_target_ids = data.get("arr_target_ids", list(d.arr_target_ids) if d else [])
+        arr_target_ids_raw = data.get("arr_target_ids", list(d.arr_target_ids) if d else [])
         if not isinstance(name, str) or not isinstance(remote_path, str) or not isinstance(local_path, str):
             return HTTPResponse(body="name, remote_path, and local_path must be strings", status=400)
         if not isinstance(enabled, bool) or not isinstance(auto_queue, bool):
             return HTTPResponse(body="enabled and auto_queue must be booleans", status=400)
-        if not isinstance(arr_target_ids, list) or not all(isinstance(t, str) for t in arr_target_ids):
+        if not isinstance(arr_target_ids_raw, list):
             return HTTPResponse(body="arr_target_ids must be a list of strings", status=400)
+        arr_target_ids: list[str] = []
+        for t in cast(list[Any], arr_target_ids_raw):
+            if not isinstance(t, str):
+                return HTTPResponse(body="arr_target_ids must be a list of strings", status=400)
+            arr_target_ids.append(t)
         name = name.strip()
         remote_path = remote_path.strip()
         local_path = local_path.strip()
@@ -55,7 +63,7 @@ class PathPairsHandler(IHandler):
             return HTTPResponse(body="remote_path must not be empty", status=400)
         if not local_path:
             return HTTPResponse(body="local_path must not be empty", status=400)
-        return name, remote_path, local_path, enabled, auto_queue, list(arr_target_ids)
+        return name, remote_path, local_path, enabled, auto_queue, arr_target_ids
 
     def __handle_create(self):
         try:

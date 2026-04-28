@@ -36,9 +36,9 @@ test.describe("Path Pairs", () => {
     await expect(pathPairs.emptyMessage).toBeVisible();
   });
 
-  test("click Add shows the form", async ({ page }) => {
+  test("click Add shows the form", async () => {
     await pathPairs.addButton.click();
-    const form = page.locator(".pair-form");
+    const form = pathPairs.pairForm;
     await expect(form.first()).toBeVisible();
   });
 
@@ -73,7 +73,7 @@ test.describe("Path Pairs", () => {
       );
   });
 
-  test("created pair appears in the list", async ({ page }) => {
+  test("created pair appears in the list", async () => {
     await pathPairs.addButton.click();
     await pathPairs.fillForm({
       name: "visible-pair",
@@ -83,13 +83,13 @@ test.describe("Path Pairs", () => {
     await pathPairs.clickSave();
 
     // Wait for the form to close (save completes async)
-    await expect(page.locator(".pair-form")).not.toBeVisible({ timeout: 10_000 });
+    await expect(pathPairs.pairForm).not.toBeVisible({ timeout: 10_000 });
 
     const row = pathPairs.getPairByName("visible-pair");
     await expect(row).toBeVisible({ timeout: 10_000 });
   });
 
-  test("duplicate name shows error message", async ({ page, apiFetch }) => {
+  test("duplicate name shows error message", async ({ apiFetch }) => {
     // Create a pair via API first
     await apiFetch("/server/pathpairs", {
       method: "POST",
@@ -119,10 +119,7 @@ test.describe("Path Pairs", () => {
     await expect(error).toBeVisible();
   });
 
-  test("click Edit shows form with existing values", async ({
-    page,
-    apiFetch,
-  }) => {
+  test("click Edit shows form with existing values", async ({ apiFetch }) => {
     // Create a pair via API
     await apiFetch("/server/pathpairs", {
       method: "POST",
@@ -141,7 +138,7 @@ test.describe("Path Pairs", () => {
     await row.waitFor({ timeout: 10_000 });
     await pathPairs.getEditButton(row).click();
 
-    const form = page.locator(".pair-form");
+    const form = pathPairs.pairForm;
     await expect(form.first()).toBeVisible();
 
     // Verify the form contains the existing values
@@ -197,10 +194,7 @@ test.describe("Path Pairs", () => {
       );
   });
 
-  test("delete requires two clicks with confirmation", async ({
-    page,
-    apiFetch,
-  }) => {
+  test("delete requires two clicks with confirmation", async ({ apiFetch }) => {
     // Create a pair via API
     await apiFetch("/server/pathpairs", {
       method: "POST",

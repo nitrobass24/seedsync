@@ -36,9 +36,7 @@ class WebAppBuilder:
         self.status_handler = StatusHandler(context.status)
         self.logs_handler = LogsHandler(logdir=context.args.logdir, service_name=Constants.SERVICE_NAME)
         self.path_pairs_handler = PathPairsHandler(context.path_pairs_config)
-        self.integrations_handler = IntegrationsHandler(
-            context.integrations_config, context.path_pairs_config
-        )
+        self.integrations_handler = IntegrationsHandler(context.integrations_config, context.path_pairs_config)
 
     def build(self) -> WebApp:
         web_app = WebApp(context=self.__context, controller=self.__controller)

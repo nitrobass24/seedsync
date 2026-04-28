@@ -440,11 +440,9 @@ class Seedsync:
                     Seedsync.logger.exception("Failed to load integrations.json")
                 Seedsync.__backup_file(file_path)
 
-        legacy = Seedsync.__read_legacy_integrations(config_path)
-        if legacy is None:
+        ic = Seedsync.__migrate_legacy_integrations(config_path)
+        if ic is None:
             return IntegrationsConfig()
-
-        ic = IntegrationsConfig.migrate_from_legacy(**legacy)
 
         if ic.instances:
             instance_ids = [i.id for i in ic.instances]
@@ -462,12 +460,11 @@ class Seedsync:
         return ic
 
     @staticmethod
-    def __read_legacy_integrations(config_path: str) -> dict[str, str | bool] | None:
-        """Read the [Integrations] section directly from settings.cfg without
-        going through Config (which has dropped the section).
+    def __migrate_legacy_integrations(config_path: str) -> IntegrationsConfig | None:
+        """Read the [Integrations] section directly from settings.cfg (Config has
+        dropped it) and build an IntegrationsConfig from the legacy fields.
 
-        Returns kwargs for IntegrationsConfig.migrate_from_legacy, or None if
-        no migration is needed.
+        Returns None if no migration is needed.
         """
         if not os.path.isfile(config_path):
             return None
@@ -488,14 +485,14 @@ class Seedsync:
             except ValueError:
                 return False
 
-        return {
-            "sonarr_url": _get_str("sonarr_url"),
-            "sonarr_api_key": _get_str("sonarr_api_key"),
-            "sonarr_enabled": _get_bool("sonarr_enabled"),
-            "radarr_url": _get_str("radarr_url"),
-            "radarr_api_key": _get_str("radarr_api_key"),
-            "radarr_enabled": _get_bool("radarr_enabled"),
-        }
+        return IntegrationsConfig.migrate_from_legacy(
+            sonarr_url=_get_str("sonarr_url"),
+            sonarr_api_key=_get_str("sonarr_api_key"),
+            sonarr_enabled=_get_bool("sonarr_enabled"),
+            radarr_url=_get_str("radarr_url"),
+            radarr_api_key=_get_str("radarr_api_key"),
+            radarr_enabled=_get_bool("radarr_enabled"),
+        )
 
     @staticmethod
     def _load_path_pairs_config(file_path: str, config: Config) -> PathPairsConfig:
