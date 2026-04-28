@@ -272,7 +272,6 @@ class TestArrNotifier(unittest.TestCase):
             with notifier._lock:
                 self.assertEqual(len(notifier._active_threads), 0)
 
-
     # ------------------------------------------------------------------
     # Scheme guard
     # ------------------------------------------------------------------

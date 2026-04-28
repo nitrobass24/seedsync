@@ -60,7 +60,7 @@ class TestPathPairsConfig(unittest.TestCase):
         restored = PathPairsConfig.from_str(serialized)
 
         self.assertEqual(len(ppc.pairs), len(restored.pairs))
-        for original, loaded in zip(ppc.pairs, restored.pairs):
+        for original, loaded in zip(ppc.pairs, restored.pairs, strict=True):
             self.assertEqual(original.id, loaded.id)
             self.assertEqual(original.name, loaded.name)
             self.assertEqual(original.remote_path, loaded.remote_path)
