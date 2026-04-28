@@ -260,6 +260,34 @@ class TestIntegrationsHandler(BaseTestWebApp):
         resp = self._post("/server/integrations/nonexistent/test", {}, expect_errors=True)
         self.assertEqual(404, resp.status_int)
 
+    def test_test_radarr_missing_api_key(self):
+        """Radarr instance with URL set, api_key empty -> POST to test -> 400."""
+        inst = self._add_instance(name="Radarr", kind="radarr", url="http://r", api_key="")
+        resp = self._post(f"/server/integrations/{inst.id}/test", {}, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+
+    def test_test_radarr_bad_scheme(self):
+        """Radarr instance with ftp:// URL -> POST to test -> 400."""
+        inst = self._add_instance(name="Radarr", kind="radarr", url="http://placeholder", api_key="k")
+        # Manually set URL to ftp:// after creation (bypasses create-time validation)
+        inst.url = "ftp://r"
+        self.integrations_config.update_instance(inst)
+        resp = self._post(f"/server/integrations/{inst.id}/test", {}, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+
+    @patch("web.handler.integrations.urllib.request.urlopen")
+    def test_test_radarr_error_does_not_leak_details(self, mock_urlopen):
+        """Same as the Sonarr version but for a radarr instance."""
+        inst = self._add_instance(name="Radarr", kind="radarr", url="http://192.168.1.50:7878", api_key="k")
+        mock_urlopen.side_effect = urllib.error.URLError("connection refused to 192.168.1.50:7878")
+        resp = self._post(f"/server/integrations/{inst.id}/test", {}, expect_errors=True)
+        self.assertEqual(502, resp.status_int)
+        raw = resp.text
+        body = json.loads(raw)
+        self.assertIn("connection failed", body["error"].lower())
+        self.assertNotIn("192.168.1.50", raw)
+        self.assertNotIn("URLError", raw)
+
 
 if __name__ == "__main__":
     unittest.main()

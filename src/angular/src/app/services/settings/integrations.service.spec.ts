@@ -77,13 +77,30 @@ describe('IntegrationsService', () => {
     expect(snapshot).toEqual([]);
   });
 
-  it('falls back to empty list on refresh error', () => {
+  it('preserves existing list when a subsequent refresh errors', () => {
+    // First connect loads instances successfully
     connectedSubject.next(true);
-    httpMock.expectOne('/server/integrations').error(new ProgressEvent('error'));
+    httpMock.expectOne('/server/integrations').flush([makeInstance()]);
 
     let snapshot: ArrInstance[] | undefined;
     service.instances$.subscribe((v) => (snapshot = v));
-    expect(snapshot).toEqual([]);
+    expect(snapshot!.length).toBe(1);
+
+    // Trigger a second refresh by disconnecting then reconnecting
+    connectedSubject.next(false);
+    expect(snapshot).toEqual([]);   // disconnect clears
+
+    connectedSubject.next(true);
+    httpMock.expectOne('/server/integrations').flush([makeInstance()]);
+    expect(snapshot!.length).toBe(1);
+
+    // Now call refresh() directly and have it fail
+    service.refresh();
+    httpMock.expectOne('/server/integrations').error(new ProgressEvent('error'));
+
+    // Instances should still contain the previously loaded list
+    expect(snapshot!.length).toBe(1);
+    expect(snapshot![0].name).toBe('Sonarr — TV');
   });
 
   it('appends a new instance on create()', () => {

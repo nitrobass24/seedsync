@@ -35,7 +35,7 @@ class WebAppBuilder:
         self.auto_queue_handler = AutoQueueHandler(auto_queue_persist)
         self.status_handler = StatusHandler(context.status)
         self.logs_handler = LogsHandler(logdir=context.args.logdir, service_name=Constants.SERVICE_NAME)
-        self.path_pairs_handler = PathPairsHandler(context.path_pairs_config)
+        self.path_pairs_handler = PathPairsHandler(context.path_pairs_config, context.integrations_config)
         self.integrations_handler = IntegrationsHandler(context.integrations_config, context.path_pairs_config)
 
     def build(self) -> WebApp:

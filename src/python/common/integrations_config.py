@@ -186,7 +186,7 @@ class IntegrationsConfig(Persist):
         """
         config = IntegrationsConfig()
         if sonarr_url:
-            config._instances.append(
+            config.add_instance(
                 ArrInstance(
                     name="Sonarr",
                     kind=ArrInstance.KIND_SONARR,
@@ -196,7 +196,7 @@ class IntegrationsConfig(Persist):
                 )
             )
         if radarr_url:
-            config._instances.append(
+            config.add_instance(
                 ArrInstance(
                     name="Radarr",
                     kind=ArrInstance.KIND_RADARR,

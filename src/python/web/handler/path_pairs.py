@@ -5,14 +5,15 @@ from typing import Any, cast
 
 from bottle import HTTPResponse, request
 
-from common import PathPair, PathPairsConfig, overrides
+from common import IntegrationsConfig, PathPair, PathPairsConfig, overrides
 
 from ..web_app import IHandler, WebApp
 
 
 class PathPairsHandler(IHandler):
-    def __init__(self, path_pairs_config: PathPairsConfig):
+    def __init__(self, path_pairs_config: PathPairsConfig, integrations_config: IntegrationsConfig):
         self.__config = path_pairs_config
+        self.__integrations_config = integrations_config
 
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
@@ -65,6 +66,19 @@ class PathPairsHandler(IHandler):
             return HTTPResponse(body="local_path must not be empty", status=400)
         return name, remote_path, local_path, enabled, auto_queue, arr_target_ids
 
+    def __validate_arr_target_ids(self, arr_target_ids: list[str]) -> HTTPResponse | None:
+        """Return an error response if any arr_target_ids don't exist, else None."""
+        if not arr_target_ids:
+            return None
+        known_ids = {i.id for i in self.__integrations_config.instances}
+        unknown = [t for t in arr_target_ids if t not in known_ids]
+        if unknown:
+            return HTTPResponse(
+                body=f"Unknown integration id(s): {', '.join(unknown)}",
+                status=400,
+            )
+        return None
+
     def __handle_create(self):
         try:
             raw_data: Any = json.loads(request.body.read().decode("utf-8"))  # type: ignore[attr-defined]
@@ -78,6 +92,10 @@ class PathPairsHandler(IHandler):
         if isinstance(result, HTTPResponse):
             return result
         name, remote_path, local_path, enabled, auto_queue, arr_target_ids = result
+
+        err = self.__validate_arr_target_ids(arr_target_ids)
+        if err is not None:
+            return err
 
         pair = PathPair(
             name=name,
@@ -112,6 +130,10 @@ class PathPairsHandler(IHandler):
         if isinstance(result, HTTPResponse):
             return result
         name, remote_path, local_path, enabled, auto_queue, arr_target_ids = result
+
+        err = self.__validate_arr_target_ids(arr_target_ids)
+        if err is not None:
+            return err
 
         updated = PathPair(
             pair_id=pair_id,

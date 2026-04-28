@@ -176,7 +176,13 @@ export class IntegrationsComponent implements OnDestroy {
   onToggleEnabled(instance: ArrInstance, enabled: boolean): void {
     this.integrationsService.update(instance.id, { enabled }).pipe(
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe();
+    ).subscribe((updated) => {
+      if (!updated) {
+        this.errorMessage = 'Failed to toggle integration. Please try again.';
+        this.integrationsService.refresh();
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   // --- Test connection ---

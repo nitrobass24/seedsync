@@ -45,9 +45,13 @@ export class IntegrationsService {
     this.http.get<ArrInstance[]>(BASE_URL).pipe(
       catchError((err: HttpErrorResponse) => {
         this.logger.warn('Failed to load integrations: %O', err);
-        return of([] as ArrInstance[]);
+        return of(null);
       }),
-    ).subscribe((list) => this.instancesSubject.next(list));
+    ).subscribe((list) => {
+      if (list !== null) {
+        this.instancesSubject.next(list);
+      }
+    });
   }
 
   create(instance: ArrInstanceCreate): Observable<ArrInstance | null> {

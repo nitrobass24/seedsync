@@ -262,6 +262,32 @@ describe('PathPairsComponent logic', () => {
     expect(component.confirmingDeleteId).toBeNull();
   });
 
+  it('should not close add form when create returns null', () => {
+    mockService.create.mockReturnValue(of(null));
+    component.onStartAdd();
+    component.addForm = {
+      name: 'Failing',
+      remote_path: '/r',
+      local_path: '/l',
+      enabled: true,
+      auto_queue: false,
+      arr_target_ids: [],
+    };
+    component.onSaveAdd();
+    expect(mockService.create).toHaveBeenCalled();
+    expect(component.adding).toBe(true);
+  });
+
+  it('should not close edit form when update returns null', () => {
+    mockService.update.mockReturnValue(of(null));
+    const pair = makePair({ id: 'p1' });
+    component.onStartEdit(pair);
+    expect(component.editingId).toBe('p1');
+    component.onSaveEdit();
+    expect(mockService.update).toHaveBeenCalled();
+    expect(component.editingId).toBe('p1');
+  });
+
   describe('arr target attachment', () => {
     it('attachedInstances returns instances in the order of arr_target_ids', () => {
       const a = makeInstance({ id: 'a', name: 'A' });

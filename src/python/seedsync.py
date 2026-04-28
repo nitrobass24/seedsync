@@ -455,6 +455,7 @@ class Seedsync:
                 if Seedsync.logger:
                     Seedsync.logger.exception("Failed to load integrations.json")
                 Seedsync.__backup_file(integrations_path)
+                return IntegrationsConfig()
 
         ic = Seedsync.__migrate_legacy_integrations(config_path)
         if ic is None:
@@ -489,6 +490,11 @@ class Seedsync:
         try:
             parser.read(config_path)
         except configparser.Error:
+            if Seedsync.logger:
+                Seedsync.logger.warning(
+                    "Could not parse settings.cfg for legacy [Integrations] migration; "
+                    "integrations may need to be reconfigured manually"
+                )
             return None
         if not parser.has_section("Integrations"):
             return None

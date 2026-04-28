@@ -48,9 +48,7 @@ class IntegrationsHandler(IHandler):
         try:
             self.__config.add_instance(instance)
         except ValueError as e:
-            if "name" in str(e) and "already exists" in str(e):
-                return HTTPResponse(body=str(e), status=409)
-            raise
+            return HTTPResponse(body=str(e), status=409)
         return HTTPResponse(
             body=json.dumps(self._redact(instance.to_dict())),
             status=201,
@@ -86,9 +84,12 @@ class IntegrationsHandler(IHandler):
         try:
             self.__config.update_instance(updated)
         except ValueError as e:
-            if "name" in str(e) and "already exists" in str(e):
-                return HTTPResponse(body=str(e), status=409)
-            return HTTPResponse(body="Integration not found", status=404)
+            msg = str(e)
+            if "already exists" in msg:
+                return HTTPResponse(body=msg, status=409)
+            if "not found" in msg:
+                return HTTPResponse(body="Integration not found", status=404)
+            return HTTPResponse(body=msg, status=400)
         return HTTPResponse(
             body=json.dumps(self._redact(updated.to_dict())),
             headers={"Content-Type": "application/json"},

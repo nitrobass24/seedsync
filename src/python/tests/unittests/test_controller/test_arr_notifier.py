@@ -273,5 +273,27 @@ class TestArrNotifier(unittest.TestCase):
                 self.assertEqual(len(notifier._active_threads), 0)
 
 
+    # ------------------------------------------------------------------
+    # Scheme guard
+    # ------------------------------------------------------------------
+    def test_send_post_rejects_non_http_scheme(self):
+        """_send_post with a non-http(s) URL must not make an HTTP request and should log a warning."""
+        inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s", api_key="k")
+        pair = self._make_pair(arr_target_ids=[inst.id])
+        notifier, _, _ = self._build_notifier(instances=[inst], pairs=[pair])
+
+        with (
+            patch("urllib.request.urlopen") as mock_urlopen,
+            self.assertLogs("test_arr_notifier.ArrNotifier", level="WARNING") as cm,
+        ):
+            notifier._send_post("Sonarr", "ftp://host/path", "key", {})
+            mock_urlopen.assert_not_called()
+
+        self.assertTrue(
+            any("rejected" in msg.lower() and "scheme" in msg.lower() for msg in cm.output),
+            f"Expected a warning about scheme rejection, got: {cm.output}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

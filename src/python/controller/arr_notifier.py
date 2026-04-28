@@ -153,4 +153,4 @@ class ArrNotifier(IModelListener):
                 pass
             self._logger.debug("%s scan triggered: %s", service, payload.get("path", ""))
         except Exception:
-            self._logger.exception("%s scan failed", service)
+            self._logger.exception("%s scan failed (url=%s)", service, url)

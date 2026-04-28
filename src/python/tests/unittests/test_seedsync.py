@@ -243,3 +243,102 @@ class TestLoadIntegrationsConfig(unittest.TestCase):
         self.assertEqual([], ic.instances)
         # path_pairs.json not rewritten when nothing to migrate
         self.assertFalse(os.path.exists(self.path_pairs_path))
+
+
+class TestBackfillConfigDefaults(unittest.TestCase):
+    """Tests for Seedsync._backfill_config_defaults()."""
+
+    def test_none_fields_are_filled_with_defaults(self):
+        """A config with None fields gets them filled with defaults and returns True."""
+        config = Seedsync._create_default_config()
+        # Simulate an upgrade: set some fields to None
+        config.lftp.use_ssh_key = None
+        config.controller.use_staging = None
+        config.autoqueue.enabled = None
+
+        changed = Seedsync._backfill_config_defaults(config)
+
+        self.assertTrue(changed)
+        # Verify that None fields were filled with default values
+        defaults = Seedsync._create_default_config()
+        self.assertEqual(defaults.lftp.use_ssh_key, config.lftp.use_ssh_key)
+        self.assertEqual(defaults.controller.use_staging, config.controller.use_staging)
+        self.assertEqual(defaults.autoqueue.enabled, config.autoqueue.enabled)
+
+    def test_fully_populated_config_returns_false(self):
+        """A fully populated config returns False and nothing changes."""
+        config = Seedsync._create_default_config()
+        original_dict = config.as_dict()
+
+        changed = Seedsync._backfill_config_defaults(config)
+
+        self.assertFalse(changed)
+        self.assertEqual(original_dict, config.as_dict())
+
+
+class TestLoadPathPairsConfig(unittest.TestCase):
+    """Tests for Seedsync._load_path_pairs_config()."""
+
+    def setUp(self):
+        self._tmpdir_obj = tempfile.TemporaryDirectory()
+        self.tmpdir = self._tmpdir_obj.name
+        self.path_pairs_path = os.path.join(self.tmpdir, "path_pairs.json")
+
+    def tearDown(self):
+        self._tmpdir_obj.cleanup()
+
+    def _make_config_with_paths(self, remote_path, local_path):
+        config = Seedsync._create_default_config()
+        config.lftp.remote_path = remote_path
+        config.lftp.local_path = local_path
+        return config
+
+    def test_happy_path_migration(self):
+        """path_pairs.json absent, valid remote_path/local_path -> returns config with one 'Default' pair."""
+        config = self._make_config_with_paths("/remote/data", "/local/data")
+        ppc = Seedsync._load_path_pairs_config(self.path_pairs_path, config)
+
+        self.assertEqual(1, len(ppc.pairs))
+        self.assertEqual("Default", ppc.pairs[0].name)
+        self.assertEqual("/remote/data", ppc.pairs[0].remote_path)
+        self.assertEqual("/local/data", ppc.pairs[0].local_path)
+        # File should have been persisted
+        self.assertTrue(os.path.isfile(self.path_pairs_path))
+
+    def test_no_migration_with_dummy_values(self):
+        """path_pairs.json absent, dummy sentinel values -> returns empty config."""
+        config = self._make_config_with_paths("<replace me>", "<replace me>")
+        ppc = Seedsync._load_path_pairs_config(self.path_pairs_path, config)
+
+        self.assertEqual(0, len(ppc.pairs))
+        # File should NOT have been persisted
+        self.assertFalse(os.path.isfile(self.path_pairs_path))
+
+    def test_clean_load_from_existing_file(self):
+        """path_pairs.json exists and is valid -> loads from file."""
+        from common import PathPair, PathPairsConfig
+
+        ppc = PathPairsConfig()
+        ppc.add_pair(PathPair(name="Movies", remote_path="/r/movies", local_path="/l/movies"))
+        ppc.to_file(self.path_pairs_path)
+
+        config = self._make_config_with_paths("/other/remote", "/other/local")
+        loaded = Seedsync._load_path_pairs_config(self.path_pairs_path, config)
+
+        self.assertEqual(1, len(loaded.pairs))
+        self.assertEqual("Movies", loaded.pairs[0].name)
+
+    def test_corrupt_file_backs_up_and_migrates(self):
+        """path_pairs.json exists with bad content -> backs up and falls through to migration."""
+        with open(self.path_pairs_path, "w") as f:
+            f.write("NOT VALID JSON {{{")
+
+        config = self._make_config_with_paths("/remote/data", "/local/data")
+        ppc = Seedsync._load_path_pairs_config(self.path_pairs_path, config)
+
+        # Should have fallen through to migration
+        self.assertEqual(1, len(ppc.pairs))
+        self.assertEqual("Default", ppc.pairs[0].name)
+        # Backup file should exist
+        backup_files = [f for f in os.listdir(self.tmpdir) if f.endswith(".bak")]
+        self.assertTrue(len(backup_files) > 0, "Expected a backup file to be created")
