@@ -60,6 +60,9 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
       notify_on_extraction_complete: false,
       notify_on_extraction_failed: false,
       notify_on_delete_complete: false,
+      discord_webhook_url: null,
+      telegram_bot_token: null,
+      telegram_chat_id: null,
     },
     validate: {
       enabled: false,

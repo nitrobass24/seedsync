@@ -6,6 +6,7 @@ import { distinctUntilChanged, map } from 'rxjs';
 import { LoggerService } from '../../services/utils/logger.service';
 import { ConfigService } from '../../services/settings/config.service';
 import { NotificationService } from '../../services/utils/notification.service';
+import { NotificationsService, TestResult } from '../../services/settings/notifications.service';
 import { ServerCommandService } from '../../services/server/server-command.service';
 import { ConnectedService } from '../../services/utils/connected.service';
 import { PathPairsService } from '../../services/settings/path-pairs.service';
@@ -64,6 +65,7 @@ export class SettingsPageComponent implements OnInit {
   private readonly logger = inject(LoggerService);
   private readonly configService = inject(ConfigService);
   private readonly notifService = inject(NotificationService);
+  private readonly notificationsService = inject(NotificationsService);
   private readonly commandService = inject(ServerCommandService);
   private readonly connectedService = inject(ConnectedService);
   private readonly pathPairsService = inject(PathPairsService);
@@ -73,6 +75,10 @@ export class SettingsPageComponent implements OnInit {
   readonly config$ = this.configService.config$;
 
   commandsEnabled = false;
+  testingDiscord = false;
+  testingTelegram = false;
+  discordResult: TestResult | null = null;
+  telegramResult: TestResult | null = null;
 
   private configRestartNotif: Notification = createNotification(
     NotificationLevel.INFO,
@@ -204,6 +210,30 @@ export class SettingsPageComponent implements OnInit {
           this.logger.error(reaction.errorMessage);
         }
       },
+    });
+  }
+
+  onTestDiscord(): void {
+    this.testingDiscord = true;
+    this.discordResult = null;
+    this.notificationsService.testDiscord().pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((result) => {
+      this.testingDiscord = false;
+      this.discordResult = result;
+      this.cdr.markForCheck();
+    });
+  }
+
+  onTestTelegram(): void {
+    this.testingTelegram = true;
+    this.telegramResult = null;
+    this.notificationsService.testTelegram().pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((result) => {
+      this.testingTelegram = false;
+      this.telegramResult = result;
+      this.cdr.markForCheck();
     });
   }
 }
