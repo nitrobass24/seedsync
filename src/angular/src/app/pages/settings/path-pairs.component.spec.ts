@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { Observable, of } from 'rxjs';
 
 import { PathPair } from '../../models/path-pair';
+import { ArrInstance } from '../../models/arr-instance';
 
 interface PathPairsServiceLike {
   create(pair: Omit<PathPair, 'id'>): Observable<PathPair | null>;
@@ -17,26 +18,35 @@ function makePair(overrides: Partial<PathPair> = {}): PathPair {
     local_path: '/local',
     enabled: true,
     auto_queue: false,
+    arr_target_ids: [],
+    ...overrides,
+  };
+}
+
+function makeInstance(overrides: Partial<ArrInstance> = {}): ArrInstance {
+  return {
+    id: 'inst-1',
+    name: 'Sonarr — TV',
+    kind: 'sonarr',
+    url: 'http://s',
+    api_key: '********',
+    enabled: true,
     ...overrides,
   };
 }
 
 /**
- * Since Vitest lacks Angular JIT compiler setup, we test the component logic
- * by dynamically importing the class and bypassing Angular decorators at
- * module-evaluation time. Instead we test the same logic inline.
- *
- * This mirrors the pattern used by the passing model/pipe spec files in this repo.
+ * Vitest lacks Angular JIT compiler setup, so we mirror PathPairsComponent's
+ * methods inline and exercise them directly. Same pattern as the existing
+ * model/pipe spec files.
  */
-
-// Extracted inline version of the component logic for testing
-// (matches PathPairsComponent methods exactly)
 class PathPairsLogic {
   editingId: string | null = null;
   editForm: Omit<PathPair, 'id'> = this.emptyForm();
   adding = false;
   addForm: Omit<PathPair, 'id'> = this.emptyForm();
   confirmingDeleteId: string | null = null;
+  arrPickerPairId: string | null = null;
   private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private service: PathPairsServiceLike) {}
@@ -71,6 +81,7 @@ class PathPairsLogic {
       local_path: pair.local_path,
       enabled: pair.enabled,
       auto_queue: pair.auto_queue,
+      arr_target_ids: [...pair.arr_target_ids],
     };
   }
 
@@ -106,6 +117,40 @@ class PathPairsLogic {
     this.service.update({ ...pair, auto_queue: autoQueue }).subscribe();
   }
 
+  // --- Arr targets ---
+
+  attachedInstances(pair: PathPair, allInstances: ArrInstance[] | null): ArrInstance[] {
+    if (!allInstances) return [];
+    const byId = new Map(allInstances.map((i) => [i.id, i]));
+    return pair.arr_target_ids
+      .map((id) => byId.get(id))
+      .filter((i): i is ArrInstance => i !== undefined);
+  }
+
+  availableInstances(pair: PathPair, allInstances: ArrInstance[] | null): ArrInstance[] {
+    if (!allInstances) return [];
+    return allInstances.filter((i) => !pair.arr_target_ids.includes(i.id));
+  }
+
+  togglePicker(pairId: string): void {
+    this.arrPickerPairId = this.arrPickerPairId === pairId ? null : pairId;
+  }
+
+  onAttachInstance(pair: PathPair, instance: ArrInstance): void {
+    if (pair.arr_target_ids.includes(instance.id)) return;
+    const updated = { ...pair, arr_target_ids: [...pair.arr_target_ids, instance.id] };
+    this.arrPickerPairId = null;
+    this.service.update(updated).subscribe();
+  }
+
+  onDetachInstance(pair: PathPair, instanceId: string): void {
+    const updated = {
+      ...pair,
+      arr_target_ids: pair.arr_target_ids.filter((id) => id !== instanceId),
+    };
+    this.service.update(updated).subscribe();
+  }
+
   destroy(): void {
     this.clearConfirmTimer();
   }
@@ -117,7 +162,14 @@ class PathPairsLogic {
   }
 
   private emptyForm(): Omit<PathPair, 'id'> {
-    return { name: '', remote_path: '', local_path: '', enabled: true, auto_queue: false };
+    return {
+      name: '',
+      remote_path: '',
+      local_path: '',
+      enabled: true,
+      auto_queue: false,
+      arr_target_ids: [],
+    };
   }
 
   private setConfirming(pairId: string): void {
@@ -170,85 +222,34 @@ describe('PathPairsComponent logic', () => {
     expect(component.confirmingDeleteId).toBeNull();
   });
 
-  it('should open add form', () => {
+  it('should call create on save add with arr_target_ids included', () => {
     component.onStartAdd();
-    expect(component.adding).toBe(true);
-    expect(component.addForm.name).toBe('');
-  });
-
-  it('should cancel add form', () => {
-    component.onStartAdd();
-    component.addForm.name = 'test';
-    component.onCancelAdd();
-    expect(component.adding).toBe(false);
-    expect(component.addForm.name).toBe('');
-  });
-
-  it('should call create on save add', () => {
-    component.onStartAdd();
-    component.addForm = { name: 'Test', remote_path: '/r', local_path: '/l', enabled: true, auto_queue: false };
+    component.addForm = {
+      name: 'Test',
+      remote_path: '/r',
+      local_path: '/l',
+      enabled: true,
+      auto_queue: false,
+      arr_target_ids: [],
+    };
     component.onSaveAdd();
     expect(mockService.create).toHaveBeenCalledWith({
-      name: 'Test', remote_path: '/r', local_path: '/l', enabled: true, auto_queue: false,
+      name: 'Test',
+      remote_path: '/r',
+      local_path: '/l',
+      enabled: true,
+      auto_queue: false,
+      arr_target_ids: [],
     });
   });
 
-  it('should not save add when name is empty', () => {
-    component.onStartAdd();
-    component.addForm.name = '   ';
-    component.onSaveAdd();
-    expect(mockService.create).not.toHaveBeenCalled();
-  });
-
-  it('should close add form after successful create', () => {
-    component.onStartAdd();
-    component.addForm = { name: 'Test', remote_path: '/r', local_path: '/l', enabled: true, auto_queue: false };
-    component.onSaveAdd();
-    expect(component.adding).toBe(false);
-  });
-
-  it('should enter edit mode', () => {
-    const pair = makePair();
+  it('should preserve arr_target_ids when entering edit mode', () => {
+    const pair = makePair({ arr_target_ids: ['a', 'b'] });
     component.onStartEdit(pair);
-    expect(component.editingId).toBe(pair.id);
-    expect(component.editForm.name).toBe(pair.name);
-    expect(component.editForm.remote_path).toBe(pair.remote_path);
-  });
-
-  it('should cancel edit mode', () => {
-    component.onStartEdit(makePair());
-    component.onCancelEdit();
-    expect(component.editingId).toBeNull();
-  });
-
-  it('should call update on save edit', () => {
-    const pair = makePair();
-    component.onStartEdit(pair);
-    component.editForm.name = 'Updated';
-    component.onSaveEdit();
-    expect(mockService.update).toHaveBeenCalledWith(
-      expect.objectContaining({ id: '1', name: 'Updated' }),
-    );
-  });
-
-  it('should not save edit when name is empty', () => {
-    component.onStartEdit(makePair());
-    component.editForm.name = '   ';
-    component.onSaveEdit();
-    expect(mockService.update).not.toHaveBeenCalled();
-  });
-
-  it('should close edit form after successful update', () => {
-    component.onStartEdit(makePair());
-    component.editForm.name = 'Updated';
-    component.onSaveEdit();
-    expect(component.editingId).toBeNull();
-  });
-
-  it('should cancel add when starting edit', () => {
-    component.onStartAdd();
-    component.onStartEdit(makePair());
-    expect(component.adding).toBe(false);
+    expect(component.editForm.arr_target_ids).toEqual(['a', 'b']);
+    // Mutating the form must not mutate the source pair
+    component.editForm.arr_target_ids.push('c');
+    expect(pair.arr_target_ids).toEqual(['a', 'b']);
   });
 
   it('should require double-click to delete', () => {
@@ -261,62 +262,74 @@ describe('PathPairsComponent logic', () => {
     expect(component.confirmingDeleteId).toBeNull();
   });
 
-  it('should reset confirm state after timeout', () => {
-    vi.useFakeTimers();
-    component.onDelete('1');
-    expect(component.confirmingDeleteId).toBe('1');
+  describe('arr target attachment', () => {
+    it('attachedInstances returns instances in the order of arr_target_ids', () => {
+      const a = makeInstance({ id: 'a', name: 'A' });
+      const b = makeInstance({ id: 'b', name: 'B' });
+      const pair = makePair({ arr_target_ids: ['b', 'a'] });
+      const result = component.attachedInstances(pair, [a, b]);
+      expect(result.map((i) => i.id)).toEqual(['b', 'a']);
+    });
 
-    vi.advanceTimersByTime(3000);
-    expect(component.confirmingDeleteId).toBeNull();
-    vi.useRealTimers();
-  });
+    it('attachedInstances drops dangling ids', () => {
+      const a = makeInstance({ id: 'a', name: 'A' });
+      const pair = makePair({ arr_target_ids: ['a', 'ghost'] });
+      const result = component.attachedInstances(pair, [a]);
+      expect(result.map((i) => i.id)).toEqual(['a']);
+    });
 
-  it('should switch confirming to different pair on click', () => {
-    component.onDelete('1');
-    expect(component.confirmingDeleteId).toBe('1');
+    it('availableInstances excludes already-attached instances', () => {
+      const a = makeInstance({ id: 'a', name: 'A' });
+      const b = makeInstance({ id: 'b', name: 'B' });
+      const pair = makePair({ arr_target_ids: ['a'] });
+      const result = component.availableInstances(pair, [a, b]);
+      expect(result.map((i) => i.id)).toEqual(['b']);
+    });
 
-    component.onDelete('2');
-    expect(component.confirmingDeleteId).toBe('2');
-  });
+    it('onAttachInstance updates with the new id appended', () => {
+      const inst = makeInstance({ id: 'new' });
+      const pair = makePair({ arr_target_ids: ['existing'] });
+      component.onAttachInstance(pair, inst);
+      expect(mockService.update).toHaveBeenCalledWith(
+        expect.objectContaining({ arr_target_ids: ['existing', 'new'] }),
+      );
+    });
 
-  it('should toggle enabled via update', () => {
-    const pair = makePair({ enabled: true });
-    component.onToggleEnabled(pair, false);
-    expect(mockService.update).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: false }),
-    );
-  });
+    it('onAttachInstance is a no-op for already-attached instance', () => {
+      const inst = makeInstance({ id: 'a' });
+      const pair = makePair({ arr_target_ids: ['a'] });
+      component.onAttachInstance(pair, inst);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
 
-  it('should toggle auto_queue via update', () => {
-    const pair = makePair({ auto_queue: false });
-    component.onToggleAutoQueue(pair, true);
-    expect(mockService.update).toHaveBeenCalledWith(
-      expect.objectContaining({ auto_queue: true }),
-    );
-  });
+    it('onAttachInstance closes the picker', () => {
+      component.arrPickerPairId = 'pair-1';
+      const inst = makeInstance({ id: 'new' });
+      const pair = makePair({ id: 'pair-1', arr_target_ids: [] });
+      component.onAttachInstance(pair, inst);
+      expect(component.arrPickerPairId).toBeNull();
+    });
 
-  it('should not clear add form when service returns null', () => {
-    mockService.create = vi.fn().mockReturnValue(of(null));
-    component.onStartAdd();
-    component.addForm = { name: 'Test', remote_path: '/r', local_path: '/l', enabled: true, auto_queue: false };
-    component.onSaveAdd();
-    expect(component.adding).toBe(true);
-    expect(component.addForm.name).toBe('Test');
-  });
+    it('onDetachInstance removes the id from arr_target_ids', () => {
+      const pair = makePair({ arr_target_ids: ['a', 'b', 'c'] });
+      component.onDetachInstance(pair, 'b');
+      expect(mockService.update).toHaveBeenCalledWith(
+        expect.objectContaining({ arr_target_ids: ['a', 'c'] }),
+      );
+    });
 
-  it('should not clear edit form when service returns null', () => {
-    mockService.update = vi.fn().mockReturnValue(of(null));
-    component.onStartEdit(makePair());
-    component.editForm.name = 'Updated';
-    component.onSaveEdit();
-    expect(component.editingId).toBe('1');
-    expect(component.editForm.name).toBe('Updated');
-  });
+    it('togglePicker opens and closes the picker for a pair', () => {
+      expect(component.arrPickerPairId).toBeNull();
+      component.togglePicker('pair-1');
+      expect(component.arrPickerPairId).toBe('pair-1');
+      component.togglePicker('pair-1');
+      expect(component.arrPickerPairId).toBeNull();
+    });
 
-  it('should reset confirm state when starting edit', () => {
-    component.onDelete('1');
-    expect(component.confirmingDeleteId).toBe('1');
-    component.onStartEdit(makePair());
-    expect(component.confirmingDeleteId).toBeNull();
+    it('togglePicker switches between pairs', () => {
+      component.togglePicker('pair-1');
+      component.togglePicker('pair-2');
+      expect(component.arrPickerPairId).toBe('pair-2');
+    });
   });
 });

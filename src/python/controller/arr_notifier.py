@@ -5,15 +5,31 @@ import threading
 import time
 import urllib.request
 
-from common import Config, PathPairsConfig
+from common import ArrInstance, IntegrationsConfig, PathPair, PathPairsConfig
 from model import IModelListener, ModelFile
 
 
 class ArrNotifier(IModelListener):
-    """Notifies Sonarr/Radarr on download completion so they can trigger import scans."""
+    """Notifies *arr instances on download completion so they can trigger import scans.
 
-    def __init__(self, config: Config, path_pairs_config: PathPairsConfig, logger: logging.Logger):
-        self._config = config
+    Routing: a completed file is mapped to its pair via `pair_id`, and the scan
+    is dispatched to every enabled instance referenced by that pair's
+    `arr_target_ids`. Files outside any path pair are skipped.
+    """
+
+    _COMMAND_BY_KIND: dict[str, tuple[str, str]] = {
+        # kind -> (display name, *arr command name)
+        ArrInstance.KIND_SONARR: ("Sonarr", "DownloadedEpisodesScan"),
+        ArrInstance.KIND_RADARR: ("Radarr", "DownloadedMoviesScan"),
+    }
+
+    def __init__(
+        self,
+        integrations_config: IntegrationsConfig,
+        path_pairs_config: PathPairsConfig,
+        logger: logging.Logger,
+    ):
+        self._integrations_config = integrations_config
         self._path_pairs_config = path_pairs_config
         self._logger = logger.getChild("ArrNotifier")
         self._shutdown_flag = False
@@ -29,28 +45,36 @@ class ArrNotifier(IModelListener):
     def file_updated(self, old_file: ModelFile, new_file: ModelFile):
         if old_file.state == new_file.state:
             return
-
         if new_file.state != ModelFile.State.DOWNLOADED:
             return
+        if not new_file.pair_id:
+            return  # orphan file, no pair → no instance routing possible
 
-        local_path = self._resolve_local_path(new_file)
-        cfg = self._config.integrations
+        pair = self._path_pairs_config.get_pair(new_file.pair_id)
+        if pair is None or not pair.arr_target_ids:
+            return
 
-        if cfg.sonarr_enabled and cfg.sonarr_url and cfg.sonarr_api_key:
+        instances_by_id = {i.id: i for i in self._integrations_config.instances}
+        local_path = self._resolve_local_path(pair, new_file)
+
+        for target_id in pair.arr_target_ids:
+            instance = instances_by_id.get(target_id)
+            if instance is None:
+                self._logger.debug("Pair %r references unknown *arr instance %s", pair.name, target_id)
+                continue
+            if not instance.enabled or not instance.url or not instance.api_key:
+                continue
+            command = self._COMMAND_BY_KIND.get(instance.kind)
+            if command is None:
+                self._logger.warning("Unknown *arr kind %r for instance %s", instance.kind, instance.name)
+                continue
+            display_name, command_name = command
+            label = f"{display_name} ({instance.name})" if instance.name else display_name
             self._fire_scan(
-                service="Sonarr",
-                base_url=cfg.sonarr_url,
-                api_key=cfg.sonarr_api_key,
-                command_name="DownloadedEpisodesScan",
-                path=local_path,
-            )
-
-        if cfg.radarr_enabled and cfg.radarr_url and cfg.radarr_api_key:
-            self._fire_scan(
-                service="Radarr",
-                base_url=cfg.radarr_url,
-                api_key=cfg.radarr_api_key,
-                command_name="DownloadedMoviesScan",
+                service=label,
+                base_url=instance.url,
+                api_key=instance.api_key,
+                command_name=command_name,
                 path=local_path,
             )
 
@@ -82,15 +106,9 @@ class ArrNotifier(IModelListener):
         else:
             self._logger.info("Arr notifier shutdown: all threads completed")
 
-    def _resolve_local_path(self, file: ModelFile) -> str:
-        """Resolve the absolute local filesystem path for a downloaded file."""
-        base = ""
-        if file.pair_id:
-            pair = self._path_pairs_config.get_pair(file.pair_id)
-            if pair:
-                base = pair.local_path
-        if not base:
-            base = self._config.lftp.local_path or ""
+    @staticmethod
+    def _resolve_local_path(pair: PathPair, file: ModelFile) -> str:
+        base = pair.local_path or ""
         return os.path.join(base, file.full_path) if base else file.full_path
 
     def _fire_scan(self, service: str, base_url: str, api_key: str, command_name: str, path: str):

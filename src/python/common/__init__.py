@@ -21,3 +21,7 @@ from .remote_path_utils import (
     escape_remote_path_double as escape_remote_path_double,
 )
 from .path_pairs_config import PathPairsConfig as PathPairsConfig, PathPair as PathPair
+from .integrations_config import (
+    ArrInstance as ArrInstance,
+    IntegrationsConfig as IntegrationsConfig,
+)

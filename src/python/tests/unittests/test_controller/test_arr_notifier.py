@@ -1,171 +1,249 @@
 import logging
 import threading
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
+from common import ArrInstance, IntegrationsConfig, PathPair, PathPairsConfig
 from controller.arr_notifier import ArrNotifier
 from model.file import ModelFile
 
 
 class TestArrNotifier(unittest.TestCase):
-    """Tests for ArrNotifier Sonarr/Radarr integration."""
+    """Tests for ArrNotifier multi-instance, per-pair routing."""
 
-    def _make_config(
+    def _make_pair(
         self,
-        sonarr_enabled=False,
-        sonarr_url="http://localhost:8989",
-        sonarr_api_key="test-sonarr-key",
-        radarr_enabled=False,
-        radarr_url="http://localhost:7878",
-        radarr_api_key="test-radarr-key",
-        local_path="/downloads",
-    ):
-        config = MagicMock()
-        config.integrations.sonarr_enabled = sonarr_enabled
-        config.integrations.sonarr_url = sonarr_url
-        config.integrations.sonarr_api_key = sonarr_api_key
-        config.integrations.radarr_enabled = radarr_enabled
-        config.integrations.radarr_url = radarr_url
-        config.integrations.radarr_api_key = radarr_api_key
-        config.lftp.local_path = local_path
-        return config
+        name="TV",
+        local_path="/media/tv",
+        arr_target_ids: list[str] | None = None,
+    ) -> PathPair:
+        return PathPair(
+            name=name,
+            remote_path=f"/remote/{name}",
+            local_path=local_path,
+            enabled=True,
+            auto_queue=True,
+            arr_target_ids=list(arr_target_ids) if arr_target_ids else [],
+        )
 
-    def _make_notifier(self, **kwargs):
-        config = self._make_config(**kwargs)
-        path_pairs_config = MagicMock()
-        path_pairs_config.get_pair.return_value = None
+    def _build_notifier(
+        self,
+        instances: list[ArrInstance] | None = None,
+        pairs: list[PathPair] | None = None,
+    ) -> tuple[ArrNotifier, IntegrationsConfig, PathPairsConfig]:
+        ic = IntegrationsConfig()
+        for inst in instances or []:
+            ic.add_instance(inst)
+        pp = PathPairsConfig()
+        for pair in pairs or []:
+            pp.add_pair(pair)
         logger = logging.getLogger("test_arr_notifier")
-        return ArrNotifier(config, path_pairs_config, logger)
+        return ArrNotifier(ic, pp, logger), ic, pp
 
-    def _make_model_file(self, name="test.mkv", state=ModelFile.State.DEFAULT):
+    def _make_file(
+        self,
+        name="Show.S01E01.mkv",
+        state=ModelFile.State.DEFAULT,
+        pair_id: str | None = None,
+    ) -> ModelFile:
         f = ModelFile(name, False)
         f.state = state
+        if pair_id is not None:
+            f.pair_id = pair_id
         return f
 
-    def test_no_action_when_disabled(self):
-        """No scan fires when both Sonarr and Radarr are disabled."""
-        notifier = self._make_notifier(sonarr_enabled=False, radarr_enabled=False)
-        old_file = self._make_model_file(state=ModelFile.State.DOWNLOADING)
-        new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
+    def _trigger(self, notifier: ArrNotifier, pair_id: str | None) -> None:
+        old = self._make_file(state=ModelFile.State.DOWNLOADING, pair_id=pair_id)
+        new = self._make_file(state=ModelFile.State.DOWNLOADED, pair_id=pair_id)
+        notifier.file_updated(old, new)
+
+    # ------------------------------------------------------------------
+    # No-op cases
+    # ------------------------------------------------------------------
+    def test_no_action_when_state_unchanged(self):
+        inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s", api_key="k")
+        pair = self._make_pair(arr_target_ids=[inst.id])
+        notifier, _, _ = self._build_notifier(instances=[inst], pairs=[pair])
 
         with patch.object(notifier, "_send_post") as mock_send:
-            notifier.file_updated(old_file, new_file)
+            old = self._make_file(state=ModelFile.State.DOWNLOADED, pair_id=pair.id)
+            new = self._make_file(state=ModelFile.State.DOWNLOADED, pair_id=pair.id)
+            notifier.file_updated(old, new)
             notifier.shutdown(timeout=2)
             mock_send.assert_not_called()
 
-    def test_sonarr_fires_on_download_complete(self):
-        """Sonarr scan fires when enabled and file transitions to DOWNLOADED."""
-        notifier = self._make_notifier(sonarr_enabled=True)
-        old_file = self._make_model_file(state=ModelFile.State.DOWNLOADING)
-        new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
+    def test_no_action_when_state_not_downloaded(self):
+        inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s", api_key="k")
+        pair = self._make_pair(arr_target_ids=[inst.id])
+        notifier, _, _ = self._build_notifier(instances=[inst], pairs=[pair])
 
         with patch.object(notifier, "_send_post") as mock_send:
-            notifier.file_updated(old_file, new_file)
+            old = self._make_file(state=ModelFile.State.DOWNLOADED, pair_id=pair.id)
+            new = self._make_file(state=ModelFile.State.EXTRACTED, pair_id=pair.id)
+            notifier.file_updated(old, new)
             notifier.shutdown(timeout=2)
-            mock_send.assert_called_once()
-            args = mock_send.call_args
-            self.assertEqual(args[0][0], "Sonarr")
-            self.assertIn("/api/v3/command", args[0][1])
-            self.assertEqual(args[0][2], "test-sonarr-key")
-            self.assertEqual(args[0][3]["name"], "DownloadedEpisodesScan")
+            mock_send.assert_not_called()
 
-    def test_radarr_fires_on_download_complete(self):
-        """Radarr scan fires when enabled and file transitions to DOWNLOADED."""
-        notifier = self._make_notifier(radarr_enabled=True)
-        old_file = self._make_model_file(state=ModelFile.State.DOWNLOADING)
-        new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
+    def test_skips_orphan_file_without_pair(self):
+        inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s", api_key="k")
+        notifier, _, _ = self._build_notifier(instances=[inst], pairs=[])
 
         with patch.object(notifier, "_send_post") as mock_send:
-            notifier.file_updated(old_file, new_file)
+            self._trigger(notifier, pair_id=None)
             notifier.shutdown(timeout=2)
-            mock_send.assert_called_once()
-            args = mock_send.call_args
-            self.assertEqual(args[0][0], "Radarr")
-            self.assertEqual(args[0][3]["name"], "DownloadedMoviesScan")
+            mock_send.assert_not_called()
 
-    def test_both_fire_when_both_enabled(self):
-        """Both Sonarr and Radarr fire when both are enabled."""
-        notifier = self._make_notifier(sonarr_enabled=True, radarr_enabled=True)
-        old_file = self._make_model_file(state=ModelFile.State.DOWNLOADING)
-        new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
+    def test_skips_pair_with_empty_target_list(self):
+        inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s", api_key="k")
+        pair = self._make_pair(arr_target_ids=[])  # explicit no-op
+        notifier, _, _ = self._build_notifier(instances=[inst], pairs=[pair])
 
         with patch.object(notifier, "_send_post") as mock_send:
-            notifier.file_updated(old_file, new_file)
+            self._trigger(notifier, pair_id=pair.id)
+            notifier.shutdown(timeout=2)
+            mock_send.assert_not_called()
+
+    def test_unknown_pair_id_is_skipped(self):
+        inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s", api_key="k")
+        notifier, _, _ = self._build_notifier(instances=[inst], pairs=[])
+
+        with patch.object(notifier, "_send_post") as mock_send:
+            self._trigger(notifier, pair_id="ghost-id")
+            notifier.shutdown(timeout=2)
+            mock_send.assert_not_called()
+
+    def test_dangling_target_id_is_skipped(self):
+        pair = self._make_pair(arr_target_ids=["does-not-exist"])
+        notifier, _, _ = self._build_notifier(instances=[], pairs=[pair])
+
+        with patch.object(notifier, "_send_post") as mock_send:
+            self._trigger(notifier, pair_id=pair.id)
+            notifier.shutdown(timeout=2)
+            mock_send.assert_not_called()
+
+    def test_disabled_instance_is_skipped(self):
+        inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s", api_key="k", enabled=False)
+        pair = self._make_pair(arr_target_ids=[inst.id])
+        notifier, _, _ = self._build_notifier(instances=[inst], pairs=[pair])
+
+        with patch.object(notifier, "_send_post") as mock_send:
+            self._trigger(notifier, pair_id=pair.id)
+            notifier.shutdown(timeout=2)
+            mock_send.assert_not_called()
+
+    def test_instance_missing_url_or_api_key_is_skipped(self):
+        no_url = ArrInstance(name="A", kind="sonarr", url="", api_key="k")
+        no_key = ArrInstance(name="B", kind="radarr", url="http://r", api_key="")
+        pair = self._make_pair(arr_target_ids=[no_url.id, no_key.id])
+        notifier, _, _ = self._build_notifier(instances=[no_url, no_key], pairs=[pair])
+
+        with patch.object(notifier, "_send_post") as mock_send:
+            self._trigger(notifier, pair_id=pair.id)
+            notifier.shutdown(timeout=2)
+            mock_send.assert_not_called()
+
+    # ------------------------------------------------------------------
+    # Routing cases
+    # ------------------------------------------------------------------
+    def test_sonarr_fires_with_correct_command(self):
+        sonarr = ArrInstance(name="Sonarr — TV", kind="sonarr", url="http://s", api_key="key1")
+        pair = self._make_pair(name="TV", local_path="/media/tv", arr_target_ids=[sonarr.id])
+        notifier, _, _ = self._build_notifier(instances=[sonarr], pairs=[pair])
+
+        with patch.object(notifier, "_send_post") as mock_send:
+            self._trigger(notifier, pair_id=pair.id)
+            notifier.shutdown(timeout=2)
+
+            mock_send.assert_called_once()
+            args = mock_send.call_args[0]
+            service_label, url, api_key, payload = args
+            self.assertIn("Sonarr", service_label)
+            self.assertEqual(url, "http://s/api/v3/command")
+            self.assertEqual(api_key, "key1")
+            self.assertEqual(payload["name"], "DownloadedEpisodesScan")
+            self.assertEqual(payload["path"], "/media/tv/Show.S01E01.mkv")
+
+    def test_radarr_fires_with_correct_command(self):
+        radarr = ArrInstance(name="Radarr — Anime", kind="radarr", url="http://r", api_key="key2")
+        pair = self._make_pair(name="Anime", local_path="/media/anime", arr_target_ids=[radarr.id])
+        notifier, _, _ = self._build_notifier(instances=[radarr], pairs=[pair])
+
+        with patch.object(notifier, "_send_post") as mock_send:
+            self._trigger(notifier, pair_id=pair.id)
+            notifier.shutdown(timeout=2)
+
+            args = mock_send.call_args[0]
+            self.assertIn("Radarr", args[0])
+            self.assertEqual(args[3]["name"], "DownloadedMoviesScan")
+            self.assertEqual(args[3]["path"], "/media/anime/Show.S01E01.mkv")
+
+    def test_multiple_targets_attached_to_one_pair(self):
+        sonarr = ArrInstance(name="Sonarr — TV", kind="sonarr", url="http://s", api_key="k1")
+        radarr = ArrInstance(name="Radarr — Movies", kind="radarr", url="http://r", api_key="k2")
+        pair = self._make_pair(arr_target_ids=[sonarr.id, radarr.id])
+        notifier, _, _ = self._build_notifier(instances=[sonarr, radarr], pairs=[pair])
+
+        with patch.object(notifier, "_send_post") as mock_send:
+            self._trigger(notifier, pair_id=pair.id)
             notifier.shutdown(timeout=2)
             self.assertEqual(mock_send.call_count, 2)
-            service_names = {call[0][0] for call in mock_send.call_args_list}
-            self.assertEqual(service_names, {"Sonarr", "Radarr"})
+            kinds = {call[0][3]["name"] for call in mock_send.call_args_list}
+            self.assertEqual(kinds, {"DownloadedEpisodesScan", "DownloadedMoviesScan"})
 
-    def test_no_fire_on_non_downloaded_state(self):
-        """No scan fires for state transitions other than DOWNLOADED."""
-        notifier = self._make_notifier(sonarr_enabled=True, radarr_enabled=True)
-        old_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
-        new_file = self._make_model_file(state=ModelFile.State.EXTRACTED)
-
-        with patch.object(notifier, "_send_post") as mock_send:
-            notifier.file_updated(old_file, new_file)
-            notifier.shutdown(timeout=2)
-            mock_send.assert_not_called()
-
-    def test_no_fire_when_state_unchanged(self):
-        """No scan fires when old and new state are the same."""
-        notifier = self._make_notifier(sonarr_enabled=True)
-        old_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
-        new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
+    def test_two_pairs_with_distinct_targets(self):
+        s_anime = ArrInstance(name="Sonarr — Anime", kind="sonarr", url="http://sa", api_key="k1")
+        s_tv = ArrInstance(name="Sonarr — TV", kind="sonarr", url="http://stv", api_key="k2")
+        anime_pair = self._make_pair(name="Anime", local_path="/media/anime", arr_target_ids=[s_anime.id])
+        tv_pair = self._make_pair(name="TV", local_path="/media/tv", arr_target_ids=[s_tv.id])
+        notifier, _, _ = self._build_notifier(instances=[s_anime, s_tv], pairs=[anime_pair, tv_pair])
 
         with patch.object(notifier, "_send_post") as mock_send:
-            notifier.file_updated(old_file, new_file)
+            self._trigger(notifier, pair_id=anime_pair.id)
             notifier.shutdown(timeout=2)
-            mock_send.assert_not_called()
 
-    def test_no_fire_when_url_empty(self):
-        """No scan fires when URL is empty even if enabled."""
-        notifier = self._make_notifier(sonarr_enabled=True, sonarr_url="")
-        old_file = self._make_model_file(state=ModelFile.State.DOWNLOADING)
-        new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
+            mock_send.assert_called_once()
+            api_key = mock_send.call_args[0][2]
+            path = mock_send.call_args[0][3]["path"]
+            self.assertEqual(api_key, "k1")
+            self.assertTrue(path.startswith("/media/anime/"))
+
+    def test_url_trailing_slash_is_stripped(self):
+        inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s/", api_key="k")
+        pair = self._make_pair(arr_target_ids=[inst.id])
+        notifier, _, _ = self._build_notifier(instances=[inst], pairs=[pair])
 
         with patch.object(notifier, "_send_post") as mock_send:
-            notifier.file_updated(old_file, new_file)
+            self._trigger(notifier, pair_id=pair.id)
             notifier.shutdown(timeout=2)
-            mock_send.assert_not_called()
+            self.assertEqual(mock_send.call_args[0][1], "http://s/api/v3/command")
 
-    def test_no_fire_when_api_key_empty(self):
-        """No scan fires when API key is empty even if enabled."""
-        notifier = self._make_notifier(sonarr_enabled=True, sonarr_api_key="")
-        old_file = self._make_model_file(state=ModelFile.State.DOWNLOADING)
-        new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
-
-        with patch.object(notifier, "_send_post") as mock_send:
-            notifier.file_updated(old_file, new_file)
-            notifier.shutdown(timeout=2)
-            mock_send.assert_not_called()
-
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
     def test_shutdown_prevents_new_scans(self):
-        """After shutdown, no new threads are started."""
-        notifier = self._make_notifier(sonarr_enabled=True)
+        inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s", api_key="k")
+        pair = self._make_pair(arr_target_ids=[inst.id])
+        notifier, _, _ = self._build_notifier(instances=[inst], pairs=[pair])
         notifier.shutdown(timeout=1)
 
         with patch.object(notifier, "_send_post") as mock_send:
-            old_file = self._make_model_file(state=ModelFile.State.DOWNLOADING)
-            new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
-            notifier.file_updated(old_file, new_file)
+            self._trigger(notifier, pair_id=pair.id)
             mock_send.assert_not_called()
 
     def test_shutdown_waits_for_inflight(self):
-        """Shutdown joins in-flight threads."""
-        notifier = self._make_notifier(sonarr_enabled=True)
+        inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s", api_key="k")
+        pair = self._make_pair(arr_target_ids=[inst.id])
+        notifier, _, _ = self._build_notifier(instances=[inst], pairs=[pair])
         barrier = threading.Event()
         started = threading.Event()
 
-        def slow_send(service, url, api_key, payload):
+        def slow_send(*_args, **_kwargs):
             started.set()
             barrier.wait(timeout=5)
 
         with patch.object(notifier, "_send_post", side_effect=slow_send):
-            old_file = self._make_model_file(state=ModelFile.State.DOWNLOADING)
-            new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
-            notifier.file_updated(old_file, new_file)
-            started.wait(timeout=5)
+            self._trigger(notifier, pair_id=pair.id)
+            self.assertTrue(started.wait(timeout=5))
 
             with notifier._lock:
                 self.assertEqual(len(notifier._active_threads), 1)
@@ -176,70 +254,23 @@ class TestArrNotifier(unittest.TestCase):
             with notifier._lock:
                 self.assertEqual(len(notifier._active_threads), 0)
 
-    def test_thread_removed_on_exception(self):
-        """Thread is cleaned up even if _send_post raises."""
-        notifier = self._make_notifier(sonarr_enabled=True)
+    def test_thread_cleaned_up_on_exception(self):
+        inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s", api_key="k")
+        pair = self._make_pair(arr_target_ids=[inst.id])
+        notifier, _, _ = self._build_notifier(instances=[inst], pairs=[pair])
         started = threading.Event()
 
-        def failing_send(service, url, api_key, payload):
+        def failing_send(*_args, **_kwargs):
             started.set()
             raise RuntimeError("connection refused")
 
-        with patch.object(notifier, "_send_post", side_effect=failing_send) as mock_send:
-            old_file = self._make_model_file(state=ModelFile.State.DOWNLOADING)
-            new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
-            notifier.file_updated(old_file, new_file)
-            self.assertTrue(started.wait(timeout=5), "failing_send was never invoked")
-            mock_send.assert_called_once()
+        with patch.object(notifier, "_send_post", side_effect=failing_send):
+            self._trigger(notifier, pair_id=pair.id)
+            self.assertTrue(started.wait(timeout=5))
             notifier.shutdown(timeout=2)
 
             with notifier._lock:
                 self.assertEqual(len(notifier._active_threads), 0)
-
-    def test_url_trailing_slash_stripped(self):
-        """Trailing slash on URL is handled correctly."""
-        notifier = self._make_notifier(sonarr_enabled=True, sonarr_url="http://localhost:8989/")
-        old_file = self._make_model_file(state=ModelFile.State.DOWNLOADING)
-        new_file = self._make_model_file(state=ModelFile.State.DOWNLOADED)
-
-        with patch.object(notifier, "_send_post") as mock_send:
-            notifier.file_updated(old_file, new_file)
-            notifier.shutdown(timeout=2)
-            url_arg = mock_send.call_args[0][1]
-            self.assertEqual(url_arg, "http://localhost:8989/api/v3/command")
-
-    def test_payload_path_is_absolute(self):
-        """Payload path should be the absolute local filesystem path."""
-        notifier = self._make_notifier(sonarr_enabled=True, local_path="/downloads")
-        old_file = self._make_model_file(name="Show.S01E01.mkv", state=ModelFile.State.DOWNLOADING)
-        new_file = self._make_model_file(name="Show.S01E01.mkv", state=ModelFile.State.DOWNLOADED)
-
-        with patch.object(notifier, "_send_post") as mock_send:
-            notifier.file_updated(old_file, new_file)
-            notifier.shutdown(timeout=2)
-            payload = mock_send.call_args[0][3]
-            self.assertEqual(payload["path"], "/downloads/Show.S01E01.mkv")
-
-    def test_payload_path_uses_pair_local_path(self):
-        """When file has a pair_id, use the pair's local_path."""
-        config = self._make_config(sonarr_enabled=True, local_path="/fallback")
-        path_pairs_config = MagicMock()
-        pair = MagicMock()
-        pair.local_path = "/media/tv"
-        path_pairs_config.get_pair.return_value = pair
-        logger = logging.getLogger("test_arr_notifier")
-        notifier = ArrNotifier(config, path_pairs_config, logger)
-
-        old_file = self._make_model_file(name="Show.S01E01.mkv", state=ModelFile.State.DOWNLOADING)
-        new_file = self._make_model_file(name="Show.S01E01.mkv", state=ModelFile.State.DOWNLOADED)
-        new_file.pair_id = "pair-1"
-
-        with patch.object(notifier, "_send_post") as mock_send:
-            notifier.file_updated(old_file, new_file)
-            notifier.shutdown(timeout=2)
-            payload = mock_send.call_args[0][3]
-            self.assertEqual(payload["path"], "/media/tv/Show.S01E01.mkv")
-            path_pairs_config.get_pair.assert_called_with("pair-1")
 
 
 if __name__ == "__main__":

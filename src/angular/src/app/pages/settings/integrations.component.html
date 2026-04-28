@@ -1,0 +1,123 @@
+<ng-template #instanceFormFields let-form="form">
+  <div class="form-row">
+    <label>Type
+      <select class="form-select form-select-sm" [(ngModel)]="form.kind">
+        @for (k of kinds; track k) {
+          <option [value]="k">{{ kindLabel(k) }}</option>
+        }
+      </select>
+    </label>
+  </div>
+  <div class="form-row">
+    <label>Name
+      <input type="text" class="form-control form-control-sm" [(ngModel)]="form.name" placeholder="Sonarr — TV" />
+    </label>
+  </div>
+  <div class="form-row">
+    <label>URL
+      <input type="text" class="form-control form-control-sm" [(ngModel)]="form.url" placeholder="http://localhost:8989" />
+    </label>
+  </div>
+  <div class="form-row">
+    <label>API Key
+      <input type="password" class="form-control form-control-sm" [(ngModel)]="form.api_key" autocomplete="new-password" />
+    </label>
+  </div>
+  <div class="form-row toggles">
+    <label class="toggle-label">
+      <input type="checkbox" class="form-check-input" [(ngModel)]="form.enabled" />
+      Enabled
+    </label>
+  </div>
+</ng-template>
+
+<div class="integrations">
+  <div class="header">
+    <span>Integrations</span>
+    @if (!adding) {
+      <div class="add-buttons">
+        <button class="btn btn-sm btn-add" (click)="onStartAdd('sonarr')">+ Sonarr</button>
+        <button class="btn btn-sm btn-add" (click)="onStartAdd('radarr')">+ Radarr</button>
+      </div>
+    }
+  </div>
+  <div class="restart-note">Attach instances to path pairs to control which downloads notify which *arr.</div>
+  @if (errorMessage) {
+    <div class="error-message" role="alert">{{ errorMessage }}</div>
+  }
+
+  @if (adding) {
+    <div class="instance-form">
+      <ng-container *ngTemplateOutlet="instanceFormFields; context: { form: addForm }"></ng-container>
+      <div class="form-actions">
+        <button class="btn btn-sm btn-save" (click)="onSaveAdd()">Save</button>
+        <button class="btn btn-sm btn-cancel" (click)="onCancelAdd()">Cancel</button>
+      </div>
+    </div>
+  }
+
+  @if ((instances$ | async); as instances) {
+    @if (instances.length === 0 && !adding) {
+      <div class="empty-state">No integrations configured.</div>
+    }
+
+    @for (instance of instances; track instance.id) {
+      @if (editingId === instance.id) {
+        <div class="instance-form">
+          <ng-container *ngTemplateOutlet="instanceFormFields; context: { form: editForm }"></ng-container>
+          @if (isApiKeyRedacted(editForm.api_key)) {
+            <div class="form-hint">Leave the API Key as-is to keep the existing key.</div>
+          }
+          <div class="form-actions">
+            <button class="btn btn-sm btn-save" (click)="onSaveEdit()">Save</button>
+            <button class="btn btn-sm btn-cancel" (click)="onCancelEdit()">Cancel</button>
+          </div>
+        </div>
+      } @else {
+        <div class="instance-row">
+          <div class="instance-info">
+            <div class="instance-name">
+              <span class="kind-badge" [class.kind-sonarr]="instance.kind === 'sonarr'" [class.kind-radarr]="instance.kind === 'radarr'">
+                {{ kindLabel(instance.kind) }}
+              </span>
+              {{ instance.name }}
+            </div>
+            <div class="instance-url">
+              <span class="path-label">URL:</span> {{ instance.url || '(not set)' }}
+            </div>
+            <div class="instance-toggles">
+              <label class="toggle-label">
+                <input type="checkbox" class="form-check-input"
+                       [checked]="instance.enabled"
+                       (change)="onToggleEnabled(instance, $any($event.target).checked)" />
+                Enabled
+              </label>
+            </div>
+            <div class="test-row">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="isTesting(instance.id)"
+                      (click)="onTest(instance.id)">
+                {{ isTesting(instance.id) ? 'Testing...' : 'Test Connection' }}
+              </button>
+              @if (testResult(instance.id); as result) {
+                <span class="test-result" aria-live="polite" aria-atomic="true"
+                      [class.text-success]="result.success"
+                      [class.text-danger]="!result.success">
+                  {{ result.message }}
+                </span>
+              }
+            </div>
+          </div>
+          <div class="instance-actions">
+            <button class="btn btn-sm btn-edit" (click)="onStartEdit(instance)">Edit</button>
+            <button class="btn btn-sm btn-delete"
+                    [class.confirming]="confirmingDeleteId === instance.id"
+                    (click)="onDelete(instance.id)">
+              {{ confirmingDeleteId === instance.id ? 'Confirm?' : 'Delete' }}
+            </button>
+          </div>
+        </div>
+      }
+    }
+  }
+</div>

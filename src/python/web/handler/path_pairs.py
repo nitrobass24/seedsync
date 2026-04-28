@@ -26,10 +26,12 @@ class PathPairsHandler(IHandler):
         return HTTPResponse(body=json.dumps(pairs), headers={"Content-Type": "application/json"})
 
     @staticmethod
-    def __validate_pair_params(data: dict[str, str | bool], defaults: PathPair | None = None):
+    def __validate_pair_params(data: dict[str, Any], defaults: PathPair | None = None):
         """Validate and extract path pair parameters from request data.
-        Returns (name, remote_path, local_path, enabled, auto_queue) or an HTTPResponse on error.
-        When defaults is provided (a PathPair), missing keys fall back to its values.
+
+        Returns (name, remote_path, local_path, enabled, auto_queue, arr_target_ids)
+        or an HTTPResponse on error. When defaults is provided (a PathPair), missing
+        keys fall back to its values.
         """
         d = defaults
         name = data.get("name", d.name if d else "")
@@ -37,10 +39,13 @@ class PathPairsHandler(IHandler):
         local_path = data.get("local_path", d.local_path if d else "")
         enabled = data.get("enabled", d.enabled if d else True)
         auto_queue = data.get("auto_queue", d.auto_queue if d else True)
+        arr_target_ids = data.get("arr_target_ids", list(d.arr_target_ids) if d else [])
         if not isinstance(name, str) or not isinstance(remote_path, str) or not isinstance(local_path, str):
             return HTTPResponse(body="name, remote_path, and local_path must be strings", status=400)
         if not isinstance(enabled, bool) or not isinstance(auto_queue, bool):
             return HTTPResponse(body="enabled and auto_queue must be booleans", status=400)
+        if not isinstance(arr_target_ids, list) or not all(isinstance(t, str) for t in arr_target_ids):
+            return HTTPResponse(body="arr_target_ids must be a list of strings", status=400)
         name = name.strip()
         remote_path = remote_path.strip()
         local_path = local_path.strip()
@@ -50,7 +55,7 @@ class PathPairsHandler(IHandler):
             return HTTPResponse(body="remote_path must not be empty", status=400)
         if not local_path:
             return HTTPResponse(body="local_path must not be empty", status=400)
-        return name, remote_path, local_path, enabled, auto_queue
+        return name, remote_path, local_path, enabled, auto_queue, list(arr_target_ids)
 
     def __handle_create(self):
         try:
@@ -59,12 +64,12 @@ class PathPairsHandler(IHandler):
             return HTTPResponse(body="Invalid JSON", status=400)
         if not isinstance(raw_data, dict):
             return HTTPResponse(body="Expected JSON object", status=400)
-        data = cast(dict[str, str | bool], raw_data)
+        data = cast(dict[str, Any], raw_data)
 
         result = self.__validate_pair_params(data)
         if isinstance(result, HTTPResponse):
             return result
-        name, remote_path, local_path, enabled, auto_queue = result
+        name, remote_path, local_path, enabled, auto_queue, arr_target_ids = result
 
         pair = PathPair(
             name=name,
@@ -72,6 +77,7 @@ class PathPairsHandler(IHandler):
             local_path=local_path,
             enabled=enabled,
             auto_queue=auto_queue,
+            arr_target_ids=arr_target_ids,
         )
         try:
             self.__config.add_pair(pair)
@@ -92,12 +98,12 @@ class PathPairsHandler(IHandler):
             return HTTPResponse(body="Invalid JSON", status=400)
         if not isinstance(raw_data, dict):
             return HTTPResponse(body="Expected JSON object", status=400)
-        data = cast(dict[str, str | bool], raw_data)
+        data = cast(dict[str, Any], raw_data)
 
         result = self.__validate_pair_params(data, defaults=existing)
         if isinstance(result, HTTPResponse):
             return result
-        name, remote_path, local_path, enabled, auto_queue = result
+        name, remote_path, local_path, enabled, auto_queue, arr_target_ids = result
 
         updated = PathPair(
             pair_id=pair_id,
@@ -106,6 +112,7 @@ class PathPairsHandler(IHandler):
             local_path=local_path,
             enabled=enabled,
             auto_queue=auto_queue,
+            arr_target_ids=arr_target_ids,
         )
         try:
             self.__config.update_pair(updated)

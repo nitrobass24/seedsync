@@ -6,7 +6,9 @@ import { EMPTY } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 
 import { PathPairsService } from '../../services/settings/path-pairs.service';
+import { IntegrationsService } from '../../services/settings/integrations.service';
 import { PathPair } from '../../models/path-pair';
+import { ArrInstance } from '../../models/arr-instance';
 
 @Component({
   selector: 'app-path-pairs',
@@ -18,9 +20,14 @@ import { PathPair } from '../../models/path-pair';
 })
 export class PathPairsComponent implements OnDestroy {
   private readonly pathPairsService = inject(PathPairsService);
+  private readonly integrationsService = inject(IntegrationsService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly destroyRef = inject(DestroyRef);
   readonly pairs$ = this.pathPairsService.pairs$;
+  readonly instances$ = this.integrationsService.instances$;
+
+  // Tracks which pair currently has the *arr-picker open. Empty when closed.
+  arrPickerPairId: string | null = null;
 
   // Inline editing state
   editingId: string | null = null;
@@ -90,6 +97,7 @@ export class PathPairsComponent implements OnDestroy {
       local_path: pair.local_path,
       enabled: pair.enabled,
       auto_queue: pair.auto_queue,
+      arr_target_ids: [...pair.arr_target_ids],
     };
   }
 
@@ -157,6 +165,44 @@ export class PathPairsComponent implements OnDestroy {
     ).subscribe();
   }
 
+  // --- Arr targets ---
+
+  attachedInstances(pair: PathPair, allInstances: ArrInstance[] | null): ArrInstance[] {
+    if (!allInstances) return [];
+    const byId = new Map(allInstances.map((i) => [i.id, i]));
+    return pair.arr_target_ids
+      .map((id) => byId.get(id))
+      .filter((i): i is ArrInstance => i !== undefined);
+  }
+
+  availableInstances(pair: PathPair, allInstances: ArrInstance[] | null): ArrInstance[] {
+    if (!allInstances) return [];
+    return allInstances.filter((i) => !pair.arr_target_ids.includes(i.id));
+  }
+
+  togglePicker(pairId: string): void {
+    this.arrPickerPairId = this.arrPickerPairId === pairId ? null : pairId;
+  }
+
+  onAttachInstance(pair: PathPair, instance: ArrInstance): void {
+    if (pair.arr_target_ids.includes(instance.id)) return;
+    const updated = { ...pair, arr_target_ids: [...pair.arr_target_ids, instance.id] };
+    this.arrPickerPairId = null;
+    this.pathPairsService.update(updated).pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe();
+  }
+
+  onDetachInstance(pair: PathPair, instanceId: string): void {
+    const updated = {
+      ...pair,
+      arr_target_ids: pair.arr_target_ids.filter((id) => id !== instanceId),
+    };
+    this.pathPairsService.update(updated).pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe();
+  }
+
   // --- Helpers ---
 
   private cancelEdit(): void {
@@ -166,7 +212,14 @@ export class PathPairsComponent implements OnDestroy {
   }
 
   private emptyForm(): Omit<PathPair, 'id'> {
-    return { name: '', remote_path: '', local_path: '', enabled: true, auto_queue: false };
+    return {
+      name: '',
+      remote_path: '',
+      local_path: '',
+      enabled: true,
+      auto_queue: false,
+      arr_target_ids: [],
+    };
   }
 
   private setConfirming(pairId: string): void {
