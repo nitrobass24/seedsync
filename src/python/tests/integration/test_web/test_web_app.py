@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 from webtest import TestApp
 
-from common import Config, Status, overrides
+from common import Config, IntegrationsConfig, PathPairsConfig, Status, overrides
 from controller import AutoQueuePersist
 from web import WebAppBuilder
 
@@ -40,6 +40,10 @@ class BaseTestWebApp(unittest.TestCase):
 
         # Real config
         self.context.config = Config()
+
+        # Real integrations and path pairs configs
+        self.context.integrations_config = IntegrationsConfig()
+        self.context.path_pairs_config = PathPairsConfig()
 
         # Real auto-queue persist
         self.auto_queue_persist = AutoQueuePersist()

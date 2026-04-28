@@ -590,7 +590,7 @@ describe("ViewFileService", () => {
   // --- Pair name resolution ---
 
   it("should set pairName to null when pair_id is null", () => {
-    pairsSubject.next([{ id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false }]);
+    pairsSubject.next([{ id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false, arr_target_ids: [] }]);
     emitModelFiles([makeModelFile({ name: "file1", pair_id: null, remote_size: 100 })]);
 
     expect(latestFiles()[0].pairName).toBeNull();
@@ -598,8 +598,8 @@ describe("ViewFileService", () => {
 
   it("should resolve pairName from PathPairsService when pair_id matches", () => {
     pairsSubject.next([
-      { id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false },
-      { id: "pair-b", name: "Media", remote_path: "/r2", local_path: "/l2", enabled: true, auto_queue: false },
+      { id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false, arr_target_ids: [] },
+      { id: "pair-b", name: "Media", remote_path: "/r2", local_path: "/l2", enabled: true, auto_queue: false, arr_target_ids: [] },
     ]);
     emitModelFiles([
       makeModelFile({ name: "file1", pair_id: "pair-a", remote_size: 100 }),
@@ -612,7 +612,7 @@ describe("ViewFileService", () => {
   });
 
   it("should set pairName to null when pair_id does not match any known pair", () => {
-    pairsSubject.next([{ id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false }]);
+    pairsSubject.next([{ id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false, arr_target_ids: [] }]);
     emitModelFiles([makeModelFile({ name: "file1", pair_id: "pair-unknown", remote_size: 100 })]);
 
     expect(latestFiles()[0].pairName).toBeNull();
@@ -625,7 +625,7 @@ describe("ViewFileService", () => {
     expect(latestFiles()[0].pairName).toBeNull();
 
     // Pairs arrive — view should rebuild automatically without new model file emission
-    pairsSubject.next([{ id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false }]);
+    pairsSubject.next([{ id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false, arr_target_ids: [] }]);
     expect(latestFiles()[0].pairName).toBe("Seedbox");
   });
 

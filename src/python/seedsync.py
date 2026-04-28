@@ -18,6 +18,8 @@ if sys.hexversion < 0x030C0000:
     sys.exit("Python 3.12 or newer is required to run this program.")
 
 # my libs
+import configparser
+
 from common import (
     AppError,
     Args,
@@ -25,6 +27,7 @@ from common import (
     ConfigError,
     Constants,
     Context,
+    IntegrationsConfig,
     Localization,
     PathPairsConfig,
     Persist,
@@ -50,6 +53,7 @@ class Seedsync:
 
     __FILE_CONFIG = "settings.cfg"
     __FILE_PATH_PAIRS = "path_pairs.json"
+    __FILE_INTEGRATIONS = "integrations.json"
     __FILE_AUTO_QUEUE_PERSIST = "autoqueue.persist"
     __FILE_CONTROLLER_PERSIST = "controller.persist"
     __CONFIG_DUMMY_VALUE = "<replace me>"
@@ -65,11 +69,14 @@ class Seedsync:
         config = None
         self.config_path = os.path.join(args.config_dir, Seedsync.__FILE_CONFIG)
         create_default_config = False
+        backfill_pending = False
         if os.path.isfile(self.config_path):
             try:
                 config = Config.from_file(self.config_path)
-                if Seedsync._backfill_config_defaults(config):
-                    config.to_file(self.config_path)
+                # Backfill in-memory only — defer the to_file write until after
+                # the legacy [Integrations] section has been migrated, otherwise
+                # the rewrite drops the section before we can read it.
+                backfill_pending = Seedsync._backfill_config_defaults(config)
             except (ConfigError, PersistError) as e:
                 logging.warning(f"Failed to load config ({e!s}), backing up and using defaults")
                 Seedsync.__backup_file(self.config_path)
@@ -78,7 +85,8 @@ class Seedsync:
             create_default_config = True
 
         if create_default_config:
-            # Create default config
+            # Default config has no [Integrations] section to migrate, so it's
+            # safe to write immediately.
             config = Seedsync._create_default_config()
             config.to_file(self.config_path)
 
@@ -118,6 +126,19 @@ class Seedsync:
         self.path_pairs_path = os.path.join(args.config_dir, Seedsync.__FILE_PATH_PAIRS)
         path_pairs_config = self._load_path_pairs_config(self.path_pairs_path, config)
 
+        # Load or migrate integrations config (Sonarr/Radarr instances).
+        # Reads the legacy [Integrations] section from settings.cfg before any
+        # backfill rewrite drops it.
+        self.integrations_path = os.path.join(args.config_dir, Seedsync.__FILE_INTEGRATIONS)
+        integrations_config = self._load_integrations_config(
+            self.integrations_path, self.path_pairs_path, self.config_path, path_pairs_config
+        )
+
+        # Now safe to rewrite settings.cfg with backfilled defaults; this drops
+        # the legacy [Integrations] section, which has already been migrated.
+        if backfill_pending:
+            config.to_file(self.config_path)
+
         # Create context
         self.context = Context(
             logger=logger,
@@ -126,6 +147,7 @@ class Seedsync:
             args=ctx_args,
             status=status,
             path_pairs_config=path_pairs_config,
+            integrations_config=integrations_config,
         )
 
         # Register the signal handlers
@@ -154,7 +176,11 @@ class Seedsync:
         controller.add_model_listener(webhook_notifier)
 
         # Create arr notifier (Sonarr/Radarr integration)
-        arr_notifier = ArrNotifier(self.context.config, self.context.path_pairs_config, self.context.logger)
+        arr_notifier = ArrNotifier(
+            self.context.integrations_config,
+            self.context.path_pairs_config,
+            self.context.logger,
+        )
         controller.add_model_listener(arr_notifier)
 
         # Create auto queue
@@ -250,6 +276,7 @@ class Seedsync:
         self.auto_queue_persist.to_file(self.auto_queue_persist_path)
         self.context.config.to_file(self.config_path)
         self.context.path_pairs_config.to_file(self.path_pairs_path)
+        self.context.integrations_config.to_file(self.integrations_path)
 
     def signal(self, signum: int, _: FrameType | None) -> None:
         # noinspection PyUnresolvedReferences
@@ -364,13 +391,6 @@ class Seedsync:
         config.notifications.notify_on_extraction_failed = True
         config.notifications.notify_on_delete_complete = True
 
-        config.integrations.sonarr_url = ""
-        config.integrations.sonarr_api_key = ""
-        config.integrations.sonarr_enabled = False
-        config.integrations.radarr_url = ""
-        config.integrations.radarr_api_key = ""
-        config.integrations.radarr_enabled = False
-
         config.lftp.net_limit_rate = ""
         config.lftp.net_socket_buffer = "8M"
         config.lftp.pget_min_chunk_size = "100M"
@@ -399,7 +419,6 @@ class Seedsync:
             "autoqueue",
             "logging",
             "notifications",
-            "integrations",
             "validate",
         ]:
             section = getattr(config, section_attr)
@@ -411,6 +430,92 @@ class Seedsync:
                         setattr(section, key, default_value)
                         changed = True
         return changed
+
+    @staticmethod
+    def _load_integrations_config(
+        integrations_path: str,
+        path_pairs_path: str,
+        config_path: str,
+        path_pairs_config: PathPairsConfig,
+    ) -> IntegrationsConfig:
+        """Load integrations.json, falling back to migration from the legacy
+        [Integrations] section in settings.cfg the first time we see it.
+
+        On migration, every existing path pair has the new instance(s) attached
+        so behavior is preserved. We persist path_pairs.json BEFORE
+        integrations.json so a crash between writes can't leave us with
+        instances and no pairs referencing them — on the next boot the absence
+        of integrations.json would re-run the migration and overwrite the
+        attached IDs cleanly.
+        """
+        if os.path.isfile(integrations_path):
+            try:
+                return IntegrationsConfig.from_file(integrations_path)
+            except PersistError:
+                if Seedsync.logger:
+                    Seedsync.logger.exception("Failed to load integrations.json")
+                Seedsync.__backup_file(integrations_path)
+                return IntegrationsConfig()
+
+        ic = Seedsync.__migrate_legacy_integrations(config_path)
+        if ic is None:
+            return IntegrationsConfig()
+
+        if ic.instances:
+            instance_ids = [i.id for i in ic.instances]
+            for pair in path_pairs_config.pairs:
+                pair.arr_target_ids = list(instance_ids)
+                path_pairs_config.update_pair(pair)
+            if Seedsync.logger:
+                Seedsync.logger.info(
+                    "Migrated %d *arr instance(s) from settings.cfg; attached to %d path pair(s)",
+                    len(ic.instances),
+                    len(path_pairs_config.pairs),
+                )
+            path_pairs_config.to_file(path_pairs_path)
+
+        ic.to_file(integrations_path)
+        return ic
+
+    @staticmethod
+    def __migrate_legacy_integrations(config_path: str) -> IntegrationsConfig | None:
+        """Read the [Integrations] section directly from settings.cfg (Config has
+        dropped it) and build an IntegrationsConfig from the legacy fields.
+
+        Returns None if no migration is needed.
+        """
+        if not os.path.isfile(config_path):
+            return None
+        parser = configparser.RawConfigParser()
+        try:
+            parser.read(config_path)
+        except configparser.Error:
+            if Seedsync.logger:
+                Seedsync.logger.warning(
+                    "Could not parse settings.cfg for legacy [Integrations] migration; "
+                    "integrations may need to be reconfigured manually"
+                )
+            return None
+        if not parser.has_section("Integrations"):
+            return None
+
+        def _get_str(option: str) -> str:
+            return parser.get("Integrations", option, fallback="").strip()
+
+        def _get_bool(option: str) -> bool:
+            try:
+                return parser.getboolean("Integrations", option, fallback=False)
+            except ValueError:
+                return False
+
+        return IntegrationsConfig.migrate_from_legacy(
+            sonarr_url=_get_str("sonarr_url"),
+            sonarr_api_key=_get_str("sonarr_api_key"),
+            sonarr_enabled=_get_bool("sonarr_enabled"),
+            radarr_url=_get_str("radarr_url"),
+            radarr_api_key=_get_str("radarr_api_key"),
+            radarr_enabled=_get_bool("radarr_enabled"),
+        )
 
     @staticmethod
     def _load_path_pairs_config(file_path: str, config: Config) -> PathPairsConfig:

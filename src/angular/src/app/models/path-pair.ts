@@ -5,4 +5,5 @@ export interface PathPair {
   local_path: string;
   enabled: boolean;
   auto_queue: boolean;
+  arr_target_ids: string[];
 }

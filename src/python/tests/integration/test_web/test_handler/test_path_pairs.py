@@ -2,7 +2,7 @@
 
 import json
 
-from common import PathPair, PathPairsConfig, overrides
+from common import ArrInstance, IntegrationsConfig, PathPair, PathPairsConfig, overrides
 from tests.integration.test_web.test_web_app import BaseTestWebApp
 
 
@@ -13,6 +13,7 @@ class TestPathPairsHandler(BaseTestWebApp):
     def setUp(self):
         # Inject a real PathPairsConfig before the builder wires the handler
         self.path_pairs_config = PathPairsConfig()
+        self.integrations_config = IntegrationsConfig()
         # We need context to exist before we can set path_pairs_config on it,
         # but super creates it. So we call super first, then rebuild with
         # the real config.
@@ -20,6 +21,7 @@ class TestPathPairsHandler(BaseTestWebApp):
         # The builder already ran with context.path_pairs_config as a MagicMock.
         # Replace it with a real config and rebuild.
         self.context.path_pairs_config = self.path_pairs_config
+        self.context.integrations_config = self.integrations_config
         from webtest import TestApp
 
         from web import WebAppBuilder
@@ -102,11 +104,13 @@ class TestPathPairsHandler(BaseTestWebApp):
         self.assertIn("local_path", pair)
         self.assertIn("enabled", pair)
         self.assertIn("auto_queue", pair)
+        self.assertIn("arr_target_ids", pair)
         self.assertEqual("Test", pair["name"])
         self.assertEqual("/r", pair["remote_path"])
         self.assertEqual("/l", pair["local_path"])
         self.assertFalse(pair["enabled"])
         self.assertFalse(pair["auto_queue"])
+        self.assertEqual([], pair["arr_target_ids"])
 
     # ---------------------------------------------------------------
     # POST /server/pathpairs  (create)
@@ -210,6 +214,81 @@ class TestPathPairsHandler(BaseTestWebApp):
         }
         resp = self._post_json("/server/pathpairs", data, expect_errors=True)
         self.assertEqual(400, resp.status_int)
+
+    def test_create_with_arr_target_ids(self):
+        s = ArrInstance(instance_id="sonarr-1", name="S1", kind="sonarr")
+        r = ArrInstance(instance_id="sonarr-2", name="S2", kind="sonarr")
+        self.integrations_config.add_instance(s)
+        self.integrations_config.add_instance(r)
+        data = {
+            "name": "TV",
+            "remote_path": "/r/tv",
+            "local_path": "/l/tv",
+            "arr_target_ids": ["sonarr-1", "sonarr-2"],
+        }
+        resp = self._post_json("/server/pathpairs", data)
+        self.assertEqual(201, resp.status_int)
+        body = json.loads(resp.text)
+        self.assertEqual(["sonarr-1", "sonarr-2"], body["arr_target_ids"])
+
+    def test_create_arr_target_ids_default_empty(self):
+        data = {"name": "TV", "remote_path": "/r/tv", "local_path": "/l/tv"}
+        resp = self._post_json("/server/pathpairs", data)
+        self.assertEqual(201, resp.status_int)
+        body = json.loads(resp.text)
+        self.assertEqual([], body["arr_target_ids"])
+
+    def test_create_rejects_arr_target_ids_non_list(self):
+        data = {
+            "name": "TV",
+            "remote_path": "/r/tv",
+            "local_path": "/l/tv",
+            "arr_target_ids": "not-a-list",
+        }
+        resp = self._post_json("/server/pathpairs", data, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+        self.assertIn("arr_target_ids", resp.text)
+
+    def test_create_rejects_arr_target_ids_with_non_strings(self):
+        data = {
+            "name": "TV",
+            "remote_path": "/r/tv",
+            "local_path": "/l/tv",
+            "arr_target_ids": ["ok", 5],
+        }
+        resp = self._post_json("/server/pathpairs", data, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+
+    def test_update_arr_target_ids(self):
+        inst = ArrInstance(instance_id="sonarr-anime", name="Sonarr Anime", kind="sonarr")
+        self.integrations_config.add_instance(inst)
+        pair = self._add_pair(name="TV")
+        data = {"arr_target_ids": ["sonarr-anime"]}
+        resp = self._put_json(f"/server/pathpairs/{pair.id}", data)
+        self.assertEqual(200, resp.status_int)
+        body = json.loads(resp.text)
+        self.assertEqual(["sonarr-anime"], body["arr_target_ids"])
+        # Other fields unchanged
+        self.assertEqual("TV", body["name"])
+
+    def test_create_rejects_unknown_arr_target_ids(self):
+        """arr_target_ids referencing non-existent integrations should be rejected."""
+        data = {
+            "name": "TV",
+            "remote_path": "/r/tv",
+            "local_path": "/l/tv",
+            "arr_target_ids": ["does-not-exist"],
+        }
+        resp = self._post_json("/server/pathpairs", data, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+        self.assertIn("does-not-exist", resp.text)
+
+    def test_update_rejects_unknown_arr_target_ids(self):
+        pair = self._add_pair(name="TV")
+        data = {"arr_target_ids": ["ghost-id"]}
+        resp = self._put_json(f"/server/pathpairs/{pair.id}", data, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+        self.assertIn("ghost-id", resp.text)
 
     def test_create_special_characters_in_paths(self):
         data = {
