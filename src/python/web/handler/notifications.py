@@ -30,8 +30,9 @@ class NotificationsHandler(IHandler):
             return HTTPResponse(
                 body=json.dumps({"error": "Discord webhook URL is not configured"}),
                 status=400,
+                headers={"Content-Type": "application/json"},
             )
-        headers, body = format_discord("test", "seedsync-test", datetime.now(UTC).isoformat())
+        headers, body = format_discord("test", "seedsync-test", timestamp=datetime.now(UTC).isoformat())
         return self.__send_test(url, headers, body, "Discord")
 
     def __handle_test_telegram(self):
@@ -41,11 +42,13 @@ class NotificationsHandler(IHandler):
             return HTTPResponse(
                 body=json.dumps({"error": "Telegram bot token is not configured"}),
                 status=400,
+                headers={"Content-Type": "application/json"},
             )
         if not chat_id:
             return HTTPResponse(
                 body=json.dumps({"error": "Telegram chat ID is not configured"}),
                 status=400,
+                headers={"Content-Type": "application/json"},
             )
         url, headers, body = format_telegram(token, chat_id, "test", "seedsync-test")
         return self.__send_test(url, headers, body, "Telegram")

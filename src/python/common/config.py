@@ -498,7 +498,7 @@ class Config(Persist):
         return {
             "Lftp": {"remote_password"},
             "Web": {"api_key"},
-            "Notifications": {"discord_webhook_url", "telegram_bot_token"},
+            "Notifications": {"webhook_url", "discord_webhook_url", "telegram_bot_token"},
         }
 
     @staticmethod

@@ -48,7 +48,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
         notifier.shutdown(timeout=1)
 
         with patch.object(notifier, "_send_post") as mock_send:
-            notifier._fire_webhook("download_complete", "test.txt")
+            notifier._fire_webhook("download_complete", "test.txt", "2026-01-01T00:00:00+00:00")
             mock_send.assert_not_called()
 
     def test_shutdown_waits_for_inflight_threads(self):
@@ -61,7 +61,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
             barrier.wait(timeout=5)
 
         with patch.object(notifier, "_send_post", side_effect=slow_send):
-            notifier._fire_webhook("download_complete", "test.txt")
+            notifier._fire_webhook("download_complete", "test.txt", "2026-01-01T00:00:00+00:00")
             started.wait(timeout=5)
 
             with notifier._lock:
@@ -83,7 +83,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
             barrier.wait(timeout=10)
 
         with patch.object(notifier, "_send_post", side_effect=stuck_send):
-            notifier._fire_webhook("download_complete", "test.txt")
+            notifier._fire_webhook("download_complete", "test.txt", "2026-01-01T00:00:00+00:00")
             started.wait(timeout=5)
 
             start = time.monotonic()
@@ -103,7 +103,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
             raise RuntimeError("webhook failed")
 
         with patch.object(notifier, "_send_post", side_effect=failing_send):
-            notifier._fire_webhook("download_complete", "test.txt")
+            notifier._fire_webhook("download_complete", "test.txt", "2026-01-01T00:00:00+00:00")
             started.wait(timeout=5)
             notifier.shutdown(timeout=2)
 
@@ -116,7 +116,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
 
         with patch.object(notifier, "_send_post") as mock_send:
             for i in range(10):
-                notifier._fire_webhook("download_complete", f"file{i}.txt")
+                notifier._fire_webhook("download_complete", f"file{i}.txt", "2026-01-01T00:00:00+00:00")
 
             mock_send.assert_not_called()
             with notifier._lock:
@@ -141,7 +141,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
 
         with patch.object(notifier, "_send_post", side_effect=slow_send):
             for i in range(5):
-                notifier._fire_webhook("download_complete", f"file{i}.txt")
+                notifier._fire_webhook("download_complete", f"file{i}.txt", "2026-01-01T00:00:00+00:00")
             all_started.wait(timeout=5)
 
             start = time.monotonic()

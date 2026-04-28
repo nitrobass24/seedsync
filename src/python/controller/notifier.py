@@ -34,12 +34,16 @@ class WebhookNotifier(IModelListener):
         if not event_type:
             return
 
+        timestamp = datetime.now(UTC).isoformat()
+        pair_id = new_file.pair_id
+        full_path = new_file.full_path
+
         if self._config.notifications.webhook_url:
-            self._fire_webhook(event_type, new_file.name, pair_id=new_file.pair_id, full_path=new_file.full_path)
+            self._fire_webhook(event_type, new_file.name, timestamp, pair_id=pair_id, full_path=full_path)
         if self._config.notifications.discord_webhook_url:
-            self._fire_discord(event_type, new_file.name)
+            self._fire_discord(event_type, new_file.name, timestamp, pair_id=pair_id, full_path=full_path)
         if self._config.notifications.telegram_bot_token and self._config.notifications.telegram_chat_id:
-            self._fire_telegram(event_type, new_file.name)
+            self._fire_telegram(event_type, new_file.name, pair_id=pair_id, full_path=full_path)
 
     def _resolve_event_type(self, state: ModelFile.State) -> str | None:
         """Map a file state to an event type string, gated by config flags."""
@@ -82,13 +86,21 @@ class WebhookNotifier(IModelListener):
         else:
             self._logger.info("Webhook notifier shutdown: all threads completed")
 
-    def _fire_webhook(self, event_type: str, filename: str, pair_id: str | None = None, full_path: str | None = None):
+    def _fire_webhook(
+        self,
+        event_type: str,
+        filename: str,
+        timestamp: str,
+        *,
+        pair_id: str | None = None,
+        full_path: str | None = None,
+    ):
         """Fire-and-forget POST of raw webhook payload."""
         url = self._config.notifications.webhook_url
-        payload = {
+        payload: dict[str, str] = {
             "event_type": event_type,
             "filename": filename,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": timestamp,
         }
         if pair_id:
             payload["pair_id"] = pair_id
@@ -98,17 +110,32 @@ class WebhookNotifier(IModelListener):
         body = json.dumps(payload).encode("utf-8")
         self._fire_raw("webhook", url, headers, body)
 
-    def _fire_discord(self, event_type: str, filename: str):
+    def _fire_discord(
+        self,
+        event_type: str,
+        filename: str,
+        timestamp: str,
+        *,
+        pair_id: str | None = None,
+        full_path: str | None = None,
+    ):
         """Fire-and-forget POST of Discord embed."""
         url = self._config.notifications.discord_webhook_url
-        headers, body = format_discord(event_type, filename)
+        headers, body = format_discord(event_type, filename, timestamp=timestamp, pair_id=pair_id, full_path=full_path)
         self._fire_raw("Discord", url, headers, body)
 
-    def _fire_telegram(self, event_type: str, filename: str):
+    def _fire_telegram(
+        self,
+        event_type: str,
+        filename: str,
+        *,
+        pair_id: str | None = None,
+        full_path: str | None = None,
+    ):
         """Fire-and-forget POST of Telegram message."""
         token = self._config.notifications.telegram_bot_token
         chat_id = self._config.notifications.telegram_chat_id
-        url, headers, body = format_telegram(token, chat_id, event_type, filename)
+        url, headers, body = format_telegram(token, chat_id, event_type, filename, pair_id=pair_id, full_path=full_path)
         self._fire_raw("Telegram", url, headers, body)
 
     def _fire_raw(self, label: str, url: str, headers: dict[str, str], body: bytes):
