@@ -80,8 +80,10 @@
         }
 
         &.kind-radarr {
+          // #1a1a1a on #e6a532 is ~7.3:1 — passes WCAG AAA for small text.
+          // White on the same background is only ~2.6:1 (fails AA).
           background-color: #e6a532;
-          color: white;
+          color: #1a1a1a;
         }
       }
 

@@ -69,11 +69,14 @@ class Seedsync:
         config = None
         self.config_path = os.path.join(args.config_dir, Seedsync.__FILE_CONFIG)
         create_default_config = False
+        backfill_pending = False
         if os.path.isfile(self.config_path):
             try:
                 config = Config.from_file(self.config_path)
-                if Seedsync._backfill_config_defaults(config):
-                    config.to_file(self.config_path)
+                # Backfill in-memory only — defer the to_file write until after
+                # the legacy [Integrations] section has been migrated, otherwise
+                # the rewrite drops the section before we can read it.
+                backfill_pending = Seedsync._backfill_config_defaults(config)
             except (ConfigError, PersistError) as e:
                 logging.warning(f"Failed to load config ({e!s}), backing up and using defaults")
                 Seedsync.__backup_file(self.config_path)
@@ -82,7 +85,8 @@ class Seedsync:
             create_default_config = True
 
         if create_default_config:
-            # Create default config
+            # Default config has no [Integrations] section to migrate, so it's
+            # safe to write immediately.
             config = Seedsync._create_default_config()
             config.to_file(self.config_path)
 
@@ -123,12 +127,17 @@ class Seedsync:
         path_pairs_config = self._load_path_pairs_config(self.path_pairs_path, config)
 
         # Load or migrate integrations config (Sonarr/Radarr instances).
-        # Migration uses the legacy [Integrations] section in settings.cfg, which
-        # Config drops on next save.
+        # Reads the legacy [Integrations] section from settings.cfg before any
+        # backfill rewrite drops it.
         self.integrations_path = os.path.join(args.config_dir, Seedsync.__FILE_INTEGRATIONS)
         integrations_config = self._load_integrations_config(
-            self.integrations_path, self.config_path, path_pairs_config
+            self.integrations_path, self.path_pairs_path, self.config_path, path_pairs_config
         )
+
+        # Now safe to rewrite settings.cfg with backfilled defaults; this drops
+        # the legacy [Integrations] section, which has already been migrated.
+        if backfill_pending:
+            config.to_file(self.config_path)
 
         # Create context
         self.context = Context(
@@ -424,21 +433,28 @@ class Seedsync:
 
     @staticmethod
     def _load_integrations_config(
-        file_path: str, config_path: str, path_pairs_config: PathPairsConfig
+        integrations_path: str,
+        path_pairs_path: str,
+        config_path: str,
+        path_pairs_config: PathPairsConfig,
     ) -> IntegrationsConfig:
         """Load integrations.json, falling back to migration from the legacy
         [Integrations] section in settings.cfg the first time we see it.
 
         On migration, every existing path pair has the new instance(s) attached
-        so behavior is preserved.
+        so behavior is preserved. We persist path_pairs.json BEFORE
+        integrations.json so a crash between writes can't leave us with
+        instances and no pairs referencing them — on the next boot the absence
+        of integrations.json would re-run the migration and overwrite the
+        attached IDs cleanly.
         """
-        if os.path.isfile(file_path):
+        if os.path.isfile(integrations_path):
             try:
-                return IntegrationsConfig.from_file(file_path)
+                return IntegrationsConfig.from_file(integrations_path)
             except PersistError:
                 if Seedsync.logger:
                     Seedsync.logger.exception("Failed to load integrations.json")
-                Seedsync.__backup_file(file_path)
+                Seedsync.__backup_file(integrations_path)
 
         ic = Seedsync.__migrate_legacy_integrations(config_path)
         if ic is None:
@@ -455,8 +471,9 @@ class Seedsync:
                     len(ic.instances),
                     len(path_pairs_config.pairs),
                 )
+            path_pairs_config.to_file(path_pairs_path)
 
-        ic.to_file(file_path)
+        ic.to_file(integrations_path)
         return ic
 
     @staticmethod

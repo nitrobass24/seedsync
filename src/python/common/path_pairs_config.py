@@ -31,7 +31,9 @@ class PathPair:
         self.local_path = local_path
         self.enabled = enabled
         self.auto_queue = auto_queue
-        self.arr_target_ids: list[str] = list(arr_target_ids) if arr_target_ids else []
+        # Order-preserving dedup so duplicates can never reach ArrNotifier and
+        # produce double scan commands.
+        self.arr_target_ids: list[str] = list(dict.fromkeys(arr_target_ids or []))
 
     def to_dict(self) -> dict[str, Any]:
         return {

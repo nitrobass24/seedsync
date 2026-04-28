@@ -187,10 +187,26 @@ export class PathPairsComponent implements OnDestroy {
   onAttachInstance(pair: PathPair, instance: ArrInstance): void {
     if (pair.arr_target_ids.includes(instance.id)) return;
     const updated = { ...pair, arr_target_ids: [...pair.arr_target_ids, instance.id] };
-    this.arrPickerPairId = null;
+    this.errorMessage = null;
     this.pathPairsService.update(updated).pipe(
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe();
+    ).subscribe({
+      next: (result) => {
+        if (!result) {
+          this.errorMessage = 'Failed to attach integration. Please try again.';
+        } else {
+          this.arrPickerPairId = null;
+        }
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        // 409 from the service is the only path that errors; treat any error
+        // as a conflict-style failure and keep the picker open so the user can
+        // retry.
+        this.errorMessage = 'Failed to attach integration. Please try again.';
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   onDetachInstance(pair: PathPair, instanceId: string): void {
@@ -198,9 +214,21 @@ export class PathPairsComponent implements OnDestroy {
       ...pair,
       arr_target_ids: pair.arr_target_ids.filter((id) => id !== instanceId),
     };
+    this.errorMessage = null;
     this.pathPairsService.update(updated).pipe(
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe();
+    ).subscribe({
+      next: (result) => {
+        if (!result) {
+          this.errorMessage = 'Failed to detach integration. Please try again.';
+        }
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.errorMessage = 'Failed to detach integration. Please try again.';
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   // --- Helpers ---
