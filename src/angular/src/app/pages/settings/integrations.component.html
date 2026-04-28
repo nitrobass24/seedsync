@@ -36,8 +36,8 @@
     <span>Integrations</span>
     @if (!adding) {
       <div class="add-buttons">
-        <button class="btn btn-sm btn-add" (click)="onStartAdd('sonarr')">+ Sonarr</button>
-        <button class="btn btn-sm btn-add" (click)="onStartAdd('radarr')">+ Radarr</button>
+        <button type="button" class="btn btn-sm btn-add" (click)="onStartAdd('sonarr')">+ Sonarr</button>
+        <button type="button" class="btn btn-sm btn-add" (click)="onStartAdd('radarr')">+ Radarr</button>
       </div>
     }
   </h3>
@@ -50,8 +50,8 @@
     <div class="instance-form">
       <ng-container *ngTemplateOutlet="instanceFormFields; context: { form: addForm }"></ng-container>
       <div class="form-actions">
-        <button class="btn btn-sm btn-save" (click)="onSaveAdd()">Save</button>
-        <button class="btn btn-sm btn-cancel" (click)="onCancelAdd()">Cancel</button>
+        <button type="button" class="btn btn-sm btn-save" (click)="onSaveAdd()">Save</button>
+        <button type="button" class="btn btn-sm btn-cancel" (click)="onCancelAdd()">Cancel</button>
       </div>
     </div>
   }
@@ -69,8 +69,8 @@
             <div class="form-hint">Leave the API Key as-is to keep the existing key.</div>
           }
           <div class="form-actions">
-            <button class="btn btn-sm btn-save" (click)="onSaveEdit()">Save</button>
-            <button class="btn btn-sm btn-cancel" (click)="onCancelEdit()">Cancel</button>
+            <button type="button" class="btn btn-sm btn-save" (click)="onSaveEdit()">Save</button>
+            <button type="button" class="btn btn-sm btn-cancel" (click)="onCancelEdit()">Cancel</button>
           </div>
         </div>
       } @else {
@@ -109,8 +109,8 @@
             </div>
           </div>
           <div class="instance-actions">
-            <button class="btn btn-sm btn-edit" (click)="onStartEdit(instance)">Edit</button>
-            <button class="btn btn-sm btn-delete"
+            <button type="button" class="btn btn-sm btn-edit" (click)="onStartEdit(instance)">Edit</button>
+            <button type="button" class="btn btn-sm btn-delete"
                     [class.confirming]="confirmingDeleteId === instance.id"
                     (click)="onDelete(instance.id)">
               {{ confirmingDeleteId === instance.id ? 'Confirm?' : 'Delete' }}
