@@ -43,10 +43,10 @@ def format_discord(
     if pair_id:
         fields.append({"name": "Pair", "value": pair_id, "inline": True})
     if full_path:
-        fields.append({"name": "Path", "value": f"`{full_path}`", "inline": False})
+        fields.append({"name": "Path", "value": f"`{_escape_backticks(full_path)}`", "inline": False})
     embed: dict[str, object] = {
         "title": f"SeedSync — {label}",
-        "description": f"`{filename}`",
+        "description": f"`{_escape_backticks(filename)}`",
         "color": color,
         "timestamp": ts,
     }
@@ -57,12 +57,9 @@ def format_discord(
     return headers, json.dumps(payload).encode("utf-8")
 
 
-def _escape_markdown(text: str) -> str:
-    """Escape characters that have meaning in Telegram Markdown v1.
-
-    Inside inline code (backtick-delimited) only backticks need escaping,
-    but since we use backticks to wrap user-provided text, we strip them
-    from the value to prevent premature closing of the code span.
+def _escape_backticks(text: str) -> str:
+    """Replace backticks so user-provided text can be safely wrapped in
+    backtick-delimited inline code spans (Discord embeds, Telegram Markdown).
     """
     return text.replace("`", "'")
 
@@ -81,12 +78,12 @@ def format_telegram(
     Returns (api_url, headers, body_bytes).
     """
     label = EVENT_LABELS.get(event_type, event_type)
-    safe_filename = _escape_markdown(filename)
+    safe_filename = _escape_backticks(filename)
     lines = ["*SeedSync*", f"Event: `{label}`", f"File: `{safe_filename}`"]
     if pair_id:
-        lines.append(f"Pair: `{_escape_markdown(pair_id)}`")
+        lines.append(f"Pair: `{_escape_backticks(pair_id)}`")
     if full_path:
-        lines.append(f"Path: `{_escape_markdown(full_path)}`")
+        lines.append(f"Path: `{_escape_backticks(full_path)}`")
     text = "\n".join(lines)
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {

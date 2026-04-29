@@ -54,6 +54,13 @@ class NotificationsHandler(IHandler):
         return self.__send_test(url, headers, body, "Telegram")
 
     def __send_test(self, url: str, headers: dict[str, str], body: bytes, service: str) -> HTTPResponse:
+        if not url.startswith(("http://", "https://")):
+            self._logger.warning("%s test URL rejected: scheme is not http/https", service)
+            return HTTPResponse(
+                body=json.dumps({"error": f"{service} URL must start with http:// or https://"}),
+                status=400,
+                headers={"Content-Type": "application/json"},
+            )
         try:
             req = urllib.request.Request(url, data=body, headers=headers, method="POST")
             with urllib.request.urlopen(req, timeout=10):
