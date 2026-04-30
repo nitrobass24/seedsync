@@ -11,6 +11,12 @@
     background-color: var(--ss-header-bg);
     border-bottom: 1px solid var(--ss-border);
 
+    h3 {
+      margin: 0;
+      font-size: inherit;
+      font-weight: inherit;
+    }
+
     .btn-add {
       @extend %button;
 
