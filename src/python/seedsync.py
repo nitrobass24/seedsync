@@ -390,6 +390,9 @@ class Seedsync:
         config.notifications.notify_on_extraction_complete = True
         config.notifications.notify_on_extraction_failed = True
         config.notifications.notify_on_delete_complete = True
+        config.notifications.discord_webhook_url = ""
+        config.notifications.telegram_bot_token = ""
+        config.notifications.telegram_chat_id = ""
 
         config.lftp.net_limit_rate = ""
         config.lftp.net_socket_buffer = "8M"

@@ -669,6 +669,9 @@ class TestConfig(unittest.TestCase):
         notify_on_extraction_complete = True
         notify_on_extraction_failed = True
         notify_on_delete_complete = True
+        discord_webhook_url =
+        telegram_bot_token =
+        telegram_chat_id =
 
         [Validate]
         enabled = False

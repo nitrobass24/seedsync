@@ -366,6 +366,24 @@ export const OPTIONS_CONTEXT_NOTIFICATIONS: IOptionsContext = {
       valuePath: ['notifications', 'notify_on_delete_complete'],
       description: null,
     },
+    {
+      type: OptionType.Password,
+      label: 'Discord Webhook URL',
+      valuePath: ['notifications', 'discord_webhook_url'],
+      description: 'Discord channel webhook URL. Leave empty to disable.',
+    },
+    {
+      type: OptionType.Password,
+      label: 'Telegram Bot Token',
+      valuePath: ['notifications', 'telegram_bot_token'],
+      description: 'Token from @BotFather. Leave empty to disable.',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Telegram Chat ID',
+      valuePath: ['notifications', 'telegram_chat_id'],
+      description: 'Numeric ID of the chat/channel to post to.',
+    },
   ],
 };
 

@@ -66,6 +66,9 @@ export interface Notifications {
   notify_on_extraction_complete: boolean | null;
   notify_on_extraction_failed: boolean | null;
   notify_on_delete_complete: boolean | null;
+  discord_webhook_url: string | null;
+  telegram_bot_token: string | null;
+  telegram_chat_id: string | null;
 }
 
 export interface Validate {
@@ -152,6 +155,9 @@ export const DEFAULT_NOTIFICATIONS: Notifications = {
   notify_on_extraction_complete: null,
   notify_on_extraction_failed: null,
   notify_on_delete_complete: null,
+  discord_webhook_url: null,
+  telegram_bot_token: null,
+  telegram_chat_id: null,
 };
 
 export const DEFAULT_VALIDATE: Validate = {

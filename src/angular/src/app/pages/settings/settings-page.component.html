@@ -71,9 +71,54 @@
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_OTHER">
       </ng-container>
 
-      <ng-container
-        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_NOTIFICATIONS">
-      </ng-container>
+      <div class="card">
+        <h3 class="card-header">Notifications</h3>
+        <div class="card-body">
+          @for (option of OPTIONS_CONTEXT_NOTIFICATIONS.options; track option.label) {
+            <div>
+              <app-option
+                [type]="option.type"
+                [label]="option.label"
+                [description]="option.description"
+                [disabled]="!!option.disabled"
+                [choices]="option.choices || []"
+                [value]="getOptionValue(config$ | async, option.valuePath)"
+                (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
+              </app-option>
+            </div>
+          }
+          <div class="notification-test-buttons">
+            <div class="test-row">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="testingDiscord || !commandsEnabled"
+                      (click)="onTestDiscord()">
+                {{ testingDiscord ? 'Testing...' : 'Test Discord' }}
+              </button>
+              @if (discordResult) {
+                <span class="test-result" aria-live="polite" aria-atomic="true"
+                      [class.text-success]="discordResult.success"
+                      [class.text-danger]="!discordResult.success">
+                  {{ discordResult.message }}
+                </span>
+              }
+            </div>
+            <div class="test-row">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      [disabled]="testingTelegram || !commandsEnabled"
+                      (click)="onTestTelegram()">
+                {{ testingTelegram ? 'Testing...' : 'Test Telegram' }}
+              </button>
+              @if (telegramResult) {
+                <span class="test-result" aria-live="polite" aria-atomic="true"
+                      [class.text-success]="telegramResult.success"
+                      [class.text-danger]="!telegramResult.success">
+                  {{ telegramResult.message }}
+                </span>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div class="card">
         <app-integrations></app-integrations>

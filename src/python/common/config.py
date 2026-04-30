@@ -370,6 +370,9 @@ class Config(Persist):
         notify_on_extraction_complete = PROP("notify_on_extraction_complete", Checkers.null, Converters.bool)
         notify_on_extraction_failed = PROP("notify_on_extraction_failed", Checkers.null, Converters.bool)
         notify_on_delete_complete = PROP("notify_on_delete_complete", Checkers.null, Converters.bool)
+        discord_webhook_url = PROP("discord_webhook_url", Checkers.string_allow_empty, Converters.null)
+        telegram_bot_token = PROP("telegram_bot_token", Checkers.string_allow_empty, Converters.null)
+        telegram_chat_id = PROP("telegram_chat_id", Checkers.string_allow_empty, Converters.null)
 
         def __init__(self):
             super().__init__()
@@ -378,6 +381,9 @@ class Config(Persist):
             self.notify_on_extraction_complete = True
             self.notify_on_extraction_failed = True
             self.notify_on_delete_complete = True
+            self.discord_webhook_url = ""
+            self.telegram_bot_token = ""
+            self.telegram_chat_id = ""
 
     class Validate(IC):
         enabled = PROP("enabled", Checkers.null, Converters.bool)
@@ -492,6 +498,7 @@ class Config(Persist):
         return {
             "Lftp": {"remote_password"},
             "Web": {"api_key"},
+            "Notifications": {"webhook_url", "discord_webhook_url", "telegram_bot_token"},
         }
 
     @staticmethod
