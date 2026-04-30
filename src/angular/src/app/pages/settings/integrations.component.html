@@ -32,15 +32,15 @@
 </ng-template>
 
 <div class="integrations">
-  <h3 class="card-header integrations-card-header">
-    <span>Integrations</span>
+  <div class="header">
+    <h3>Integrations</h3>
     @if (!adding) {
       <div class="add-buttons">
-        <button type="button" class="btn btn-sm btn-add" (click)="onStartAdd('sonarr')">+ Sonarr</button>
-        <button type="button" class="btn btn-sm btn-add" (click)="onStartAdd('radarr')">+ Radarr</button>
+        <button type="button" class="btn-add" (click)="onStartAdd('sonarr')">+ Sonarr</button>
+        <button type="button" class="btn-add" (click)="onStartAdd('radarr')">+ Radarr</button>
       </div>
     }
-  </h3>
+  </div>
   <div class="restart-note">Attach instances to path pairs to control which downloads notify which *arr.</div>
   @if (errorMessage) {
     <div class="error-message" role="alert">{{ errorMessage }}</div>

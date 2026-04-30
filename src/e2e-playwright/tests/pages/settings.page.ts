@@ -15,10 +15,10 @@ export class SettingsPage {
 
   /** Get a settings section card by its header text */
   getSection(headerText: string) {
-    // Find the card that contains a matching h3 header
-    // Use XPath parent to go from h3 back to its .card container
+    // Find the card that contains a matching header (h3.card-header or .header)
+    // Use XPath parent to go back to the card container
     return this.page
-      .locator("h3.card-header", { hasText: headerText })
+      .locator("h3.card-header, .header", { hasText: headerText })
       .first()
       .locator("xpath=..");
   }

@@ -11,6 +11,12 @@
     background-color: var(--ss-header-bg);
     border-bottom: 1px solid var(--ss-border);
 
+    h3 {
+      margin: 0;
+      font-size: inherit;
+      font-weight: inherit;
+    }
+
     .btn-add {
       @extend %button;
 
@@ -312,15 +318,20 @@
       border-color: #A93226;
     }
 
-    .arr-row {
+    .pair-row .pair-info .arr-row {
       .arr-chip {
         background-color: #1D222B;
         border-color: #252C37;
       }
 
+      .chip-add {
+        background-color: var(--ss-primary);
+      }
+
       .arr-picker {
         background-color: #1D222B;
         border-color: #252C37;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 
         .arr-picker-item {
           color: #E6EAF2;
