@@ -146,7 +146,12 @@ class WebhookNotifier(IModelListener):
                 self._logger.debug("%s notification suppressed during shutdown", label)
                 return
             self._active_threads.add(thread)
-        thread.start()
+        try:
+            thread.start()
+        except RuntimeError:
+            with self._lock:
+                self._active_threads.discard(thread)
+            self._logger.exception("%s notification thread failed to start", label)
 
     def _thread_wrapper(self, label: str, url: str, headers: dict[str, str], body: bytes) -> None:
         try:
