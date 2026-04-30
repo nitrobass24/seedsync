@@ -1,11 +1,15 @@
 @use '../../common/common' as *;
 
 .integrations {
-  .integrations-card-header {
+  .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin: 0;
+    font-size: 80%;
+    font-weight: 500;
+    padding: 10px 15px;
+    background-color: var(--ss-header-bg);
+    border-bottom: 1px solid var(--ss-border);
 
     .add-buttons {
       display: flex;
@@ -15,6 +19,7 @@
     .btn-add {
       @extend %button;
 
+      flex-direction: row;
       padding: 2px 10px;
       font-size: 85%;
     }

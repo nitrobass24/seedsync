@@ -32,7 +32,7 @@
 </ng-template>
 
 <div class="integrations">
-  <h3 class="card-header integrations-card-header">
+  <div class="header">
     <span>Integrations</span>
     @if (!adding) {
       <div class="add-buttons">
@@ -40,7 +40,7 @@
         <button type="button" class="btn btn-sm btn-add" (click)="onStartAdd('radarr')">+ Radarr</button>
       </div>
     }
-  </h3>
+  </div>
   <div class="restart-note">Attach instances to path pairs to control which downloads notify which *arr.</div>
   @if (errorMessage) {
     <div class="error-message" role="alert">{{ errorMessage }}</div>
