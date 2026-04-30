@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from collections.abc import Callable
 from urllib.parse import unquote
 
 from bottle import HTTPResponse
@@ -9,11 +10,37 @@ from common import Config, ConfigError, overrides
 from ..serialize import SerializeConfig
 from ..web_app import IHandler, WebApp
 
+# LFTP tuning keys that can be hot-reloaded without restart
+_LFTP_TUNING_KEYS = frozenset(
+    {
+        "num_max_parallel_downloads",
+        "num_max_parallel_files_per_download",
+        "num_max_connections_per_root_file",
+        "num_max_connections_per_dir_file",
+        "num_max_total_connections",
+        "use_temp_file",
+        "net_limit_rate",
+        "net_socket_buffer",
+        "pget_min_chunk_size",
+        "mirror_parallel_directories",
+        "net_timeout",
+        "net_max_retries",
+        "net_reconnect_interval_base",
+        "net_reconnect_interval_multiplier",
+    }
+)
+
 
 class ConfigHandler(IHandler):
-    def __init__(self, config: Config, config_path: str):
+    def __init__(
+        self,
+        config: Config,
+        config_path: str,
+        on_lftp_config_change: Callable[[], None] | None = None,
+    ):
         self.__config = config
         self.__config_path = config_path
+        self.__on_lftp_config_change = on_lftp_config_change
 
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
@@ -44,6 +71,8 @@ class ConfigHandler(IHandler):
         try:
             inner_config.set_property(key, value)
             self.__config.to_file(self.__config_path)
+            if section == "lftp" and key in _LFTP_TUNING_KEYS and self.__on_lftp_config_change:
+                self.__on_lftp_config_change()
             if Config.is_sensitive(section, key):
                 return HTTPResponse(body=f"{section}.{key} updated")
             return HTTPResponse(body=f"{section}.{key} set to {value}")

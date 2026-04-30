@@ -32,7 +32,9 @@ class WebAppBuilder:
 
         self.controller_handler = ControllerHandler(controller)
         self.server_handler = ServerHandler(context)
-        self.config_handler = ConfigHandler(context.config, context.config_path)
+        self.config_handler = ConfigHandler(
+            context.config, context.config_path, on_lftp_config_change=controller.request_lftp_reconfigure
+        )
         self.auto_queue_handler = AutoQueueHandler(auto_queue_persist, context.auto_queue_persist_path)
         self.status_handler = StatusHandler(context.status)
         self.logs_handler = LogsHandler(logdir=context.args.logdir, service_name=Constants.SERVICE_NAME)
