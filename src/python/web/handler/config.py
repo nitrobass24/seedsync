@@ -30,6 +30,7 @@ _LFTP_TUNING_KEYS: frozenset[tuple[str, str]] = frozenset(
         ("lftp", "net_reconnect_interval_multiplier"),
         ("general", "verbose"),
         ("validate", "xfer_verify"),
+        ("validate", "algorithm"),
     }
 )
 

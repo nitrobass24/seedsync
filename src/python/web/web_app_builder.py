@@ -30,6 +30,11 @@ class WebAppBuilder:
         self.__context = context
         self.__controller = controller
 
+        assert context.config_path is not None
+        assert context.path_pairs_path is not None
+        assert context.integrations_path is not None
+        assert context.auto_queue_persist_path is not None
+
         self.controller_handler = ControllerHandler(controller)
         self.server_handler = ServerHandler(context)
         self.config_handler = ConfigHandler(
