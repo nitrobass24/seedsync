@@ -7,6 +7,7 @@ export interface IOption {
   description: string | null;
   disabled?: boolean;
   choices?: string[];
+  requiresRestart?: boolean;
 }
 
 export interface IOptionsContext {
@@ -24,48 +25,56 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
       label: 'Server Address',
       valuePath: ['lftp', 'remote_address'],
       description: null,
+      requiresRestart: true,
     },
     {
       type: OptionType.Text,
       label: 'Server User',
       valuePath: ['lftp', 'remote_username'],
       description: null,
+      requiresRestart: true,
     },
     {
       type: OptionType.Password,
       label: 'Server Password',
       valuePath: ['lftp', 'remote_password'],
       description: 'Required unless SSH key authentication is enabled',
+      requiresRestart: true,
     },
     {
       type: OptionType.Checkbox,
       label: 'Use password-less key-based authentication',
       valuePath: ['lftp', 'use_ssh_key'],
       description: null,
+      requiresRestart: true,
     },
     {
       type: OptionType.Text,
       label: 'Server Directory',
       valuePath: ['lftp', 'remote_path'],
       description: 'Path to your files on the remote server',
+      requiresRestart: true,
     },
     {
       type: OptionType.Text,
       label: 'Local Directory',
       valuePath: ['lftp', 'local_path'],
       description: 'Downloaded files are placed here',
+      requiresRestart: true,
     },
     {
       type: OptionType.Text,
       label: 'Remote SSH Port',
       valuePath: ['lftp', 'remote_port'],
       description: null,
+      requiresRestart: true,
     },
     {
       type: OptionType.Text,
       label: 'Server Script Path',
       valuePath: ['lftp', 'remote_path_to_scan_script'],
       description: 'Where to install scanner script on remote server',
+      requiresRestart: true,
     },
     {
       type: OptionType.Text,
@@ -74,6 +83,7 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
       description:
         'Path to Python 3 on the remote server. Leave empty to use the default "python3". ' +
         'Set this if your seedbox has a custom Python install (e.g. "~/python3/bin/python3").',
+      requiresRestart: true,
     },
   ],
 };
@@ -95,18 +105,21 @@ export const OPTIONS_CONTEXT_DISCOVERY: IOptionsContext = {
       label: 'Remote Scan Interval (ms)',
       valuePath: ['controller', 'interval_ms_remote_scan'],
       description: 'How often the remote server is scanned for new files',
+      requiresRestart: true,
     },
     {
       type: OptionType.Text,
       label: 'Local Scan Interval (ms)',
       valuePath: ['controller', 'interval_ms_local_scan'],
       description: 'How often the local directory is scanned',
+      requiresRestart: true,
     },
     {
       type: OptionType.Text,
       label: 'Downloading Scan Interval (ms)',
       valuePath: ['controller', 'interval_ms_downloading_scan'],
       description: 'How often the downloading information is updated',
+      requiresRestart: true,
     },
   ],
 };
@@ -180,12 +193,14 @@ export const OPTIONS_CONTEXT_OTHER: IOptionsContext = {
       label: 'Web GUI Port',
       valuePath: ['web', 'port'],
       description: null,
+      requiresRestart: true,
     },
     {
       type: OptionType.Password,
       label: 'API Key',
       valuePath: ['web', 'api_key'],
       description: 'Require this key for API access. Leave empty to disable.',
+      requiresRestart: true,
     },
   ],
 };
@@ -199,18 +214,21 @@ export const OPTIONS_CONTEXT_AUTOQUEUE: IOptionsContext = {
       label: 'Enable AutoQueue',
       valuePath: ['autoqueue', 'enabled'],
       description: null,
+      requiresRestart: true,
     },
     {
       type: OptionType.Checkbox,
       label: 'Restrict to patterns',
       valuePath: ['autoqueue', 'patterns_only'],
       description: 'Only autoqueue files that match a pattern',
+      requiresRestart: true,
     },
     {
       type: OptionType.Checkbox,
       label: 'Enable auto extraction',
       valuePath: ['autoqueue', 'auto_extract'],
       description: 'Automatically extract files',
+      requiresRestart: true,
     },
     {
       type: OptionType.Checkbox,
@@ -231,12 +249,14 @@ export const OPTIONS_CONTEXT_STAGING: IOptionsContext = {
       label: 'Use staging directory',
       valuePath: ['controller', 'use_staging'],
       description: 'Download files to a staging directory before moving to the final location',
+      requiresRestart: true,
     },
     {
       type: OptionType.Text,
       label: 'Staging Path',
       valuePath: ['controller', 'staging_path'],
       description: 'Temporary directory where files are downloaded before being moved',
+      requiresRestart: true,
     },
   ],
 };
@@ -315,6 +335,7 @@ export const OPTIONS_CONTEXT_LOGGING: IOptionsContext = {
       valuePath: ['general', 'log_level'],
       description: 'Controls which log messages are recorded',
       choices: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+      requiresRestart: true,
     },
     {
       type: OptionType.Checkbox,
@@ -328,6 +349,7 @@ export const OPTIONS_CONTEXT_LOGGING: IOptionsContext = {
       valuePath: ['logging', 'log_format'],
       description: 'Log output format',
       choices: ['standard', 'json'],
+      requiresRestart: true,
     },
   ],
 };
@@ -433,6 +455,7 @@ export const OPTIONS_CONTEXT_EXTRACT: IOptionsContext = {
       label: 'Extract archives in the downloads directory',
       valuePath: ['controller', 'use_local_path_as_extract_path'],
       description: null,
+      requiresRestart: true,
     },
     {
       type: OptionType.Text,
@@ -440,6 +463,7 @@ export const OPTIONS_CONTEXT_EXTRACT: IOptionsContext = {
       valuePath: ['controller', 'extract_path'],
       description:
         'When option above is disabled, extract archives to this directory',
+      requiresRestart: true,
     },
   ],
 };
