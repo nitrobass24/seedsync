@@ -15,6 +15,7 @@
     .btn-add {
       @extend %button;
 
+      flex-direction: row;
       padding: 2px 10px;
       font-size: 85%;
     }
