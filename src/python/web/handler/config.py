@@ -11,8 +11,9 @@ from ..web_app import IHandler, WebApp
 
 
 class ConfigHandler(IHandler):
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, config_path: str):
         self.__config = config
+        self.__config_path = config_path
 
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
@@ -42,6 +43,7 @@ class ConfigHandler(IHandler):
             return HTTPResponse(body="Cannot set sensitive field to redacted value", status=400)
         try:
             inner_config.set_property(key, value)
+            self.__config.to_file(self.__config_path)
             if Config.is_sensitive(section, key):
                 return HTTPResponse(body=f"{section}.{key} updated")
             return HTTPResponse(body=f"{section}.{key} set to {value}")

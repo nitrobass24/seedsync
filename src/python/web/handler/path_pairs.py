@@ -11,9 +11,12 @@ from ..web_app import IHandler, WebApp
 
 
 class PathPairsHandler(IHandler):
-    def __init__(self, path_pairs_config: PathPairsConfig, integrations_config: IntegrationsConfig):
+    def __init__(
+        self, path_pairs_config: PathPairsConfig, integrations_config: IntegrationsConfig, path_pairs_path: str
+    ):
         self.__config = path_pairs_config
         self.__integrations_config = integrations_config
+        self.__path_pairs_path = path_pairs_path
 
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
@@ -111,6 +114,7 @@ class PathPairsHandler(IHandler):
             if "name" in str(e) and "already exists" in str(e):
                 return HTTPResponse(body=str(e), status=409)
             raise
+        self.__config.to_file(self.__path_pairs_path)
         return HTTPResponse(body=json.dumps(pair.to_dict()), status=201, headers={"Content-Type": "application/json"})
 
     def __handle_update(self, pair_id: str):
@@ -150,6 +154,7 @@ class PathPairsHandler(IHandler):
             if "name" in str(e) and "already exists" in str(e):
                 return HTTPResponse(body=str(e), status=409)
             return HTTPResponse(body="Path pair not found", status=404)
+        self.__config.to_file(self.__path_pairs_path)
         return HTTPResponse(body=json.dumps(updated.to_dict()), headers={"Content-Type": "application/json"})
 
     def __handle_delete(self, pair_id: str):
@@ -157,4 +162,5 @@ class PathPairsHandler(IHandler):
             self.__config.remove_pair(pair_id)
         except ValueError:
             return HTTPResponse(body="Path pair not found", status=404)
+        self.__config.to_file(self.__path_pairs_path)
         return HTTPResponse(status=204)
