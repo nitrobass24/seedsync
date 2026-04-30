@@ -366,6 +366,24 @@ export const OPTIONS_CONTEXT_NOTIFICATIONS: IOptionsContext = {
       valuePath: ['notifications', 'notify_on_delete_complete'],
       description: null,
     },
+    {
+      type: OptionType.Password,
+      label: 'Discord Webhook URL',
+      valuePath: ['notifications', 'discord_webhook_url'],
+      description: 'Discord channel webhook URL. Leave empty to disable.',
+    },
+    {
+      type: OptionType.Password,
+      label: 'Telegram Bot Token',
+      valuePath: ['notifications', 'telegram_bot_token'],
+      description: 'Token from @BotFather. Leave empty to disable.',
+    },
+    {
+      type: OptionType.Text,
+      label: 'Telegram Chat ID',
+      valuePath: ['notifications', 'telegram_chat_id'],
+      description: 'Numeric ID of the chat/channel to post to.',
+    },
   ],
 };
 
@@ -402,56 +420,6 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
       valuePath: ['validate', 'algorithm'],
       description: 'Checksum algorithm used for both inline transfer verification and post-download validation',
       choices: ['md5', 'sha1', 'sha256'],
-    },
-  ],
-};
-
-export const OPTIONS_CONTEXT_INTEGRATIONS_SONARR: IOptionsContext = {
-  header: 'Sonarr',
-  id: 'integrations-sonarr',
-  options: [
-    {
-      type: OptionType.Checkbox,
-      label: 'Enable Sonarr integration',
-      valuePath: ['integrations', 'sonarr_enabled'],
-      description: 'Trigger Sonarr to scan for downloaded episodes when a download completes',
-    },
-    {
-      type: OptionType.Text,
-      label: 'Sonarr URL',
-      valuePath: ['integrations', 'sonarr_url'],
-      description: 'Base URL for Sonarr (e.g. http://localhost:8989)',
-    },
-    {
-      type: OptionType.Password,
-      label: 'Sonarr API Key',
-      valuePath: ['integrations', 'sonarr_api_key'],
-      description: 'Found in Sonarr under Settings > General > API Key',
-    },
-  ],
-};
-
-export const OPTIONS_CONTEXT_INTEGRATIONS_RADARR: IOptionsContext = {
-  header: 'Radarr',
-  id: 'integrations-radarr',
-  options: [
-    {
-      type: OptionType.Checkbox,
-      label: 'Enable Radarr integration',
-      valuePath: ['integrations', 'radarr_enabled'],
-      description: 'Trigger Radarr to scan for downloaded movies when a download completes',
-    },
-    {
-      type: OptionType.Text,
-      label: 'Radarr URL',
-      valuePath: ['integrations', 'radarr_url'],
-      description: 'Base URL for Radarr (e.g. http://localhost:7878)',
-    },
-    {
-      type: OptionType.Password,
-      label: 'Radarr API Key',
-      valuePath: ['integrations', 'radarr_api_key'],
-      description: 'Found in Radarr under Settings > General > API Key',
     },
   ],
 };

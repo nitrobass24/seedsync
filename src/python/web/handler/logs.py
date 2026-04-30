@@ -61,7 +61,7 @@ class LogsHandler(IHandler):
 
         return HTTPResponse(body=json.dumps(entries), content_type="application/json")
 
-    def _read_logs(self, search: str, min_level: int, limit: int, before: int) -> list[dict[str, str]]:
+    def _read_logs(self, search: str, min_level: int, limit: int, before: int) -> list[dict[str, str]]:  # noqa: C901
         """
         Read log entries from rotated log files without loading any file fully into memory.
 
@@ -75,7 +75,7 @@ class LogsHandler(IHandler):
         O(sum of all log file bytes).
         """
         assert self._logdir is not None
-        base_path = os.path.join(self._logdir, "{}.log".format(self._service_name))
+        base_path = os.path.join(self._logdir, f"{self._service_name}.log")
 
         # Gather log file paths in oldest -> newest order.
         # RotatingFileHandler convention: on rotation, the current .log is
@@ -85,7 +85,7 @@ class LogsHandler(IHandler):
         # the deque below naturally retains the *newest* `limit` entries.
         log_files: list[str] = []
         for i in range(Constants.LOG_BACKUP_COUNT, 0, -1):
-            rotated = "{}.{}".format(base_path, i)
+            rotated = f"{base_path}.{i}"
             if os.path.isfile(rotated):
                 log_files.append(rotated)
         if os.path.isfile(base_path):
@@ -154,6 +154,4 @@ class LogsHandler(IHandler):
             entry_level = _LEVEL_ORDER.get(entry["level"], 0)
             if entry_level < min_level:
                 return False
-        if search and search.lower() not in entry["message"].lower():
-            return False
-        return True
+        return not (search and search.lower() not in entry["message"].lower())

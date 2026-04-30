@@ -131,12 +131,12 @@ class ExtractDispatch:
 
     def extract(self, req: ExtractRequest):
         model_file = req.model_file
-        self.logger.debug("Received extract for {}".format(model_file.name))
+        self.logger.debug(f"Received extract for {model_file.name}")
 
         with self.__task_queue.mutex:
             for task in self.__task_queue.queue:
                 if task.root_name == model_file.name and task.pair_id == req.pair_id:
-                    self.logger.info("Ignoring extract for {}, already exists".format(model_file.name))
+                    self.logger.info(f"Ignoring extract for {model_file.name}, already exists")
                     return
 
         # noinspection PyProtectedMember
@@ -167,16 +167,16 @@ class ExtractDispatch:
             if len(task.archive_paths) > 0:
                 self.__task_queue.put(task)
             else:
-                raise ExtractDispatchError("Directory does not contain any archives: {}".format(model_file.name))
+                raise ExtractDispatchError(f"Directory does not contain any archives: {model_file.name}")
         else:
             # For a single file, it must exist locally and must be an archive
             if model_file.local_size in (None, 0):
-                raise ExtractDispatchError("File does not exist locally: {}".format(model_file.name))
+                raise ExtractDispatchError(f"File does not exist locally: {model_file.name}")
             archive_full_path, is_fallback = self.__resolve_archive_path(
                 model_file.name, req.local_path, req.local_path_fallback
             )
             if not archive_full_path:
-                raise ExtractDispatchError("File is not an archive: {}".format(model_file.name))
+                raise ExtractDispatchError(f"File is not an archive: {model_file.name}")
             base_out = req.out_dir_path_fallback if is_fallback else req.out_dir_path
             task.add_archive(archive_path=archive_full_path, out_dir_path=base_out)
             self.__task_queue.put(task)
@@ -204,7 +204,7 @@ class ExtractDispatch:
                             completed = False
                             break
 
-                        self.logger.debug("Extracting {}".format(archive_path))
+                        self.logger.debug(f"Extracting {archive_path}")
                         Extract.extract_archive(archive_path=archive_path, out_dir_path=out_dir_path)
 
                 except ExtractError:

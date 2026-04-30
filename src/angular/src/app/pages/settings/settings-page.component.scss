@@ -98,6 +98,23 @@
     }
 }
 
+.notification-test-buttons {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color, #dee2e6);
+}
+
+.test-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.test-result {
+    font-size: 0.85rem;
+}
+
 /* Medium and large screens */
 @media only screen and (min-width: $medium-min-width) {
     #settings {
@@ -127,7 +144,6 @@
             .card-header {
                 background-color: #161A21;
                 border-bottom: 1px solid #252C37;
-                color: #8A93A6;
             }
 
             .collapsible-header:hover {

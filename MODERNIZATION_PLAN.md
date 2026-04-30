@@ -99,6 +99,21 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 | Fix spurious staging moves on restart | #179 | Done |
 | Fix healthcheck IPv6 + WEB_PORT env var | #180 | Done |
 
+### Phase 9: Multi-Instance Integrations & Notification Presets (v0.17.0)
+
+| Task | PR(s) | Status |
+|------|-------|--------|
+| Multi-instance Sonarr/Radarr with per-pair routing | #426 | Done |
+| Integrations CRUD REST API + chip-picker UI | #426 | Done |
+| Legacy [Integrations] section migration to integrations.json | #426 | Done |
+| Discord webhook notification preset | #428 | Done |
+| Telegram bot notification preset | #428 | Done |
+| Notification formatters (pure functions) | #428 | Done |
+| Test buttons for Discord and Telegram | #428 | Done |
+| Credential redaction (webhook URLs, bot tokens) | #428 | Done |
+| Controller decomposition (C901 compliance) | #419, #420 | Done |
+| Settings UI consistency (headers, dark mode) | #429, #430, #431 | Done |
+
 ---
 
 ## Results

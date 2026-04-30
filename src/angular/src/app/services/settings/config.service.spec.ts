@@ -60,14 +60,9 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
       notify_on_extraction_complete: false,
       notify_on_extraction_failed: false,
       notify_on_delete_complete: false,
-    },
-    integrations: {
-      sonarr_url: null,
-      sonarr_api_key: null,
-      sonarr_enabled: false,
-      radarr_url: null,
-      radarr_api_key: null,
-      radarr_enabled: false,
+      discord_webhook_url: null,
+      telegram_bot_token: null,
+      telegram_chat_id: null,
     },
     validate: {
       enabled: false,

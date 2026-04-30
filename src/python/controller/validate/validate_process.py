@@ -134,7 +134,7 @@ class ValidateProcess(AppProcess):
                 req = self.__command_queue.get(block=False)
                 key = (req.pair_id, req.name)
                 if key in self.__active_validations:
-                    self.logger.warning("Validation already in progress for {}".format(req.name))
+                    self.logger.warning(f"Validation already in progress for {req.name}")
                     continue
                 self.__active_validations[key] = req
         except queue.Empty:
@@ -169,7 +169,7 @@ class ValidateProcess(AppProcess):
                 )
                 self.__completed_result_queue.put(completed)
             except ChecksumMismatchError as e:
-                self.logger.error("Checksum mismatch for {}: {}".format(req.name, str(e)))
+                self.logger.error(f"Checksum mismatch for {req.name}: {e!s}")
                 failed = ValidateFailedResult(
                     timestamp=datetime.datetime.now(),
                     name=req.name,
@@ -180,7 +180,7 @@ class ValidateProcess(AppProcess):
                 )
                 self.__failed_result_queue.put(failed)
             except Exception as e:
-                self.logger.error("Validation failed for {}: {}".format(req.name, str(e)))
+                self.logger.error(f"Validation failed for {req.name}: {e!s}")
                 failed = ValidateFailedResult(
                     timestamp=datetime.datetime.now(),
                     name=req.name,
@@ -212,25 +212,25 @@ class ValidateProcess(AppProcess):
         file_path = os.path.join(req.local_path, req.name)
 
         if req.algorithm not in _ALLOWED_ALGORITHMS:
-            raise ValueError("Unsupported hash algorithm: {}".format(req.algorithm))
+            raise ValueError(f"Unsupported hash algorithm: {req.algorithm}")
 
         if not os.path.exists(file_path):
-            raise FileNotFoundError("Local path does not exist: {}".format(file_path))
+            raise FileNotFoundError(f"Local path does not exist: {file_path}")
 
         sshcp = self._create_ssh(req)
 
         if req.is_dir:
             if not os.path.isdir(file_path):
-                raise ValueError("Expected directory but found file: {}".format(file_path))
+                raise ValueError(f"Expected directory but found file: {file_path}")
             self._validate_directory(req, file_path, sshcp)
         else:
             local_hash = self._hash_local_file(file_path, req.algorithm)
             remote_hash = self._hash_remote_file(req, req.name, req.algorithm, sshcp)
             if not hmac.compare_digest(local_hash, remote_hash):
                 raise ChecksumMismatchError(
-                    "Checksum mismatch for {}: local={} remote={}".format(req.name, local_hash, remote_hash)
+                    f"Checksum mismatch for {req.name}: local={local_hash} remote={remote_hash}"
                 )
-            self.logger.info("Validated {}: {}".format(req.name, local_hash))
+            self.logger.info(f"Validated {req.name}: {local_hash}")
 
     def _validate_directory(self, req: ValidateRequest, local_dir: str, sshcp: Sshcp) -> None:
         """Validate all files in a directory by comparing local and remote checksums.
@@ -250,7 +250,7 @@ class ValidateProcess(AppProcess):
         # Build remote file set via SSH find
         remote_dir = os.path.join(req.remote_path, req.name)
         quoted_dir = shlex.quote(remote_dir)
-        find_cmd = "find {} -type f".format(quoted_dir)
+        find_cmd = f"find {quoted_dir} -type f"
         try:
             find_output = sshcp.shell(find_cmd)
             remote_abs_paths = find_output.decode().strip().split("\n")
@@ -261,7 +261,7 @@ class ValidateProcess(AppProcess):
                     rel = os.path.relpath(abs_path, req.remote_path)
                     remote_rel_paths.add(rel)
         except Exception as e:
-            raise ValueError("Failed to list remote directory {}: {}".format(remote_dir, str(e))) from e
+            raise ValueError(f"Failed to list remote directory {remote_dir}: {e!s}") from e
 
         # Validate the union of both sets
         all_paths = local_rel_paths | remote_rel_paths
@@ -273,27 +273,25 @@ class ValidateProcess(AppProcess):
             is_remote = rel_path in remote_rel_paths
 
             if is_local and not is_remote:
-                mismatches.append("Local-only file: {}".format(rel_path))
+                mismatches.append(f"Local-only file: {rel_path}")
                 continue
             if is_remote and not is_local:
-                mismatches.append("Remote-only file: {}".format(rel_path))
+                mismatches.append(f"Remote-only file: {rel_path}")
                 continue
 
             # Both exist — compare hashes
             local_hash = self._hash_local_file(local_file, req.algorithm)
             remote_hash = self._hash_remote_file(req, rel_path, req.algorithm, sshcp)
             if not hmac.compare_digest(local_hash, remote_hash):
-                mismatches.append(
-                    "Checksum mismatch for {}: local={} remote={}".format(rel_path, local_hash, remote_hash)
-                )
+                mismatches.append(f"Checksum mismatch for {rel_path}: local={local_hash} remote={remote_hash}")
             else:
-                self.logger.debug("Validated file {}: {}".format(rel_path, local_hash))
+                self.logger.debug(f"Validated file {rel_path}: {local_hash}")
 
         if mismatches:
             raise ChecksumMismatchError(
                 "Directory validation failed for {}: {}".format(req.name, "; ".join(mismatches))
             )
-        self.logger.info("Validated directory {}".format(req.name))
+        self.logger.info(f"Validated directory {req.name}")
 
     @staticmethod
     def _hash_local_file(file_path: str, algorithm: str) -> str:
@@ -326,13 +324,12 @@ class ValidateProcess(AppProcess):
     def _build_hash_cmd(algorithm: str, quoted_file: str) -> str:
         """Build the remote hash command for the given algorithm."""
         if algorithm == "md5":
-            return "md5sum {}".format(quoted_file)
-        elif algorithm == "sha256":
-            return "sha256sum {}".format(quoted_file)
-        elif algorithm == "sha1":
-            return "sha1sum {}".format(quoted_file)
-        else:
-            raise ValueError("Unsupported algorithm: {}".format(algorithm))
+            return f"md5sum {quoted_file}"
+        if algorithm == "sha256":
+            return f"sha256sum {quoted_file}"
+        if algorithm == "sha1":
+            return f"sha1sum {quoted_file}"
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
 
     def _hash_remote_file(self, req: ValidateRequest, rel_path: str, algorithm: str, sshcp: Sshcp) -> str:
         """Compute hash of a remote file via SSH."""
@@ -345,9 +342,7 @@ class ValidateProcess(AppProcess):
         decoded = output.decode().strip()
         parts = decoded.split()
         if not parts:
-            raise ValueError(
-                "Empty or unexpected output from remote hash command for {}: {!r}".format(rel_path, decoded)
-            )
+            raise ValueError(f"Empty or unexpected output from remote hash command for {rel_path}: {decoded!r}")
         return parts[0]
 
     @overrides(AppProcess)

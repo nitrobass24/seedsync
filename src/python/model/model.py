@@ -60,21 +60,21 @@ class Model:
     def file_key(file: ModelFile) -> str:
         """Return the unique key for a ModelFile: 'pair_id:name' or just 'name'."""
         if file.pair_id:
-            return "{}:{}".format(file.pair_id, file.name)
+            return f"{file.pair_id}:{file.name}"
         return file.name
 
     @staticmethod
     def make_key(name: str, pair_id: str | None = None) -> str:
         """Build a key from name and optional pair_id."""
         if pair_id:
-            return "{}:{}".format(pair_id, name)
+            return f"{pair_id}:{name}"
         return name
 
     @staticmethod
     def _log_name(name: str, pair_id: str | None = None) -> str:
         """Human-readable name for log messages: 'name [ab12cd34]' or just 'name'."""
         if pair_id:
-            return "{} [{}]".format(name, pair_id[:8])
+            return f"{name} [{pair_id[:8]}]"
         return name
 
     def __init__(self):
@@ -114,7 +114,7 @@ class Model:
         :return:
         """
         key = Model.file_key(file)
-        self.logger.debug("LftpModel: Adding file '{}'".format(Model._log_name(file.name, file.pair_id)))
+        self.logger.debug(f"LftpModel: Adding file '{Model._log_name(file.name, file.pair_id)}'")
         if key in self.__files:
             raise ModelError("File already exists in the model")
         self.__files[key] = file
@@ -129,7 +129,7 @@ class Model:
         :return:
         """
         key = Model.make_key(filename, pair_id)
-        self.logger.debug("LftpModel: Removing file '{}'".format(Model._log_name(filename, pair_id)))
+        self.logger.debug(f"LftpModel: Removing file '{Model._log_name(filename, pair_id)}'")
         if key not in self.__files:
             raise ModelError("File does not exist in the model")
         file = self.__files[key]
@@ -144,7 +144,7 @@ class Model:
         :return:
         """
         key = Model.file_key(file)
-        self.logger.debug("LftpModel: Updating file '{}'".format(Model._log_name(file.name, file.pair_id)))
+        self.logger.debug(f"LftpModel: Updating file '{Model._log_name(file.name, file.pair_id)}'")
         if key not in self.__files:
             raise ModelError("File does not exist in the model")
         old_file = self.__files[key]

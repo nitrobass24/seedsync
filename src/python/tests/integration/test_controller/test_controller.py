@@ -85,7 +85,7 @@ class TestController(unittest.TestCase):
         elif ext == "rar":
             subprocess.run(["rar", "a", "-ep", path, temp_file_path], stdout=subprocess.DEVNULL, check=True)
         else:
-            raise ValueError("Unsupported archive format: {}".format(os.path.basename(path)))
+            raise ValueError(f"Unsupported archive format: {os.path.basename(path)}")
         return os.path.getsize(path)
 
     @overrides(unittest.TestCase)
@@ -451,11 +451,9 @@ class TestController(unittest.TestCase):
         self.assertEqual(len(self.initial_state.keys()), len(model_files))
         files_dict = {f.name: f for f in model_files}
         self.assertEqual(self.initial_state.keys(), files_dict.keys())
-        for filename in self.initial_state.keys():
+        for filename in self.initial_state:
             # Note: put items in a list for a better diff output
-            self.assertEqual(
-                [self.initial_state[filename]], [files_dict[filename]], "Mismatch in file: {}".format(filename)
-            )
+            self.assertEqual([self.initial_state[filename]], [files_dict[filename]], f"Mismatch in file: {filename}")
 
     @timeout_decorator.timeout(20)
     def test_local_file_added(self):

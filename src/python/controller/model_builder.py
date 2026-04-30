@@ -166,7 +166,7 @@ class ModelBuilder:
         )
         for name in all_file_names:
             remote = self.__remote_files.get(name, None)
-            local = effective_local.get(name, None)
+            local = effective_local.get(name)
             status = self.__lftp_statuses.get(name, None)
 
             if remote is None and local is None and status is None:
@@ -188,62 +188,6 @@ class ModelBuilder:
             ):
                 raise ModelError("Mismatch in is_dir between sources")
 
-            def __fill_model_file(
-                _model_file: ModelFile,
-                _remote: SystemFile | None,
-                _local: SystemFile | None,
-                _transfer_state: LftpJobStatus.TransferState | None,
-            ):
-                # set local and remote sizes
-                if _remote:
-                    _model_file.remote_size = _remote.size
-                if _local:
-                    _model_file.local_size = _local.size
-
-                # Note: no longer use lftp's file sizes
-                #       they represent remaining size for resumed downloads
-
-                # set the downloading speed and eta
-                if _transfer_state:
-                    _model_file.downloading_speed = _transfer_state.speed
-                    _model_file.eta = _transfer_state.eta
-
-                # set the transferred size (only if file or dir exists on both ends)
-                if _local and _remote:
-                    if _model_file.is_dir:
-                        # dir transferred size is updated by child files
-                        _model_file.transferred_size = 0
-                    else:
-                        _model_file.transferred_size = min(_local.size, _remote.size)
-
-                        # also update all parent directories
-                        _parent_file = _model_file.parent
-                        while _parent_file is not None:
-                            if _parent_file.transferred_size is not None and _model_file.transferred_size is not None:  # type: ignore[reportUnnecessaryComparison]
-                                _parent_file.transferred_size += _model_file.transferred_size
-                            _parent_file = _parent_file.parent
-
-                # set the is_extractable flag
-                if not _model_file.is_dir and Extract.is_archive_fast(_model_file.name):
-                    _model_file.is_extractable = True
-                    # Also set the flag for all of its parents
-                    _parent_file = _model_file.parent
-                    while _parent_file is not None:
-                        _parent_file.is_extractable = True
-                        _parent_file = _parent_file.parent
-
-                # set the timestamps
-                if _local:
-                    if _local.timestamp_created:
-                        _model_file.local_created_timestamp = _local.timestamp_created
-                    if _local.timestamp_modified:
-                        _model_file.local_modified_timestamp = _local.timestamp_modified
-                if _remote:
-                    if _remote.timestamp_created:
-                        _model_file.remote_created_timestamp = _remote.timestamp_created
-                    if _remote.timestamp_modified:
-                        _model_file.remote_modified_timestamp = _remote.timestamp_modified
-
             model_file = ModelFile(name, is_dir, pair_id=self.__pair_id)
             # set the file state
             # for now we only set to Queued or Downloading
@@ -255,248 +199,18 @@ class ModelBuilder:
                     else ModelFile.State.DOWNLOADING
                 )
             # fill the rest
-            __fill_model_file(
+            ModelBuilder._fill_model_file(
                 model_file,
                 remote,
                 local,
                 status.total_transfer_state if status and status.state == LftpJobStatus.State.RUNNING else None,
             )
 
-            # Traverse SystemFile children tree in BFS order
-            # Store (remote, local, status, model_file) tuple in traversal frontier where remote and local
-            # correspond to the same node in both remote and local SystemFile trees, status corresponds
-            # to the LFTP status for the entire tree, and model_file corresponds to the generated ModelFile
-            # for the pair
-            # Note: in this case the frontier contains nodes that have already been process, it is
-            #       merely used for traversing children
-            frontier: list[tuple[SystemFile | None, SystemFile | None, LftpJobStatus | None, ModelFile]] = []
-            if remote or local:
-                frontier.append((remote, local, status, model_file))
-            while frontier:
-                _remote, _local, _status, _model_file = frontier.pop(0)
-                _remote_children: dict[str, SystemFile] = {sf.name: sf for sf in _remote.children} if _remote else {}
-                _local_children: dict[str, SystemFile] = {sf.name: sf for sf in _local.children} if _local else {}
-                _all_children_names: set[str] = set[str]().union(_remote_children.keys(), _local_children.keys())
-                for _child_name in _all_children_names:
-                    _remote_child = _remote_children.get(_child_name, None)
-                    _local_child = _local_children.get(_child_name, None)
-                    _is_dir = (
-                        _remote_child.is_dir if _remote_child else (_local_child.is_dir if _local_child else False)
-                    )
-                    # sanity check is_dir
-                    if (_remote_child and _is_dir != _remote_child.is_dir) or (
-                        _local_child and _is_dir != _local_child.is_dir
-                    ):
-                        raise ModelError("Mismatch in is_dir between child sources")
-                    _child_model_file = ModelFile(_child_name, _is_dir, pair_id=self.__pair_id)
+            self._build_children(remote, local, status, model_file)
 
-                    # add it to the parent right away so we can access the full path
-                    _model_file.add_child(_child_model_file)
-
-                    # find the transfer state (if it exists) corresponding to this child
-                    # Note: transfer states are in full paths
-                    # Note2: transfer states don't include root path
-                    _child_status_path = os.path.join(*(_child_model_file.full_path.split(os.sep)[1:]))
-                    _child_transfer_state = None
-                    if _status:
-                        _child_transfer_state = next(
-                            (ts for n, ts in _status.get_active_file_transfer_states() if n == _child_status_path), None
-                        )
-                    # Set the state, first matching criteria below decides state
-                    #   child is a directory: Default
-                    #   child is active: Downloading
-                    #   child local_size >= remote_size: Downloaded
-                    #   remote child exists and root is Queued or Downloading: Queued
-                    #   Default
-                    # Result:
-                    #   subdirectories are always Default
-                    #   downloading files are Downloading
-                    #   finished files are Downloaded
-                    #   Queued and Downloading root's unfinished files are Queued
-                    #   Local-only files are Default
-                    if _is_dir:
-                        _child_model_file.state = ModelFile.State.DEFAULT
-                    elif _child_transfer_state:
-                        _child_model_file.state = ModelFile.State.DOWNLOADING
-                    elif _remote_child and _local_child and _local_child.size >= _remote_child.size:
-                        _child_model_file.state = ModelFile.State.DOWNLOADED
-                    elif _remote_child and model_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
-                        _child_model_file.state = ModelFile.State.QUEUED
-                    else:
-                        _child_model_file.state = ModelFile.State.DEFAULT
-
-                    # fill the rest
-                    __fill_model_file(_child_model_file, _remote_child, _local_child, _child_transfer_state)
-                    # add child to frontier
-                    frontier.append((_remote_child, _local_child, _status, _child_model_file))
-
-            # estimate the ETA for the root if it's not available
-            if (
-                model_file.state == ModelFile.State.DOWNLOADING
-                and model_file.eta is None
-                and model_file.downloading_speed is not None
-                and model_file.downloading_speed > 0
-            ):
-                raw_eta = None
-                # For directories, prefer LFTP's real-time transfer sizes over
-                # stale filesystem sizes
-                if (
-                    model_file.is_dir
-                    and status
-                    and status.total_transfer_state.size_local is not None
-                    and status.total_transfer_state.size_remote is not None
-                    and status.total_transfer_state.size_remote > 0
-                ):
-                    remaining = max(status.total_transfer_state.size_remote - status.total_transfer_state.size_local, 0)
-                    raw_eta = remaining / model_file.downloading_speed
-                elif model_file.transferred_size is not None and model_file.remote_size is not None:
-                    remaining = max(model_file.remote_size - model_file.transferred_size, 0)
-                    raw_eta = remaining / model_file.downloading_speed
-
-                if raw_eta is not None:
-                    # Apply EMA smoothing (alpha=0.3) to prevent wild swings
-                    alpha = 0.3
-                    if name in self.__smoothed_etas:
-                        smoothed = self.__smoothed_etas[name] + alpha * (raw_eta - self.__smoothed_etas[name])
-                    else:
-                        smoothed = raw_eta
-                    self.__smoothed_etas[name] = smoothed
-                    model_file.eta = int(math.ceil(smoothed))
-
-            # now we can determine if root is Downloaded
-            # root is Downloaded if all child remote files are Downloaded
-            # again we use BFS to traverse
-            incomplete_children = False
-            if model_file.state == ModelFile.State.DEFAULT:
-                if (
-                    not model_file.is_dir
-                    and model_file.local_size is not None
-                    and model_file.remote_size is not None
-                    and model_file.local_size >= model_file.remote_size
-                ):
-                    # root is a finished single file
-                    model_file.state = ModelFile.State.DOWNLOADED
-                elif model_file.is_dir and model_file.remote_size is not None:
-                    # root is a directory that also exists remotely
-                    # check all the children
-                    all_downloaded = True
-                    frontier_check: list[ModelFile] = []
-                    frontier_check += model_file.get_children()
-                    while frontier_check:
-                        _child_file = frontier_check.pop(0)
-                        if (
-                            not _child_file.is_dir
-                            and _child_file.remote_size is not None
-                            and _child_file.state != ModelFile.State.DOWNLOADED
-                        ):
-                            all_downloaded = False
-                            break
-                        frontier_check += _child_file.get_children()
-                    if all_downloaded:
-                        model_file.state = ModelFile.State.DOWNLOADED
-                    else:
-                        incomplete_children = True
-
-            # next we check persist authority for previously downloaded files
-            if model_file.state == ModelFile.State.DEFAULT and model_file.name in self.__downloaded_files:
-                # Directory with incomplete children always stays DEFAULT
-                # (the children BFS check is authoritative; root-level size
-                # comparisons can be fooled by extra local files like extracted content)
-                if incomplete_children:
-                    pass  # Stay DEFAULT for re-download
-                # Partial file overrides persist — stay DEFAULT for re-download
-                elif (
-                    model_file.local_size is not None
-                    and model_file.remote_size is not None
-                    and model_file.local_size < model_file.remote_size
-                ):
-                    pass  # Stay DEFAULT for re-download
-                # Persist authority — applies when auto_delete_remote OFF,
-                # or when remote is already gone (auto_delete_remote ON, delete succeeded)
-                elif not self.__auto_delete_remote or model_file.remote_size is None:
-                    if model_file.local_size is not None:
-                        model_file.state = ModelFile.State.DOWNLOADED
-                    else:
-                        model_file.state = ModelFile.State.DELETED
-                # else: auto_delete_remote ON + remote exists → persist doesn't apply,
-                #       stay DEFAULT so auto-queue can re-download
-
-            # next we check if root is Extracting
-            # root is Extracting if it's part of an extract status, in an expected state,
-            # and exists locally
-            # if root is NOT in an expected state, then ignore the extract status
-            # and report a warning message, as this shouldn't be happening
-            if model_file.name in self.__extract_statuses:
-                extract_status = self.__extract_statuses[model_file.name]
-                if model_file.is_dir != extract_status.is_dir:
-                    raise ModelError("Mismatch in is_dir between file and extract status")
-                if (
-                    model_file.state in (ModelFile.State.DEFAULT, ModelFile.State.DOWNLOADED)
-                    and model_file.local_size is not None
-                ):
-                    model_file.state = ModelFile.State.EXTRACTING
-                else:
-                    if model_file.local_size is None:
-                        self.logger.warning(
-                            "File {} has extract status but doesn't exist locally!".format(model_file.name)
-                        )
-                    else:
-                        self.logger.warning(
-                            "File {} has extract status but is in state {}".format(
-                                model_file.name, str(model_file.state)
-                            )
-                        )
-
-            # next we check if root is Extracted
-            # root is Extracted if it is in Downloaded state and in extracted files list
-            # Note: Default files aren't marked extracted because they can still be queued
-            #       for download, and it doesn't make sense to queue after extracting
-            #       If a Default file is extracted, it will return back to the Default state
-            if model_file.name in self.__extracted_files and model_file.state == ModelFile.State.DOWNLOADED:
-                model_file.state = ModelFile.State.EXTRACTED
-
-            # next we check if root has failed extraction
-            if model_file.name in self.__extract_failed_files and model_file.state == ModelFile.State.DOWNLOADED:
-                model_file.state = ModelFile.State.EXTRACT_FAILED
-
-            # next we check if root is Validating
-            # root is Validating if it has a validate status, is in an expected state, and exists locally
-            if model_file.name in self.__validate_statuses:
-                if (
-                    model_file.state
-                    in (
-                        ModelFile.State.DEFAULT,
-                        ModelFile.State.DOWNLOADED,
-                        ModelFile.State.EXTRACTED,
-                        ModelFile.State.EXTRACT_FAILED,
-                    )
-                    and model_file.local_size is not None
-                ):
-                    model_file.state = ModelFile.State.VALIDATING
-                else:
-                    self.logger.warning(
-                        "File {} has validate status but is in state {}".format(model_file.name, str(model_file.state))
-                    )
-
-            # next we check if root is Validated
-            # root is Validated if it is in Downloaded/Extracted/ExtractFailed state and in validated files list
-            if model_file.name in self.__validated_files and model_file.state in (
-                ModelFile.State.DOWNLOADED,
-                ModelFile.State.EXTRACTED,
-                ModelFile.State.EXTRACT_FAILED,
-            ):
-                model_file.state = ModelFile.State.VALIDATED
-
-            # next we check if root is Corrupt
-            # root is Corrupt if it is in Downloaded/Extracted/ExtractFailed/Validated state and in corrupt files list
-            # Corrupt overrides Validated because corruption is discovered after validation
-            if model_file.name in self.__corrupt_files and model_file.state in (
-                ModelFile.State.DOWNLOADED,
-                ModelFile.State.EXTRACTED,
-                ModelFile.State.EXTRACT_FAILED,
-                ModelFile.State.VALIDATED,
-            ):
-                model_file.state = ModelFile.State.CORRUPT
+            self._estimate_eta(model_file, name, status)
+            incomplete_children = self._check_root_downloaded(model_file)
+            self._determine_state(model_file, incomplete_children)
 
             model.add_file(model_file)
 
@@ -507,3 +221,326 @@ class ModelBuilder:
 
         self.__cached_model = model
         return model
+
+    def _build_children(
+        self,
+        remote: SystemFile | None,
+        local: SystemFile | None,
+        status: LftpJobStatus | None,
+        root_model_file: ModelFile,
+    ):
+        # Traverse SystemFile children tree in BFS order
+        # Store (remote, local, status, model_file) tuple in traversal frontier where remote and local
+        # correspond to the same node in both remote and local SystemFile trees, status corresponds
+        # to the LFTP status for the entire tree, and model_file corresponds to the generated ModelFile
+        # for the pair
+        # Note: in this case the frontier contains nodes that have already been process, it is
+        #       merely used for traversing children
+        frontier: list[tuple[SystemFile | None, SystemFile | None, LftpJobStatus | None, ModelFile]] = []
+        if remote or local:
+            frontier.append((remote, local, status, root_model_file))
+        while frontier:
+            _remote, _local, _status, _model_file = frontier.pop(0)
+            _remote_children: dict[str, SystemFile] = {sf.name: sf for sf in _remote.children} if _remote else {}
+            _local_children: dict[str, SystemFile] = {sf.name: sf for sf in _local.children} if _local else {}
+            _all_children_names: set[str] = set[str]().union(_remote_children.keys(), _local_children.keys())
+            for _child_name in _all_children_names:
+                _remote_child = _remote_children.get(_child_name)
+                _local_child = _local_children.get(_child_name)
+                _is_dir = _remote_child.is_dir if _remote_child else (_local_child.is_dir if _local_child else False)
+                # sanity check is_dir
+                if (_remote_child and _is_dir != _remote_child.is_dir) or (
+                    _local_child and _is_dir != _local_child.is_dir
+                ):
+                    raise ModelError("Mismatch in is_dir between child sources")
+                _child_model_file = ModelFile(_child_name, _is_dir, pair_id=self.__pair_id)
+
+                # add it to the parent right away so we can access the full path
+                _model_file.add_child(_child_model_file)
+
+                # find the transfer state (if it exists) corresponding to this child
+                # Note: transfer states are in full paths
+                # Note2: transfer states don't include root path
+                _child_status_path = os.path.join(*(_child_model_file.full_path.split(os.sep)[1:]))
+                _child_transfer_state = None
+                if _status:
+                    _child_transfer_state = next(
+                        (ts for n, ts in _status.get_active_file_transfer_states() if n == _child_status_path), None
+                    )
+                # Set the state, first matching criteria below decides state
+                #   child is a directory: Default
+                #   child is active: Downloading
+                #   child local_size >= remote_size: Downloaded
+                #   remote child exists and root is Queued or Downloading: Queued
+                #   Default
+                # Result:
+                #   subdirectories are always Default
+                #   downloading files are Downloading
+                #   finished files are Downloaded
+                #   Queued and Downloading root's unfinished files are Queued
+                #   Local-only files are Default
+                if _is_dir:
+                    _child_model_file.state = ModelFile.State.DEFAULT
+                elif _child_transfer_state:
+                    _child_model_file.state = ModelFile.State.DOWNLOADING
+                elif _remote_child and _local_child and _local_child.size >= _remote_child.size:
+                    _child_model_file.state = ModelFile.State.DOWNLOADED
+                elif _remote_child and root_model_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
+                    _child_model_file.state = ModelFile.State.QUEUED
+                else:
+                    _child_model_file.state = ModelFile.State.DEFAULT
+
+                # fill the rest
+                ModelBuilder._fill_model_file(_child_model_file, _remote_child, _local_child, _child_transfer_state)
+                # add child to frontier
+                frontier.append((_remote_child, _local_child, _status, _child_model_file))
+
+    @staticmethod
+    def _fill_model_file(
+        model_file: ModelFile,
+        remote: SystemFile | None,
+        local: SystemFile | None,
+        transfer_state: LftpJobStatus.TransferState | None,
+    ):
+        # set local and remote sizes
+        if remote:
+            model_file.remote_size = remote.size
+        if local:
+            model_file.local_size = local.size
+
+        # Note: no longer use lftp's file sizes
+        #       they represent remaining size for resumed downloads
+
+        # set the downloading speed and eta
+        if transfer_state:
+            model_file.downloading_speed = transfer_state.speed
+            model_file.eta = transfer_state.eta
+
+        # set the transferred size (only if file or dir exists on both ends)
+        if local and remote:
+            ModelBuilder._update_transferred_size(model_file, remote, local)
+
+        # set the is_extractable flag
+        ModelBuilder._update_extractable_flag(model_file)
+
+        # set the timestamps
+        ModelBuilder._update_timestamps(model_file, remote, local)
+
+    @staticmethod
+    def _update_transferred_size(
+        model_file: ModelFile,
+        remote: SystemFile,
+        local: SystemFile,
+    ):
+        if model_file.is_dir:
+            # dir transferred size is updated by child files
+            model_file.transferred_size = 0
+        else:
+            model_file.transferred_size = min(local.size, remote.size)
+
+            # also update all parent directories
+            parent_file = model_file.parent
+            while parent_file is not None:
+                if parent_file.transferred_size is not None and model_file.transferred_size is not None:  # type: ignore[reportUnnecessaryComparison]
+                    parent_file.transferred_size += model_file.transferred_size
+                parent_file = parent_file.parent
+
+    @staticmethod
+    def _update_extractable_flag(model_file: ModelFile):
+        if not model_file.is_dir and Extract.is_archive_fast(model_file.name):
+            model_file.is_extractable = True
+            # Also set the flag for all of its parents
+            parent_file = model_file.parent
+            while parent_file is not None:
+                parent_file.is_extractable = True
+                parent_file = parent_file.parent
+
+    @staticmethod
+    def _update_timestamps(
+        model_file: ModelFile,
+        remote: SystemFile | None,
+        local: SystemFile | None,
+    ):
+        if local:
+            if local.timestamp_created:
+                model_file.local_created_timestamp = local.timestamp_created
+            if local.timestamp_modified:
+                model_file.local_modified_timestamp = local.timestamp_modified
+        if remote:
+            if remote.timestamp_created:
+                model_file.remote_created_timestamp = remote.timestamp_created
+            if remote.timestamp_modified:
+                model_file.remote_modified_timestamp = remote.timestamp_modified
+
+    def _estimate_eta(self, model_file: ModelFile, name: str, status: LftpJobStatus | None):
+        # estimate the ETA for the root if it's not available
+        if not (
+            model_file.state == ModelFile.State.DOWNLOADING
+            and model_file.eta is None
+            and model_file.downloading_speed is not None
+            and model_file.downloading_speed > 0
+        ):
+            return
+
+        raw_eta = None
+        # For directories, prefer LFTP's real-time transfer sizes over
+        # stale filesystem sizes
+        if (
+            model_file.is_dir
+            and status
+            and status.total_transfer_state.size_local is not None
+            and status.total_transfer_state.size_remote is not None
+            and status.total_transfer_state.size_remote > 0
+        ):
+            remaining = max(status.total_transfer_state.size_remote - status.total_transfer_state.size_local, 0)
+            raw_eta = remaining / model_file.downloading_speed
+        elif model_file.transferred_size is not None and model_file.remote_size is not None:
+            remaining = max(model_file.remote_size - model_file.transferred_size, 0)
+            raw_eta = remaining / model_file.downloading_speed
+
+        if raw_eta is not None:
+            # Apply EMA smoothing (alpha=0.3) to prevent wild swings
+            alpha = 0.3
+            if name in self.__smoothed_etas:
+                smoothed = self.__smoothed_etas[name] + alpha * (raw_eta - self.__smoothed_etas[name])
+            else:
+                smoothed = raw_eta
+            self.__smoothed_etas[name] = smoothed
+            model_file.eta = math.ceil(smoothed)
+
+    def _check_root_downloaded(self, model_file: ModelFile) -> bool:
+        # now we can determine if root is Downloaded
+        # root is Downloaded if all child remote files are Downloaded
+        # again we use BFS to traverse
+        incomplete_children = False
+        if model_file.state == ModelFile.State.DEFAULT:
+            if (
+                not model_file.is_dir
+                and model_file.local_size is not None
+                and model_file.remote_size is not None
+                and model_file.local_size >= model_file.remote_size
+            ):
+                # root is a finished single file
+                model_file.state = ModelFile.State.DOWNLOADED
+            elif model_file.is_dir and model_file.remote_size is not None:
+                # root is a directory that also exists remotely
+                # check all the children
+                all_downloaded = True
+                frontier_check: list[ModelFile] = []
+                frontier_check += model_file.get_children()
+                while frontier_check:
+                    _child_file = frontier_check.pop(0)
+                    if (
+                        not _child_file.is_dir
+                        and _child_file.remote_size is not None
+                        and _child_file.state != ModelFile.State.DOWNLOADED
+                    ):
+                        all_downloaded = False
+                        break
+                    frontier_check += _child_file.get_children()
+                if all_downloaded:
+                    model_file.state = ModelFile.State.DOWNLOADED
+                else:
+                    incomplete_children = True
+        return incomplete_children
+
+    def _determine_state(self, model_file: ModelFile, incomplete_children: bool):
+        self._check_persist_authority(model_file, incomplete_children)
+        self._check_extracting(model_file)
+
+        # next we check if root is Extracted
+        # root is Extracted if it is in Downloaded state and in extracted files list
+        # Note: Default files aren't marked extracted because they can still be queued
+        #       for download, and it doesn't make sense to queue after extracting
+        #       If a Default file is extracted, it will return back to the Default state
+        if model_file.name in self.__extracted_files and model_file.state == ModelFile.State.DOWNLOADED:
+            model_file.state = ModelFile.State.EXTRACTED
+
+        # next we check if root has failed extraction
+        if model_file.name in self.__extract_failed_files and model_file.state == ModelFile.State.DOWNLOADED:
+            model_file.state = ModelFile.State.EXTRACT_FAILED
+
+        self._check_validating(model_file)
+
+        # next we check if root is Validated
+        # root is Validated if it is in Downloaded/Extracted/ExtractFailed state and in validated files list
+        if model_file.name in self.__validated_files and model_file.state in (
+            ModelFile.State.DOWNLOADED,
+            ModelFile.State.EXTRACTED,
+            ModelFile.State.EXTRACT_FAILED,
+        ):
+            model_file.state = ModelFile.State.VALIDATED
+
+        # next we check if root is Corrupt
+        # root is Corrupt if it is in Downloaded/Extracted/ExtractFailed/Validated state and in corrupt files list
+        # Corrupt overrides Validated because corruption is discovered after validation
+        if model_file.name in self.__corrupt_files and model_file.state in (
+            ModelFile.State.DOWNLOADED,
+            ModelFile.State.EXTRACTED,
+            ModelFile.State.EXTRACT_FAILED,
+            ModelFile.State.VALIDATED,
+        ):
+            model_file.state = ModelFile.State.CORRUPT
+
+    def _check_persist_authority(self, model_file: ModelFile, incomplete_children: bool):
+        # next we check persist authority for previously downloaded files
+        if not (model_file.state == ModelFile.State.DEFAULT and model_file.name in self.__downloaded_files):
+            return
+        # Directory with incomplete children always stays DEFAULT
+        # (the children BFS check is authoritative; root-level size
+        # comparisons can be fooled by extra local files like extracted content)
+        if incomplete_children or (
+            model_file.local_size is not None
+            and model_file.remote_size is not None
+            and model_file.local_size < model_file.remote_size
+        ):
+            return  # Stay DEFAULT for re-download
+        # Persist authority — applies when auto_delete_remote OFF,
+        # or when remote is already gone (auto_delete_remote ON, delete succeeded)
+        if not self.__auto_delete_remote or model_file.remote_size is None:
+            if model_file.local_size is not None:
+                model_file.state = ModelFile.State.DOWNLOADED
+            else:
+                model_file.state = ModelFile.State.DELETED
+        # else: auto_delete_remote ON + remote exists → persist doesn't apply,
+        #       stay DEFAULT so auto-queue can re-download
+
+    def _check_extracting(self, model_file: ModelFile):
+        # next we check if root is Extracting
+        # root is Extracting if it's part of an extract status, in an expected state,
+        # and exists locally
+        # if root is NOT in an expected state, then ignore the extract status
+        # and report a warning message, as this shouldn't be happening
+        if model_file.name not in self.__extract_statuses:
+            return
+        extract_status = self.__extract_statuses[model_file.name]
+        if model_file.is_dir != extract_status.is_dir:
+            raise ModelError("Mismatch in is_dir between file and extract status")
+        if (
+            model_file.state in (ModelFile.State.DEFAULT, ModelFile.State.DOWNLOADED)
+            and model_file.local_size is not None
+        ):
+            model_file.state = ModelFile.State.EXTRACTING
+        elif model_file.local_size is None:
+            self.logger.warning(f"File {model_file.name} has extract status but doesn't exist locally!")
+        else:
+            self.logger.warning(f"File {model_file.name} has extract status but is in state {model_file.state!s}")
+
+    def _check_validating(self, model_file: ModelFile):
+        # next we check if root is Validating
+        # root is Validating if it has a validate status, is in an expected state, and exists locally
+        if model_file.name not in self.__validate_statuses:
+            return
+        if (
+            model_file.state
+            in (
+                ModelFile.State.DEFAULT,
+                ModelFile.State.DOWNLOADED,
+                ModelFile.State.EXTRACTED,
+                ModelFile.State.EXTRACT_FAILED,
+            )
+            and model_file.local_size is not None
+        ):
+            model_file.state = ModelFile.State.VALIDATING
+        else:
+            self.logger.warning(f"File {model_file.name} has validate status but is in state {model_file.state!s}")

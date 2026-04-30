@@ -8,6 +8,7 @@ from common import Args, Config, Context, Status
 from common.path_pairs_config import PathPairsConfig
 from controller import Controller, ControllerPersist
 from controller.controller import ControllerError
+from controller.model_updater import ModelUpdater
 
 # All required Lftp fields and their valid test values
 _LFTP_REQUIRED = {
@@ -57,6 +58,8 @@ def _make_config(skip_lftp=None, skip_controller=None, skip_general_verbose=Fals
     for field, value in _CONTROLLER_REQUIRED.items():
         if field not in skip_controller:
             setattr(config.controller, field, value)
+    if "use_local_path_as_extract_path" not in skip_controller:
+        config.controller.use_local_path_as_extract_path = True
 
     # General
     if not skip_general_verbose:
@@ -97,7 +100,7 @@ class TestValidateConfig(unittest.TestCase):
     """Tests for Controller._validate_config()."""
 
     @patch.object(Controller, "_build_pair_contexts", return_value=[])
-    @patch.object(Controller, "_sync_persist_to_all_builders")
+    @patch.object(ModelUpdater, "sync_persist_to_all_builders")
     def test_valid_config_does_not_raise(self, _mock_sync, _mock_build):
         """A fully-populated config should not raise."""
         config = _make_config()
@@ -108,7 +111,7 @@ class TestValidateConfig(unittest.TestCase):
         Controller(context, persist)
 
     @patch.object(Controller, "_build_pair_contexts", return_value=[])
-    @patch.object(Controller, "_sync_persist_to_all_builders")
+    @patch.object(ModelUpdater, "sync_persist_to_all_builders")
     def test_missing_single_lftp_field_raises(self, _mock_sync, _mock_build):
         """A single missing Lftp field should raise with that field name."""
         config = _make_config(skip_lftp={"remote_address"})
@@ -120,7 +123,7 @@ class TestValidateConfig(unittest.TestCase):
         self.assertIn("Lftp.remote_address", str(cm.exception))
 
     @patch.object(Controller, "_build_pair_contexts", return_value=[])
-    @patch.object(Controller, "_sync_persist_to_all_builders")
+    @patch.object(ModelUpdater, "sync_persist_to_all_builders")
     def test_missing_multiple_fields_lists_all(self, _mock_sync, _mock_build):
         """Multiple missing fields should all appear in the error message."""
         config = _make_config(
@@ -140,7 +143,7 @@ class TestValidateConfig(unittest.TestCase):
         self.assertIn("General.verbose", msg)
 
     @patch.object(Controller, "_build_pair_contexts", return_value=[])
-    @patch.object(Controller, "_sync_persist_to_all_builders")
+    @patch.object(ModelUpdater, "sync_persist_to_all_builders")
     def test_missing_args_local_path_to_scanfs_raises(self, _mock_sync, _mock_build):
         """Missing Args.local_path_to_scanfs should raise."""
         config = _make_config()
@@ -152,7 +155,7 @@ class TestValidateConfig(unittest.TestCase):
         self.assertIn("Args.local_path_to_scanfs", str(cm.exception))
 
     @patch.object(Controller, "_build_pair_contexts", return_value=[])
-    @patch.object(Controller, "_sync_persist_to_all_builders")
+    @patch.object(ModelUpdater, "sync_persist_to_all_builders")
     def test_missing_autoqueue_field_raises(self, _mock_sync, _mock_build):
         """Missing AutoQueue.auto_delete_remote should raise."""
         config = _make_config(skip_autoqueue=True)
@@ -164,7 +167,7 @@ class TestValidateConfig(unittest.TestCase):
         self.assertIn("AutoQueue.auto_delete_remote", str(cm.exception))
 
     @patch.object(Controller, "_build_pair_contexts", return_value=[])
-    @patch.object(Controller, "_sync_persist_to_all_builders")
+    @patch.object(ModelUpdater, "sync_persist_to_all_builders")
     def test_missing_controller_field_raises(self, _mock_sync, _mock_build):
         """Missing Controller.interval_ms_local_scan should raise."""
         config = _make_config(skip_controller={"interval_ms_local_scan"})
@@ -180,7 +183,7 @@ class TestBackwardCompatValidation(unittest.TestCase):
     """Tests for backward-compat path pair validation in _build_pair_contexts."""
 
     @patch.object(Controller, "_validate_config")
-    @patch.object(Controller, "_sync_persist_to_all_builders")
+    @patch.object(ModelUpdater, "sync_persist_to_all_builders")
     def test_backward_compat_missing_remote_path_raises(self, _mock_sync, _mock_validate):
         """When no path pairs exist and remote_path is None, should raise."""
         # remote_path defaults to None in Config.Lftp.__init__
@@ -196,8 +199,22 @@ class TestBackwardCompatValidation(unittest.TestCase):
             Controller(context, persist)
         self.assertIn("remote_path", str(cm.exception))
 
+    @patch.object(Controller, "_build_pair_contexts", return_value=[])
+    @patch.object(ModelUpdater, "sync_persist_to_all_builders")
+    def test_missing_extract_path_when_not_using_local(self, _mock_sync, _mock_build):
+        """When use_local_path_as_extract_path is False and extract_path is None, should raise."""
+        config = _make_config(skip_controller={"use_local_path_as_extract_path"})
+        config.controller.use_local_path_as_extract_path = False
+        # extract_path defaults to None
+        args = _make_args()
+        context = _make_context(config, args)
+        persist = MagicMock(spec=ControllerPersist)
+        with self.assertRaises(ControllerError) as cm:
+            Controller(context, persist)
+        self.assertIn("Controller.extract_path", str(cm.exception))
+
     @patch.object(Controller, "_validate_config")
-    @patch.object(Controller, "_sync_persist_to_all_builders")
+    @patch.object(ModelUpdater, "sync_persist_to_all_builders")
     def test_backward_compat_missing_local_path_raises(self, _mock_sync, _mock_validate):
         """When no path pairs exist and local_path is None, should raise."""
         config = Config()

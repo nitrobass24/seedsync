@@ -70,7 +70,7 @@ class Lftp:
         self.__base_remote_dir_path = ""
         self.__base_local_dir_path = ""
         self.logger = logging.getLogger("Lftp")
-        self.__expect_pattern = "lftp {}@{}:.*>".format(self.__user, self.__address)
+        self.__expect_pattern = f"lftp {self.__user}@{self.__address}:.*>"
         self.__job_status_parser = LftpJobStatusParser()
         self.__timeout = 10  # in seconds
         self.__consecutive_status_errors = 0
@@ -95,7 +95,7 @@ class Lftp:
             str(self.__port),
             "-u",
             "{},{}".format(self.__user, self.__password if self.__password else ""),
-            "sftp://{}".format(self.__address),
+            f"sftp://{self.__address}",
         ]
         # Force a wide terminal so LFTP never wraps 'jobs -v' output.
         # Belt-and-suspenders: set COLUMNS in the environment (which LFTP
@@ -123,7 +123,7 @@ class Lftp:
         self.__spawn_process()
         # Replay cached settings
         for setting, value in self.__settings_cache.items():
-            self.__run_command("set {} {}".format(setting, value))  # type: ignore[arg-type]
+            self.__run_command(f"set {setting} {value}")  # type: ignore[arg-type]
         self.__consecutive_timeouts = 0
 
     def __setup(self):
@@ -154,7 +154,7 @@ class Lftp:
                 try:
                     inst.__restart_process()
                 except Exception:
-                    raise LftpError("lftp process is not running and restart failed")
+                    raise LftpError("lftp process is not running and restart failed") from None
             return method(inst, *args, **kwargs)
 
         return wrapper
@@ -195,12 +195,10 @@ class Lftp:
 
         if timed_out:
             self.__consecutive_timeouts += 1
-            self.logger.warning(
-                "Lftp timeout on command (consecutive timeouts: {})".format(self.__consecutive_timeouts)
-            )
+            self.logger.warning(f"Lftp timeout on command (consecutive timeouts: {self.__consecutive_timeouts})")
             if self.__consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS:
                 self.__restart_process()
-                raise LftpError("lftp process restarted after {} consecutive timeouts".format(MAX_CONSECUTIVE_TIMEOUTS))
+                raise LftpError(f"lftp process restarted after {MAX_CONSECUTIVE_TIMEOUTS} consecutive timeouts")
             # Return empty string to prevent parsing corrupted buffer output
             return ""
 
@@ -212,13 +210,13 @@ class Lftp:
         out = out.strip()  # remove any CRs
 
         if self.__log_command_output:
-            self.logger.debug("out ({} bytes):\n {}".format(len(out), out))
+            self.logger.debug(f"out ({len(out)} bytes):\n {out}")
             after_val = self.__process.after
             if isinstance(after_val, bytes):
                 after = after_val.decode("utf8", "replace").strip()
             else:
                 after = ""
-            self.logger.debug("after: {}".format(after))
+            self.logger.debug(f"after: {after}")
 
         # let's try and detect some errors
         if self.__detect_errors_from_output(out):
@@ -236,14 +234,14 @@ class Lftp:
             out = before.decode("utf8", "replace")
             out = out.strip()  # remove any CRs
             if self.__log_command_output:
-                self.logger.debug("retry out ({} bytes):\n {}".format(len(out), out))
+                self.logger.debug(f"retry out ({len(out)} bytes):\n {out}")
                 after_val = self.__process.after
                 if isinstance(after_val, bytes):
                     after = after_val.decode("utf8", "replace").strip()
                 else:
                     after = ""
-                self.logger.debug("retry after: {}".format(after))
-            self.logger.error("Lftp detected error: {}".format(error_out))
+                self.logger.debug(f"retry after: {after}")
+            self.logger.error(f"Lftp detected error: {error_out}")
             # save pending error
             self.__pending_error = error_out
         return out
@@ -256,10 +254,7 @@ class Lftp:
             "mirror: Access failed",
             "Login failed: Login incorrect",
         ]
-        for error in errors:
-            if error in out:
-                return True
-        return False
+        return any(error in out for error in errors)
 
     def __set(self, setting: str, value: str):
         """
@@ -269,7 +264,7 @@ class Lftp:
         :return:
         """
         self.__settings_cache[setting] = value
-        self.__run_command("set {} {}".format(setting, value))  # type: ignore[arg-type]
+        self.__run_command(f"set {setting} {value}")  # type: ignore[arg-type]
 
     def __get(self, setting: str) -> str:
         """
@@ -277,10 +272,10 @@ class Lftp:
         :param setting:
         :return:
         """
-        out = self.__run_command("set -a | grep {}".format(setting))  # type: ignore[arg-type]
-        m = re.search("set {} (.*)".format(setting), out)
+        out = self.__run_command(f"set -a | grep {setting}")  # type: ignore[arg-type]
+        m = re.search(f"set {setting} (.*)", out)
         if not m or not m.group or not m.group(1):  # type: ignore[reportUnnecessaryComparison]
-            raise LftpError("Failed to get setting '{}'. Output: '{}'".format(setting, out))
+            raise LftpError(f"Failed to get setting '{setting}'. Output: '{out}'")
         return m.group(1).strip()
 
     @staticmethod
@@ -288,10 +283,9 @@ class Lftp:
         # sets are taken from LFTP manual
         if value.lower() in {"true", "on", "yes", "1", "+"}:
             return True
-        elif value.lower() in {"false", "off", "no", "0", "-"}:
+        if value.lower() in {"false", "off", "no", "0", "-"}:
             return False
-        else:
-            raise LftpError("Cannot convert value '{}' to boolean".format(value))
+        raise LftpError(f"Cannot convert value '{value}' to boolean")
 
     @property
     def num_connections_per_dir_file(self) -> int:
@@ -488,8 +482,7 @@ class Lftp:
             if self.__consecutive_status_errors < MAX_CONSECUTIVE_STATUS_ERRORS:
                 self.logger.warning(f"Ignoring status error (count={self.__consecutive_status_errors})")
                 return None
-            else:
-                raise
+            raise
         return statuses
 
     def queue(self, name: str, is_dir: bool, exclude_patterns: list[str] | None = None):
@@ -512,7 +505,7 @@ class Lftp:
         # Note: LFTP's --exclude uses regex; --exclude-glob uses glob patterns
         exclude_flags = ""
         if is_dir and exclude_patterns:
-            exclude_flags = " ".join('--exclude-glob "{}"'.format(escape(p)) for p in exclude_patterns)
+            exclude_flags = " ".join(f'--exclude-glob "{escape(p)}"' for p in exclude_patterns)
 
         parts = [
             "queue",
@@ -524,11 +517,9 @@ class Lftp:
             parts.append(exclude_flags)
         parts.extend(
             [
-                '"{remote_dir}/{filename}"'.format(
-                    remote_dir=escape(self.__base_remote_dir_path), filename=escape(name)
-                ),
+                f'"{escape(self.__base_remote_dir_path)}/{escape(name)}"',
                 "-o" if not is_dir else "",
-                '"{local_dir}/"'.format(local_dir=escape(self.__base_local_dir_path)),
+                f'"{escape(self.__base_local_dir_path)}/"',
                 "'",
             ]
         )
@@ -546,26 +537,26 @@ class Lftp:
         job_to_kill = None
         statuses = self.status()
         if statuses is None:
-            self.logger.debug("Kill failed - status unavailable for job '{}'".format(name))
+            self.logger.debug(f"Kill failed - status unavailable for job '{name}'")
             return False
         for status in statuses:
             if status.name == name:
                 job_to_kill = status
                 break
         if job_to_kill is None:
-            self.logger.debug("Kill failed to find job '{}'".format(name))
+            self.logger.debug(f"Kill failed to find job '{name}'")
             return False
         # Note: there's a chance that job ids change between when we called status
         #       and when we execute the kill command
         #       in this case the wrong job may be killed, there's nothing we can do about it
         if job_to_kill.state == LftpJobStatus.State.RUNNING:
-            self.logger.debug("Killing running job '{}'...".format(name))
-            self.__run_command("kill {}".format(job_to_kill.id))  # type: ignore[arg-type]
+            self.logger.debug(f"Killing running job '{name}'...")
+            self.__run_command(f"kill {job_to_kill.id}")  # type: ignore[arg-type]
         elif job_to_kill.state == LftpJobStatus.State.QUEUED:
-            self.logger.debug("Killing queued job '{}'...".format(name))
-            self.__run_command("queue --delete {}".format(job_to_kill.id))  # type: ignore[arg-type]
+            self.logger.debug(f"Killing queued job '{name}'...")
+            self.__run_command(f"queue --delete {job_to_kill.id}")  # type: ignore[arg-type]
         else:
-            raise NotImplementedError("Unsupported state {}".format(str(job_to_kill.state)))
+            raise NotImplementedError(f"Unsupported state {job_to_kill.state!s}")
         return True
 
     def kill_all(self):

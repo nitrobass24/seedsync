@@ -23,6 +23,7 @@ class PathPair:
         local_path: str = "",
         enabled: bool = True,
         auto_queue: bool = True,
+        arr_target_ids: list[str] | None = None,
     ):
         self.id = pair_id or str(uuid.uuid4())
         self.name = name
@@ -30,8 +31,11 @@ class PathPair:
         self.local_path = local_path
         self.enabled = enabled
         self.auto_queue = auto_queue
+        # Order-preserving dedup so duplicates can never reach ArrNotifier and
+        # produce double scan commands.
+        self.arr_target_ids: list[str] = list(dict.fromkeys(arr_target_ids or []))
 
-    def to_dict(self) -> dict[str, str | bool]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
@@ -39,28 +43,37 @@ class PathPair:
             "local_path": self.local_path,
             "enabled": self.enabled,
             "auto_queue": self.auto_queue,
+            "arr_target_ids": list(self.arr_target_ids),
         }
 
     @staticmethod
-    def from_dict(d: dict[str, str | bool]) -> "PathPair":
+    def from_dict(d: dict[str, Any]) -> "PathPair":
         pair_id = d["id"]
         name = d.get("name", "")
         remote_path = d["remote_path"]
         local_path = d["local_path"]
         enabled = d.get("enabled", True)
         auto_queue = d.get("auto_queue", True)
+        arr_target_ids = d.get("arr_target_ids", [])
         if not isinstance(pair_id, str):
-            raise TypeError("id must be a string, got {}".format(type(pair_id).__name__))
+            raise TypeError(f"id must be a string, got {type(pair_id).__name__}")
         if not isinstance(name, str):
-            raise TypeError("name must be a string, got {}".format(type(name).__name__))
+            raise TypeError(f"name must be a string, got {type(name).__name__}")
         if not isinstance(remote_path, str):
-            raise TypeError("remote_path must be a string, got {}".format(type(remote_path).__name__))
+            raise TypeError(f"remote_path must be a string, got {type(remote_path).__name__}")
         if not isinstance(local_path, str):
-            raise TypeError("local_path must be a string, got {}".format(type(local_path).__name__))
+            raise TypeError(f"local_path must be a string, got {type(local_path).__name__}")
         if not isinstance(enabled, bool):
-            raise TypeError("enabled must be a boolean, got {}".format(type(enabled).__name__))
+            raise TypeError(f"enabled must be a boolean, got {type(enabled).__name__}")
         if not isinstance(auto_queue, bool):
-            raise TypeError("auto_queue must be a boolean, got {}".format(type(auto_queue).__name__))
+            raise TypeError(f"auto_queue must be a boolean, got {type(auto_queue).__name__}")
+        if not isinstance(arr_target_ids, list):
+            raise TypeError(f"arr_target_ids must be a list, got {type(arr_target_ids).__name__}")
+        validated_ids: list[str] = []
+        for tid in cast(list[Any], arr_target_ids):
+            if not isinstance(tid, str):
+                raise TypeError(f"arr_target_ids entries must be strings, got {type(tid).__name__}")
+            validated_ids.append(tid)
         return PathPair(
             pair_id=pair_id,
             name=name,
@@ -68,6 +81,7 @@ class PathPair:
             local_path=local_path,
             enabled=enabled,
             auto_queue=auto_queue,
+            arr_target_ids=validated_ids,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -76,7 +90,7 @@ class PathPair:
         return self.to_dict() == other.to_dict()
 
     def __repr__(self) -> str:
-        return "PathPair({})".format(self.to_dict())
+        return f"PathPair({self.to_dict()})"
 
 
 _CURRENT_VERSION = 1
@@ -112,9 +126,9 @@ class PathPairsConfig(Persist):
     def add_pair(self, pair: PathPair):
         with self._lock:
             if any(p.id == pair.id for p in self._pairs):
-                raise ValueError("PathPair with id '{}' already exists".format(pair.id))
+                raise ValueError(f"PathPair with id '{pair.id}' already exists")
             if any(p.name == pair.name for p in self._pairs):
-                raise ValueError("PathPair with name '{}' already exists".format(pair.name))
+                raise ValueError(f"PathPair with name '{pair.name}' already exists")
             self._pairs.append(pair)
 
     def update_pair(self, pair: PathPair):
@@ -122,24 +136,34 @@ class PathPairsConfig(Persist):
             for i, p in enumerate(self._pairs):
                 if p.id == pair.id:
                     if any(other.name == pair.name and other.id != pair.id for other in self._pairs):
-                        raise ValueError("PathPair with name '{}' already exists".format(pair.name))
+                        raise ValueError(f"PathPair with name '{pair.name}' already exists")
                     self._pairs[i] = pair
                     return
-            raise ValueError("PathPair with id '{}' not found".format(pair.id))
+            raise ValueError(f"PathPair with id '{pair.id}' not found")
 
     def remove_pair(self, pair_id: str):
         with self._lock:
             new_pairs = [p for p in self._pairs if p.id != pair_id]
             if len(new_pairs) == len(self._pairs):
-                raise ValueError("PathPair with id '{}' not found".format(pair_id))
+                raise ValueError(f"PathPair with id '{pair_id}' not found")
             self._pairs = new_pairs
+
+    def detach_arr_target(self, instance_id: str) -> int:
+        """Remove `instance_id` from every pair's arr_target_ids. Returns the number of pairs touched."""
+        touched = 0
+        with self._lock:
+            for p in self._pairs:
+                if instance_id in p.arr_target_ids:
+                    p.arr_target_ids = [tid for tid in p.arr_target_ids if tid != instance_id]
+                    touched += 1
+        return touched
 
     @classmethod
     def from_str(cls, content: str) -> "PathPairsConfig":
         try:
             raw: Any = json.loads(content)
         except json.JSONDecodeError as e:
-            raise PersistError("Error parsing PathPairsConfig: {}".format(str(e))) from e
+            raise PersistError(f"Error parsing PathPairsConfig: {e!s}") from e
 
         if not isinstance(raw, dict):
             raise PersistError("Expected JSON object in PathPairsConfig")
@@ -148,12 +172,12 @@ class PathPairsConfig(Persist):
         raw_pairs = data.get("path_pairs", [])
         if not isinstance(raw_pairs, list):
             raise PersistError("Expected 'path_pairs' to be a list")
-        pairs_list = cast(list[dict[str, str | bool]], raw_pairs)
+        pairs_list = cast(list[dict[str, Any]], raw_pairs)
         for pair_dict in pairs_list:
             try:
                 config.add_pair(PathPair.from_dict(pair_dict))
             except (KeyError, TypeError, ValueError) as e:
-                raise PersistError("Malformed path pair entry: {}".format(e)) from e
+                raise PersistError(f"Malformed path pair entry: {e}") from e
         return config
 
     def to_str(self) -> str:

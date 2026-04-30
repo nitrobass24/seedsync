@@ -28,7 +28,7 @@
 
 <div class="path-pairs">
   <div class="header">
-    <span>Path Pairs</span>
+    <h3>Path Pairs</h3>
     @if (!adding) {
       <button class="btn btn-sm btn-add" (click)="onStartAdd()">+ Add</button>
     }
@@ -85,6 +85,34 @@
                        (change)="onToggleAutoQueue(pair, $any($event.target).checked)" />
                 Auto Queue
               </label>
+            </div>
+            <div class="arr-row">
+              <span class="arr-label">Notify:</span>
+              @for (instance of attachedInstances(pair, instances$ | async); track instance.id) {
+                <span class="arr-chip">
+                  {{ instance.name }}
+                  <button type="button" class="chip-remove" aria-label="Detach"
+                          (click)="onDetachInstance(pair, instance.id)">×</button>
+                </span>
+              }
+              @if (availableInstances(pair, instances$ | async).length > 0) {
+                <button type="button" class="chip-add"
+                        (click)="togglePicker(pair.id)">
+                  + Add
+                </button>
+                @if (arrPickerPairId === pair.id) {
+                  <div class="arr-picker">
+                    @for (candidate of availableInstances(pair, instances$ | async); track candidate.id) {
+                      <button type="button" class="arr-picker-item"
+                              (click)="onAttachInstance(pair, candidate)">
+                        {{ candidate.name }}
+                      </button>
+                    }
+                  </div>
+                }
+              } @else if (attachedInstances(pair, instances$ | async).length === 0) {
+                <span class="arr-empty">none — add an integration first</span>
+              }
             </div>
           </div>
           <div class="pair-actions">

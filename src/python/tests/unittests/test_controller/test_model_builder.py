@@ -1777,9 +1777,9 @@ class TestModelBuilder(unittest.TestCase):
     def test_build_state_validating(self):
         """Files with active validate statuses should be in VALIDATING state."""
         r = [SystemFile("a", 100, False)]
-        l = [SystemFile("a", 100, False)]
+        local_files = [SystemFile("a", 100, False)]
         self.model_builder.set_remote_files(r)
-        self.model_builder.set_local_files(l)
+        self.model_builder.set_local_files(local_files)
         self.model_builder.set_validate_statuses(
             [
                 ValidateStatus("a", False, ValidateStatus.State.VALIDATING),
@@ -1872,7 +1872,7 @@ class TestSharedLocalDeduplication(unittest.TestCase):
         aggregate = Model()
         aggregate.set_base_logger(logging.getLogger("test"))
 
-        for builder, lp in zip(builders, local_paths):
+        for builder, lp in zip(builders, local_paths, strict=True):
             norm_path = os.path.normpath(os.path.abspath(lp))
             if norm_path not in seen_names_by_path:
                 seen_names_by_path[norm_path] = set()

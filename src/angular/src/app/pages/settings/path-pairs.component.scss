@@ -11,6 +11,12 @@
     background-color: var(--ss-header-bg);
     border-bottom: 1px solid var(--ss-border);
 
+    h3 {
+      margin: 0;
+      font-size: inherit;
+      font-weight: inherit;
+    }
+
     .btn-add {
       @extend %button;
 
@@ -77,6 +83,89 @@
         margin-top: 4px;
         display: flex;
         gap: 15px;
+      }
+
+      .arr-row {
+        margin-top: 6px;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        font-size: 85%;
+        position: relative;
+
+        .arr-label {
+          font-weight: 500;
+          color: var(--ss-text);
+        }
+
+        .arr-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 1px 8px;
+          background-color: var(--ss-header-bg);
+          border: 1px solid var(--ss-border);
+          border-radius: 12px;
+          font-size: 90%;
+
+          .chip-remove {
+            background: none;
+            border: none;
+            color: var(--ss-text-muted);
+            cursor: pointer;
+            font-size: 110%;
+            line-height: 1;
+            padding: 0 0 0 2px;
+
+            &:hover {
+              color: var(--bs-danger, #dc3545);
+            }
+          }
+        }
+
+        .chip-add {
+          @extend %button;
+
+          padding: 1px 8px;
+          font-size: 85%;
+          border-radius: 12px;
+        }
+
+        .arr-empty {
+          color: var(--ss-text-muted);
+          font-style: italic;
+        }
+
+        .arr-picker {
+          position: absolute;
+          top: calc(100% + 4px);
+          left: 0;
+          z-index: 10;
+          background-color: var(--ss-card-bg, #fff);
+          border: 1px solid var(--ss-border);
+          border-radius: 4px;
+          padding: 4px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 200px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+          .arr-picker-item {
+            background: none;
+            border: none;
+            padding: 4px 8px;
+            text-align: left;
+            cursor: pointer;
+            border-radius: 3px;
+            color: var(--ss-text);
+
+            &:hover {
+              background-color: var(--ss-header-bg);
+            }
+          }
+        }
       }
     }
 
@@ -190,7 +279,6 @@
     .header {
       background-color: #161A21;
       border-color: #252C37;
-      color: #8A93A6;
     }
 
     .pair-form {
@@ -227,6 +315,31 @@
     .btn-delete.confirming {
       background-color: #C0392B;
       border-color: #A93226;
+    }
+
+    .pair-row .pair-info .arr-row {
+      .arr-chip {
+        background-color: #1D222B;
+        border-color: #252C37;
+      }
+
+      .chip-add {
+        background-color: var(--ss-primary);
+      }
+
+      .arr-picker {
+        background-color: #1D222B;
+        border-color: #252C37;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+
+        .arr-picker-item {
+          color: #E6EAF2;
+
+          &:hover {
+            background-color: #161A21;
+          }
+        }
+      }
     }
   }
 }

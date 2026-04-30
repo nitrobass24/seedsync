@@ -5,8 +5,8 @@ import { distinctUntilChanged, map } from 'rxjs';
 
 import { LoggerService } from '../../services/utils/logger.service';
 import { ConfigService } from '../../services/settings/config.service';
-import { IntegrationsService } from '../../services/settings/integrations.service';
 import { NotificationService } from '../../services/utils/notification.service';
+import { NotificationsService, TestResult } from '../../services/settings/notifications.service';
 import { ServerCommandService } from '../../services/server/server-command.service';
 import { ConnectedService } from '../../services/utils/connected.service';
 import { PathPairsService } from '../../services/settings/path-pairs.service';
@@ -16,6 +16,7 @@ import { Config } from '../../models/config';
 import { ClickStopPropagationDirective } from '../../common/click-stop-propagation.directive';
 import { OptionComponent, OptionValue } from './option.component';
 import { PathPairsComponent } from './path-pairs.component';
+import { IntegrationsComponent } from './integrations.component';
 import {
   IOptionsContext,
   OPTIONS_CONTEXT_SERVER,
@@ -29,14 +30,19 @@ import {
   OPTIONS_CONTEXT_ADVANCED_LFTP,
   OPTIONS_CONTEXT_LOGGING,
   OPTIONS_CONTEXT_NOTIFICATIONS,
-  OPTIONS_CONTEXT_INTEGRATIONS_SONARR,
-  OPTIONS_CONTEXT_INTEGRATIONS_RADARR,
 } from './options-list';
 
 @Component({
   selector: 'app-settings-page',
   standalone: true,
-  imports: [AsyncPipe, NgTemplateOutlet, OptionComponent, PathPairsComponent, ClickStopPropagationDirective],
+  imports: [
+    AsyncPipe,
+    NgTemplateOutlet,
+    OptionComponent,
+    PathPairsComponent,
+    IntegrationsComponent,
+    ClickStopPropagationDirective,
+  ],
   templateUrl: './settings-page.component.html',
   styleUrls: ['./settings-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -53,28 +59,26 @@ export class SettingsPageComponent implements OnInit {
   readonly OPTIONS_CONTEXT_ADVANCED_LFTP = OPTIONS_CONTEXT_ADVANCED_LFTP;
   readonly OPTIONS_CONTEXT_LOGGING = OPTIONS_CONTEXT_LOGGING;
   readonly OPTIONS_CONTEXT_NOTIFICATIONS = OPTIONS_CONTEXT_NOTIFICATIONS;
-  readonly OPTIONS_CONTEXT_INTEGRATIONS_SONARR = OPTIONS_CONTEXT_INTEGRATIONS_SONARR;
-  readonly OPTIONS_CONTEXT_INTEGRATIONS_RADARR = OPTIONS_CONTEXT_INTEGRATIONS_RADARR;
 
   advancedLftpCollapsed = true;
-  sonarrTestResult: { success: boolean; message: string } | null = null;
-  radarrTestResult: { success: boolean; message: string } | null = null;
-  sonarrTesting = false;
-  radarrTesting = false;
 
   private readonly logger = inject(LoggerService);
   private readonly configService = inject(ConfigService);
   private readonly notifService = inject(NotificationService);
+  private readonly notificationsService = inject(NotificationsService);
   private readonly commandService = inject(ServerCommandService);
   private readonly connectedService = inject(ConnectedService);
   private readonly pathPairsService = inject(PathPairsService);
-  private readonly integrationsService = inject(IntegrationsService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly destroyRef = inject(DestroyRef);
 
   readonly config$ = this.configService.config$;
 
   commandsEnabled = false;
+  testingDiscord = false;
+  testingTelegram = false;
+  discordResult: TestResult | null = null;
+  telegramResult: TestResult | null = null;
 
   private configRestartNotif: Notification = createNotification(
     NotificationLevel.INFO,
@@ -195,30 +199,6 @@ export class SettingsPageComponent implements OnInit {
     this.advancedLftpCollapsed = !this.advancedLftpCollapsed;
   }
 
-  onTestSonarr(): void {
-    this.sonarrTesting = true;
-    this.sonarrTestResult = null;
-    this.integrationsService.testSonarr().subscribe({
-      next: (result) => {
-        this.sonarrTestResult = result;
-        this.sonarrTesting = false;
-        this.cdr.markForCheck();
-      },
-    });
-  }
-
-  onTestRadarr(): void {
-    this.radarrTesting = true;
-    this.radarrTestResult = null;
-    this.integrationsService.testRadarr().subscribe({
-      next: (result) => {
-        this.radarrTestResult = result;
-        this.radarrTesting = false;
-        this.cdr.markForCheck();
-      },
-    });
-  }
-
   onCommandRestart(): void {
     this.notifService.hide(this.configRestartNotif);
 
@@ -230,6 +210,30 @@ export class SettingsPageComponent implements OnInit {
           this.logger.error(reaction.errorMessage);
         }
       },
+    });
+  }
+
+  onTestDiscord(): void {
+    this.testingDiscord = true;
+    this.discordResult = null;
+    this.notificationsService.testDiscord().pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((result) => {
+      this.testingDiscord = false;
+      this.discordResult = result;
+      this.cdr.markForCheck();
+    });
+  }
+
+  onTestTelegram(): void {
+    this.testingTelegram = true;
+    this.telegramResult = null;
+    this.notificationsService.testTelegram().pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((result) => {
+      this.testingTelegram = false;
+      this.telegramResult = result;
+      this.cdr.markForCheck();
     });
   }
 }

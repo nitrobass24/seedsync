@@ -29,30 +29,40 @@ line-length = 120
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "C4",   # flake8-comprehensions
+    "RET",  # flake8-return
+    "PERF", # perflint
+    "RUF",  # ruff-specific
+    "C",    # mccabe complexity
 ]
 ignore = [
-    "E501",  # line too long — defer to PR 2
-    "E721",  # type comparison — existing pattern uses type() intentionally
-    "E722",  # bare except — one instance in legacy e2e script
-    "E741",  # ambiguous variable name — single-letter vars in context
-    "UP032", # f-string — too much churn for auto-fix PR, defer to PR 2
-    "UP046", # non-pep695-generic-class — requires Python 3.12+ syntax migration
-    "B904",  # raise-without-from — defer to PR 2
-    "B905",  # zip-without-explicit-strict — defer to PR 2
-    "B024",  # abstract-base-class-without-abstract-method — existing pattern
-    "UP031", # printf-string-formatting — defer to PR 2
+    "UP046",  # non-pep695-generic-class — requires Python 3.12+ syntax migration
+    "B024",   # abstract-base-class-without-abstract-method — intentional pattern
+    "SIM102", # collapsible-if — nested ifs are often more readable
+    "SIM108", # if-else-block-instead-of-if-exp — ternaries hurt readability for complex conditions
+    "SIM115", # open-file-with-context-handler — false positives in loops and try/except patterns
+    "RET504", # unnecessary-assign — intermediate variables aid readability
+    "PERF401",# manual-list-comprehension — some loops have conditionals that don't fit comprehensions
+    "RUF012", # mutable-class-default — false positives for constant class-level dicts/lists
+    "RUF003", # ambiguous-unicode-character-comment — intentional unicode in test data and comments
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "I001"]  # re-exports, import order is load-order sensitive
-"tests/**" = ["W291"]  # trailing whitespace in test string literals (lftp output data)
-"scan_fs.py" = ["UP006", "UP035", "UP045"]  # must use typing.List/Optional for Python 3.5 compat on remote
+"tests/**" = ["W291", "SIM117", "RUF059", "C901"]  # trailing whitespace; nested with; structural unpacking; test complexity
+"tests/**/test_job_status_parser.py" = ["E501"]  # long lines are lftp output test data
+"model/file.py" = ["E721"]  # intentional type() comparisons for enum-style state checks
+"scan_fs.py" = ["UP006", "UP032", "UP035", "UP045"]  # must use typing/format() for Python 3.5 compat on remote
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
 
 [tool.ruff.lint.isort]
 known-first-party = ["common", "controller", "model", "lftp", "ssh", "web", "system"]

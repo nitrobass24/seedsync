@@ -10,7 +10,7 @@ class DummySerialize(Serialize):
 
 
 def parse_stream(serialized_str: str):
-    parsed = dict()
+    parsed = {}
     for line in serialized_str.split("\n"):
         if line:
             key, value = line.split(":", maxsplit=1)

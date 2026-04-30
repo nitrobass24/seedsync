@@ -119,8 +119,7 @@ class LogStreamHandler(IStreamHandler):
         record = self.handler.get_next_event()
         if record is not None:
             return self.serialize.record(record)
-        else:
-            return None
+        return None
 
     @overrides(IStreamHandler)
     def cleanup(self):

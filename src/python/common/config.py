@@ -16,10 +16,9 @@ def _strtobool(val: str) -> bool:
     val = val.strip().lower()
     if val in ("y", "yes", "t", "true", "on", "1"):
         return True
-    elif val in ("n", "no", "f", "false", "off", "0"):
+    if val in ("n", "no", "f", "false", "off", "0"):
         return False
-    else:
-        raise ValueError("invalid truth value %r" % (val,))
+    raise ValueError(f"invalid truth value {val!r}")
 
 
 class ConfigError(AppError):
@@ -46,21 +45,21 @@ class Converters:
     @staticmethod
     def int(cls: T, name: str, value: str) -> int:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if not value:
-            raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} is empty")
         try:
             val = int(value)
         except ValueError:
-            raise ConfigError("Bad config: {}.{} ({}) must be an integer value".format(cls.__name__, name, value))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be an integer value") from None
         return val
 
     @staticmethod
     def bool(cls: T, name: str, value: str) -> bool:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if not value:
-            raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} is empty")
         try:
             val = bool(_strtobool(value))
         except ValueError:
-            raise ConfigError("Bad config: {}.{} ({}) must be a boolean value".format(cls.__name__, name, value))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be a boolean value") from None
         return val
 
 
@@ -72,7 +71,7 @@ class Checkers:
     @staticmethod
     def string_nonempty(cls: T, name: str, value: str) -> str:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if not value or not value.strip():
-            raise ConfigError("Bad config: {}.{} is empty".format(cls.__name__, name))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} is empty")
         return value
 
     @staticmethod
@@ -82,13 +81,13 @@ class Checkers:
     @staticmethod
     def int_non_negative(cls: T, name: str, value: int) -> int:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if value < 0:
-            raise ConfigError("Bad config: {}.{} ({}) must be zero or greater".format(cls.__name__, name, value))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be zero or greater")
         return value
 
     @staticmethod
     def int_positive(cls: T, name: str, value: int) -> int:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         if value < 1:
-            raise ConfigError("Bad config: {}.{} ({}) must be greater than 0".format(cls.__name__, name, value))
+            raise ConfigError(f"Bad config: {cls.__name__}.{name} ({value}) must be greater than 0")
         return value
 
     @staticmethod
@@ -174,7 +173,7 @@ class InnerConfig(ABC):
         # noinspection PyCallingNonCallable
         inner_config = cls()
         property_map = {p: getattr(cls, p) for p in dir(cls) if isinstance(getattr(cls, p), property)}
-        for name, _prop in property_map.items():
+        for name in property_map:
             if name in config_dict:
                 value = config_dict[name]
                 # to_str() serializes None as "". When reading back, treat
@@ -203,7 +202,7 @@ class InnerConfig(ABC):
         # Prop map contains all properties of all config classes, so filtering is required
         all_properties = InnerConfig.__prop_addon_map.keys()
         for prop in all_properties:
-            if prop in my_property_to_name_map.keys():
+            if prop in my_property_to_name_map:
                 name = my_property_to_name_map[prop]
                 config_dict[name] = getattr(self, name)
         return config_dict
@@ -371,6 +370,9 @@ class Config(Persist):
         notify_on_extraction_complete = PROP("notify_on_extraction_complete", Checkers.null, Converters.bool)
         notify_on_extraction_failed = PROP("notify_on_extraction_failed", Checkers.null, Converters.bool)
         notify_on_delete_complete = PROP("notify_on_delete_complete", Checkers.null, Converters.bool)
+        discord_webhook_url = PROP("discord_webhook_url", Checkers.string_allow_empty, Converters.null)
+        telegram_bot_token = PROP("telegram_bot_token", Checkers.string_allow_empty, Converters.null)
+        telegram_chat_id = PROP("telegram_chat_id", Checkers.string_allow_empty, Converters.null)
 
         def __init__(self):
             super().__init__()
@@ -379,23 +381,9 @@ class Config(Persist):
             self.notify_on_extraction_complete = True
             self.notify_on_extraction_failed = True
             self.notify_on_delete_complete = True
-
-    class Integrations(IC):
-        sonarr_url = PROP("sonarr_url", Checkers.string_allow_empty, Converters.null)
-        sonarr_api_key = PROP("sonarr_api_key", Checkers.string_allow_empty, Converters.null)
-        sonarr_enabled = PROP("sonarr_enabled", Checkers.null, Converters.bool)
-        radarr_url = PROP("radarr_url", Checkers.string_allow_empty, Converters.null)
-        radarr_api_key = PROP("radarr_api_key", Checkers.string_allow_empty, Converters.null)
-        radarr_enabled = PROP("radarr_enabled", Checkers.null, Converters.bool)
-
-        def __init__(self):
-            super().__init__()
-            self.sonarr_url = ""
-            self.sonarr_api_key = ""
-            self.sonarr_enabled = False
-            self.radarr_url = ""
-            self.radarr_api_key = ""
-            self.radarr_enabled = False
+            self.discord_webhook_url = ""
+            self.telegram_bot_token = ""
+            self.telegram_chat_id = ""
 
     class Validate(IC):
         enabled = PROP("enabled", Checkers.null, Converters.bool)
@@ -418,13 +406,12 @@ class Config(Persist):
         self.autoqueue = Config.AutoQueue()
         self.logging = Config.Logging()
         self.notifications = Config.Notifications()
-        self.integrations = Config.Integrations()
         self.validate = Config.Validate()
 
     @staticmethod
     def _check_section(dct: OuterConfigType, name: str) -> InnerConfigType:
         if name not in dct:
-            raise ConfigError("Missing config section: {}".format(name))
+            raise ConfigError(f"Missing config section: {name}")
         val = dct[name]
         del dct[name]
         return val
@@ -441,7 +428,7 @@ class Config(Persist):
         try:
             config_parser.read_string(content)
         except (configparser.MissingSectionHeaderError, configparser.ParsingError) as e:
-            raise PersistError("Error parsing Config - {}: {}".format(type(e).__name__, str(e)))
+            raise PersistError(f"Error parsing Config - {type(e).__name__}: {e!s}") from e
         config_dict: OuterConfigType = {}
         for section in config_parser.sections():
             config_dict[section] = {}
@@ -475,7 +462,10 @@ class Config(Persist):
         config.autoqueue = Config.AutoQueue.from_dict(config_dict.pop("AutoQueue", {}))
         config.logging = Config.Logging.from_dict(config_dict.pop("Logging", {}))
         config.notifications = Config.Notifications.from_dict(config_dict.pop("Notifications", {}))
-        config.integrations = Config.Integrations.from_dict(config_dict.pop("Integrations", {}))
+        # The legacy [Integrations] section is migrated to integrations.json on
+        # startup (see Seedsync._load_integrations_config). Drop it here so
+        # subsequent persists rewrite settings.cfg without the section.
+        config_dict.pop("Integrations", None)
         config.validate = Config.Validate.from_dict(config_dict.pop("Validate", {}))
 
         Config._check_empty_outer_dict(config_dict)
@@ -492,7 +482,6 @@ class Config(Persist):
         config_dict["AutoQueue"] = self.autoqueue.as_dict()
         config_dict["Logging"] = self.logging.as_dict()
         config_dict["Notifications"] = self.notifications.as_dict()
-        config_dict["Integrations"] = self.integrations.as_dict()
         config_dict["Validate"] = self.validate.as_dict()
         return config_dict
 
@@ -509,7 +498,7 @@ class Config(Persist):
         return {
             "Lftp": {"remote_password"},
             "Web": {"api_key"},
-            "Integrations": {"sonarr_api_key", "radarr_api_key"},
+            "Notifications": {"webhook_url", "discord_webhook_url", "telegram_bot_token"},
         }
 
     @staticmethod
@@ -521,10 +510,7 @@ class Config(Persist):
         """
         sensitive = Config.sensitive_property_names()
         section_lower = section_name.lower()
-        for key, options in sensitive.items():
-            if key.lower() == section_lower and option_name in options:
-                return True
-        return False
+        return any(key.lower() == section_lower and option_name in options for key, options in sensitive.items())
 
     def has_section(self, name: str) -> bool:
         """

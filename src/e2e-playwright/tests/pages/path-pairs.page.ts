@@ -2,15 +2,22 @@ import { type Page, type Locator } from "@playwright/test";
 
 export class PathPairsPage {
   readonly page: Page;
-  readonly addButton: Locator;
   readonly pairsList: Locator;
+  readonly addButton: Locator;
   readonly emptyMessage: Locator;
+  readonly pairForm: Locator;
+  readonly errorMessage: Locator;
 
   constructor(page: Page) {
     this.page = page;
-    this.addButton = page.locator("button.btn-add");
+    // All selectors are scoped under .path-pairs to avoid colliding with the
+    // sibling .integrations card, which reuses class names like .empty-state,
+    // .btn-add, .btn-save, .btn-cancel, and .error-message.
     this.pairsList = page.locator(".path-pairs");
-    this.emptyMessage = page.locator(".empty-state");
+    this.addButton = this.pairsList.locator("button.btn-add");
+    this.emptyMessage = this.pairsList.locator(".empty-state");
+    this.pairForm = this.pairsList.locator(".pair-form");
+    this.errorMessage = this.pairsList.locator(".error-message");
   }
 
   async goto() {
@@ -37,7 +44,7 @@ export class PathPairsPage {
     remotePath?: string;
     localPath?: string;
   }) {
-    const form = this.page.locator(".pair-form");
+    const form = this.pairForm;
     if (fields.name !== undefined) {
       const nameInput = form.locator('label:has-text("Name") input');
       await nameInput.fill(fields.name);
@@ -53,15 +60,15 @@ export class PathPairsPage {
   }
 
   async clickSave() {
-    await this.page.locator("button.btn-save").click();
+    await this.pairForm.locator("button.btn-save").click();
   }
 
   async clickCancel() {
-    await this.page.locator("button.btn-cancel").click();
+    await this.pairForm.locator("button.btn-cancel").click();
   }
 
   getErrorMessage() {
-    return this.page.locator(".error-message");
+    return this.errorMessage;
   }
 
   getDeleteButton(pairRow: Locator) {

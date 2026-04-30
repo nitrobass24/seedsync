@@ -40,7 +40,7 @@ class Sshcp:
     def _remote_address(self) -> str:
         """Return 'user@host' when user is set, or just 'host' when None."""
         if self.__user is not None:
-            return "{}@{}".format(self.__user, self.__host)
+            return f"{self.__user}@{self.__host}"
         return self.__host
 
     def set_base_logger(self, base_logger: logging.Logger):
@@ -85,7 +85,7 @@ class Sshcp:
                 self.__detected_shell = "/bin/sh"
 
             self.__shell_detected = True
-            self.logger.info("Detected remote shell: {}".format(self.__detected_shell))
+            self.logger.info(f"Detected remote shell: {self.__detected_shell}")
             return self.__detected_shell
 
         except SshcpError as e:
@@ -103,17 +103,16 @@ class Sshcp:
                 shells_str = ", ".join(available_shells)
                 raise SshcpError(
                     "Remote user's login shell not found. "
-                    "Available shells on the remote server: {}. "
+                    f"Available shells on the remote server: {shells_str}. "
                     "Fix by running on the remote server: "
-                    "sudo chsh -s {} {}".format(shells_str, available_shells[0], self.__user)
-                )
-            else:
-                raise SshcpError(
-                    "Remote user's login shell not found and no common shells "
-                    "could be detected. Fix by running on the remote server: "
-                    "sudo chsh -s /bin/sh {} OR "
-                    "sudo ln -s /usr/bin/bash /bin/bash".format(self.__user)
-                )
+                    f"sudo chsh -s {available_shells[0]} {self.__user}"
+                ) from e
+            raise SshcpError(
+                "Remote user's login shell not found and no common shells "
+                "could be detected. Fix by running on the remote server: "
+                f"sudo chsh -s /bin/sh {self.__user} OR "
+                "sudo ln -s /usr/bin/bash /bin/bash"
+            ) from e
 
     def _run_shell_command(self, command: str) -> bytes:
         """
@@ -122,9 +121,9 @@ class Sshcp:
         """
         # Quote the command
         if '"' in command:
-            quoted = "'{}'".format(command)
+            quoted = f"'{command}'"
         else:
-            quoted = '"{}"'.format(command)
+            quoted = f'"{command}"'
 
         flags = [
             "-p",
@@ -188,7 +187,7 @@ class Sshcp:
         command_args += args
 
         command = " ".join(command_args)
-        self.logger.debug("SFTP stat command: {}".format(command))
+        self.logger.debug(f"SFTP stat command: {command}")
 
         # Suppress DeprecationWarning from pexpect.spawn's internal forkpty call.
         # Scoped here so it doesn't affect the parent process.
@@ -223,7 +222,7 @@ class Sshcp:
                 raise SshcpError("SFTP connection failed")
 
             # Send ls command to check if file exists
-            sp.sendline("ls {}".format(remote_path))
+            sp.sendline(f"ls {remote_path}")
             i = sp.expect(
                 [
                     "sftp>",
@@ -238,50 +237,41 @@ class Sshcp:
             sp.close()
 
             if "No such file" in output or "not found" in output or "Can't ls" in output:
-                raise SshcpError("File not found: {}".format(remote_path))
+                raise SshcpError(f"File not found: {remote_path}")
 
         except pexpect.exceptions.TIMEOUT:
             sp.close()
-            raise SshcpError("SFTP timed out")
+            raise SshcpError("SFTP timed out") from None
 
     def __run_command(self, command: str, flags: str, args: str) -> bytes:
-
         command_args = [command, flags]
 
         # Common flags
         command_args += [
             "-o",
-            "StrictHostKeyChecking=no",  # ignore host key changes
+            "StrictHostKeyChecking=no",
             "-o",
-            "UserKnownHostsFile=/dev/null",  # ignore known hosts file
+            "UserKnownHostsFile=/dev/null",
             "-o",
-            "LogLevel=error",  # suppress warnings
+            "LogLevel=error",
             "-o",
-            "ConnectTimeout=30",  # cap connection establishment to 30s
+            "ConnectTimeout=30",
             "-o",
-            "ServerAliveInterval=15",  # send keepalive every 15s
+            "ServerAliveInterval=15",
             "-o",
-            "ServerAliveCountMax=3",  # drop after 3 missed keepalives
+            "ServerAliveCountMax=3",
         ]
 
         if self.__password is None:
-            command_args += [
-                "-o",
-                "PasswordAuthentication=no",  # don't ask for password
-            ]
+            command_args += ["-o", "PasswordAuthentication=no"]
         else:
-            command_args += [
-                "-o",
-                "PubkeyAuthentication=no",  # don't use key authentication
-            ]
+            command_args += ["-o", "PubkeyAuthentication=no"]
 
         command_args.append(args)
-
         command = " ".join(command_args)
-        self.logger.debug("Command: {}".format(command))
+        self.logger.debug(f"Command: {command}")
 
         start_time = time.time()
-        # Suppress DeprecationWarning from pexpect.spawn's internal forkpty call.
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message=".*fork.*", category=DeprecationWarning)
             sp = pexpect.spawn(command)
@@ -289,63 +279,22 @@ class Sshcp:
             if self.__password is not None:
                 i = sp.expect(
                     [
-                        "password: ",  # i=0, all's good
-                        pexpect.EOF,  # i=1, unknown error
-                        "lost connection",  # i=2, connection refused
-                        "Could not resolve hostname",  # i=3, bad hostname
-                        "Connection refused",  # i=4, connection refused
+                        "password: ",
+                        pexpect.EOF,
+                        "lost connection",
+                        "Could not resolve hostname",
+                        "Connection refused",
                     ]
                 )
-                if i > 0:
-                    before_val = sp.before
-                    after_val = sp.after
-                    before = before_val.decode(errors="replace").strip() if isinstance(before_val, bytes) else ""
-                    after = after_val.decode(errors="replace").strip() if isinstance(after_val, bytes) else ""
-                    self.logger.warning("Command failed: '{} - {}'".format(before, after))
-                if i == 1:
-                    error_msg = "Unknown error"
-                    before_val = sp.before
-                    if isinstance(before_val, bytes) and before_val.decode(errors="replace").strip():
-                        error_msg += " - " + before_val.decode(errors="replace").strip()
-                    raise SshcpError(error_msg)
-                elif i == 3:
-                    raise SshcpError("Bad hostname: {}".format(self.__host))
-                elif i in {2, 4}:
-                    error_msg = "Connection refused by server"
-                    before_val = sp.before
-                    if isinstance(before_val, bytes) and before_val.decode(errors="replace").strip():
-                        error_msg += " - " + before_val.decode(errors="replace").strip()
-                    raise SshcpError(error_msg)
+                self._classify_expect_result(sp, i, eof_error="Unknown error", password_error=None)
                 sp.sendline(self.__password)
 
             i = sp.expect(
-                [
-                    pexpect.EOF,  # i=0, all's good
-                    "password: ",  # i=1, wrong password
-                    "lost connection",  # i=2, connection refused
-                    "Could not resolve hostname",  # i=3, bad hostname
-                    "Connection refused",  # i=4, connection refused
-                ],
+                [pexpect.EOF, "password: ", "lost connection", "Could not resolve hostname", "Connection refused"],
                 timeout=self.__TIMEOUT_SECS,
             )
-            if i > 0:
-                before_val = sp.before
-                after_val = sp.after
-                before = before_val.decode(errors="replace").strip() if isinstance(before_val, bytes) else ""
-                after = after_val.decode(errors="replace").strip() if isinstance(after_val, bytes) else ""
-                self.logger.warning("Command failed: '{} - {}'".format(before, after))
-            if i == 1:
-                raise SshcpError("Incorrect password")
-            elif i == 3:
-                raise SshcpError("Bad hostname: {}".format(self.__host))
-            elif i in {2, 4}:
-                error_msg = "Connection refused by server"
-                before_val = sp.before
-                if isinstance(before_val, bytes) and before_val.decode(errors="replace").strip():
-                    error_msg += " - " + before_val.decode(errors="replace").strip()
-                raise SshcpError(error_msg)
+            self._classify_expect_result(sp, i, eof_error=None, password_error="Incorrect password")
 
-            # Capture output attributes while sp is still open (close can clear them)
             before_val = sp.before
             after_val = sp.after
             out_before = before_val.decode(errors="replace").strip() if isinstance(before_val, bytes) else ""
@@ -355,37 +304,77 @@ class Sshcp:
 
         except pexpect.exceptions.TIMEOUT:
             elapsed = time.time() - start_time
-            self.logger.error(
-                "Timed out after {:.0f}s (limit: {}s). Command: {}".format(elapsed, self.__TIMEOUT_SECS, command)
-            )
-            self.logger.error("Command output before timeout: {}".format(sp.before if sp.before else b"(none)"))
-            raise SshcpError("Timed out after {:.0f}s".format(elapsed))
+            self.logger.error(f"Timed out after {elapsed:.0f}s (limit: {self.__TIMEOUT_SECS}s). Command: {command}")
+            self.logger.error(f"Command output before timeout: {sp.before if sp.before else b'(none)'}")
+            raise SshcpError(f"Timed out after {elapsed:.0f}s") from None
         finally:
             sp.close()
 
-        # exitstatus is only valid after close() reaps the child process
         exit_status = sp.exitstatus
-
         end_time = time.time()
 
-        self.logger.debug("Return code: {}".format(exit_status))
-        self.logger.debug("Command took {:.3f}s".format(end_time - start_time))
+        self.logger.debug(f"Return code: {exit_status}")
+        self.logger.debug(f"Command took {end_time - start_time:.3f}s")
         if exit_status != 0:
-            self.logger.warning("Command failed: '{} - {}'".format(out_before, out_after))
-
-            # Check for shell not found error (common on servers where bash is at /usr/bin/bash)
-            if "No such file or directory" in out_before:
-                for shell in self.SHELL_CANDIDATES:
-                    if shell in out_before:
-                        raise SshcpError(
-                            "Remote user's login shell not found: {}. "
-                            "Run detect_shell() or fix by running on the remote server: "
-                            "sudo chsh -s /bin/sh {}".format(shell, self.__user)
-                        )
-
+            self.logger.warning(f"Command failed: '{out_before} - {out_after}'")
+            self._check_shell_not_found(out_before)
             raise SshcpError(out_before)
 
         return out_raw
+
+    def _classify_expect_result(
+        self, sp: pexpect.spawn, i: int, eof_error: str | None, password_error: str | None
+    ) -> None:
+        """Classify the result of a pexpect expect() call and raise on error.
+
+        Args:
+            sp: The pexpect spawn instance.
+            i: The index returned by expect().
+               0 = success (password prompt or EOF depending on phase).
+               1 = EOF/password prompt (error).
+               2 = lost connection.
+               3 = bad hostname.
+               4 = connection refused.
+            eof_error: Error message for i=1 (EOF in phase 1, password in phase 2).
+                       None means i=0 is the success case.
+            password_error: Error message for i=1 when it's a password prompt.
+        """
+        if i == 0:
+            return
+        # Log the failure
+        before_val = sp.before
+        after_val = sp.after
+        before = before_val.decode(errors="replace").strip() if isinstance(before_val, bytes) else ""
+        after = after_val.decode(errors="replace").strip() if isinstance(after_val, bytes) else ""
+        self.logger.warning(f"Command failed: '{before} - {after}'")
+
+        if i == 1:
+            if eof_error is not None:
+                msg = eof_error
+                if before:
+                    msg += " - " + before
+                raise SshcpError(msg)
+            if password_error is not None:
+                raise SshcpError(password_error)
+        if i == 3:
+            raise SshcpError(f"Bad hostname: {self.__host}")
+        if i in {2, 4}:
+            msg = "Connection refused by server"
+            if before:
+                msg += " - " + before
+            raise SshcpError(msg)
+
+    def _check_shell_not_found(self, output: str) -> None:
+        """Check if a command failure is due to a missing login shell."""
+        if "No such file or directory" not in output:
+            return
+        for shell in self.SHELL_CANDIDATES:
+            if shell in output:
+                raise SshcpError(
+                    f"Remote user's login shell not found: {shell}. "
+                    "Run detect_shell() or fix by running on the remote server: "
+                    f"sudo chsh -s /bin/sh {self.__user}"
+                )
 
     def shell(self, command: str) -> bytes:
         """
@@ -406,10 +395,10 @@ class Sshcp:
             command = "'" + command.replace("'", "'\"'\"'") + "'"
         elif '"' in command:
             # double quote in command, cover with single quotes
-            command = "'{}'".format(command)
+            command = f"'{command}'"
         else:
             # no quotes in command, cover with double quotes
-            command = '"{}"'.format(command)
+            command = f'"{command}"'
 
         flags = [
             "-p",
@@ -435,5 +424,5 @@ class Sshcp:
             "-P",
             str(self.__port),  # port
         ]
-        args = [local_path, "{}:{}".format(self._remote_address(), remote_path)]
+        args = [local_path, f"{self._remote_address()}:{remote_path}"]
         self.__run_command(command="scp", flags=" ".join(flags), args=" ".join(args))

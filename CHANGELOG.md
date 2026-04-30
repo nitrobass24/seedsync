@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.17.0] - 2026-04-30
+
+### Added
+
+- **Multi-instance Sonarr/Radarr integration** — Replace single Sonarr/Radarr config with named instances stored in `integrations.json`; each path pair can be mapped to specific *arr instances via `arr_target_ids`; full CRUD REST API and chip-picker UI for attaching/detaching instances (#425, #426)
+- **Discord notification preset** — Configure a Discord webhook URL in Settings to receive rich embed notifications with color-coded event types (download complete, extraction complete/failed, delete complete); includes Test button (#329, #428)
+- **Telegram notification preset** — Configure a Telegram bot token and chat ID in Settings to receive Markdown-formatted notifications; includes Test button (#329, #428)
+- **Cross-validation for arr_target_ids** — Path pair create/update rejects unknown integration instance IDs with a 400 response (#426)
+
+### Changed
+
+- **Notification architecture** — Refactored `WebhookNotifier` with extracted `_resolve_event_type` and generic `_fire_raw` dispatch; Discord and Telegram formatters are pure functions in `notification_formatters.py` (#428)
+- **Controller decomposition** — Decomposed `step()`, `_update_pair_model_state()`, and `update()` into focused methods, reducing cyclomatic complexity below C901 threshold (#419, #420)
+- **Settings UI consistency** — Integrations and Path Pairs headers use matching `.header` pattern; dark mode card headers use consistent light text color (#429, #430, #431)
+- **Semantic headings** — Integrations and Path Pairs section titles now use `<h3>` for screen-reader heading navigation (#430)
+- **Dependency updates** — Angular group (10 updates), vitest 4.1.4→4.1.5, typescript-eslint 8.56.1→8.59.0, postcss 8.5.6→8.5.12 (#421, #422, #423, #424)
+
+### Fixed
+
+- **Corrupt integrations.json recovery** — Corrupt file now returns empty config instead of re-running migration with new UUIDs, which could overwrite user customizations (#426)
+- **Refresh preserves instances on error** — `IntegrationsService.refresh()` preserves the existing instance list on HTTP error instead of replacing with empty (#426)
+- **Toggle enabled error handling** — `onToggleEnabled()` now shows an error message and refreshes on failure instead of silently leaving the UI out of sync (#426)
+- **Arr-picker dark mode** — Fixed white dropdown background in dark mode caused by CSS specificity mismatch (#430)
+- **Telegram Markdown safety** — Backticks in filenames are escaped to prevent breaking inline code spans (#428)
+- **Webhook URL redaction** — `webhook_url` added to `sensitive_property_names()` for API response redaction (#428)
+- **Thread leak on start failure** — `_fire_raw` now cleans up `_active_threads` if `thread.start()` raises `RuntimeError` (#428)
+
+### Security
+
+- **Credential redaction** — Discord webhook URLs and Telegram bot tokens are redacted in API responses via `sensitive_property_names()` (#428)
+- **URL scheme validation** — Notification test endpoints reject non-http(s) URLs before attempting the request (#428)
+- **Button type safety** — All integrations component buttons have explicit `type="button"` to prevent unintended form submission (#426)
+
 ## [0.16.0] - 2026-04-22
 
 ### Added
@@ -37,11 +70,13 @@
 
 - **Bulk delete crash** — Fixed unbounded process spawning that caused crashes during bulk delete; scoped concurrency cap to delete operations and added move retry on failure (#338, #341)
 - **Infinite busy-loop in command process throttling** — Fixed CPU spin in the controller process throttle logic
+- **Mobile viewport height** — File list viewport no longer wastes 40px on small screens where the header row is hidden
+- **Bulk action error resilience** — A single failed action no longer aborts the entire bulk operation pipeline
 
 ### Changed
 
-- **Dependency updates** — Angular group bump (9 packages), hono 4.12.7→4.12.12, @hono/node-server bump, jsdom 29.0.1→29.0.2, vitest 4.1.2→4.1.3, lodash 4.17.23→4.18.1, all deps to latest compatible versions (#326, #333, #336, #337, #343, #344, #345)
-- **Documentation** — Moved recommended hard-link workflow from FAQ to a dedicated Usage section with getting-started link on the homepage; fixed hyphenation of "hard-linked" (#340)
+- **Dependency updates** — Angular group bump (9 packages), hono, @hono/node-server, jsdom, vitest, lodash (#326, #333, #336, #337, #343, #344, #345)
+- **Documentation** — Moved recommended hard-link workflow from FAQ to a dedicated Usage section; fixed UI label consistency (#340)
 
 ## [0.14.4] - 2026-03-30
 

@@ -66,10 +66,10 @@ class RemoteScanner(IScanner):
             data = json.loads(out)
             remote_files = [SystemFile.from_dict(d) for d in data]
         except (json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError) as err:
-            self.logger.error("JSON parse error: {}\n{}".format(str(err), out[:500]))
+            self.logger.error(f"JSON parse error: {err!s}\n{out[:500]}")
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"), recoverable=False
-            )
+            ) from err
 
         self.__first_run = False
         return remote_files
@@ -84,54 +84,52 @@ class RemoteScanner(IScanner):
                 # Use consistent quoting: double quotes if scan path has tilde
                 # (for $HOME expansion), single quotes otherwise
                 if self.__remote_path_to_scan.startswith("~"):
-                    return self.__ssh.shell(
-                        "{} {} {}".format(
-                            _escape_remote_path_double(self.__remote_python_cmd),
-                            _escape_remote_path_double(self.__remote_path_to_scan_script),
-                            _escape_remote_path_double(self.__remote_path_to_scan),
-                        )
+                    cmd = (
+                        f"{_escape_remote_path_double(self.__remote_python_cmd)} "
+                        f"{_escape_remote_path_double(self.__remote_path_to_scan_script)} "
+                        f"{_escape_remote_path_double(self.__remote_path_to_scan)}"
                     )
-                else:
-                    return self.__ssh.shell(
-                        "{} {} {}".format(
-                            _escape_remote_path_single(self.__remote_python_cmd),
-                            _escape_remote_path_single(self.__remote_path_to_scan_script),
-                            _escape_remote_path_single(self.__remote_path_to_scan),
-                        )
-                    )
+                    return self.__ssh.shell(cmd)
+                cmd = (
+                    f"{_escape_remote_path_single(self.__remote_python_cmd)} "
+                    f"{_escape_remote_path_single(self.__remote_path_to_scan_script)} "
+                    f"{_escape_remote_path_single(self.__remote_path_to_scan)}"
+                )
+                return self.__ssh.shell(cmd)
             except SshcpError as e:
                 last_error = e
                 error_str = str(e)
-                self.logger.warning("Scan attempt {}/{} failed: {}".format(attempt, self._SCAN_MAX_RETRIES, error_str))
+                self.logger.warning(f"Scan attempt {attempt}/{self._SCAN_MAX_RETRIES} failed: {error_str}")
 
                 # Non-recoverable errors: don't retry
                 if "Is a directory" in error_str:
                     raise ScannerError(
-                        "Server Script Path '{}' is a directory on the remote server. "
+                        f"Server Script Path '{self.__remote_path_to_scan_script}' "
+                        "is a directory on the remote server. "
                         "Change the 'Server Script Path' setting to a writable location "
                         "outside your sync tree (e.g. '~' or '~/.local') and remove the "
-                        "conflicting directory from the remote server.".format(self.__remote_path_to_scan_script),
+                        "conflicting directory from the remote server.",
                         recoverable=False,
-                    )
+                    ) from e
 
                 if "SystemScannerError" in error_str:
                     raise ScannerError(
                         Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()), recoverable=False
-                    )
+                    ) from e
 
                 # Config errors on first run are non-recoverable
                 if self.__first_run and not self._is_transient_error(error_str):
                     raise ScannerError(
                         Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()), recoverable=False
-                    )
+                    ) from e
 
                 # Retry transient errors
                 if attempt < self._SCAN_MAX_RETRIES:
-                    self.logger.info("Retrying in {}s...".format(self._SCAN_RETRY_DELAY_SECS))
+                    self.logger.info(f"Retrying in {self._SCAN_RETRY_DELAY_SECS}s...")
                     time.sleep(self._SCAN_RETRY_DELAY_SECS)
 
         # All retries exhausted
-        self.logger.error("All {} scan attempts failed".format(self._SCAN_MAX_RETRIES))
+        self.logger.error(f"All {self._SCAN_MAX_RETRIES} scan attempts failed")
         raise ScannerError(Localization.Error.REMOTE_SERVER_SCAN.format(str(last_error).strip()), recoverable=True)
 
     @staticmethod
@@ -148,7 +146,9 @@ class RemoteScanner(IScanner):
         except SshcpError as e:
             self.logger.exception("Shell detection failed")
             recoverable = self._is_transient_error(str(e))
-            raise ScannerError(Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable)
+            raise ScannerError(
+                Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
+            ) from e
 
         # Resolve tilde in the script path to an absolute path.
         # SCP expands ~ natively, but the path is shell-quoted for md5sum
@@ -160,22 +160,18 @@ class RemoteScanner(IScanner):
                 home = self.__ssh.shell("echo ~").decode().strip()
                 if home and not home.startswith("~"):
                     expanded = home + self.__remote_path_to_scan_script[1:]
-                    self.logger.debug(
-                        "Resolved script path '{}' -> '{}'".format(self.__remote_path_to_scan_script, expanded)
-                    )
+                    self.logger.debug(f"Resolved script path '{self.__remote_path_to_scan_script}' -> '{expanded}'")
                     self.__remote_path_to_scan_script = expanded
             except SshcpError as e:
-                self.logger.warning("Could not resolve tilde in script path: {}".format(str(e)))
+                self.logger.warning(f"Could not resolve tilde in script path: {e!s}")
 
         # Check md5sum on remote to see if we can skip installation
         with open(self.__local_path_to_scan_script, "rb") as f:
             local_md5sum = hashlib.md5(f.read()).hexdigest()
-        self.logger.debug("Local scanfs md5sum = {}".format(local_md5sum))
+        self.logger.debug(f"Local scanfs md5sum = {local_md5sum}")
         try:
             out = self.__ssh.shell(
-                "md5sum {} | awk '{{print $1}}' || echo".format(
-                    _escape_remote_path_single(self.__remote_path_to_scan_script)
-                )
+                f"md5sum {_escape_remote_path_single(self.__remote_path_to_scan_script)} | awk '{{print $1}}' || echo"
             )
             out = out.decode().strip()
             if out == local_md5sum:
@@ -184,7 +180,9 @@ class RemoteScanner(IScanner):
         except SshcpError as e:
             self.logger.exception("Caught SSH exception during md5sum check")
             recoverable = self._is_transient_error(str(e))
-            raise ScannerError(Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable)
+            raise ScannerError(
+                Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
+            ) from e
 
         # Guard: if the target path is already a directory on the remote, the
         # copy would succeed (scp deposits the file inside the dir) but
@@ -192,35 +190,32 @@ class RemoteScanner(IScanner):
         try:
             result = (
                 self.__ssh.shell(
-                    "[ -d {} ] && echo IS_DIRECTORY || echo OK".format(
-                        _escape_remote_path_single(self.__remote_path_to_scan_script)
-                    )
+                    f"[ -d {_escape_remote_path_single(self.__remote_path_to_scan_script)} ] "
+                    "&& echo IS_DIRECTORY || echo OK"
                 )
                 .decode()
                 .strip()
             )
             if result == "IS_DIRECTORY":
                 raise ScannerError(
-                    "Server Script Path '{}' is a directory on the remote server. "
+                    f"Server Script Path '{self.__remote_path_to_scan_script}' is a directory on the remote server. "
                     "This usually means it overlaps with your sync directory. "
                     "Change the 'Server Script Path' setting to a writable location "
                     "outside your sync tree (e.g. '~' or '~/.local') and remove the "
-                    "conflicting directory from the remote server.".format(self.__remote_path_to_scan_script),
+                    "conflicting directory from the remote server.",
                     recoverable=False,
                 )
         except SshcpError as e:
-            self.logger.warning("Could not check remote path type: {}".format(str(e)))
+            self.logger.warning(f"Could not check remote path type: {e!s}")
 
         # Go ahead and install
         self.logger.info(
-            "Installing local:{} to remote:{}".format(
-                self.__local_path_to_scan_script, self.__remote_path_to_scan_script
-            )
+            f"Installing local:{self.__local_path_to_scan_script} to remote:{self.__remote_path_to_scan_script}"
         )
         if not os.path.isfile(self.__local_path_to_scan_script):
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_SCAN.format(
-                    "Failed to find scan script at {}".format(self.__local_path_to_scan_script)
+                    f"Failed to find scan script at {self.__local_path_to_scan_script}"
                 ),
                 recoverable=False,
             )
@@ -234,7 +229,7 @@ class RemoteScanner(IScanner):
                 recoverable = self._is_transient_error(str(e))
                 raise ScannerError(
                     Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
-                )
+                ) from e
 
     def _install_scanfs_with_home_fallback(self, original_error: str):
         """
@@ -255,9 +250,8 @@ class RemoteScanner(IScanner):
             pass
 
         self.logger.warning(
-            "Script path '{}' is not writable (Permission denied). Retrying with home directory: '{}'".format(
-                self.__remote_path_to_scan_script, fallback_path
-            )
+            f"Script path '{self.__remote_path_to_scan_script}' is not writable (Permission denied). "
+            f"Retrying with home directory: '{fallback_path}'"
         )
         self.logger.warning("Update 'Server Script Path' in Settings to '~' to avoid this fallback on restart.")
 
@@ -265,36 +259,31 @@ class RemoteScanner(IScanner):
         # the script inside it and execution would fail with "Is a directory".
         try:
             result = (
-                self.__ssh.shell(
-                    "[ -d {} ] && echo IS_DIRECTORY || echo OK".format(_escape_remote_path_single(fallback_path))
-                )
+                self.__ssh.shell(f"[ -d {_escape_remote_path_single(fallback_path)} ] && echo IS_DIRECTORY || echo OK")
                 .decode()
                 .strip()
             )
             if result == "IS_DIRECTORY":
                 raise ScannerError(
-                    "Fallback script path '{}' is already a directory on the remote server. "
+                    f"Fallback script path '{fallback_path}' is already a directory on the remote server. "
                     "Remove it and update 'Server Script Path' in Settings to a writable "
                     "location (e.g. '~' or '~/.local'). "
-                    "Original error: {}".format(fallback_path, original_error.strip()),
+                    f"Original error: {original_error.strip()}",
                     recoverable=False,
                 )
         except SshcpError as e:
-            self.logger.warning("Could not check fallback path type: {}".format(str(e)))
+            self.logger.warning(f"Could not check fallback path type: {e!s}")
 
         try:
             self.__ssh.copy(local_path=self.__local_path_to_scan_script, remote_path=fallback_path)
             self.__remote_path_to_scan_script = fallback_path
-            self.logger.info("Scanner installed to fallback path: {}".format(fallback_path))
+            self.logger.info(f"Scanner installed to fallback path: {fallback_path}")
         except SshcpError as fallback_e:
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(
-                    "Could not install scanner to '{}' ({}), fallback to '{}' also failed: {}".format(
-                        self.__remote_path_to_scan_script,
-                        original_error.strip(),
-                        fallback_path,
-                        str(fallback_e).strip(),
-                    )
+                    f"Could not install scanner to '{self.__remote_path_to_scan_script}' "
+                    f"({original_error.strip()}), fallback to '{fallback_path}' "
+                    f"also failed: {str(fallback_e).strip()}"
                 ),
                 recoverable=False,
-            )
+            ) from fallback_e

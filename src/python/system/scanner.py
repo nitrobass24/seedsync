@@ -80,9 +80,9 @@ class SystemScanner:
         :return:
         """
         if not os.path.exists(self.path_to_scan):
-            raise SystemScannerError("Path does not exist: {}".format(self.path_to_scan))
-        elif not os.path.isdir(self.path_to_scan):
-            raise SystemScannerError("Path is not a directory: {}".format(self.path_to_scan))
+            raise SystemScannerError(f"Path does not exist: {self.path_to_scan}")
+        if not os.path.isdir(self.path_to_scan):
+            raise SystemScannerError(f"Path is not a directory: {self.path_to_scan}")
         return self.__create_children(self.path_to_scan)
 
     def scan_single(self, name: str) -> SystemFile:
@@ -101,7 +101,7 @@ class SystemScanner:
             # There's a temp file, use that
             path = temp_path
         else:
-            raise SystemScannerError("Path does not exist: {}".format(path))
+            raise SystemScannerError(f"Path does not exist: {path}")
 
         return self.__create_system_file(
             PseudoDirEntry(name=name, path=path, is_dir=os.path.isdir(path), stat=os.stat(path))

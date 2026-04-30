@@ -33,9 +33,9 @@ class TestLogsHandler(BaseTestWebApp):
         self.web_app_builder.logs_handler._logdir = self.tmp_dir
 
     def _log_path(self, suffix: str = "") -> str:
-        name = "{}.log".format(Constants.SERVICE_NAME)
+        name = f"{Constants.SERVICE_NAME}.log"
         if suffix:
-            name = "{}.{}".format(name, suffix)
+            name = f"{name}.{suffix}"
         return os.path.join(self.tmp_dir, name)
 
     # ---- correctness tests -------------------------------------------------
@@ -49,13 +49,13 @@ class TestLogsHandler(BaseTestWebApp):
             for i in range(total):
                 f.write(_header(i, "INFO", f"msg {i}"))
 
-        resp = self.test_app.get("/server/logs?limit={}".format(limit))
+        resp = self.test_app.get(f"/server/logs?limit={limit}")
         self.assertEqual(200, resp.status_int)
         entries = json.loads(resp.text)
         self.assertEqual(limit, len(entries))
         # The last `limit` entries, in oldest-first order, are msgs [total-limit .. total-1]
-        self.assertEqual("msg {}".format(total - limit), entries[0]["message"])
-        self.assertEqual("msg {}".format(total - 1), entries[-1]["message"])
+        self.assertEqual(f"msg {total - limit}", entries[0]["message"])
+        self.assertEqual(f"msg {total - 1}", entries[-1]["message"])
 
     def test_continuation_lines_attached_to_entry(self):
         """Lines that don't match the header pattern are appended to the
@@ -199,11 +199,11 @@ class TestLogsHandler(BaseTestWebApp):
         self.assertEqual(500, len(entries))
         # Ordering: last 500 of the `total_entries` written, oldest-first.
         self.assertEqual(
-            "msg {:08d}".format(total_entries - 500),
+            f"msg {total_entries - 500:08d}",
             entries[0]["message"],
         )
         self.assertEqual(
-            "msg {:08d}".format(total_entries - 1),
+            f"msg {total_entries - 1:08d}",
             entries[-1]["message"],
         )
 
@@ -212,5 +212,5 @@ class TestLogsHandler(BaseTestWebApp):
         self.assertLess(
             peak,
             10 * 1024 * 1024,
-            "peak traced allocation was {} bytes (>= 10 MB); streaming is broken".format(peak),
+            f"peak traced allocation was {peak} bytes (>= 10 MB); streaming is broken",
         )

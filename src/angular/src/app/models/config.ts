@@ -66,15 +66,9 @@ export interface Notifications {
   notify_on_extraction_complete: boolean | null;
   notify_on_extraction_failed: boolean | null;
   notify_on_delete_complete: boolean | null;
-}
-
-export interface Integrations {
-  sonarr_url: string | null;
-  sonarr_api_key: string | null;
-  sonarr_enabled: boolean | null;
-  radarr_url: string | null;
-  radarr_api_key: string | null;
-  radarr_enabled: boolean | null;
+  discord_webhook_url: string | null;
+  telegram_bot_token: string | null;
+  telegram_chat_id: string | null;
 }
 
 export interface Validate {
@@ -95,7 +89,6 @@ export interface Config {
   autoqueue: AutoQueue;
   logging: Logging;
   notifications: Notifications;
-  integrations: Integrations;
   validate: Validate;
 }
 
@@ -162,15 +155,9 @@ export const DEFAULT_NOTIFICATIONS: Notifications = {
   notify_on_extraction_complete: null,
   notify_on_extraction_failed: null,
   notify_on_delete_complete: null,
-};
-
-export const DEFAULT_INTEGRATIONS: Integrations = {
-  sonarr_url: null,
-  sonarr_api_key: null,
-  sonarr_enabled: null,
-  radarr_url: null,
-  radarr_api_key: null,
-  radarr_enabled: null,
+  discord_webhook_url: null,
+  telegram_bot_token: null,
+  telegram_chat_id: null,
 };
 
 export const DEFAULT_VALIDATE: Validate = {
@@ -188,6 +175,5 @@ export const DEFAULT_CONFIG: Config = {
   autoqueue: { ...DEFAULT_AUTOQUEUE },
   logging: { ...DEFAULT_LOGGING },
   notifications: { ...DEFAULT_NOTIFICATIONS },
-  integrations: { ...DEFAULT_INTEGRATIONS },
   validate: { ...DEFAULT_VALIDATE },
 };

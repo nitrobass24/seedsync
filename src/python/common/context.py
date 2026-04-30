@@ -6,6 +6,7 @@ import logging
 
 # my libs
 from .config import Config
+from .integrations_config import IntegrationsConfig
 from .path_pairs_config import PathPairsConfig
 from .status import Status
 
@@ -47,6 +48,7 @@ class Context:
         args: Args,
         status: Status,
         path_pairs_config: PathPairsConfig | None = None,
+        integrations_config: IntegrationsConfig | None = None,
     ):
         """
         Primary constructor to construct the top-level context
@@ -58,6 +60,7 @@ class Context:
         self.args = args
         self.status = status
         self.path_pairs_config = path_pairs_config or PathPairsConfig()
+        self.integrations_config = integrations_config or IntegrationsConfig()
 
     def create_child_context(self, context_name: str) -> "Context":
         child_context = copy.copy(self)
@@ -68,12 +71,14 @@ class Context:
         # Print the config
         self.logger.debug("Config:")
         config_dict = self.config.as_dict()
-        for section in config_dict.keys():
-            for option in config_dict[section].keys():
+        sensitive = Config.sensitive_property_names()
+        for section in config_dict:
+            sensitive_options = sensitive.get(section, set())
+            for option in config_dict[section]:
                 value = config_dict[section][option]
-                if option == "remote_password":
+                if option in sensitive_options:
                     value = "********" if value else ""
-                self.logger.debug("  {}.{}: {}".format(section, option, value))
+                self.logger.debug(f"  {section}.{option}: {value}")
 
         # Print path pairs
         if self.path_pairs_config and self.path_pairs_config.pairs:
@@ -89,6 +94,21 @@ class Context:
         else:
             self.logger.debug("Path Pairs: (none)")
 
+        # Print integrations
+        if self.integrations_config and self.integrations_config.instances:
+            self.logger.debug("Integrations:")
+            for inst in self.integrations_config.instances:
+                self.logger.debug(
+                    "  [{}] {} {} ({})".format(
+                        inst.id[:8],
+                        inst.kind,
+                        inst.name,
+                        "enabled" if inst.enabled else "disabled",
+                    )
+                )
+        else:
+            self.logger.debug("Integrations: (none)")
+
         self.logger.debug("Args:")
         for name, value in self.args.as_dict().items():
-            self.logger.debug("  {}: {}".format(name, value))
+            self.logger.debug(f"  {name}: {value}")

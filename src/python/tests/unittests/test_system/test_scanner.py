@@ -223,7 +223,7 @@ class TestSystemScanner(unittest.TestCase):
         files = scanner.scan()
         self.assertEqual(3, len(files))
         a, b, c = tuple(files)
-        aa, ab = tuple(a.children)
+        aa, _ab = tuple(a.children)
         ba, bb = tuple(b.children)
         bba, bbb, bbc = tuple(bb.children)
         bbca = bbc.children[0]
@@ -233,11 +233,11 @@ class TestSystemScanner(unittest.TestCase):
         scanner.add_exclude_prefix("ab")
         files = scanner.scan()
         self.assertEqual(3, len(files))
-        a, b, c = tuple(files)
+        a, b, _c = tuple(files)
         self.assertEqual(1, len(a.children))
         aa = a.children[0]
-        ba, bb = tuple(b.children)
-        bba, bbb, bbc = tuple(bb.children)
+        _ba, bb = tuple(b.children)
+        _bba, _bbb, bbc = tuple(bb.children)
         bbca = bbc.children[0]
         self.assertEqual("aa", aa.name)
         self.assertEqual(0, len(bbca.children))
@@ -249,9 +249,9 @@ class TestSystemScanner(unittest.TestCase):
         files = scanner.scan()
         self.assertEqual(3, len(files))
         a, b, c = tuple(files)
-        aa, ab = tuple(a.children)
-        ba, bb = tuple(b.children)
-        bba, bbb, bbc = tuple(bb.children)
+        aa, _ab = tuple(a.children)
+        _ba, bb = tuple(b.children)
+        _bba, _bbb, bbc = tuple(bb.children)
         bbca = bbc.children[0]
         self.assertEqual(12 * 1024 + 4, a.size)
         self.assertEqual(0, aa.size)
@@ -262,7 +262,7 @@ class TestSystemScanner(unittest.TestCase):
         scanner.add_exclude_prefix("ab")
         files = scanner.scan()
         self.assertEqual(3, len(files))
-        a, b, c = tuple(files)
+        a, b, _c = tuple(files)
         self.assertEqual(1, len(a.children))
         aa = a.children[0]
         self.assertEqual("aa", aa.name)
@@ -277,7 +277,7 @@ class TestSystemScanner(unittest.TestCase):
         scanner.add_exclude_suffix("bb")
         files = scanner.scan()
         self.assertEqual(3, len(files))
-        a, b, c = tuple(files)
+        a, b, _c = tuple(files)
         self.assertEqual(1, len(a.children))
         aa = a.children[0]
         self.assertEqual("aa", aa.name)
@@ -588,7 +588,7 @@ class TestSystemScanner(unittest.TestCase):
                 files = scanner.scan()
                 # Must have at least the untouched files
                 self.assertGreaterEqual(len(files), 3)
-                names = set([f.name for f in files])
+                names = {f.name for f in files}
                 self.assertIn("a", names)
                 self.assertIn("b", names)
                 self.assertIn("c", names)
@@ -613,7 +613,7 @@ class TestSystemScanner(unittest.TestCase):
         scanner = SystemScanner(TestSystemScanner.temp_dir)
         files = scanner.scan()
         self.assertEqual(3, len(files))
-        a, b, c = tuple(files)
+        a, _b, c = tuple(files)
 
         self.assertEqual(datetime(2018, 11, 9, 21, 40, 18), a.timestamp_modified)
         self.assertEqual(datetime(2018, 11, 9, 21, 40, 17), c.timestamp_modified)
