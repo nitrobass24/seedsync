@@ -30,10 +30,14 @@ class WebAppBuilder:
         self.__context = context
         self.__controller = controller
 
-        assert context.config_path is not None
-        assert context.path_pairs_path is not None
-        assert context.integrations_path is not None
-        assert context.auto_queue_persist_path is not None
+        if context.config_path is None:
+            raise RuntimeError("Context.config_path must be set before building WebApp")
+        if context.path_pairs_path is None:
+            raise RuntimeError("Context.path_pairs_path must be set before building WebApp")
+        if context.integrations_path is None:
+            raise RuntimeError("Context.integrations_path must be set before building WebApp")
+        if context.auto_queue_persist_path is None:
+            raise RuntimeError("Context.auto_queue_persist_path must be set before building WebApp")
 
         self.controller_handler = ControllerHandler(controller)
         self.server_handler = ServerHandler(context)
