@@ -10,23 +10,26 @@ from common import Config, ConfigError, overrides
 from ..serialize import SerializeConfig
 from ..web_app import IHandler, WebApp
 
-# LFTP tuning keys that can be hot-reloaded without restart
-_LFTP_TUNING_KEYS = frozenset(
+# (section, key) pairs for settings that can be hot-reloaded into the
+# running LFTP process without a full restart.
+_LFTP_TUNING_KEYS: frozenset[tuple[str, str]] = frozenset(
     {
-        "num_max_parallel_downloads",
-        "num_max_parallel_files_per_download",
-        "num_max_connections_per_root_file",
-        "num_max_connections_per_dir_file",
-        "num_max_total_connections",
-        "use_temp_file",
-        "net_limit_rate",
-        "net_socket_buffer",
-        "pget_min_chunk_size",
-        "mirror_parallel_directories",
-        "net_timeout",
-        "net_max_retries",
-        "net_reconnect_interval_base",
-        "net_reconnect_interval_multiplier",
+        ("lftp", "num_max_parallel_downloads"),
+        ("lftp", "num_max_parallel_files_per_download"),
+        ("lftp", "num_max_connections_per_root_file"),
+        ("lftp", "num_max_connections_per_dir_file"),
+        ("lftp", "num_max_total_connections"),
+        ("lftp", "use_temp_file"),
+        ("lftp", "net_limit_rate"),
+        ("lftp", "net_socket_buffer"),
+        ("lftp", "pget_min_chunk_size"),
+        ("lftp", "mirror_parallel_directories"),
+        ("lftp", "net_timeout"),
+        ("lftp", "net_max_retries"),
+        ("lftp", "net_reconnect_interval_base"),
+        ("lftp", "net_reconnect_interval_multiplier"),
+        ("general", "verbose"),
+        ("validate", "xfer_verify"),
     }
 )
 
@@ -71,7 +74,7 @@ class ConfigHandler(IHandler):
         try:
             inner_config.set_property(key, value)
             self.__config.to_file(self.__config_path)
-            if section == "lftp" and key in _LFTP_TUNING_KEYS and self.__on_lftp_config_change:
+            if (section, key) in _LFTP_TUNING_KEYS and self.__on_lftp_config_change:
                 self.__on_lftp_config_change()
             if Config.is_sensitive(section, key):
                 return HTTPResponse(body=f"{section}.{key} updated")
