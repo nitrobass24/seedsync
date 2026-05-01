@@ -12,15 +12,10 @@ COPY src/angular/ ./
 RUN npx ng build --configuration=production --output-path /build
 
 # ==============================================================================
-# Stage 2: Runtime Image
+# Stage 2: Prepare Python runtime (install deps, strip stdlib)
 # ==============================================================================
-FROM python:3.13-alpine AS runtime
+FROM python:3.13-alpine AS python-deps
 
-LABEL maintainer="nitrobass24" \
-      description="SeedSync - Seedbox file synchronization tool"
-
-# Install Python dependencies with uv (mounted, never committed to a layer),
-# then strip pip/setuptools/stdlib modules not needed at runtime.
 COPY src/python/pyproject.toml src/python/uv.lock /tmp/
 RUN --mount=from=ghcr.io/astral-sh/uv:0.11,source=/uv,target=/tmp/uv \
     /tmp/uv pip install --system --no-cache --strict \
@@ -57,6 +52,17 @@ RUN --mount=from=ghcr.io/astral-sh/uv:0.11,source=/uv,target=/tmp/uv \
         /usr/local/lib/python3.13/lib-dynload/readline*.so \
         /usr/local/lib/python3.13/lib-dynload/_ctypes_test*.so \
     && find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
+# ==============================================================================
+# Stage 3: Final Runtime Image
+# ==============================================================================
+FROM alpine:3.23 AS runtime
+
+LABEL maintainer="nitrobass24" \
+      description="SeedSync - Seedbox file synchronization tool"
+
+# Copy stripped Python runtime from python-deps stage
+COPY --from=python-deps /usr/local/ /usr/local/
 
 # Copy pre-built 7zz binary with RAR codec support (ghcr.io/nitrobass24/docker-7zip)
 COPY --from=ghcr.io/nitrobass24/docker-7zip:alpine /7zz /usr/bin/7zz
