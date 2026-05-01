@@ -362,6 +362,7 @@ test.describe("Settings — Integrity Check", () => {
   test("hash algorithm select changes and saves to backend", async ({
     page,
     apiGet,
+    apiSetConfig,
   }) => {
     const settings = new SettingsPage(page);
     await settings.goto();
@@ -386,16 +387,7 @@ test.describe("Settings — Integrity Check", () => {
         )
         .toBe(newValue);
     } finally {
-      await select.selectOption(String(originalAlgorithm));
-      await expect
-        .poll(
-          async () => {
-            const config = await apiGet("/server/config/get");
-            return config.validate.algorithm;
-          },
-          { timeout: 5000 }
-        )
-        .toBe(originalAlgorithm);
+      await apiSetConfig("validate", "algorithm", String(originalAlgorithm));
     }
   });
 });
