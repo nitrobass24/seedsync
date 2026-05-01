@@ -25,6 +25,8 @@ class TestStatusHandler(BaseTestWebApp):
         self.assertIn("latest_local_scan_time", json_dict["controller"])
         self.assertIn("latest_remote_scan_time", json_dict["controller"])
         self.assertIn("no_enabled_pairs", json_dict["controller"])
+        self.assertIn("latest_remote_scan_failed", json_dict["controller"])
+        self.assertIn("latest_remote_scan_error", json_dict["controller"])
 
     def test_remote_scan_time_null_initially(self):
         """controller.latest_remote_scan_time is null initially."""

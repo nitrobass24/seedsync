@@ -91,7 +91,7 @@ class TestLogStreamHandlerCleanup(BaseTestWebApp):
         logger.removeHandler(h2)
 
     def test_cached_handler_delivers_history(self):
-        """CachedQueueLogHandler delivers records from before the QueueLogHandler connects."""
+        """CachedQueueLogHandler stores records and returns them via get_cached_records()."""
         logger = self.context.logger
         cache = CachedQueueLogHandler(history_size_in_ms=5000)
         logger.addHandler(cache)
