@@ -90,7 +90,13 @@ RUN apk add --no-cache \
         openssh-client \
         ca-certificates \
         setpriv \
-        libstdc++
+        libstdc++ \
+    && rm -rf /sbin/apk /etc/apk /usr/share/apk /lib/apk /var/cache/apk \
+              /lib/libapk.so* /usr/bin/scanelf \
+              /usr/bin/ssh-keyscan /usr/bin/ssh-add /usr/bin/ssh-agent \
+              /usr/bin/ssh-pkcs11-helper /usr/bin/ssh-copy-id \
+              /usr/bin/findssl.sh /usr/bin/c_rehash \
+              /usr/bin/iconv /usr/bin/getconf /usr/bin/ssl_client
 
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8 \
