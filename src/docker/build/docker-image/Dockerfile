@@ -12,20 +12,14 @@ COPY src/angular/ ./
 RUN npx ng build --configuration=production --output-path /build
 
 # ==============================================================================
-# Stage 2: Runtime Image
+# Stage 2: Prepare Python runtime (install deps, strip stdlib)
 # ==============================================================================
-FROM python:3.13-alpine AS runtime
-
-LABEL maintainer="nitrobass24" \
-      description="SeedSync - Seedbox file synchronization tool"
-
-# Install Python dependencies with uv, then clean up
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
+FROM python:3.13-alpine AS python-deps
 
 COPY src/python/pyproject.toml src/python/uv.lock /tmp/
-RUN uv pip install --system --no-cache --strict \
+RUN --mount=from=ghcr.io/astral-sh/uv:0.11,source=/uv,target=/tmp/uv \
+    /tmp/uv pip install --system --no-cache --strict \
         -r /tmp/pyproject.toml \
-    && rm -f /usr/local/bin/uv \
     && rm -rf /usr/local/lib/python3.13/site-packages/pip* \
               /usr/local/lib/python3.13/site-packages/setuptools* \
               /usr/local/bin/pip* \
@@ -57,7 +51,36 @@ RUN uv pip install --system --no-cache --strict \
         /usr/local/lib/python3.13/lib-dynload/_gdbm*.so \
         /usr/local/lib/python3.13/lib-dynload/readline*.so \
         /usr/local/lib/python3.13/lib-dynload/_ctypes_test*.so \
+        /usr/local/lib/python3.13/lib-dynload/xx*.so \
+        /usr/local/lib/python3.13/lib-dynload/_tkinter*.so \
+        /usr/local/lib/python3.13/lib-dynload/_xxtestfuzz*.so \
+        /usr/local/lib/python3.13/lib-dynload/_lsprof*.so \
+        /usr/local/lib/python3.13/lib-dynload/_interp*.so \
+        /usr/local/lib/python3.13/_pyrepl \
+        /usr/local/lib/python3.13/_pydecimal.py \
+        /usr/local/lib/python3.13/venv \
+        /usr/local/lib/python3.13/config-3.13-* \
+        /usr/local/include \
+    && find /usr/local/lib/python3.13/encodings -name '*.py' \
+        ! -name '__init__.py' ! -name 'aliases.py' \
+        ! -name 'ascii.py' ! -name 'latin_1.py' \
+        ! -name 'utf_8.py' ! -name 'utf_8_sig.py' \
+        ! -name 'utf_16*.py' ! -name 'utf_32*.py' \
+        ! -name 'unicode_escape.py' ! -name 'raw_unicode_escape.py' \
+        ! -name 'charmap.py' ! -name 'idna.py' \
+        -delete \
     && find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
+# ==============================================================================
+# Stage 3: Final Runtime Image
+# ==============================================================================
+FROM alpine:3.23 AS runtime
+
+LABEL maintainer="nitrobass24" \
+      description="SeedSync - Seedbox file synchronization tool"
+
+# Copy stripped Python runtime from python-deps stage
+COPY --from=python-deps /usr/local/ /usr/local/
 
 # Copy pre-built 7zz binary with RAR codec support (ghcr.io/nitrobass24/docker-7zip)
 COPY --from=ghcr.io/nitrobass24/docker-7zip:alpine /7zz /usr/bin/7zz
@@ -72,7 +95,14 @@ RUN apk add --no-cache \
         openssh-client \
         ca-certificates \
         setpriv \
-        libstdc++
+        libstdc++ \
+    && rm -rf /sbin/apk /etc/apk /usr/share/apk /lib/apk /var/cache/apk \
+              /lib/libapk.so* /usr/lib/libapk.so* /usr/bin/scanelf \
+              /usr/bin/ssh-keyscan /usr/bin/ssh-add /usr/bin/ssh-agent \
+              /usr/bin/ssh-pkcs11-helper /usr/bin/ssh-copy-id \
+              /usr/bin/findssl.sh /usr/bin/c_rehash \
+              /usr/bin/iconv /usr/bin/getconf /usr/bin/ssl_client \
+              /etc/ssh/moduli
 
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8 \
@@ -82,8 +112,9 @@ ENV LC_ALL=C.UTF-8 \
 # Create directory structure
 RUN mkdir -p /app/python /app/html /config /downloads /staging
 
-# Copy application source
+# Copy application source (remove dev config files not needed at runtime)
 COPY src/python/ /app/python/
+RUN rm -f /app/python/pyproject.toml /app/python/uv.lock
 
 # Copy built artifacts from previous stages
 COPY --from=angular-builder /build/browser /app/html
