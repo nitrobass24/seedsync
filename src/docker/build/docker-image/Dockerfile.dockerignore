@@ -3,6 +3,8 @@
 **/node_modules
 **/.venv
 **/.ruff_cache
+**/.pytest_cache
+**/pyrightconfig.json
 .git
 .idea
 build

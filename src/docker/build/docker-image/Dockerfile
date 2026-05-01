@@ -107,8 +107,9 @@ ENV LC_ALL=C.UTF-8 \
 # Create directory structure
 RUN mkdir -p /app/python /app/html /config /downloads /staging
 
-# Copy application source
+# Copy application source (remove dev config files not needed at runtime)
 COPY src/python/ /app/python/
+RUN rm -f /app/python/pyproject.toml /app/python/uv.lock
 
 # Copy built artifacts from previous stages
 COPY --from=angular-builder /build/browser /app/html
