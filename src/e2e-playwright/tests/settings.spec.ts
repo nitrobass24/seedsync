@@ -369,8 +369,18 @@ test.describe("Settings — Integrity Check", () => {
 
     const configBefore = await apiGet("/server/config/get");
     const originalAlgorithm = configBefore.validate.algorithm;
+    const originalXferVerify = configBefore.validate.xfer_verify;
+
+    // Enable integrity check so the algorithm select is enabled
+    if (!originalXferVerify) {
+      await apiSetConfig("validate", "xfer_verify", "True");
+      await page.reload();
+      await settings.goto();
+    }
 
     const select = settings.getSelect("Hash Algorithm");
+    await expect(select).toBeEnabled({ timeout: 5000 });
+
     // Pick a different algorithm than current
     const newValue = originalAlgorithm === "sha256" ? "md5" : "sha256";
 
@@ -388,6 +398,9 @@ test.describe("Settings — Integrity Check", () => {
         .toBe(newValue);
     } finally {
       await apiSetConfig("validate", "algorithm", String(originalAlgorithm));
+      if (!originalXferVerify) {
+        await apiSetConfig("validate", "xfer_verify", "False");
+      }
     }
   });
 });
