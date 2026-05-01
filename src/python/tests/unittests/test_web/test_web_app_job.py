@@ -135,6 +135,6 @@ class TestRequestLoggingMiddleware(unittest.TestCase):
         def start_response(status, headers, *args):
             pass
 
-        with self.assertRaises(RuntimeError):
-            with self.assertLogs("test_request_logging_error", level="DEBUG"):
+        with self.assertLogs("test_request_logging_error", level="DEBUG"):
+            with self.assertRaises(RuntimeError):
                 list(middleware(environ, start_response))
