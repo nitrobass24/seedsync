@@ -43,6 +43,7 @@ class TestLogStreamHandler(BaseTestWebApp):
         self.assertEqual("Error msg", record4.msg)
         self.assertEqual(logging.ERROR, record4.levelno)
 
+
 class TestLogStreamHandlerCleanup(BaseTestWebApp):
     """Tests for handler attachment and cleanup."""
 
