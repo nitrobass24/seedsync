@@ -96,7 +96,8 @@ RUN apk add --no-cache \
               /usr/bin/ssh-keyscan /usr/bin/ssh-add /usr/bin/ssh-agent \
               /usr/bin/ssh-pkcs11-helper /usr/bin/ssh-copy-id \
               /usr/bin/findssl.sh /usr/bin/c_rehash \
-              /usr/bin/iconv /usr/bin/getconf /usr/bin/ssl_client
+              /usr/bin/iconv /usr/bin/getconf /usr/bin/ssl_client \
+              /etc/ssh/moduli
 
 ENV LC_ALL=C.UTF-8 \
     LANG=C.UTF-8 \
