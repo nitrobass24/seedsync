@@ -19,13 +19,12 @@ FROM python:3.13-alpine AS runtime
 LABEL maintainer="nitrobass24" \
       description="SeedSync - Seedbox file synchronization tool"
 
-# Install Python dependencies with uv, then clean up
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
-
+# Install Python dependencies with uv (mounted, never committed to a layer),
+# then strip pip/setuptools/stdlib modules not needed at runtime.
 COPY src/python/pyproject.toml src/python/uv.lock /tmp/
-RUN uv pip install --system --no-cache --strict \
+RUN --mount=from=ghcr.io/astral-sh/uv:0.11,source=/uv,target=/tmp/uv \
+    /tmp/uv pip install --system --no-cache --strict \
         -r /tmp/pyproject.toml \
-    && rm -f /usr/local/bin/uv \
     && rm -rf /usr/local/lib/python3.13/site-packages/pip* \
               /usr/local/lib/python3.13/site-packages/setuptools* \
               /usr/local/bin/pip* \
