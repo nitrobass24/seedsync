@@ -39,18 +39,25 @@ test.describe("Settings Page", () => {
 
     try {
       const field = settings.getTextInput("Server Address");
-      await field.clear();
+      // Wait for the field to be enabled (config loaded via SSE)
+      await expect(field).toBeEnabled({ timeout: 5000 });
       const testValue = "e2e-test-server";
+      // fill() already clears the input before typing — calling clear()
+      // separately can race with Angular's signal-driven re-render of the
+      // ngModel binding and reset the field before fill() runs.
       await field.fill(testValue);
+      // Blur triggers any pending change events and ensures Angular
+      // processes the final value through the debounce pipeline.
+      await field.blur();
 
-      // Poll the API until the value is saved
+      // Poll the API until the value is saved (debounce is 1 s)
       await expect
         .poll(
           async () => {
             const config = await apiGet("/server/config/get");
             return config.lftp.remote_address;
           },
-          { timeout: 5000 }
+          { timeout: 8000 }
         )
         .toBe(testValue);
     } finally {
