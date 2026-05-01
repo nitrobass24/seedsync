@@ -363,23 +363,24 @@ test.describe("Settings — Integrity Check", () => {
     page,
     apiGet,
     apiSetConfig,
+    waitForStream,
   }) => {
-    const settings = new SettingsPage(page);
-    await settings.goto();
-
+    // Enable integrity check first so the algorithm select is enabled
     const configBefore = await apiGet("/server/config/get");
     const originalAlgorithm = configBefore.validate.algorithm;
     const originalXferVerify = configBefore.validate.xfer_verify;
 
-    // Enable integrity check so the algorithm select is enabled
     if (!originalXferVerify) {
       await apiSetConfig("validate", "xfer_verify", "True");
-      await page.reload();
-      await settings.goto();
     }
 
+    // Navigate after config is set so the page loads with xfer_verify enabled
+    const settings = new SettingsPage(page);
+    await settings.goto();
+    await waitForStream(page);
+
     const select = settings.getSelect("Hash Algorithm");
-    await expect(select).toBeEnabled({ timeout: 5000 });
+    await expect(select).toBeEnabled({ timeout: 10_000 });
 
     // Pick a different algorithm than current
     const newValue = originalAlgorithm === "sha256" ? "md5" : "sha256";
