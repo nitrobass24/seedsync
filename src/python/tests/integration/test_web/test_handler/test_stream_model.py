@@ -12,14 +12,14 @@ from web.serialize import SerializeModel
 class TestModelStreamHandler(BaseTestWebApp):
     def test_stream_model_fetches_model_and_adds_listener(self):
         # Schedule server stop
-        Timer(0.5, self.web_app.stop).start()
+        Timer(2.0, self.web_app.stop).start()
 
         self.test_app.get("/server/stream")
         self.controller.get_model_files_and_add_listener.assert_called_once_with(unittest.mock.ANY)
 
     def test_stream_model_removes_listener(self):
         # Schedule server stop
-        Timer(0.5, self.web_app.stop).start()
+        Timer(2.0, self.web_app.stop).start()
 
         self.test_app.get("/server/stream")
         self.controller.remove_model_listener.assert_called_once_with(self.model_listener)
@@ -27,7 +27,7 @@ class TestModelStreamHandler(BaseTestWebApp):
     @patch("web.handler.stream_model.SerializeModel")
     def test_stream_model_serializes_initial_model(self, mock_serialize_model_cls):
         # Schedule server stop
-        Timer(0.5, self.web_app.stop).start()
+        Timer(2.0, self.web_app.stop).start()
 
         # Setup mock serialize instance
         mock_serialize = mock_serialize_model_cls.return_value
