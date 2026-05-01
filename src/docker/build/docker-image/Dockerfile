@@ -52,8 +52,13 @@ RUN --mount=from=ghcr.io/astral-sh/uv:0.11,source=/uv,target=/tmp/uv \
         /usr/local/lib/python3.13/lib-dynload/readline*.so \
         /usr/local/lib/python3.13/lib-dynload/_ctypes_test*.so \
         /usr/local/lib/python3.13/lib-dynload/xx*.so \
+        /usr/local/lib/python3.13/lib-dynload/_tkinter*.so \
+        /usr/local/lib/python3.13/lib-dynload/_xxtestfuzz*.so \
+        /usr/local/lib/python3.13/lib-dynload/_lsprof*.so \
+        /usr/local/lib/python3.13/lib-dynload/_interp*.so \
         /usr/local/lib/python3.13/_pyrepl \
         /usr/local/lib/python3.13/_pydecimal.py \
+        /usr/local/lib/python3.13/venv \
         /usr/local/lib/python3.13/config-3.13-* \
         /usr/local/include \
     && find /usr/local/lib/python3.13/encodings -name '*.py' \
@@ -92,7 +97,7 @@ RUN apk add --no-cache \
         setpriv \
         libstdc++ \
     && rm -rf /sbin/apk /etc/apk /usr/share/apk /lib/apk /var/cache/apk \
-              /lib/libapk.so* /usr/bin/scanelf \
+              /lib/libapk.so* /usr/lib/libapk.so* /usr/bin/scanelf \
               /usr/bin/ssh-keyscan /usr/bin/ssh-add /usr/bin/ssh-agent \
               /usr/bin/ssh-pkcs11-helper /usr/bin/ssh-copy-id \
               /usr/bin/findssl.sh /usr/bin/c_rehash \
