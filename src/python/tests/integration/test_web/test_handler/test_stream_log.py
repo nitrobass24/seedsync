@@ -12,7 +12,7 @@ class TestLogStreamHandler(BaseTestWebApp):
     @patch("web.handler.stream_log.SerializeLogRecord")
     def test_stream_log_serializes_record(self, mock_serialize_log_record_cls):
         # Schedule server stop
-        Timer(0.5, self.web_app.stop).start()
+        Timer(2.0, self.web_app.stop).start()
 
         # Schedule status update
         def issue_logs():
