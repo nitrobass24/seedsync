@@ -107,6 +107,7 @@ test.describe("File Actions", () => {
     // After deselecting, the actions div should not be visible
     // (actions are only shown when selected via CSS)
     await expect(row).not.toHaveClass(/selected/);
+    await expect(row.locator(".actions")).not.toBeVisible();
   });
 });
 

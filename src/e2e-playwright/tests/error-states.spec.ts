@@ -1,26 +1,84 @@
 import { test, expect } from "./fixtures";
 
 test.describe("Error States — Header Notifications", () => {
-  test("no enabled pairs shows warning notification", async ({
-    page,
-    apiFetch,
-    waitForStream,
-  }) => {
-    // Disable all existing path pairs
+  /**
+   * Helper: disable all path pairs and ensure at least one disabled pair exists.
+   *
+   * The backend only sets `no_enabled_pairs = true` when there are path pairs
+   * configured but none are enabled.  If no pairs exist at all, it falls through
+   * to the legacy single-path mode.  So every test that expects the
+   * "no enabled pairs" notification must guarantee a disabled pair exists.
+   *
+   * Returns cleanup info so the caller can restore state in a `finally` block.
+   */
+  async function disableAllPairs(apiFetch: (path: string, init?: RequestInit) => Promise<Response>) {
     const res = await apiFetch("/server/pathpairs");
-    const pairs = res.ok ? await res.json() : [];
+    expect(res.ok, `GET /server/pathpairs failed: ${res.status}`).toBe(true);
+    const pairs = await res.json();
     const originalStates: { id: string; enabled: boolean }[] = [];
 
     for (const pair of pairs) {
       originalStates.push({ id: pair.id, enabled: pair.enabled });
       if (pair.enabled) {
-        await apiFetch(`/server/pathpairs/${pair.id}`, {
+        const updateRes = await apiFetch(`/server/pathpairs/${pair.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ enabled: false }),
         });
+        expect(updateRes.ok, `PUT pathpairs/${pair.id} failed: ${updateRes.status}`).toBe(true);
       }
     }
+
+    // If no pairs exist at all, create a disabled one so the backend reports
+    // noEnabledPairs=true rather than falling through to legacy single-path mode.
+    let tempPairId: string | null = null;
+    if (pairs.length === 0) {
+      const createRes = await apiFetch("/server/pathpairs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "e2e-disabled-pair",
+          remote_path: "/remote/e2e",
+          local_path: "/local/e2e",
+          enabled: false,
+        }),
+      });
+      expect(createRes.ok, `POST /server/pathpairs failed: ${createRes.status}`).toBe(true);
+      const created = await createRes.json();
+      tempPairId = created.id;
+    }
+
+    return { originalStates, tempPairId };
+  }
+
+  /**
+   * Helper: restore original pair states and clean up any temp pair.
+   */
+  async function restorePairs(
+    apiFetch: (path: string, init?: RequestInit) => Promise<Response>,
+    originalStates: { id: string; enabled: boolean }[],
+    tempPairId: string | null,
+  ) {
+    if (tempPairId) {
+      await apiFetch(`/server/pathpairs/${tempPairId}`, { method: "DELETE" });
+    }
+    for (const state of originalStates) {
+      if (state.enabled) {
+        await apiFetch(`/server/pathpairs/${state.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: true }),
+        });
+      }
+    }
+  }
+
+  test("no enabled pairs shows warning notification", async ({
+    page,
+    apiFetch,
+    waitForStream,
+  }) => {
+    const { originalStates, tempPairId } = await disableAllPairs(apiFetch);
 
     try {
       await page.goto("/dashboard");
@@ -33,16 +91,7 @@ test.describe("Error States — Header Notifications", () => {
       await expect(notification).toBeVisible({ timeout: 10_000 });
       await expect(notification).toHaveClass(/alert-warning/);
     } finally {
-      // Restore original enabled states
-      for (const state of originalStates) {
-        if (state.enabled) {
-          await apiFetch(`/server/pathpairs/${state.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ enabled: true }),
-          });
-        }
-      }
+      await restorePairs(apiFetch, originalStates, tempPairId);
     }
   });
 
@@ -51,43 +100,9 @@ test.describe("Error States — Header Notifications", () => {
     apiFetch,
     waitForStream,
   }) => {
-    // Disable all existing path pairs
-    const res = await apiFetch("/server/pathpairs");
-    const pairs = res.ok ? await res.json() : [];
-    const originalStates: { id: string; enabled: boolean }[] = [];
-
-    for (const pair of pairs) {
-      originalStates.push({ id: pair.id, enabled: pair.enabled });
-      if (pair.enabled) {
-        await apiFetch(`/server/pathpairs/${pair.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled: false }),
-        });
-      }
-    }
+    const { originalStates, tempPairId } = await disableAllPairs(apiFetch);
 
     try {
-      // If no pairs exist at all, create a disabled one so the controller
-      // reports noEnabledPairs=true rather than showing a different state
-      let tempPairId: string | null = null;
-      if (pairs.length === 0) {
-        const createRes = await apiFetch("/server/pathpairs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: "e2e-disabled-pair",
-            remote_path: "/remote/e2e",
-            local_path: "/local/e2e",
-            enabled: false,
-          }),
-        });
-        if (createRes.ok) {
-          const created = await createRes.json();
-          tempPairId = created.id;
-        }
-      }
-
       await page.goto("/dashboard");
       await waitForStream(page);
 
@@ -98,23 +113,8 @@ test.describe("Error States — Header Notifications", () => {
       await expect(notification).toContainText(
         "Enable a pair in Settings to start syncing"
       );
-
-      // Clean up temp pair
-      if (tempPairId) {
-        await apiFetch(`/server/pathpairs/${tempPairId}`, {
-          method: "DELETE",
-        });
-      }
     } finally {
-      for (const state of originalStates) {
-        if (state.enabled) {
-          await apiFetch(`/server/pathpairs/${state.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ enabled: true }),
-          });
-        }
-      }
+      await restorePairs(apiFetch, originalStates, tempPairId);
     }
   });
 
@@ -138,7 +138,7 @@ test.describe("Error States — Header Notifications", () => {
       await field.fill("trigger-restart-" + Date.now());
 
       // The restart notification should appear in the header
-      const notification = page.locator(".alert", {
+      const notification = page.locator("#header .alert", {
         hasText: /restart/i,
       });
       await expect(notification).toBeVisible({ timeout: 5000 });
@@ -152,39 +152,7 @@ test.describe("Error States — Header Notifications", () => {
     apiFetch,
     waitForStream,
   }) => {
-    // Disable all path pairs to trigger the warning notification
-    const res = await apiFetch("/server/pathpairs");
-    const pairs = res.ok ? await res.json() : [];
-    const originalStates: { id: string; enabled: boolean }[] = [];
-
-    for (const pair of pairs) {
-      originalStates.push({ id: pair.id, enabled: pair.enabled });
-      if (pair.enabled) {
-        await apiFetch(`/server/pathpairs/${pair.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled: false }),
-        });
-      }
-    }
-
-    let tempPairId: string | null = null;
-    if (pairs.length === 0) {
-      const createRes = await apiFetch("/server/pathpairs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "e2e-alert-level-pair",
-          remote_path: "/remote/e2e",
-          local_path: "/local/e2e",
-          enabled: false,
-        }),
-      });
-      if (createRes.ok) {
-        const created = await createRes.json();
-        tempPairId = created.id;
-      }
-    }
+    const { originalStates, tempPairId } = await disableAllPairs(apiFetch);
 
     try {
       await page.goto("/dashboard");
@@ -199,18 +167,7 @@ test.describe("Error States — Header Notifications", () => {
       await expect(notification).not.toHaveClass(/alert-danger/);
       await expect(notification).not.toHaveClass(/alert-info/);
     } finally {
-      if (tempPairId) {
-        await apiFetch(`/server/pathpairs/${tempPairId}`, { method: "DELETE" });
-      }
-      for (const state of originalStates) {
-        if (state.enabled) {
-          await apiFetch(`/server/pathpairs/${state.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ enabled: true }),
-          });
-        }
-      }
+      await restorePairs(apiFetch, originalStates, tempPairId);
     }
   });
 
@@ -219,7 +176,7 @@ test.describe("Error States — Header Notifications", () => {
     apiFetch,
     waitForStream,
   }) => {
-    // Ensure we have at least one pair, disabled
+    // Create a disabled pair for this test
     const pairName = `e2e-reenable-${Date.now()}`;
     const createRes = await apiFetch("/server/pathpairs", {
       method: "POST",
@@ -231,22 +188,24 @@ test.describe("Error States — Header Notifications", () => {
         enabled: false,
       }),
     });
-    expect(createRes.ok).toBe(true);
+    expect(createRes.ok, `POST /server/pathpairs failed: ${createRes.status}`).toBe(true);
     const createdPair = await createRes.json();
 
     // Also disable any other enabled pairs
     const listRes = await apiFetch("/server/pathpairs");
-    const allPairs = listRes.ok ? await listRes.json() : [];
+    expect(listRes.ok, `GET /server/pathpairs failed: ${listRes.status}`).toBe(true);
+    const allPairs = await listRes.json();
     const originalStates: { id: string; enabled: boolean }[] = [];
     for (const pair of allPairs) {
       if (pair.id !== createdPair.id) {
         originalStates.push({ id: pair.id, enabled: pair.enabled });
         if (pair.enabled) {
-          await apiFetch(`/server/pathpairs/${pair.id}`, {
+          const updateRes = await apiFetch(`/server/pathpairs/${pair.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ enabled: false }),
           });
+          expect(updateRes.ok, `PUT pathpairs/${pair.id} failed: ${updateRes.status}`).toBe(true);
         }
       }
     }
@@ -262,11 +221,12 @@ test.describe("Error States — Header Notifications", () => {
       await expect(notification).toBeVisible({ timeout: 10_000 });
 
       // Re-enable the pair via API
-      await apiFetch(`/server/pathpairs/${createdPair.id}`, {
+      const enableRes = await apiFetch(`/server/pathpairs/${createdPair.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: true }),
       });
+      expect(enableRes.ok, `PUT pathpairs/${createdPair.id} failed: ${enableRes.status}`).toBe(true);
 
       // The warning should disappear (SSE pushes status updates)
       await expect(notification).not.toBeVisible({ timeout: 10_000 });
