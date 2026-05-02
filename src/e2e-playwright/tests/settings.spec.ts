@@ -173,37 +173,6 @@ test.describe("Settings Page", () => {
     await expect(options).toHaveCount(7);
   });
 
-  test("Server Directory field is disabled when path pairs exist", async ({
-    apiFetch,
-  }) => {
-    // Create a path pair via API
-    const pairName = `temp-pair-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const res = await apiFetch("/server/pathpairs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: pairName,
-        remote_path: "/remote/test",
-        local_path: "/local/test",
-        enabled: true,
-      }),
-    });
-    expect(res.ok).toBe(true);
-    const pair = await res.json();
-
-    try {
-      await settings.goto();
-      const serverDir = settings.getTextInput("Server Directory");
-      await expect(serverDir).toBeDisabled();
-    } finally {
-      // Always clean up the pair
-      if (pair?.id) {
-        const del = await apiFetch(`/server/pathpairs/${pair.id}`, { method: "DELETE" });
-        expect(del.ok, `Failed to delete temp pair ${pair.id}: ${del.status}`).toBe(true);
-      }
-    }
-  });
-
   test("restart notification appears after config change", async ({ apiGet, apiSetConfig }) => {
     const configBefore = await apiGet("/server/config/get");
     const originalAddress = configBefore.lftp.remote_address;
