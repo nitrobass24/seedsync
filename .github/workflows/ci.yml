@@ -208,7 +208,7 @@ jobs:
 
   build-test:
     name: Build and Test (amd64)
-    if: ${{ !(startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/develop' && github.event_name == 'push') || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !(startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -239,37 +239,17 @@ jobs:
           done
           docker logs test-container
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: src/e2e-playwright/package-lock.json
-
-      - name: Install Playwright dependencies
-        working-directory: src/e2e-playwright
-        run: npm ci
-
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('src/e2e-playwright/package-lock.json') }}
-
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        working-directory: src/e2e-playwright
-        run: npx playwright install --with-deps chromium
-
-      - name: Install Playwright system deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
-        working-directory: src/e2e-playwright
-
-      - name: Run E2E tests
-        working-directory: src/e2e-playwright
-        run: npx playwright test
+      - name: Run E2E tests in Playwright container
+        run: |
+          # Match the @playwright/test version pinned in the lockfile so the
+          # container's chromium build is the one the package expects.
+          PW_VERSION=$(jq -r '.packages["node_modules/@playwright/test"].version' src/e2e-playwright/package-lock.json)
+          docker run --rm \
+            --network host \
+            -v "$GITHUB_WORKSPACE":/workspace \
+            -w /workspace/src/e2e-playwright \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-noble" \
+            sh -c "npm ci && npx playwright test"
 
       - name: Upload Playwright report
         if: failure()
