@@ -17,6 +17,7 @@ class TestActiveScanner(unittest.TestCase):
         logger = logging.getLogger("test_active_scanner")
         handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(handler)
+        self.addCleanup(logger.removeHandler, handler)
         logger.setLevel(logging.DEBUG)
 
     @patch("controller.scan.active_scanner.SystemScanner")
