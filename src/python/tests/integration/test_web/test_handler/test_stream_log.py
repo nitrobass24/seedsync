@@ -5,6 +5,7 @@ from threading import Timer
 from unittest.mock import patch
 
 from tests.integration.test_web.test_web_app import BaseTestWebApp
+from web.handler.stream_log import CachedQueueLogHandler, QueueLogHandler
 
 
 class TestLogStreamHandler(BaseTestWebApp):
@@ -41,3 +42,78 @@ class TestLogStreamHandler(BaseTestWebApp):
         record4 = call4[0][0]
         self.assertEqual("Error msg", record4.msg)
         self.assertEqual(logging.ERROR, record4.levelno)
+
+
+class TestLogStreamHandlerCleanup(BaseTestWebApp):
+    """Tests for handler attachment and cleanup."""
+
+    def test_queue_handler_attach_remove(self):
+        """QueueLogHandler can be attached and removed from logger."""
+        logger = self.context.logger
+        handler = QueueLogHandler()
+        initial_count = len(logger.handlers)
+
+        logger.addHandler(handler)
+        self.assertEqual(len(logger.handlers), initial_count + 1)
+
+        logger.removeHandler(handler)
+        self.assertEqual(len(logger.handlers), initial_count)
+
+    def test_multiple_handlers_independent(self):
+        """Multiple QueueLogHandlers attach/remove independently."""
+        logger = self.context.logger
+        h1 = QueueLogHandler()
+        h2 = QueueLogHandler()
+
+        logger.addHandler(h1)
+        logger.addHandler(h2)
+
+        logger.info("test message")
+
+        # Both handlers should have received the message
+        r1 = h1.get_next_event()
+        r2 = h2.get_next_event()
+        self.assertIsNotNone(r1)
+        self.assertIsNotNone(r2)
+        self.assertEqual(r1.msg, "test message")
+        self.assertEqual(r2.msg, "test message")
+
+        # Remove h1, h2 still works
+        logger.removeHandler(h1)
+        logger.info("second message")
+
+        r1 = h1.get_next_event()
+        r2 = h2.get_next_event()
+        self.assertIsNone(r1)
+        self.assertIsNotNone(r2)
+        self.assertEqual(r2.msg, "second message")
+
+        logger.removeHandler(h2)
+
+    def test_cached_handler_delivers_history(self):
+        """CachedQueueLogHandler stores records and returns them via get_cached_records()."""
+        logger = self.context.logger
+        cache = CachedQueueLogHandler(history_size_in_ms=5000)
+        logger.addHandler(cache)
+
+        # Log something before the queue handler connects
+        logger.info("before connection")
+
+        # Get cached records
+        cached = cache.get_cached_records()
+        self.assertTrue(any(r.msg == "before connection" for r in cached))
+
+        logger.removeHandler(cache)
+
+    def test_cache_zero_sends_no_history(self):
+        """CachedQueueLogHandler with history_size_in_ms=0 sends no historical records."""
+        logger = self.context.logger
+        cache = CachedQueueLogHandler(history_size_in_ms=0)
+        logger.addHandler(cache)
+
+        logger.info("should not be cached")
+
+        cached = cache.get_cached_records()
+        self.assertEqual(len(cached), 0)
+
+        logger.removeHandler(cache)
