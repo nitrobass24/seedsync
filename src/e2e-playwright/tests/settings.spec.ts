@@ -380,7 +380,10 @@ test.describe("Settings — Integrity Check", () => {
     await waitForStream(page);
 
     const select = settings.getSelect("Hash Algorithm");
-    await expect(select).toBeEnabled({ timeout: 10_000 });
+    // Wait for the config value to arrive via SSE — the select is disabled
+    // until its value is non-null (see option.component.html)
+    await expect(select).not.toHaveValue("", { timeout: 10_000 });
+    await expect(select).toBeEnabled({ timeout: 5_000 });
 
     // Pick a different algorithm than current
     const newValue = originalAlgorithm === "sha256" ? "md5" : "sha256";
