@@ -512,9 +512,14 @@ test.describe("Settings — Logging", () => {
         )
         .toBe(newValue);
 
-      // Reload the page and verify the value persists
+      // Reload the page and verify the value persists. settings.goto()
+      // only waits for Angular bootstrap (sidebar render), not for SSE
+      // config delivery, so wait for the select to become enabled — its
+      // disabled gate is `value() === null || value() === undefined`, so
+      // an enabled select means the model has received the SSE value.
       await settings.goto();
       const reloadedSelect = settings.getSelect("Log Level");
+      await expect(reloadedSelect).toBeEnabled({ timeout: 10_000 });
       await expect(reloadedSelect).toHaveValue(newValue);
     } finally {
       await select.selectOption(String(originalLevel));
