@@ -387,9 +387,12 @@ test.describe("Settings — Integrity Check", () => {
     await waitForStream(page);
 
     const select = settings.getSelect("Hash Algorithm");
-    // Wait for the config value to arrive via SSE — the select is disabled
-    // until its value is non-null (see option.component.html)
-    await expect(select).not.toHaveValue("", { timeout: 10_000 });
+    // Wait for the config value to arrive via SSE. Asserting on a real
+    // algorithm value (not just non-empty) is required because Angular
+    // renders selects bound to a null model with a non-empty "? null:null ?"
+    // placeholder option, which would let `not.toHaveValue("")` pass while
+    // the model is still null and the select is still disabled.
+    await expect(select).toHaveValue(/^(md5|sha1|sha256)$/, { timeout: 10_000 });
     await expect(select).toBeEnabled({ timeout: 5_000 });
 
     // Pick a different algorithm than current
