@@ -235,3 +235,295 @@ test.describe("Settings Page", () => {
     await expect(field).toHaveAttribute("type", "password");
   });
 });
+
+test.describe("Settings — Staging Directory", () => {
+  test("staging path text field saves to backend", async ({
+    page,
+    apiGet,
+    apiSetConfig,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const configBefore = await apiGet("/server/config/get");
+    const originalPath = configBefore.controller.staging_path;
+
+    try {
+      const field = settings.getTextInput("Staging Path");
+      await field.clear();
+      const testValue = "/tmp/e2e-staging-" + Date.now();
+      await field.fill(testValue);
+
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.controller.staging_path;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(testValue);
+    } finally {
+      await apiSetConfig("controller", "staging_path", originalPath ?? "");
+    }
+  });
+
+  test("use staging directory checkbox toggles and saves", async ({
+    page,
+    apiGet,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const checkbox = settings.getCheckbox("Use staging directory");
+    const wasBefore = await checkbox.isChecked();
+    const expected = !wasBefore;
+
+    await checkbox.click();
+
+    try {
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.controller.use_staging;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(expected);
+    } finally {
+      await checkbox.click();
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.controller.use_staging;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(wasBefore);
+    }
+  });
+});
+
+test.describe("Settings — Archive Extraction", () => {
+  test("extract in downloads directory checkbox toggles and saves", async ({
+    page,
+    apiGet,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const checkbox = settings.getCheckbox(
+      "Extract archives in the downloads directory"
+    );
+    const wasBefore = await checkbox.isChecked();
+    const expected = !wasBefore;
+
+    await checkbox.click();
+
+    try {
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.controller.use_local_path_as_extract_path;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(expected);
+    } finally {
+      await checkbox.click();
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.controller.use_local_path_as_extract_path;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(wasBefore);
+    }
+  });
+});
+
+test.describe("Settings — Integrity Check", () => {
+  test("verify transfers checkbox and algorithm select are present", async ({
+    page,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const section = settings.getSection("Integrity Check");
+    await expect(section).toBeVisible();
+
+    const verifyCheckbox = settings.getCheckbox(
+      "Verify transfers inline"
+    );
+    await expect(verifyCheckbox).toBeVisible();
+
+    const algorithmSelect = settings.getSelect("Hash Algorithm");
+    await expect(algorithmSelect).toBeVisible();
+  });
+
+  test("hash algorithm select changes and saves to backend", async ({
+    page,
+    apiGet,
+    apiSetConfig,
+    waitForStream,
+  }) => {
+    // Enable integrity check first so the algorithm select is enabled
+    const configBefore = await apiGet("/server/config/get");
+    const originalAlgorithm = configBefore.validate.algorithm;
+    const originalXferVerify = configBefore.validate.xfer_verify;
+
+    if (!originalXferVerify) {
+      await apiSetConfig("validate", "xfer_verify", "True");
+    }
+
+    // Navigate after config is set so the page loads with xfer_verify enabled
+    const settings = new SettingsPage(page);
+    await settings.goto();
+    await waitForStream(page);
+
+    const select = settings.getSelect("Hash Algorithm");
+    // Wait for the config value to arrive via SSE — the select is disabled
+    // until its value is non-null (see option.component.html)
+    await expect(select).not.toHaveValue("", { timeout: 10_000 });
+    await expect(select).toBeEnabled({ timeout: 5_000 });
+
+    // Pick a different algorithm than current
+    const newValue = originalAlgorithm === "sha256" ? "md5" : "sha256";
+
+    try {
+      await select.selectOption(newValue);
+
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.validate.algorithm;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(newValue);
+    } finally {
+      await apiSetConfig("validate", "algorithm", String(originalAlgorithm));
+      if (!originalXferVerify) {
+        await apiSetConfig("validate", "xfer_verify", "False");
+      }
+    }
+  });
+});
+
+test.describe("Settings — Connections", () => {
+  test("Max Parallel Downloads field saves to backend", async ({
+    page,
+    apiGet,
+    apiSetConfig,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const configBefore = await apiGet("/server/config/get");
+    const originalValue = configBefore.lftp.num_max_parallel_downloads;
+
+    try {
+      const field = settings.getTextInput("Max Parallel Downloads");
+      await field.clear();
+      await field.fill("7");
+
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return String(config.lftp.num_max_parallel_downloads);
+          },
+          { timeout: 5000 }
+        )
+        .toBe("7");
+    } finally {
+      await apiSetConfig(
+        "lftp",
+        "num_max_parallel_downloads",
+        String(originalValue)
+      );
+    }
+  });
+});
+
+test.describe("Settings — Notifications", () => {
+  test("Discord and Telegram webhook fields are present", async ({
+    page,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const section = settings.getSection("Notifications");
+    await expect(section).toBeVisible();
+
+    // Discord Webhook URL is a password field
+    const discordField = section
+      .locator("app-option", { hasText: "Discord Webhook URL" })
+      .locator("input[type='text'], input[type='password']");
+    await expect(discordField).toBeVisible();
+
+    // Telegram Bot Token is a password field
+    const telegramTokenField = section
+      .locator("app-option", { hasText: "Telegram Bot Token" })
+      .locator("input[type='text'], input[type='password']");
+    await expect(telegramTokenField).toBeVisible();
+
+    // Telegram Chat ID is a text field
+    const telegramChatField = section
+      .locator("app-option", { hasText: "Telegram Chat ID" })
+      .locator("input[type='text'], input[type='password']");
+    await expect(telegramChatField).toBeVisible();
+  });
+});
+
+test.describe("Settings — Logging", () => {
+  test("Log Level dropdown persists selected value", async ({
+    page,
+    apiGet,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const configBefore = await apiGet("/server/config/get");
+    const originalLevel = configBefore.general.log_level;
+
+    const select = settings.getSelect("Log Level");
+    const newValue = originalLevel === "DEBUG" ? "WARNING" : "DEBUG";
+
+    try {
+      await select.selectOption(newValue);
+
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.general.log_level;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(newValue);
+
+      // Reload the page and verify the value persists
+      await settings.goto();
+      const reloadedSelect = settings.getSelect("Log Level");
+      await expect(reloadedSelect).toHaveValue(newValue);
+    } finally {
+      await select.selectOption(String(originalLevel));
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.general.log_level;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(originalLevel);
+    }
+  });
+});
