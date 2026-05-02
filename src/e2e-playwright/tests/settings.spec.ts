@@ -372,28 +372,26 @@ test.describe("Settings — Integrity Check", () => {
     apiSetConfig,
     waitForStream,
   }) => {
-    // Enable integrity check first so the algorithm select is enabled
+    // The Hash Algorithm select is disabled by buildValidateContext() unless
+    // validate.enabled is true (see settings-page.component.ts). Enable
+    // post-download validation here, then restore in the finally block.
     const configBefore = await apiGet("/server/config/get");
     const originalAlgorithm = configBefore.validate.algorithm;
-    const originalXferVerify = configBefore.validate.xfer_verify;
+    const originalValidateEnabled = configBefore.validate.enabled;
 
-    if (!originalXferVerify) {
-      await apiSetConfig("validate", "xfer_verify", "True");
+    if (!originalValidateEnabled) {
+      await apiSetConfig("validate", "enabled", "True");
     }
 
-    // Navigate after config is set so the page loads with xfer_verify enabled
     const settings = new SettingsPage(page);
     await settings.goto();
     await waitForStream(page);
 
     const select = settings.getSelect("Hash Algorithm");
-    // Wait for the config value to arrive via SSE. Asserting on a real
-    // algorithm value (not just non-empty) is required because Angular
-    // renders selects bound to a null model with a non-empty "? null:null ?"
-    // placeholder option, which would let `not.toHaveValue("")` pass while
-    // the model is still null and the select is still disabled.
-    await expect(select).toHaveValue(/^(md5|sha1|sha256)$/, { timeout: 10_000 });
-    await expect(select).toBeEnabled({ timeout: 5_000 });
+    // Wait for the SSE config to arrive AND for buildValidateContext to
+    // unlock the select (the disable rule needs validate.enabled === true).
+    await expect(select).toBeEnabled({ timeout: 10_000 });
+    await expect(select).toHaveValue(/^(md5|sha1|sha256)$/);
 
     // Pick a different algorithm than current
     const newValue = originalAlgorithm === "sha256" ? "md5" : "sha256";
@@ -412,8 +410,8 @@ test.describe("Settings — Integrity Check", () => {
         .toBe(newValue);
     } finally {
       await apiSetConfig("validate", "algorithm", String(originalAlgorithm));
-      if (!originalXferVerify) {
-        await apiSetConfig("validate", "xfer_verify", "False");
+      if (!originalValidateEnabled) {
+        await apiSetConfig("validate", "enabled", "False");
       }
     }
   });
