@@ -5,7 +5,10 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 5_000 },
   fullyParallel: false, // tests share a Docker container per file
-  workers: 10,
+  // ubuntu-latest has 4 vCPUs and we run a chromium per worker plus the
+  // SeedSync Docker container, so > 4 workers oversubscribes CPU and
+  // slows the suite overall.
+  workers: 4,
   retries: 0,
   reporter: [["html", { open: "never" }], ["list"]],
   use: {
