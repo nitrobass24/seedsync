@@ -372,25 +372,26 @@ test.describe("Settings — Integrity Check", () => {
     apiSetConfig,
     waitForStream,
   }) => {
-    // Enable integrity check first so the algorithm select is enabled
+    // The Hash Algorithm select is disabled by buildValidateContext() unless
+    // validate.enabled is true (see settings-page.component.ts). Enable
+    // post-download validation here, then restore in the finally block.
     const configBefore = await apiGet("/server/config/get");
     const originalAlgorithm = configBefore.validate.algorithm;
-    const originalXferVerify = configBefore.validate.xfer_verify;
+    const originalValidateEnabled = configBefore.validate.enabled;
 
-    if (!originalXferVerify) {
-      await apiSetConfig("validate", "xfer_verify", "True");
+    if (!originalValidateEnabled) {
+      await apiSetConfig("validate", "enabled", "True");
     }
 
-    // Navigate after config is set so the page loads with xfer_verify enabled
     const settings = new SettingsPage(page);
     await settings.goto();
     await waitForStream(page);
 
     const select = settings.getSelect("Hash Algorithm");
-    // Wait for the config value to arrive via SSE — the select is disabled
-    // until its value is non-null (see option.component.html)
-    await expect(select).not.toHaveValue("", { timeout: 10_000 });
-    await expect(select).toBeEnabled({ timeout: 5_000 });
+    // Wait for the SSE config to arrive AND for buildValidateContext to
+    // unlock the select (the disable rule needs validate.enabled === true).
+    await expect(select).toBeEnabled({ timeout: 10_000 });
+    await expect(select).toHaveValue(/^(md5|sha1|sha256)$/);
 
     // Pick a different algorithm than current
     const newValue = originalAlgorithm === "sha256" ? "md5" : "sha256";
@@ -409,8 +410,8 @@ test.describe("Settings — Integrity Check", () => {
         .toBe(newValue);
     } finally {
       await apiSetConfig("validate", "algorithm", String(originalAlgorithm));
-      if (!originalXferVerify) {
-        await apiSetConfig("validate", "xfer_verify", "False");
+      if (!originalValidateEnabled) {
+        await apiSetConfig("validate", "enabled", "False");
       }
     }
   });
@@ -509,9 +510,14 @@ test.describe("Settings — Logging", () => {
         )
         .toBe(newValue);
 
-      // Reload the page and verify the value persists
+      // Reload the page and verify the value persists. settings.goto()
+      // only waits for Angular bootstrap (sidebar render), not for SSE
+      // config delivery, so wait for the select to become enabled — its
+      // disabled gate is `value() === null || value() === undefined`, so
+      // an enabled select means the model has received the SSE value.
       await settings.goto();
       const reloadedSelect = settings.getSelect("Log Level");
+      await expect(reloadedSelect).toBeEnabled({ timeout: 10_000 });
       await expect(reloadedSelect).toHaveValue(newValue);
     } finally {
       await select.selectOption(String(originalLevel));
