@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 5_000 },
   fullyParallel: false, // tests share a Docker container per file
-  workers: 5,
+  workers: 10,
   retries: 0,
   reporter: [["html", { open: "never" }], ["list"]],
   use: {
