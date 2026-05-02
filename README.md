@@ -25,8 +25,12 @@
     <img src="https://img.shields.io/badge/docs-website-blue" alt="Documentation">
   </a>
   <img src="https://img.shields.io/badge/Angular-21-dd0031" alt="Angular 21">
-  <img src="https://img.shields.io/badge/Python-3.12-3776ab" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/Python-3.13-3776ab" alt="Python 3.13">
   <img src="https://img.shields.io/badge/platform-amd64%20%7C%20arm64-lightgrey" alt="Platform">
+  <br>
+  <img src="https://img.shields.io/badge/Python_tests-828-2ea44f" alt="Python Tests: 828">
+  <img src="https://img.shields.io/badge/Angular_tests-412-2ea44f" alt="Angular Tests: 412">
+  <img src="https://img.shields.io/badge/E2E_tests-95-2ea44f" alt="E2E Tests: 95">
 </p>
 
 SeedSync is a tool to sync files from a remote Linux server (like your seedbox) to your local machine.
