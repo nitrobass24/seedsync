@@ -116,7 +116,9 @@ test.describe("Integrations CRUD", () => {
       .poll(
         async () => {
           const res = await apiFetch("/server/integrations");
-          if (!res.ok) return undefined;
+          if (!res.ok) {
+            throw new Error(`GET /server/integrations failed: ${res.status} ${res.statusText}`);
+          }
           const instances = await res.json();
           return instances.find(
             (i: { name: string }) => i.name === "E2E Sonarr"
@@ -174,7 +176,9 @@ test.describe("Integrations CRUD", () => {
       .poll(
         async () => {
           const res = await apiFetch("/server/integrations");
-          if (!res.ok) return undefined;
+          if (!res.ok) {
+            throw new Error(`GET /server/integrations failed: ${res.status} ${res.statusText}`);
+          }
           const instances = await res.json();
           return instances.find(
             (i: { name: string }) => i.name === "Edit Me"
@@ -335,7 +339,9 @@ test.describe("Integrations CRUD", () => {
       .poll(
         async () => {
           const res = await apiFetch("/server/integrations");
-          if (!res.ok) return undefined;
+          if (!res.ok) {
+            throw new Error(`GET /server/integrations failed: ${res.status} ${res.statusText}`);
+          }
           const instances = await res.json();
           const inst = instances.find(
             (i: { name: string }) => i.name === "Toggle Me"

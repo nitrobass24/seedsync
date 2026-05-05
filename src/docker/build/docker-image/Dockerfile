@@ -22,14 +22,19 @@ RUN npx ng build --configuration=production --output-path /build
 FROM python:3.13-alpine3.23 AS python-deps
 
 COPY src/python/pyproject.toml src/python/uv.lock /tmp/
+# `uv pip install -r pyproject.toml` re-resolves dependencies on every build
+# and ignores uv.lock — transitive versions can drift between identical
+# rebuilds. Export the lockfile to a frozen requirements list first so we
+# install the exact versions in uv.lock.
 RUN --mount=from=ghcr.io/astral-sh/uv:0.11,source=/uv,target=/tmp/uv \
-    /tmp/uv pip install --system --no-cache --strict \
-        -r /tmp/pyproject.toml \
+    cd /tmp && /tmp/uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt \
+    && /tmp/uv pip install --system --no-cache --strict \
+        -r /tmp/requirements.txt \
     && rm -rf /usr/local/lib/python3.13/site-packages/pip* \
               /usr/local/lib/python3.13/site-packages/setuptools* \
               /usr/local/bin/pip* \
               /usr/local/bin/wheel* \
-    && rm -rf /root/.cache /tmp/pyproject.toml /tmp/uv.lock \
+    && rm -rf /root/.cache /tmp/pyproject.toml /tmp/uv.lock /tmp/requirements.txt \
     && rm -rf \
         /usr/local/lib/python3.13/ensurepip \
         /usr/local/lib/python3.13/idlelib \

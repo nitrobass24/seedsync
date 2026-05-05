@@ -81,7 +81,11 @@ class TestActiveScanner(unittest.TestCase):
             result = scanner.scan()
 
         self.assertEqual(result, [])
-        self.assertTrue(any("does not exist" in msg for msg in log_ctx.output))
+        # Enforce the DEBUG level explicitly — assertLogs(level="DEBUG") only
+        # captures records >= DEBUG, so a higher-level log would also satisfy
+        # a plain message-text check. log_ctx.output entries are formatted
+        # "LEVEL:logger:message", so the DEBUG: prefix pins the level.
+        self.assertTrue(any(o.startswith("DEBUG:ActiveScanner:") and "does not exist" in o for o in log_ctx.output))
 
     @patch("controller.scan.active_scanner.SystemScanner")
     def test_unexpected_error_logged_at_warning(self, mock_scanner_cls):

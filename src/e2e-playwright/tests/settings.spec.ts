@@ -112,6 +112,8 @@ test.describe("Settings Page", () => {
     const originalFormat = configBefore.logging.log_format;
 
     const select = settings.getSelect("Log Format");
+    // Wait for SSE-delivered config — same gate as the other select tests.
+    await expect(select).toBeEnabled({ timeout: 10_000 });
 
     try {
       await select.selectOption("json");
@@ -438,17 +440,20 @@ test.describe("Settings — Notifications", () => {
     const section = settings.getSection("Notifications");
     await expect(section).toBeVisible();
 
-    // Discord Webhook URL is a password field
+    // Discord Webhook URL is a password field — assert masked input type,
+    // not just visibility, so an accidental switch to type="text" is caught.
     const discordField = section
       .locator("app-option", { hasText: "Discord Webhook URL" })
       .locator("input[type='text'], input[type='password']");
     await expect(discordField).toBeVisible();
+    await expect(discordField).toHaveAttribute("type", "password");
 
-    // Telegram Bot Token is a password field
+    // Telegram Bot Token is a password field — same masking assertion.
     const telegramTokenField = section
       .locator("app-option", { hasText: "Telegram Bot Token" })
       .locator("input[type='text'], input[type='password']");
     await expect(telegramTokenField).toBeVisible();
+    await expect(telegramTokenField).toHaveAttribute("type", "password");
 
     // Telegram Chat ID is a text field
     const telegramChatField = section
