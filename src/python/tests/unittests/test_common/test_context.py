@@ -1,7 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
-import sys
 import unittest
 
 from common import Args, Config, Context, PathPairsConfig, Status
@@ -10,9 +9,10 @@ from common.path_pairs_config import PathPair
 
 def _make_context():
     """Create a basic Context for testing."""
+    # Tests use self.assertLogs(...) which installs its own capture handler,
+    # so we don't need to attach a StreamHandler here. Attaching one would
+    # leak across tests because loggers are singletons.
     logger = logging.getLogger("test_context")
-    handler = logging.StreamHandler(sys.stdout)
-    logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
     web_logger = logging.getLogger("test_context.web")
     config = Config()

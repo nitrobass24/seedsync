@@ -87,6 +87,12 @@ describe('OptionComponent — onChange and effectiveChoices', () => {
     component = fixture.componentInstance;
   });
 
+  // Restore real timers after every test so a failing assertion inside a
+  // useFakeTimers() block can't leak fake timers into the next test.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should suppress REDACTED_SENTINEL for password type', () => {
     vi.useFakeTimers();
     fixture.componentRef.setInput('type', OptionType.Password);
@@ -96,8 +102,6 @@ describe('OptionComponent — onChange and effectiveChoices', () => {
     const nextSpy = vi.spyOn((component as unknown as { newValue: Subject<OptionValue> }).newValue, 'next');
     component.onChange(REDACTED_SENTINEL);
     expect(nextSpy).not.toHaveBeenCalled();
-
-    vi.useRealTimers();
   });
 
   it('should pass real password value through to Subject', () => {
@@ -108,8 +112,6 @@ describe('OptionComponent — onChange and effectiveChoices', () => {
     const nextSpy = vi.spyOn((component as unknown as { newValue: Subject<OptionValue> }).newValue, 'next');
     component.onChange('real-password');
     expect(nextSpy).toHaveBeenCalledWith('real-password');
-
-    vi.useRealTimers();
   });
 
   it('should not suppress REDACTED_SENTINEL for non-password types', () => {
@@ -120,8 +122,6 @@ describe('OptionComponent — onChange and effectiveChoices', () => {
     const nextSpy = vi.spyOn((component as unknown as { newValue: Subject<OptionValue> }).newValue, 'next');
     component.onChange(REDACTED_SENTINEL);
     expect(nextSpy).toHaveBeenCalledWith(REDACTED_SENTINEL);
-
-    vi.useRealTimers();
   });
 
   it('should include current value in choices if not in predefined list', () => {

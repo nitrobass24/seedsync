@@ -179,8 +179,12 @@ test.describe("Settings Page", () => {
 
     try {
       const field = settings.getTextInput("Server Address");
-      await field.clear();
+      // fill() already clears before typing — calling clear() separately
+      // races with Angular's signal-driven re-render and can reset the
+      // field before fill() runs.
+      await expect(field).toBeEnabled();
       await field.fill("trigger-restart-notice-" + Date.now());
+      await field.blur();
 
       const notification = settings.getRestartNotification();
       await expect(notification).toBeVisible({ timeout: 5000 });
@@ -219,9 +223,10 @@ test.describe("Settings — Staging Directory", () => {
 
     try {
       const field = settings.getTextInput("Staging Path");
-      await field.clear();
+      await expect(field).toBeEnabled();
       const testValue = "/tmp/e2e-staging-" + Date.now();
       await field.fill(testValue);
+      await field.blur();
 
       await expect
         .poll(
@@ -400,8 +405,9 @@ test.describe("Settings — Connections", () => {
 
     try {
       const field = settings.getTextInput("Max Parallel Downloads");
-      await field.clear();
+      await expect(field).toBeEnabled();
       await field.fill("7");
+      await field.blur();
 
       await expect
         .poll(
