@@ -24,6 +24,7 @@ class TestActiveScanner(unittest.TestCase):
     def test_empty_active_files_returns_empty(self, mock_scanner_cls):
         """With no active files set, scan returns empty."""
         scanner = ActiveScanner("/local")
+        self.addCleanup(scanner.close)
         result = scanner.scan()
         self.assertEqual(result, [])
         scanner.close()
@@ -37,6 +38,7 @@ class TestActiveScanner(unittest.TestCase):
         mock_scanner.scan_single.side_effect = [file_a, file_b]
 
         scanner = ActiveScanner("/local")
+        self.addCleanup(scanner.close)
         scanner.set_active_files(["fileA", "fileB"])
         # multiprocessing.Queue.put() uses a background thread; brief pause
         # ensures the data is available for the non-blocking get() in scan()
@@ -56,6 +58,7 @@ class TestActiveScanner(unittest.TestCase):
         mock_scanner.scan_single.return_value = file_c
 
         scanner = ActiveScanner("/local")
+        self.addCleanup(scanner.close)
         scanner.set_active_files(["fileA", "fileB"])
         scanner.set_active_files(["fileC"])
         time.sleep(0.05)
@@ -73,6 +76,7 @@ class TestActiveScanner(unittest.TestCase):
         mock_scanner.scan_single.side_effect = SystemScannerError("file does not exist: /local/missing")
 
         scanner = ActiveScanner("/local")
+        self.addCleanup(scanner.close)
         scanner.set_active_files(["missing"])
         time.sleep(0.05)
 
@@ -90,6 +94,7 @@ class TestActiveScanner(unittest.TestCase):
         mock_scanner.scan_single.side_effect = SystemScannerError("permission denied")
 
         scanner = ActiveScanner("/local")
+        self.addCleanup(scanner.close)
         scanner.set_active_files(["restricted"])
         time.sleep(0.05)
 
@@ -104,6 +109,7 @@ class TestActiveScanner(unittest.TestCase):
     def test_set_base_logger(self, mock_scanner_cls):
         """set_base_logger creates a child logger."""
         scanner = ActiveScanner("/local")
+        self.addCleanup(scanner.close)
         parent_logger = logging.getLogger("parent")
         scanner.set_base_logger(parent_logger)
         self.assertEqual(scanner.logger.name, "parent.ActiveScanner")
@@ -114,5 +120,5 @@ class TestActiveScanner(unittest.TestCase):
         """lftp_temp_suffix is forwarded to SystemScanner."""
         mock_scanner = mock_scanner_cls.return_value
         scanner = ActiveScanner("/local", lftp_temp_suffix=".partial")
+        self.addCleanup(scanner.close)
         mock_scanner.set_lftp_temp_suffix.assert_called_once_with(".partial")
-        scanner.close()

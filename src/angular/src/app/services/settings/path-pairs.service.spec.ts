@@ -194,20 +194,19 @@ describe('PathPairsService', () => {
 
   // --- Failed refresh ---
 
-  it('should preserve existing list when refresh fails', () => {
+  it('should clear pairs when refresh fails (catchError emits empty array)', () => {
     connectedSubject.next(true);
     httpMock.expectOne('/server/pathpairs').flush([makePair()]);
     expect(snapshot().length).toBe(1);
 
-    // Trigger another refresh that fails
+    // Trigger another refresh that fails. The service's catchError(of([]))
+    // turns the error into an empty list, which pairsSubject.next([]) emits
+    // to subscribers — the previously cached list is dropped.
     service.refresh();
     httpMock.expectOne('/server/pathpairs').error(new ProgressEvent('error'));
 
-    // The failed refresh replaces with empty array per the catchError(of([]))
-    // This is the actual behavior — catchError returns of([]) which emits []
     let result: PathPair[] = [];
     service.pairs$.subscribe(p => result = p);
-    // The service's catchError returns of([]) which causes pairsSubject.next([])
     expect(result).toEqual([]);
   });
 });

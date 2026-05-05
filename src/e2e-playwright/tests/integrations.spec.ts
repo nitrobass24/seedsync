@@ -4,15 +4,23 @@ import { IntegrationsPage } from "./pages/integrations.page";
 test.describe("Integrations CRUD", () => {
   let integrations: IntegrationsPage;
 
-  // Clean up all integrations before each test for a clean slate
+  // Clean up all integrations before each test for a clean slate. Fail fast
+  // on any API error so the test stops with a clear message instead of
+  // proceeding against stale or unknown state.
   test.beforeEach(async ({ page, apiFetch }) => {
     const res = await apiFetch("/server/integrations");
-    if (res.ok) {
-      const instances = await res.json();
-      for (const inst of instances) {
-        await apiFetch(`/server/integrations/${inst.id}`, {
-          method: "DELETE",
-        });
+    if (!res.ok) {
+      throw new Error(`GET /server/integrations failed: ${res.status} ${res.statusText}`);
+    }
+    const instances = await res.json();
+    for (const inst of instances) {
+      const del = await apiFetch(`/server/integrations/${inst.id}`, {
+        method: "DELETE",
+      });
+      if (!del.ok) {
+        throw new Error(
+          `DELETE /server/integrations/${inst.id} failed: ${del.status} ${del.statusText}`,
+        );
       }
     }
 
@@ -20,15 +28,23 @@ test.describe("Integrations CRUD", () => {
     await integrations.goto();
   });
 
-  // Clean up after each test
+  // Clean up after each test. Same fail-fast contract as beforeEach so
+  // teardown failures surface as test failures instead of being swallowed.
   test.afterEach(async ({ apiFetch }) => {
     const res = await apiFetch("/server/integrations");
-    if (!res.ok) return;
+    if (!res.ok) {
+      throw new Error(`GET /server/integrations failed during cleanup: ${res.status} ${res.statusText}`);
+    }
     const instances = await res.json();
     for (const inst of instances) {
-      await apiFetch(`/server/integrations/${inst.id}`, {
+      const del = await apiFetch(`/server/integrations/${inst.id}`, {
         method: "DELETE",
       });
+      if (!del.ok) {
+        throw new Error(
+          `DELETE /server/integrations/${inst.id} failed during cleanup: ${del.status} ${del.statusText}`,
+        );
+      }
     }
   });
 

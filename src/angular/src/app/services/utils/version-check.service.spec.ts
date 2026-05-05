@@ -8,6 +8,7 @@ import { RestService, WebReaction } from './rest.service';
 import { NotificationService } from './notification.service';
 import { LoggerService } from './logger.service';
 import { Notification, NotificationLevel } from '../../models/notification';
+import packageJson from '../../../../package.json';
 
 function makeReaction(overrides: Partial<WebReaction> = {}): WebReaction {
   return {
@@ -64,8 +65,10 @@ describe('VersionCheckService', () => {
   });
 
   it('should not show notification when release is same version', () => {
+    // Use the live package.json version so this test stays correct
+    // across version bumps.
     mockRestService.sendRequest.mockReturnValue(
-      of(makeReaction({ success: true, data: makeGithubResponse('v0.17.0') })),
+      of(makeReaction({ success: true, data: makeGithubResponse('v' + packageJson.version) })),
     );
 
     let notifications: Notification[] = [];

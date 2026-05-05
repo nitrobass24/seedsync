@@ -1,7 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
-import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -13,9 +12,10 @@ class TestWebAppJobSetup(unittest.TestCase):
 
     def _make_context(self):
         context = MagicMock()
+        # Don't attach a StreamHandler — assertLogs() in tests installs its
+        # own capture handler, and adding one here would leak across tests
+        # (loggers are singletons).
         logger = logging.getLogger("test_web_app_job")
-        handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
         context.logger = logger
         context.web_access_logger = logger
