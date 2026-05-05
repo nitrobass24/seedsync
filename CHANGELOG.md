@@ -2,11 +2,6 @@
 
 ## [0.18.0] - 2026-05-04
 
-### Added
-
-- **LFTP hot-reload** — Connection-related settings (parallel connections, max total connections, socket buffer size, bandwidth limit) apply without a container restart. Settings UI distinguishes between options that take effect immediately and those that require restart (#433)
-- **Atomic config writes** — `Config.to_file()` now flushes to disk via temp file + `os.rename` so a process kill mid-write can't truncate the config (#433)
-
 ### Changed
 
 - **Image size reduced from 114 MB to 64 MB** — `RUN --mount=from=ghcr.io/astral-sh/uv` keeps `uv` out of the runtime image; build artifacts no longer persist (#437)
@@ -21,28 +16,29 @@
 - **Test count badges** added to the README (#451)
 - **Dependency updates** — Angular group (10 packages), typescript-eslint, jsdom, eslint, Docusaurus 3.10.0 → 3.10.1 across 5 packages (#458, #459, #460, #461, #463, #464, #465, #466)
 
+### Added
+
+- **LFTP hot-reload** — Connection-related settings (parallel connections, max total connections, socket buffer size, bandwidth limit) apply without a container restart. Settings UI distinguishes between options that take effect immediately and those that require restart (#433)
+- **Atomic config writes** — `Config.to_file()` now flushes to disk via temp file + `os.rename` so a process kill mid-write can't truncate the config (#433)
+- **Expanded unit and E2E test coverage:**
+  - 47 security middleware unit tests (#439)
+  - 36 controller core unit tests (#444)
+  - 28 FileOptions / Integrations / Option component tests (#448)
+  - 25 AutoQueueService and PathPairsService tests (#445)
+  - 20 HeaderComponent and VersionCheckService tests (#443)
+  - 18 ViewFileFilterService tests (#440)
+  - E2E for integrations CRUD (#441)
+  - E2E for File Actions & Error States (#438)
+  - E2E Settings coverage expansion (#442)
+  - Web App Job & Context Python tests (#446)
+  - Handler integration test expansion (#447)
+  - Python integration tests added to CI (#449)
+
 ### Fixed
 
 - **Hash Algorithm select test flake** — Test waited on the wrong config field; the algorithm select's disable gate is `validate.enabled`, not `validate.xfer_verify`. Test now sets the correct field and waits for the SSE-delivered model value before asserting (#455)
 - **StreamHandler leaks in test setUp methods** — Tests added a handler to the shared root logger but never removed it. Loggers are singletons, so by test N the logger had N handlers and each log line printed N times. Fixed via `self.addCleanup(logger.removeHandler, handler)` across 8 test files / 10 setUp methods (#450, #457)
 - **Multiprocessing resource leak in `test_active_scanner.py`** — `scanner.close()` now registered with `addCleanup` so resources release even if assertions raise
-
-### Tests
-
-This release brings a substantial expansion of unit and E2E coverage:
-
-- 47 security middleware unit tests (#439)
-- 36 controller core unit tests (#444)
-- 28 FileOptions / Integrations / Option component tests (#448)
-- 25 AutoQueueService and PathPairsService tests (#445)
-- 20 HeaderComponent and VersionCheckService tests (#443)
-- 18 ViewFileFilterService tests (#440)
-- E2E for integrations CRUD (#441)
-- E2E for File Actions & Error States (#438)
-- E2E Settings coverage expansion (#442)
-- Web App Job & Context Python tests (#446)
-- Handler integration test expansion (#447)
-- Python integration tests added to CI (#449)
 
 ## [0.17.0] - 2026-04-30
 

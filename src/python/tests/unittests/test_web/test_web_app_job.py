@@ -131,6 +131,10 @@ class TestRequestLoggingMiddleware(unittest.TestCase):
         def start_response(status, headers, *args):
             pass
 
-        with self.assertLogs("test_request_logging_error", level="DEBUG"):
+        with self.assertLogs("test_request_logging_error", level="DEBUG") as log_ctx:
             with self.assertRaises(RuntimeError):
                 list(middleware(environ, start_response))
+
+        # Mirror the happy-path assertion: the error branch should still log
+        # the method, path, and status that start_response saw before the raise.
+        self.assertTrue(any("POST" in o and "/fail" in o and "500" in o for o in log_ctx.output))

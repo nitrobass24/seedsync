@@ -181,8 +181,8 @@ test.describe("Settings Page", () => {
       const field = settings.getTextInput("Server Address");
       // fill() already clears before typing — calling clear() separately
       // races with Angular's signal-driven re-render and can reset the
-      // field before fill() runs.
-      await expect(field).toBeEnabled();
+      // field before fill() runs. Wait for SSE-delivered config first.
+      await expect(field).toBeEnabled({ timeout: 5000 });
       await field.fill("trigger-restart-notice-" + Date.now());
       await field.blur();
 
@@ -223,7 +223,7 @@ test.describe("Settings — Staging Directory", () => {
 
     try {
       const field = settings.getTextInput("Staging Path");
-      await expect(field).toBeEnabled();
+      await expect(field).toBeEnabled({ timeout: 5000 });
       const testValue = "/tmp/e2e-staging-" + Date.now();
       await field.fill(testValue);
       await field.blur();
@@ -405,7 +405,7 @@ test.describe("Settings — Connections", () => {
 
     try {
       const field = settings.getTextInput("Max Parallel Downloads");
-      await expect(field).toBeEnabled();
+      await expect(field).toBeEnabled({ timeout: 5000 });
       await field.fill("7");
       await field.blur();
 

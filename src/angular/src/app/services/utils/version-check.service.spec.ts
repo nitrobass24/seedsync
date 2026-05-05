@@ -159,6 +159,7 @@ describe('VersionCheckService', () => {
 
     createService();
 
+    expect(notifications).toHaveLength(1);
     expect(notifications[0].text).toContain(url);
   });
 });

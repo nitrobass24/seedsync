@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { BehaviorSubject } from 'rxjs';
+import { take } from 'rxjs/operators';
 
 import { PathPairsService } from './path-pairs.service';
 import { ConnectedService } from '../utils/connected.service';
@@ -29,8 +30,11 @@ describe('PathPairsService', () => {
   let connectedSubject: BehaviorSubject<boolean>;
 
   function snapshot(): PathPair[] {
+    // take(1) auto-completes the observable after the first emission, so
+    // each snapshot() call doesn't accumulate a lingering subscription
+    // on service.pairs$.
     let result: PathPair[] = [];
-    service.pairs$.subscribe(p => result = p);
+    service.pairs$.pipe(take(1)).subscribe(p => result = p);
     return result;
   }
 
