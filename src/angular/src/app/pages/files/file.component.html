@@ -7,8 +7,8 @@
              [attr.aria-label]="'Toggle selection for ' + file().name"
              (click)="onCheck($event, file())"
              (keyup.enter)="onCheck($event, file())"
-             (keyup.space)="onCheck($event, file()); $event.preventDefault()">
-            <input type="checkbox" tabindex="-1" [checked]="file().isChecked" />
+             (keydown.space)="$event.preventDefault(); onCheck($event, file())">
+            <input type="checkbox" tabindex="-1" aria-hidden="true" [checked]="file().isChecked" />
         </div>
         <div class="status">
             @if (file().status === ViewFileStatus.DEFAULT && file().remoteSize > 0) {

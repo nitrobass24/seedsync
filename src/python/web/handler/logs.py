@@ -121,6 +121,9 @@ class LogsHandler(IHandler):
                         # Header line: flush any previous entry, then start a new one.
                         if current_entry is not None:
                             flush(current_entry)
+                            if before != 0 and global_entry_idx >= before:
+                                current_entry = None
+                                break
                         current_entry = {
                             "timestamp": match.group(1),
                             "level": match.group(2),
