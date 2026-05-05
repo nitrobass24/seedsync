@@ -73,7 +73,9 @@ class TestPrintToLog(unittest.TestCase):
         pair.name = "TestPair"
         pair.enabled = True
         pair.auto_queue = True
-        ppc._pairs = [pair]
+        # Use the public property setter so PathPairsConfig's lock is
+        # acquired, instead of touching the private _pairs attribute.
+        ppc.pairs = [pair]
         ctx.path_pairs_config = ppc
 
         with self.assertLogs("test_context", level="DEBUG") as log_ctx:

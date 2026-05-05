@@ -102,20 +102,18 @@ class TestRequestLoggingMiddleware(unittest.TestCase):
             "PATH_INFO": "/test/path",
         }
 
-        captured_status = {}
-
         def start_response(status, headers, *args):
-            captured_status["status"] = status
+            pass
 
         with self.assertLogs("test_request_logging", level="DEBUG") as log_ctx:
             result = list(middleware(environ, start_response))
 
         self.assertEqual(result, [b"ok"])
-        # Verify log message contains method, path, and status code
-        log_output = log_ctx.output[0]
-        self.assertIn("GET", log_output)
-        self.assertIn("/test/path", log_output)
-        self.assertIn("200", log_output)
+        # Some log line should contain method, path, and status. Don't index
+        # log_ctx.output[0] — other loggers might emit lines first under load.
+        self.assertTrue(
+            any("GET" in o and "/test/path" in o and "200" in o for o in log_ctx.output)
+        )
 
     def test_logs_even_on_app_error(self):
         """Duration is logged even when the app raises."""
