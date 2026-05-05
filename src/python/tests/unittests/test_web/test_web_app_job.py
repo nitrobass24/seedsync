@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 from web.web_app_job import MyWSGIRefServer, WebAppJob, _RequestLoggingMiddleware
 
 
-class TestWebAppJobSetup(unittest.TestCase):
-    """Tests for WebAppJob.setup() — server creation and thread start."""
+class _WebAppJobBase(unittest.TestCase):
+    """Shared context fixture for the lifecycle test classes below."""
 
     def _make_context(self):
         context = MagicMock()
@@ -22,6 +22,10 @@ class TestWebAppJobSetup(unittest.TestCase):
         context.config.web.port = 8080
         context.args.debug = False
         return context
+
+
+class TestWebAppJobSetup(_WebAppJobBase):
+    """Tests for WebAppJob.setup() — server creation and thread start."""
 
     @patch("web.web_app_job.Thread")
     @patch("web.web_app_job.MyWSGIRefServer")
@@ -37,6 +41,10 @@ class TestWebAppJobSetup(unittest.TestCase):
         mock_thread_cls.assert_called_once()
         mock_thread_cls.return_value.start.assert_called_once()
 
+
+class TestWebAppJobExecute(_WebAppJobBase):
+    """Tests for WebAppJob.execute() — invokes the web app's process loop."""
+
     def test_execute_calls_process(self):
         """execute() calls web_app.process()."""
         context = self._make_context()
@@ -46,6 +54,10 @@ class TestWebAppJobSetup(unittest.TestCase):
         job.execute()
 
         web_app.process.assert_called_once()
+
+
+class TestWebAppJobCleanup(_WebAppJobBase):
+    """Tests for WebAppJob.cleanup() — server stop and thread join."""
 
     @patch("web.web_app_job.Thread")
     @patch("web.web_app_job.MyWSGIRefServer")

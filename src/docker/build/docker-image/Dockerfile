@@ -26,8 +26,9 @@ COPY src/python/pyproject.toml src/python/uv.lock /tmp/
 # and ignores uv.lock — transitive versions can drift between identical
 # rebuilds. Export the lockfile to a frozen requirements list first so we
 # install the exact versions in uv.lock.
+WORKDIR /tmp
 RUN --mount=from=ghcr.io/astral-sh/uv:0.11,source=/uv,target=/tmp/uv \
-    cd /tmp && /tmp/uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt \
+    /tmp/uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt \
     && /tmp/uv pip install --system --no-cache --strict \
         -r /tmp/requirements.txt \
     && rm -rf /usr/local/lib/python3.13/site-packages/pip* \

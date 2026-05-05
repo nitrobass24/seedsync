@@ -355,24 +355,27 @@ test.describe("Settings — Integrity Check", () => {
     const originalAlgorithm = configBefore.validate.algorithm;
     const originalValidateEnabled = configBefore.validate.enabled;
 
-    if (!originalValidateEnabled) {
-      await apiSetConfig("validate", "enabled", "True");
-    }
-
-    const settings = new SettingsPage(page);
-    await settings.goto();
-    await waitForStream(page);
-
-    const select = settings.getSelect("Hash Algorithm");
-    // Wait for the SSE config to arrive AND for buildValidateContext to
-    // unlock the select (the disable rule needs validate.enabled === true).
-    await expect(select).toBeEnabled({ timeout: 10_000 });
-    await expect(select).toHaveValue(/^(md5|sha1|sha256)$/);
-
-    // Pick a different algorithm than current
-    const newValue = originalAlgorithm === "sha256" ? "md5" : "sha256";
-
     try {
+      // All state mutation lives inside try so the finally block always
+      // restores it — even if the apiSetConfig itself or any subsequent
+      // setup step throws.
+      if (!originalValidateEnabled) {
+        await apiSetConfig("validate", "enabled", "True");
+      }
+
+      const settings = new SettingsPage(page);
+      await settings.goto();
+      await waitForStream(page);
+
+      const select = settings.getSelect("Hash Algorithm");
+      // Wait for the SSE config to arrive AND for buildValidateContext to
+      // unlock the select (the disable rule needs validate.enabled === true).
+      await expect(select).toBeEnabled({ timeout: 10_000 });
+      await expect(select).toHaveValue(/^(md5|sha1|sha256)$/);
+
+      // Pick a different algorithm than current
+      const newValue = originalAlgorithm === "sha256" ? "md5" : "sha256";
+
       await select.selectOption(newValue);
 
       await expect

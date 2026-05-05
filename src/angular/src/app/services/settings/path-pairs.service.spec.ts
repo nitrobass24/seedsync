@@ -209,8 +209,8 @@ describe('PathPairsService', () => {
     service.refresh();
     httpMock.expectOne('/server/pathpairs').error(new ProgressEvent('error'));
 
-    let result: PathPair[] = [];
-    service.pairs$.subscribe(p => result = p);
-    expect(result).toEqual([]);
+    // Use the snapshot() helper (which pipes through take(1)) so this
+    // assertion doesn't leave a live subscriber on service.pairs$.
+    expect(snapshot()).toEqual([]);
   });
 });

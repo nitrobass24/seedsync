@@ -102,7 +102,11 @@ class TestActiveScanner(unittest.TestCase):
             result = scanner.scan()
 
         self.assertEqual(result, [])
-        self.assertTrue(any("Unexpected scan error" in msg for msg in log_ctx.output))
+        # Pin the level explicitly via the "WARNING:ActiveScanner:" prefix —
+        # mirrors the DEBUG-level check in test_missing_file_logged_at_debug.
+        self.assertTrue(
+            any(o.startswith("WARNING:ActiveScanner:") and "Unexpected scan error" in o for o in log_ctx.output)
+        )
 
     @patch("controller.scan.active_scanner.SystemScanner")
     def test_set_base_logger(self, mock_scanner_cls):

@@ -13,6 +13,12 @@ export enum OptionType {
 /** Value emitted by OptionComponent — matches the possible config value types. */
 export type OptionValue = string | number | boolean | null;
 
+/**
+ * Debounce window applied to onChange before the change event is emitted.
+ * Exported so tests can reference the same value without re-declaring it.
+ */
+export const DEBOUNCE_TIME_MS = 1000;
+
 @Component({
   selector: 'app-option',
   standalone: true,
@@ -43,13 +49,12 @@ export class OptionComponent implements OnInit, OnDestroy {
     return c;
   });
 
-  private readonly DEBOUNCE_TIME_MS = 1000;
   private readonly newValue = new Subject<OptionValue>();
   private subscription?: Subscription;
 
   ngOnInit(): void {
     this.subscription = this.newValue
-      .pipe(debounceTime(this.DEBOUNCE_TIME_MS), distinctUntilChanged())
+      .pipe(debounceTime(DEBOUNCE_TIME_MS), distinctUntilChanged())
       .subscribe({ next: (val) => this.changeEvent.emit(val) });
   }
 
