@@ -251,12 +251,16 @@ test.describe("Integrations CRUD", () => {
     // Row should disappear
     await expect(row).not.toBeVisible({ timeout: 5000 });
 
-    // Verify via API
+    // Verify via API. Throw on a non-OK response so the poll keeps
+    // retrying — returning undefined here would falsely satisfy
+    // toBeUndefined() and mask a real API failure.
     await expect
       .poll(
         async () => {
           const res = await apiFetch("/server/integrations");
-          if (!res.ok) return undefined;
+          if (!res.ok) {
+            throw new Error(`GET /server/integrations failed: ${res.status} ${res.statusText}`);
+          }
           const instances = await res.json();
           return instances.find(
             (i: { name: string }) => i.name === "Delete Me"
