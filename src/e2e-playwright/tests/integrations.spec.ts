@@ -1,6 +1,14 @@
 import { test, expect } from "./fixtures";
 import { IntegrationsPage } from "./pages/integrations.page";
 
+// Wrap a fixture-setup API call so failures surface as "fixture creation
+// failed" instead of cascading into confusing UI assertion failures.
+async function expectFixtureOk(res: Response, label: string): Promise<void> {
+  if (!res.ok) {
+    throw new Error(`fixture creation failed: ${label} → ${res.status} ${res.statusText}`);
+  }
+}
+
 test.describe("Integrations CRUD", () => {
   let integrations: IntegrationsPage;
 
@@ -129,7 +137,7 @@ test.describe("Integrations CRUD", () => {
     apiFetch,
   }) => {
     // Create an integration via API
-    await apiFetch("/server/integrations", {
+    const created = await apiFetch("/server/integrations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -140,6 +148,7 @@ test.describe("Integrations CRUD", () => {
         enabled: true,
       }),
     });
+    await expectFixtureOk(created, 'POST /server/integrations (Edit Me)');
 
     await integrations.goto();
 
@@ -184,7 +193,7 @@ test.describe("Integrations CRUD", () => {
     apiFetch,
   }) => {
     // Create an integration via API
-    await apiFetch("/server/integrations", {
+    const created = await apiFetch("/server/integrations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -195,6 +204,7 @@ test.describe("Integrations CRUD", () => {
         enabled: true,
       }),
     });
+    await expectFixtureOk(created, 'POST /server/integrations (Confirm Delete)');
 
     await integrations.goto();
 
@@ -212,7 +222,7 @@ test.describe("Integrations CRUD", () => {
     apiFetch,
   }) => {
     // Create an integration via API
-    await apiFetch("/server/integrations", {
+    const created = await apiFetch("/server/integrations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -223,6 +233,7 @@ test.describe("Integrations CRUD", () => {
         enabled: true,
       }),
     });
+    await expectFixtureOk(created, 'POST /server/integrations (Delete Me)');
 
     await integrations.goto();
 
@@ -258,7 +269,7 @@ test.describe("Integrations CRUD", () => {
 
   test("Test Connection button shows result", async ({ apiFetch }) => {
     // Create an integration with a URL that will likely fail connection
-    await apiFetch("/server/integrations", {
+    const created = await apiFetch("/server/integrations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -269,6 +280,7 @@ test.describe("Integrations CRUD", () => {
         enabled: true,
       }),
     });
+    await expectFixtureOk(created, 'POST /server/integrations (Test Conn)');
 
     await integrations.goto();
 
@@ -289,7 +301,7 @@ test.describe("Integrations CRUD", () => {
 
   test("enable/disable toggle updates via API", async ({ apiFetch }) => {
     // Create an enabled integration
-    await apiFetch("/server/integrations", {
+    const created = await apiFetch("/server/integrations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -300,6 +312,7 @@ test.describe("Integrations CRUD", () => {
         enabled: true,
       }),
     });
+    await expectFixtureOk(created, 'POST /server/integrations (Toggle Me)');
 
     await integrations.goto();
 
@@ -345,9 +358,14 @@ test.describe("Integrations CRUD", () => {
     // Form should close
     await expect(integrations.instanceForm).not.toBeVisible();
 
-    // Verify nothing was created
+    // Verify nothing was created. Fail loudly if the GET itself fails so
+    // we don't get a false-positive (an empty list always satisfies the
+    // "Should Not Exist" check).
     const res = await apiFetch("/server/integrations");
-    const instances = res.ok ? await res.json() : [];
+    if (!res.ok) {
+      throw new Error(`GET /server/integrations failed: ${res.status} ${res.statusText}`);
+    }
+    const instances = await res.json();
     expect(
       instances.find((i: { name: string }) => i.name === "Should Not Exist")
     ).toBeUndefined();

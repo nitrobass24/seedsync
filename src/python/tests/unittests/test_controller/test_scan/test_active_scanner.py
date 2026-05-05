@@ -27,7 +27,6 @@ class TestActiveScanner(unittest.TestCase):
         self.addCleanup(scanner.close)
         result = scanner.scan()
         self.assertEqual(result, [])
-        scanner.close()
 
     @patch("controller.scan.active_scanner.SystemScanner")
     def test_scan_returns_files_after_set_active(self, mock_scanner_cls):
@@ -48,7 +47,6 @@ class TestActiveScanner(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0].name, "fileA")
         self.assertEqual(result[1].name, "fileB")
-        scanner.close()
 
     @patch("controller.scan.active_scanner.SystemScanner")
     def test_latest_list_wins_when_multiple_set_before_scan(self, mock_scanner_cls):
@@ -67,7 +65,6 @@ class TestActiveScanner(unittest.TestCase):
         # Only the latest list should be used
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].name, "fileC")
-        scanner.close()
 
     @patch("controller.scan.active_scanner.SystemScanner")
     def test_missing_file_logged_at_debug(self, mock_scanner_cls):
@@ -85,7 +82,6 @@ class TestActiveScanner(unittest.TestCase):
 
         self.assertEqual(result, [])
         self.assertTrue(any("does not exist" in msg for msg in log_ctx.output))
-        scanner.close()
 
     @patch("controller.scan.active_scanner.SystemScanner")
     def test_unexpected_error_logged_at_warning(self, mock_scanner_cls):
@@ -103,7 +99,6 @@ class TestActiveScanner(unittest.TestCase):
 
         self.assertEqual(result, [])
         self.assertTrue(any("Unexpected scan error" in msg for msg in log_ctx.output))
-        scanner.close()
 
     @patch("controller.scan.active_scanner.SystemScanner")
     def test_set_base_logger(self, mock_scanner_cls):
@@ -113,7 +108,6 @@ class TestActiveScanner(unittest.TestCase):
         parent_logger = logging.getLogger("parent")
         scanner.set_base_logger(parent_logger)
         self.assertEqual(scanner.logger.name, "parent.ActiveScanner")
-        scanner.close()
 
     @patch("controller.scan.active_scanner.SystemScanner")
     def test_lftp_temp_suffix_forwarded(self, mock_scanner_cls):

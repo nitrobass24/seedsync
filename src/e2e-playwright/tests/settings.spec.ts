@@ -470,6 +470,10 @@ test.describe("Settings — Logging", () => {
     const originalLevel = configBefore.general.log_level;
 
     const select = settings.getSelect("Log Level");
+    // Wait for the SSE config delivery to populate the model before
+    // interacting with the select — same pattern as the Hash Algorithm
+    // test. settings.goto() only waits for Angular bootstrap, not SSE.
+    await expect(select).toBeEnabled({ timeout: 10_000 });
     const newValue = originalLevel === "DEBUG" ? "WARNING" : "DEBUG";
 
     try {
