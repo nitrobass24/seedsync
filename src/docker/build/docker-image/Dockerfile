@@ -14,7 +14,12 @@ RUN npx ng build --configuration=production --output-path /build
 # ==============================================================================
 # Stage 2: Prepare Python runtime (install deps, strip stdlib)
 # ==============================================================================
-FROM python:3.13-alpine AS python-deps
+# Pin to the same Alpine minor as the runtime stage (FROM alpine:3.23
+# below) so Python + C extensions in site-packages are compiled against
+# the same musl ABI they'll run on. The floating "python:3.13-alpine"
+# tag could otherwise resolve to a newer Alpine and silently introduce
+# a musl mismatch when /usr/local is copied into the runtime stage.
+FROM python:3.13-alpine3.23 AS python-deps
 
 COPY src/python/pyproject.toml src/python/uv.lock /tmp/
 RUN --mount=from=ghcr.io/astral-sh/uv:0.11,source=/uv,target=/tmp/uv \
