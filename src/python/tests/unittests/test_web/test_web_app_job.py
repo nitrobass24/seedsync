@@ -111,9 +111,7 @@ class TestRequestLoggingMiddleware(unittest.TestCase):
         self.assertEqual(result, [b"ok"])
         # Some log line should contain method, path, and status. Don't index
         # log_ctx.output[0] — other loggers might emit lines first under load.
-        self.assertTrue(
-            any("GET" in o and "/test/path" in o and "200" in o for o in log_ctx.output)
-        )
+        self.assertTrue(any("GET" in o and "/test/path" in o and "200" in o for o in log_ctx.output))
 
     def test_logs_even_on_app_error(self):
         """Duration is logged even when the app raises."""
