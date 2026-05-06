@@ -5,6 +5,7 @@
 package-lock.json
 !src/angular/package-lock.json
 !website/package-lock.json
+!src/e2e-playwright/package-lock.json
 src/python/build
 src/python/site
 dev-config/

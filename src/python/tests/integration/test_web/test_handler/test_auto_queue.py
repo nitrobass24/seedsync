@@ -1,6 +1,5 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-import json
 from urllib.parse import quote
 
 from controller import AutoQueuePattern
@@ -16,7 +15,7 @@ class TestAutoQueueHandler(BaseTestWebApp):
         self.auto_queue_persist.add_pattern(AutoQueuePattern(pattern="fi%ve"))
         resp = self.test_app.get("/server/autoqueue/get")
         self.assertEqual(200, resp.status_int)
-        json_list = json.loads(str(resp.html))
+        json_list = resp.json
         self.assertEqual(5, len(json_list))
         self.assertIn({"pattern": "one"}, json_list)
         self.assertIn({"pattern": "t wo"}, json_list)
@@ -32,7 +31,7 @@ class TestAutoQueueHandler(BaseTestWebApp):
         self.auto_queue_persist.add_pattern(AutoQueuePattern(pattern="e"))
         resp = self.test_app.get("/server/autoqueue/get")
         self.assertEqual(200, resp.status_int)
-        json_list = json.loads(str(resp.html))
+        json_list = resp.json
         self.assertEqual(5, len(json_list))
         self.assertEqual(
             [{"pattern": "a"}, {"pattern": "b"}, {"pattern": "c"}, {"pattern": "d"}, {"pattern": "e"}], json_list
@@ -73,7 +72,7 @@ class TestAutoQueueHandler(BaseTestWebApp):
         self.assertEqual(200, resp.status_int)
         resp = self.test_app.get("/server/autoqueue/add/one", expect_errors=True)
         self.assertEqual(400, resp.status_int)
-        self.assertEqual("Auto-queue pattern 'one' already exists.", str(resp.html))
+        self.assertEqual("Auto-queue pattern 'one' already exists.", resp.text)
 
     def test_add_empty_value(self):
         uri = quote(quote("  ", safe=""), safe="")
@@ -124,13 +123,13 @@ class TestAutoQueueHandler(BaseTestWebApp):
     def test_remove_non_existing(self):
         resp = self.test_app.get("/server/autoqueue/remove/one", expect_errors=True)
         self.assertEqual(400, resp.status_int)
-        self.assertEqual("Auto-queue pattern 'one' doesn't exist.", str(resp.html))
+        self.assertEqual("Auto-queue pattern 'one' doesn't exist.", resp.text)
 
     def test_remove_empty_value(self):
         uri = quote(quote("  ", safe=""), safe="")
         resp = self.test_app.get("/server/autoqueue/remove/" + uri, expect_errors=True)
         self.assertEqual(400, resp.status_int)
-        self.assertEqual("Auto-queue pattern '  ' doesn't exist.", str(resp.html))
+        self.assertEqual("Auto-queue pattern '  ' doesn't exist.", resp.text)
         self.assertEqual(0, len(self.auto_queue_persist.patterns))
 
         resp = self.test_app.get("/server/autoqueue/remove/", expect_errors=True)

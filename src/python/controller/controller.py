@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from enum import Enum
@@ -145,6 +146,9 @@ class Controller:
 
         # Seed each builder with filtered persist state
         self.__updater.sync_persist_to_all_builders()
+
+        # Flag for hot-reloading LFTP tuning settings (set from REST thread)
+        self.__needs_lftp_reconfigure = threading.Event()
 
         self.__started = False
 
@@ -314,6 +318,13 @@ class Controller:
         self.__mp_logger.start()
         self.__started = True
 
+    def request_lftp_reconfigure(self) -> None:
+        """Signal that LFTP tuning settings have changed and should be reapplied.
+
+        Thread-safe: called from the REST handler thread.
+        """
+        self.__needs_lftp_reconfigure.set()
+
     def process(self):
         """
         Advance the controller state
@@ -322,6 +333,11 @@ class Controller:
         """
         if not self.__started:
             raise ControllerError("Cannot process, controller is not started")
+        if self.__needs_lftp_reconfigure.is_set():
+            self.__needs_lftp_reconfigure.clear()
+            for pc in self.__pair_contexts:
+                self._configure_lftp(pc.lftp)
+            self.logger.info("Reapplied LFTP tuning settings")
         self.__pipeline.propagate_exceptions()
         self.__pipeline.cleanup()
         self.__pipeline.step()

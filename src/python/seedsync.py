@@ -148,6 +148,9 @@ class Seedsync:
             status=status,
             path_pairs_config=path_pairs_config,
             integrations_config=integrations_config,
+            config_path=self.config_path,
+            path_pairs_path=self.path_pairs_path,
+            integrations_path=self.integrations_path,
         )
 
         # Register the signal handlers
@@ -163,6 +166,10 @@ class Seedsync:
 
         self.auto_queue_persist_path = os.path.join(args.config_dir, Seedsync.__FILE_AUTO_QUEUE_PERSIST)
         self.auto_queue_persist = self._load_persist(AutoQueuePersist, self.auto_queue_persist_path)
+
+        # Set persist paths on context (these are determined after context creation)
+        self.context.controller_persist_path = self.controller_persist_path
+        self.context.auto_queue_persist_path = self.auto_queue_persist_path
 
     def run(self):
         self.context.logger.info("Starting SeedSync")

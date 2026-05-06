@@ -60,9 +60,9 @@ export class SettingsPage {
     }
   }
 
-  /** Get the restart notification if visible */
+  /** Get the restart notification if visible (scoped to header to avoid matching unrelated alerts) */
   getRestartNotification() {
-    return this.page.locator(".alert", {
+    return this.page.locator("#header .alert", {
       hasText: /restart/i,
     });
   }

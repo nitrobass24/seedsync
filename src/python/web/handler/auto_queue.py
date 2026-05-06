@@ -14,8 +14,9 @@ from ..web_app import IHandler, WebApp
 class AutoQueueHandler(IHandler):
     _NOSNIFF_HEADERS = {"X-Content-Type-Options": "nosniff"}
 
-    def __init__(self, auto_queue_persist: AutoQueuePersist):
+    def __init__(self, auto_queue_persist: AutoQueuePersist, persist_path: str):
         self.__auto_queue_persist = auto_queue_persist
+        self.__persist_path = persist_path
 
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
@@ -44,6 +45,7 @@ class AutoQueueHandler(IHandler):
             )
         try:
             self.__auto_queue_persist.add_pattern(aqp)
+            self.__auto_queue_persist.to_file(self.__persist_path)
             return HTTPResponse(
                 body=f"Added auto-queue pattern '{pattern}'.",
                 content_type="text/plain",
@@ -71,6 +73,7 @@ class AutoQueueHandler(IHandler):
                 headers=self._NOSNIFF_HEADERS,
             )
         self.__auto_queue_persist.remove_pattern(aqp)
+        self.__auto_queue_persist.to_file(self.__persist_path)
         return HTTPResponse(
             body=f"Removed auto-queue pattern '{pattern}'.",
             content_type="text/plain",

@@ -55,7 +55,7 @@
                   [description]="option.description"
                   [choices]="option.choices || []"
                   [value]="getOptionValue(config$ | async, option.valuePath)"
-                  (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
+                  (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event, option.requiresRestart)">
                 </app-option>
               </div>
             }
@@ -83,7 +83,7 @@
                 [disabled]="!!option.disabled"
                 [choices]="option.choices || []"
                 [value]="getOptionValue(config$ | async, option.valuePath)"
-                (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
+                (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event, option.requiresRestart)">
               </app-option>
             </div>
           }
@@ -152,7 +152,7 @@
             [disabled]="!!option.disabled"
             [choices]="option.choices || []"
             [value]="getOptionValue(config$ | async, option.valuePath)"
-            (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event)">
+            (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event, option.requiresRestart)">
           </app-option>
         </div>
       }

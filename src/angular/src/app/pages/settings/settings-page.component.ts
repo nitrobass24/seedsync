@@ -164,7 +164,7 @@ export class SettingsPageComponent implements OnInit {
     return section[valuePath[1]] ?? null;
   }
 
-  onSetConfig(section: string, option: string, value: OptionValue): void {
+  onSetConfig(section: string, option: string, value: OptionValue, requiresRestart?: boolean): void {
     this.configService.set(section, option, value).subscribe({
       next: (reaction) => {
         const notifKey = section + '.' + option;
@@ -176,7 +176,9 @@ export class SettingsPageComponent implements OnInit {
             this.badValueNotifs.delete(notifKey);
           }
 
-          this.notifService.show(this.configRestartNotif);
+          if (requiresRestart) {
+            this.notifService.show(this.configRestartNotif);
+          }
         } else {
           const notif = createNotification(
             NotificationLevel.DANGER,

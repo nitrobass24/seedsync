@@ -2,9 +2,13 @@
 **/__pycache__
 **/node_modules
 **/.venv
+**/.ruff_cache
+**/.pytest_cache
+**/pyrightconfig.json
 .git
 .idea
 build
 src/angular/dist
 src/python/tests
 src/python/build
+src/python/typings

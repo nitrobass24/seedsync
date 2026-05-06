@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from collections.abc import Callable
 from urllib.parse import unquote
 
 from bottle import HTTPResponse
@@ -9,10 +10,41 @@ from common import Config, ConfigError, overrides
 from ..serialize import SerializeConfig
 from ..web_app import IHandler, WebApp
 
+# (section, key) pairs for settings that can be hot-reloaded into the
+# running LFTP process without a full restart.
+_LFTP_TUNING_KEYS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("lftp", "num_max_parallel_downloads"),
+        ("lftp", "num_max_parallel_files_per_download"),
+        ("lftp", "num_max_connections_per_root_file"),
+        ("lftp", "num_max_connections_per_dir_file"),
+        ("lftp", "num_max_total_connections"),
+        ("lftp", "use_temp_file"),
+        ("lftp", "net_limit_rate"),
+        ("lftp", "net_socket_buffer"),
+        ("lftp", "pget_min_chunk_size"),
+        ("lftp", "mirror_parallel_directories"),
+        ("lftp", "net_timeout"),
+        ("lftp", "net_max_retries"),
+        ("lftp", "net_reconnect_interval_base"),
+        ("lftp", "net_reconnect_interval_multiplier"),
+        ("general", "verbose"),
+        ("validate", "xfer_verify"),
+        ("validate", "algorithm"),
+    }
+)
+
 
 class ConfigHandler(IHandler):
-    def __init__(self, config: Config):
+    def __init__(
+        self,
+        config: Config,
+        config_path: str,
+        on_lftp_config_change: Callable[[], None] | None = None,
+    ):
         self.__config = config
+        self.__config_path = config_path
+        self.__on_lftp_config_change = on_lftp_config_change
 
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
@@ -42,6 +74,9 @@ class ConfigHandler(IHandler):
             return HTTPResponse(body="Cannot set sensitive field to redacted value", status=400)
         try:
             inner_config.set_property(key, value)
+            self.__config.to_file(self.__config_path)
+            if (section, key) in _LFTP_TUNING_KEYS and self.__on_lftp_config_change:
+                self.__on_lftp_config_change()
             if Config.is_sensitive(section, key):
                 return HTTPResponse(body=f"{section}.{key} updated")
             return HTTPResponse(body=f"{section}.{key} set to {value}")

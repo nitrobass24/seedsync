@@ -25,8 +25,12 @@
     <img src="https://img.shields.io/badge/docs-website-blue" alt="Documentation">
   </a>
   <img src="https://img.shields.io/badge/Angular-21-dd0031" alt="Angular 21">
-  <img src="https://img.shields.io/badge/Python-3.12-3776ab" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/Python-3.13-3776ab" alt="Python 3.13">
   <img src="https://img.shields.io/badge/platform-amd64%20%7C%20arm64-lightgrey" alt="Platform">
+  <br>
+  <img src="https://img.shields.io/badge/Python_tests-828-2ea44f" alt="Python Tests: 828">
+  <img src="https://img.shields.io/badge/Angular_tests-412-2ea44f" alt="Angular Tests: 412">
+  <img src="https://img.shields.io/badge/E2E_tests-95-2ea44f" alt="E2E Tests: 95">
 </p>
 
 SeedSync is a tool to sync files from a remote Linux server (like your seedbox) to your local machine.
@@ -36,16 +40,19 @@ It uses LFTP to transfer files fast!
 
 ## Features
 
-* Built on top of [LFTP](http://lftp.tech/), the fastest file transfer program
-* Web UI — track and control your transfers from anywhere
-* **Multiple path pairs** — sync from multiple remote directories independently
-* **Exclude patterns** — filter out unwanted files with glob patterns
-* **Multi-select** — select multiple files for bulk queue/stop/delete
-* Auto-Queue — only sync the files you want based on pattern matching
-* Automatically extract your files after sync
-* **Webhook notifications** — HTTP POST on download/extract events
-* Delete local and remote files easily
-* Dark mode, staging directory, bandwidth limiting, and more
+* Built on top of [LFTP](http://lftp.tech/) — the fastest file transfer tool around
+* Web UI — track and control transfers from any browser
+* **Multiple path pairs** — sync from independent remote/local directory pairs, each with its own settings
+* **Auto-Queue** — automatically queue files matching your patterns
+* **Exclude patterns** — filter out unwanted files (`*.nfo`, `Sample/`, etc.) per path pair
+* **Multi-select bulk actions** — queue, stop, or delete multiple files at once
+* **Auto-extract** — unpack RAR, ZIP, 7z, tar, gz, bz2, xz archives after download
+* **File integrity verification** — inline checksum during download plus optional post-download validation
+* **Notifications** — Discord, Telegram, or generic webhook on download/extract events
+* **Sonarr/Radarr integration** — trigger imports with multiple named instances, attached per path pair
+* **Staging directory** — land downloads on fast storage, then move to the final location
+* **Optional API key auth** with CSRF protection and rate limiting
+* **Dark mode**, bandwidth limiting, virtual scrolling for large libraries, and more
 * **Lightweight Docker image** — ~45 MB Alpine-based, multi-arch (amd64/arm64)
 * Fully open source!
 
@@ -121,6 +128,20 @@ SeedSync is available as a Community Application on Unraid.
 
 > **Note**: PUID/PGID default to `99`/`100` (Unraid's `nobody`/`users`), which is correct for most Unraid setups.
 
+## Recommended Workflow
+
+The best way to use SeedSync is with **hard links** and a dedicated completion directory:
+
+1. **Configure your torrent client** (qBittorrent, ruTorrent, etc.) to hard link completed downloads into a separate folder (e.g., `/downloads/complete`). Hard links don't use extra disk space — your originals stay intact for seeding.
+2. **Point SeedSync** at the completion directory.
+3. **Enable Auto-Queue** and turn on **"Delete remote file after syncing"** in Settings.
+
+This way, each file is downloaded exactly once. After SeedSync syncs it, the hard link is removed from the completion directory, so it's never re-downloaded — even after a container restart. Your originals remain untouched for seeding.
+
+> **Note**: Both directories must be on the same filesystem for hard links to work.
+
+See the [full setup guide](https://nitrobass24.github.io/seedsync/usage#recommended-setup) in the docs for directory layout examples and torrent client configuration.
+
 ## Configuration
 
 On first run, access the web UI and configure:
@@ -149,19 +170,33 @@ You can limit download speed in Settings under the **Connections** section. The 
 - Values with suffixes: `K` for KB/s, `M` for MB/s (e.g., `500K`, `2M`)
 - `0` or empty for unlimited
 
-## Recommended Workflow
+### Notifications
 
-The best way to use SeedSync is with **hard links** and a dedicated completion directory:
+SeedSync can notify you when downloads or extractions finish. Configure destinations in **Settings → Notifications**:
 
-1. **Configure your torrent client** (qBittorrent, ruTorrent, etc.) to hard link completed downloads into a separate folder (e.g., `/downloads/complete`). Hard links don't use extra disk space — your originals stay intact for seeding.
-2. **Point SeedSync** at the completion directory.
-3. **Enable Auto-Queue** and turn on **"Delete remote file after syncing"** in Settings.
+- **Discord** — paste a webhook URL; events arrive as color-coded embeds
+- **Telegram** — provide a bot token and chat ID
+- **Generic webhook** — POST a JSON payload to any HTTP(S) URL
 
-This way, each file is downloaded exactly once. After SeedSync syncs it, the hard link is removed from the completion directory, so it's never re-downloaded — even after a container restart. Your originals remain untouched for seeding.
+Each destination has a **Test** button to verify it's working.
 
-> **Note**: Both directories must be on the same filesystem for hard links to work.
+### Sonarr / Radarr
 
-See the [full setup guide](https://nitrobass24.github.io/seedsync/usage#recommended-setup) in the docs for directory layout examples and torrent client configuration.
+To trigger automatic imports after downloads complete, configure **Settings → Integrations**:
+
+1. Click **Add instance**, choose Sonarr or Radarr, and enter the base URL and API key
+2. Use **Test connection** to verify credentials
+3. In the **Path Pairs** card, attach instances to the path pair(s) where imports should fire
+
+You can mix and match — for example, attach a 4K path pair only to your 4K Radarr instance.
+
+### Staging Directory
+
+For setups with fast scratch storage (NVMe/SSD) and slower bulk storage, enable **Staging** in Settings. Downloads complete on the staging volume first, then move to the final location. Mount your staging path at `/staging` in the container.
+
+### API Key
+
+To require authentication on the web UI and API, set an **API Key** in **Settings → Other Settings**. When set, browser clients prompt for the key on first load and API clients send it via the `X-API-Key` header. Leave it blank to run without auth (fine behind a reverse proxy or on a trusted network).
 
 ## Building from Source
 
@@ -192,6 +227,7 @@ make logs
 |------|-------------|
 | `/config` | Configuration and state files |
 | `/downloads` | Download destination directory |
+| `/staging` | Staging directory (optional, mount when staging is enabled) |
 | `/home/seedsync/.ssh/id_rsa` | SSH private key (optional, for key-based auth) |
 
 ## Ports

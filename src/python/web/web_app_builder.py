@@ -30,14 +30,29 @@ class WebAppBuilder:
         self.__context = context
         self.__controller = controller
 
+        if context.config_path is None:
+            raise RuntimeError("Context.config_path must be set before building WebApp")
+        if context.path_pairs_path is None:
+            raise RuntimeError("Context.path_pairs_path must be set before building WebApp")
+        if context.integrations_path is None:
+            raise RuntimeError("Context.integrations_path must be set before building WebApp")
+        if context.auto_queue_persist_path is None:
+            raise RuntimeError("Context.auto_queue_persist_path must be set before building WebApp")
+
         self.controller_handler = ControllerHandler(controller)
         self.server_handler = ServerHandler(context)
-        self.config_handler = ConfigHandler(context.config)
-        self.auto_queue_handler = AutoQueueHandler(auto_queue_persist)
+        self.config_handler = ConfigHandler(
+            context.config, context.config_path, on_lftp_config_change=controller.request_lftp_reconfigure
+        )
+        self.auto_queue_handler = AutoQueueHandler(auto_queue_persist, context.auto_queue_persist_path)
         self.status_handler = StatusHandler(context.status)
         self.logs_handler = LogsHandler(logdir=context.args.logdir, service_name=Constants.SERVICE_NAME)
-        self.path_pairs_handler = PathPairsHandler(context.path_pairs_config, context.integrations_config)
-        self.integrations_handler = IntegrationsHandler(context.integrations_config, context.path_pairs_config)
+        self.path_pairs_handler = PathPairsHandler(
+            context.path_pairs_config, context.integrations_config, context.path_pairs_path
+        )
+        self.integrations_handler = IntegrationsHandler(
+            context.integrations_config, context.path_pairs_config, context.integrations_path, context.path_pairs_path
+        )
         self.notifications_handler = NotificationsHandler(context.config)
 
     def build(self) -> WebApp:

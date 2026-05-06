@@ -1,5 +1,6 @@
 import { test, expect } from "./fixtures";
 import { PathPairsPage } from "./pages/path-pairs.page";
+import { SettingsPage } from "./pages/settings.page";
 
 test.describe("Path Pairs", () => {
   let pathPairs: PathPairsPage;
@@ -305,5 +306,31 @@ test.describe("Path Pairs", () => {
         { timeout: 5000 }
       )
       .toBe(false);
+  });
+
+  test("Server Directory field on Settings page is disabled when a path pair exists", async ({
+    page,
+    apiFetch,
+  }) => {
+    // Lives in this file (not settings.spec.ts) so it shares the same
+    // beforeEach/afterEach pair cleanup and doesn't race with other specs
+    // running in parallel — pair creation/deletion across files is the
+    // root cause of the cross-file races we saw at workers > 2.
+    const res = await apiFetch("/server/pathpairs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "e2e-server-dir-test",
+        remote_path: "/remote/test",
+        local_path: "/local/test",
+        enabled: true,
+      }),
+    });
+    expect(res.ok).toBe(true);
+
+    const settings = new SettingsPage(page);
+    await settings.goto();
+    const serverDir = settings.getTextInput("Server Directory");
+    await expect(serverDir).toBeDisabled();
   });
 });

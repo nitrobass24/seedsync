@@ -17,9 +17,17 @@ from ..web_app import IHandler, WebApp
 class IntegrationsHandler(IHandler):
     """REST endpoints for managing *arr (Sonarr/Radarr) instances."""
 
-    def __init__(self, integrations_config: IntegrationsConfig, path_pairs_config: PathPairsConfig):
+    def __init__(
+        self,
+        integrations_config: IntegrationsConfig,
+        path_pairs_config: PathPairsConfig,
+        integrations_path: str,
+        path_pairs_path: str,
+    ):
         self.__config = integrations_config
         self.__path_pairs_config = path_pairs_config
+        self.__integrations_path = integrations_path
+        self.__path_pairs_path = path_pairs_path
         self._logger = logging.getLogger(self.__class__.__name__)
 
     @overrides(IHandler)
@@ -49,6 +57,7 @@ class IntegrationsHandler(IHandler):
             self.__config.add_instance(instance)
         except ValueError as e:
             return HTTPResponse(body=str(e), status=409)
+        self.__config.to_file(self.__integrations_path)
         return HTTPResponse(
             body=json.dumps(self._redact(instance.to_dict())),
             status=201,
@@ -90,6 +99,7 @@ class IntegrationsHandler(IHandler):
             if "not found" in msg:
                 return HTTPResponse(body="Integration not found", status=404)
             return HTTPResponse(body=msg, status=400)
+        self.__config.to_file(self.__integrations_path)
         return HTTPResponse(
             body=json.dumps(self._redact(updated.to_dict())),
             headers={"Content-Type": "application/json"},
@@ -102,6 +112,8 @@ class IntegrationsHandler(IHandler):
             return HTTPResponse(body="Integration not found", status=404)
         # Detach from any path pair that referenced it so we don't leave dangling pointers.
         self.__path_pairs_config.detach_arr_target(instance_id)
+        self.__config.to_file(self.__integrations_path)
+        self.__path_pairs_config.to_file(self.__path_pairs_path)
         return HTTPResponse(status=204)
 
     def __handle_test(self, instance_id: str):
