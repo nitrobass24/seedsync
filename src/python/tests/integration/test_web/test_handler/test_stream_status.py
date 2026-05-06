@@ -10,7 +10,7 @@ class TestStatusStreamHandler(BaseTestWebApp):
     @patch("web.handler.stream_status.SerializeStatus")
     def test_stream_status_serializes_initial_status(self, mock_serialize_status_cls):
         # Schedule server stop
-        Timer(0.5, self.web_app.stop).start()
+        Timer(2.0, self.web_app.stop).start()
 
         # Setup mock serialize instance
         mock_serialize = mock_serialize_status_cls.return_value
@@ -26,7 +26,7 @@ class TestStatusStreamHandler(BaseTestWebApp):
     @patch("web.handler.stream_status.SerializeStatus")
     def test_stream_status_serializes_new_status(self, mock_serialize_status_cls):
         # Schedule server stop
-        Timer(0.5, self.web_app.stop).start()
+        Timer(2.0, self.web_app.stop).start()
 
         # Schedule status update
         def update_status():

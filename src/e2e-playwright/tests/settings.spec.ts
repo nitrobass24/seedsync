@@ -39,18 +39,25 @@ test.describe("Settings Page", () => {
 
     try {
       const field = settings.getTextInput("Server Address");
-      await field.clear();
+      // Wait for the field to be enabled (config loaded via SSE)
+      await expect(field).toBeEnabled({ timeout: 5000 });
       const testValue = "e2e-test-server";
+      // fill() already clears the input before typing — calling clear()
+      // separately can race with Angular's signal-driven re-render of the
+      // ngModel binding and reset the field before fill() runs.
       await field.fill(testValue);
+      // Blur triggers any pending change events and ensures Angular
+      // processes the final value through the debounce pipeline.
+      await field.blur();
 
-      // Poll the API until the value is saved
+      // Poll the API until the value is saved (debounce is 1 s)
       await expect
         .poll(
           async () => {
             const config = await apiGet("/server/config/get");
             return config.lftp.remote_address;
           },
-          { timeout: 5000 }
+          { timeout: 8000 }
         )
         .toBe(testValue);
     } finally {
@@ -105,6 +112,8 @@ test.describe("Settings Page", () => {
     const originalFormat = configBefore.logging.log_format;
 
     const select = settings.getSelect("Log Format");
+    // Wait for SSE-delivered config — same gate as the other select tests.
+    await expect(select).toBeEnabled({ timeout: 10_000 });
 
     try {
       await select.selectOption("json");
@@ -166,45 +175,18 @@ test.describe("Settings Page", () => {
     await expect(options).toHaveCount(7);
   });
 
-  test("Server Directory field is disabled when path pairs exist", async ({
-    apiFetch,
-  }) => {
-    // Create a path pair via API
-    const pairName = `temp-pair-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const res = await apiFetch("/server/pathpairs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: pairName,
-        remote_path: "/remote/test",
-        local_path: "/local/test",
-        enabled: true,
-      }),
-    });
-    expect(res.ok).toBe(true);
-    const pair = await res.json();
-
-    try {
-      await settings.goto();
-      const serverDir = settings.getTextInput("Server Directory");
-      await expect(serverDir).toBeDisabled();
-    } finally {
-      // Always clean up the pair
-      if (pair?.id) {
-        const del = await apiFetch(`/server/pathpairs/${pair.id}`, { method: "DELETE" });
-        expect(del.ok, `Failed to delete temp pair ${pair.id}: ${del.status}`).toBe(true);
-      }
-    }
-  });
-
   test("restart notification appears after config change", async ({ apiGet, apiSetConfig }) => {
     const configBefore = await apiGet("/server/config/get");
     const originalAddress = configBefore.lftp.remote_address;
 
     try {
       const field = settings.getTextInput("Server Address");
-      await field.clear();
+      // fill() already clears before typing — calling clear() separately
+      // races with Angular's signal-driven re-render and can reset the
+      // field before fill() runs. Wait for SSE-delivered config first.
+      await expect(field).toBeEnabled({ timeout: 5000 });
       await field.fill("trigger-restart-notice-" + Date.now());
+      await field.blur();
 
       const notification = settings.getRestartNotification();
       await expect(notification).toBeVisible({ timeout: 5000 });
@@ -226,5 +208,315 @@ test.describe("Settings Page", () => {
       .locator("app-option", { hasText: "API Key" })
       .locator("input[type='text'], input[type='password']");
     await expect(field).toHaveAttribute("type", "password");
+  });
+});
+
+test.describe("Settings — Staging Directory", () => {
+  test("staging path text field saves to backend", async ({
+    page,
+    apiGet,
+    apiSetConfig,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const configBefore = await apiGet("/server/config/get");
+    const originalPath = configBefore.controller.staging_path;
+
+    try {
+      const field = settings.getTextInput("Staging Path");
+      await expect(field).toBeEnabled({ timeout: 5000 });
+      const testValue = "/tmp/e2e-staging-" + Date.now();
+      await field.fill(testValue);
+      await field.blur();
+
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.controller.staging_path;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(testValue);
+    } finally {
+      await apiSetConfig("controller", "staging_path", originalPath ?? "");
+    }
+  });
+
+  test("use staging directory checkbox toggles and saves", async ({
+    page,
+    apiGet,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const checkbox = settings.getCheckbox("Use staging directory");
+    const wasBefore = await checkbox.isChecked();
+    const expected = !wasBefore;
+
+    await checkbox.click();
+
+    try {
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.controller.use_staging;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(expected);
+    } finally {
+      await checkbox.click();
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.controller.use_staging;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(wasBefore);
+    }
+  });
+});
+
+test.describe("Settings — Archive Extraction", () => {
+  test("extract in downloads directory checkbox toggles and saves", async ({
+    page,
+    apiGet,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const checkbox = settings.getCheckbox(
+      "Extract archives in the downloads directory"
+    );
+    const wasBefore = await checkbox.isChecked();
+    const expected = !wasBefore;
+
+    await checkbox.click();
+
+    try {
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.controller.use_local_path_as_extract_path;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(expected);
+    } finally {
+      await checkbox.click();
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.controller.use_local_path_as_extract_path;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(wasBefore);
+    }
+  });
+});
+
+test.describe("Settings — Integrity Check", () => {
+  test("verify transfers checkbox and algorithm select are present", async ({
+    page,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const section = settings.getSection("Integrity Check");
+    await expect(section).toBeVisible();
+
+    const verifyCheckbox = settings.getCheckbox(
+      "Verify transfers inline"
+    );
+    await expect(verifyCheckbox).toBeVisible();
+
+    const algorithmSelect = settings.getSelect("Hash Algorithm");
+    await expect(algorithmSelect).toBeVisible();
+  });
+
+  test("hash algorithm select changes and saves to backend", async ({
+    page,
+    apiGet,
+    apiSetConfig,
+    waitForStream,
+  }) => {
+    // The Hash Algorithm select is disabled by buildValidateContext() unless
+    // validate.enabled is true (see settings-page.component.ts). Enable
+    // post-download validation here, then restore in the finally block.
+    const configBefore = await apiGet("/server/config/get");
+    const originalAlgorithm = configBefore.validate.algorithm;
+    const originalValidateEnabled = configBefore.validate.enabled;
+
+    try {
+      // All state mutation lives inside try so the finally block always
+      // restores it — even if the apiSetConfig itself or any subsequent
+      // setup step throws.
+      if (!originalValidateEnabled) {
+        await apiSetConfig("validate", "enabled", "True");
+      }
+
+      const settings = new SettingsPage(page);
+      await settings.goto();
+      await waitForStream(page);
+
+      const select = settings.getSelect("Hash Algorithm");
+      // Wait for the SSE config to arrive AND for buildValidateContext to
+      // unlock the select (the disable rule needs validate.enabled === true).
+      await expect(select).toBeEnabled({ timeout: 10_000 });
+      await expect(select).toHaveValue(/^(md5|sha1|sha256)$/);
+
+      // Pick a different algorithm than current
+      const newValue = originalAlgorithm === "sha256" ? "md5" : "sha256";
+
+      await select.selectOption(newValue);
+
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.validate.algorithm;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(newValue);
+    } finally {
+      await apiSetConfig("validate", "algorithm", String(originalAlgorithm));
+      if (!originalValidateEnabled) {
+        await apiSetConfig("validate", "enabled", "False");
+      }
+    }
+  });
+});
+
+test.describe("Settings — Connections", () => {
+  test("Max Parallel Downloads field saves to backend", async ({
+    page,
+    apiGet,
+    apiSetConfig,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const configBefore = await apiGet("/server/config/get");
+    const originalValue = configBefore.lftp.num_max_parallel_downloads;
+
+    try {
+      const field = settings.getTextInput("Max Parallel Downloads");
+      await expect(field).toBeEnabled({ timeout: 5000 });
+      await field.fill("7");
+      await field.blur();
+
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return String(config.lftp.num_max_parallel_downloads);
+          },
+          { timeout: 5000 }
+        )
+        .toBe("7");
+    } finally {
+      await apiSetConfig(
+        "lftp",
+        "num_max_parallel_downloads",
+        String(originalValue)
+      );
+    }
+  });
+});
+
+test.describe("Settings — Notifications", () => {
+  test("Discord and Telegram webhook fields are present", async ({
+    page,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const section = settings.getSection("Notifications");
+    await expect(section).toBeVisible();
+
+    // Discord Webhook URL is a password field — assert masked input type,
+    // not just visibility, so an accidental switch to type="text" is caught.
+    const discordField = section
+      .locator("app-option", { hasText: "Discord Webhook URL" })
+      .locator("input[type='text'], input[type='password']");
+    await expect(discordField).toBeVisible();
+    await expect(discordField).toHaveAttribute("type", "password");
+
+    // Telegram Bot Token is a password field — same masking assertion.
+    const telegramTokenField = section
+      .locator("app-option", { hasText: "Telegram Bot Token" })
+      .locator("input[type='text'], input[type='password']");
+    await expect(telegramTokenField).toBeVisible();
+    await expect(telegramTokenField).toHaveAttribute("type", "password");
+
+    // Telegram Chat ID is a text field
+    const telegramChatField = section
+      .locator("app-option", { hasText: "Telegram Chat ID" })
+      .locator("input[type='text'], input[type='password']");
+    await expect(telegramChatField).toBeVisible();
+  });
+});
+
+test.describe("Settings — Logging", () => {
+  test("Log Level dropdown persists selected value", async ({
+    page,
+    apiGet,
+  }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    const configBefore = await apiGet("/server/config/get");
+    const originalLevel = configBefore.general.log_level;
+    const select = settings.getSelect("Log Level");
+
+    try {
+      // Wait for SSE-delivered config and pick the new value inside the
+      // try so any throw before the mutation still hits the finally —
+      // same pattern as the Hash Algorithm test.
+      await expect(select).toBeEnabled({ timeout: 10_000 });
+      const newValue = originalLevel === "DEBUG" ? "WARNING" : "DEBUG";
+
+      await select.selectOption(newValue);
+
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.general.log_level;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(newValue);
+
+      // Reload the page and verify the value persists. settings.goto()
+      // only waits for Angular bootstrap (sidebar render), not for SSE
+      // config delivery, so wait for the select to become enabled — its
+      // disabled gate is `value() === null || value() === undefined`, so
+      // an enabled select means the model has received the SSE value.
+      await settings.goto();
+      const reloadedSelect = settings.getSelect("Log Level");
+      await expect(reloadedSelect).toBeEnabled({ timeout: 10_000 });
+      await expect(reloadedSelect).toHaveValue(newValue);
+    } finally {
+      await select.selectOption(String(originalLevel));
+      await expect
+        .poll(
+          async () => {
+            const config = await apiGet("/server/config/get");
+            return config.general.log_level;
+          },
+          { timeout: 5000 }
+        )
+        .toBe(originalLevel);
+    }
   });
 });

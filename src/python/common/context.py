@@ -49,6 +49,11 @@ class Context:
         status: Status,
         path_pairs_config: PathPairsConfig | None = None,
         integrations_config: IntegrationsConfig | None = None,
+        config_path: str | None = None,
+        path_pairs_path: str | None = None,
+        integrations_path: str | None = None,
+        auto_queue_persist_path: str | None = None,
+        controller_persist_path: str | None = None,
     ):
         """
         Primary constructor to construct the top-level context
@@ -61,6 +66,13 @@ class Context:
         self.status = status
         self.path_pairs_config = path_pairs_config or PathPairsConfig()
         self.integrations_config = integrations_config or IntegrationsConfig()
+
+        # File paths for flush-on-write
+        self.config_path = config_path
+        self.path_pairs_path = path_pairs_path
+        self.integrations_path = integrations_path
+        self.auto_queue_persist_path = auto_queue_persist_path
+        self.controller_persist_path = controller_persist_path
 
     def create_child_context(self, context_name: str) -> "Context":
         child_context = copy.copy(self)
