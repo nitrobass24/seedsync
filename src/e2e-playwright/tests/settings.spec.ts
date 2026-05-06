@@ -476,15 +476,15 @@ test.describe("Settings — Logging", () => {
 
     const configBefore = await apiGet("/server/config/get");
     const originalLevel = configBefore.general.log_level;
-
     const select = settings.getSelect("Log Level");
-    // Wait for the SSE config delivery to populate the model before
-    // interacting with the select — same pattern as the Hash Algorithm
-    // test. settings.goto() only waits for Angular bootstrap, not SSE.
-    await expect(select).toBeEnabled({ timeout: 10_000 });
-    const newValue = originalLevel === "DEBUG" ? "WARNING" : "DEBUG";
 
     try {
+      // Wait for SSE-delivered config and pick the new value inside the
+      // try so any throw before the mutation still hits the finally —
+      // same pattern as the Hash Algorithm test.
+      await expect(select).toBeEnabled({ timeout: 10_000 });
+      const newValue = originalLevel === "DEBUG" ? "WARNING" : "DEBUG";
+
       await select.selectOption(newValue);
 
       await expect

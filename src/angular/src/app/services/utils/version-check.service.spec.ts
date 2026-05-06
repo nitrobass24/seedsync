@@ -92,18 +92,40 @@ describe('VersionCheckService', () => {
     expect(notifications.length).toBe(0);
   });
 
-  it('should strip v prefix before comparing versions', () => {
-    // Without prefix stripping, "v99.0.0" might fail comparison
-    mockRestService.sendRequest.mockReturnValue(
-      of(makeReaction({ success: true, data: makeGithubResponse('v99.0.0') })),
-    );
+  it('should treat prefixed and non-prefixed releases identically', () => {
+    // Verify v-prefix stripping by running the same scenario twice — once
+    // with "v99.0.0", once with "99.0.0" — and asserting identical results.
+    // The TestBed has to be reset between runs because VersionCheckService
+    // is a singleton and the version check fires on construction.
+    function notificationsFor(tag: string): Notification[] {
+      TestBed.resetTestingModule();
+      mockRestService = { sendRequest: vi.fn() };
+      mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      mockRestService.sendRequest.mockReturnValue(
+        of(makeReaction({ success: true, data: makeGithubResponse(tag) })),
+      );
+      TestBed.configureTestingModule({
+        providers: [
+          VersionCheckService,
+          NotificationService,
+          { provide: RestService, useValue: mockRestService },
+          { provide: LoggerService, useValue: mockLogger },
+        ],
+      });
+      const ns = TestBed.inject(NotificationService);
+      let captured: Notification[] = [];
+      ns.notifications$.subscribe(n => captured = n);
+      createService();
+      return captured;
+    }
 
-    let notifications: Notification[] = [];
-    notificationService.notifications$.subscribe(n => notifications = n);
+    const withPrefix = notificationsFor('v99.0.0');
+    const withoutPrefix = notificationsFor('99.0.0');
 
-    createService();
-
-    expect(notifications.length).toBe(1);
+    expect(withPrefix).toHaveLength(1);
+    expect(withoutPrefix).toHaveLength(1);
+    expect(withoutPrefix[0].text).toBe(withPrefix[0].text);
+    expect(withoutPrefix[0].level).toBe(withPrefix[0].level);
   });
 
   it('should log warning and not show notification on network error', () => {
