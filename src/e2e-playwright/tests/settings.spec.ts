@@ -212,14 +212,17 @@ test.describe("Settings Page", () => {
 });
 
 test.describe("Settings — Staging Directory", () => {
+  let settings: SettingsPage;
+
+  test.beforeEach(async ({ page }) => {
+    settings = new SettingsPage(page);
+    await settings.goto();
+  });
+
   test("staging path text field saves to backend", async ({
-    page,
     apiGet,
     apiSetConfig,
   }) => {
-    const settings = new SettingsPage(page);
-    await settings.goto();
-
     const configBefore = await apiGet("/server/config/get");
     const originalPath = configBefore.controller.staging_path;
 
@@ -245,12 +248,8 @@ test.describe("Settings — Staging Directory", () => {
   });
 
   test("use staging directory checkbox toggles and saves", async ({
-    page,
     apiGet,
   }) => {
-    const settings = new SettingsPage(page);
-    await settings.goto();
-
     const checkbox = settings.getCheckbox("Use staging directory");
     const wasBefore = await checkbox.isChecked();
     const expected = !wasBefore;
@@ -283,13 +282,16 @@ test.describe("Settings — Staging Directory", () => {
 });
 
 test.describe("Settings — Archive Extraction", () => {
+  let settings: SettingsPage;
+
+  test.beforeEach(async ({ page }) => {
+    settings = new SettingsPage(page);
+    await settings.goto();
+  });
+
   test("extract in downloads directory checkbox toggles and saves", async ({
-    page,
     apiGet,
   }) => {
-    const settings = new SettingsPage(page);
-    await settings.goto();
-
     const checkbox = settings.getCheckbox(
       "Extract archives in the downloads directory"
     );
@@ -324,12 +326,14 @@ test.describe("Settings — Archive Extraction", () => {
 });
 
 test.describe("Settings — Integrity Check", () => {
-  test("verify transfers checkbox and algorithm select are present", async ({
-    page,
-  }) => {
-    const settings = new SettingsPage(page);
-    await settings.goto();
+  let settings: SettingsPage;
 
+  test.beforeEach(async ({ page }) => {
+    settings = new SettingsPage(page);
+    await settings.goto();
+  });
+
+  test("verify transfers checkbox and algorithm select are present", async () => {
     const section = settings.getSection("Integrity Check");
     await expect(section).toBeVisible();
 
@@ -363,7 +367,10 @@ test.describe("Settings — Integrity Check", () => {
         await apiSetConfig("validate", "enabled", "True");
       }
 
-      const settings = new SettingsPage(page);
+      // beforeEach already constructed `settings` and navigated to /settings,
+      // but the page may have loaded before validate.enabled was applied.
+      // Reload so the buildValidateContext() rebuild observes the new value,
+      // then wait for the SSE stream before interacting with the select.
       await settings.goto();
       await waitForStream(page);
 
@@ -397,14 +404,17 @@ test.describe("Settings — Integrity Check", () => {
 });
 
 test.describe("Settings — Connections", () => {
+  let settings: SettingsPage;
+
+  test.beforeEach(async ({ page }) => {
+    settings = new SettingsPage(page);
+    await settings.goto();
+  });
+
   test("Max Parallel Downloads field saves to backend", async ({
-    page,
     apiGet,
     apiSetConfig,
   }) => {
-    const settings = new SettingsPage(page);
-    await settings.goto();
-
     const configBefore = await apiGet("/server/config/get");
     const originalValue = configBefore.lftp.num_max_parallel_downloads;
 
@@ -434,12 +444,14 @@ test.describe("Settings — Connections", () => {
 });
 
 test.describe("Settings — Notifications", () => {
-  test("Discord and Telegram webhook fields are present", async ({
-    page,
-  }) => {
-    const settings = new SettingsPage(page);
-    await settings.goto();
+  let settings: SettingsPage;
 
+  test.beforeEach(async ({ page }) => {
+    settings = new SettingsPage(page);
+    await settings.goto();
+  });
+
+  test("Discord and Telegram webhook fields are present", async () => {
     const section = settings.getSection("Notifications");
     await expect(section).toBeVisible();
 
@@ -467,13 +479,16 @@ test.describe("Settings — Notifications", () => {
 });
 
 test.describe("Settings — Logging", () => {
+  let settings: SettingsPage;
+
+  test.beforeEach(async ({ page }) => {
+    settings = new SettingsPage(page);
+    await settings.goto();
+  });
+
   test("Log Level dropdown persists selected value", async ({
-    page,
     apiGet,
   }) => {
-    const settings = new SettingsPage(page);
-    await settings.goto();
-
     const configBefore = await apiGet("/server/config/get");
     const originalLevel = configBefore.general.log_level;
     const select = settings.getSelect("Log Level");

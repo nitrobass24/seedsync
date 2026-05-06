@@ -31,11 +31,11 @@ describe('OptionComponent — debounce pipe logic', () => {
     vi.useRealTimers();
   });
 
-  it('should emit value after 1000ms debounce, not immediately', () => {
+  it('should emit value after the full debounce window, not immediately', () => {
     newValue.next('hello');
     expect(emitted).toEqual([]);
 
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
     expect(emitted).toEqual(['hello']);
   });
 
@@ -48,25 +48,25 @@ describe('OptionComponent — debounce pipe logic', () => {
 
     expect(emitted).toEqual([]);
 
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
     expect(emitted).toEqual(['c']);
   });
 
   it('should not re-emit same value after full debounce period (distinctUntilChanged)', () => {
     newValue.next('same');
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
     expect(emitted).toEqual(['same']);
 
     newValue.next('same');
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
     expect(emitted).toEqual(['same']);
   });
 
   it('should emit different values after each debounce period', () => {
     newValue.next('first');
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
     newValue.next('second');
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
 
     expect(emitted).toEqual(['first', 'second']);
   });

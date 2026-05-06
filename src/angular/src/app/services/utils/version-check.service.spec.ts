@@ -49,7 +49,8 @@ describe('VersionCheckService', () => {
   });
 
   it('should show notification when a newer release is available', () => {
-    // Current version is 0.17.0, so 99.0.0 is always newer
+    // 99.0.0 is chosen because it's always newer than the current package.json
+    // version, regardless of how that version evolves.
     mockRestService.sendRequest.mockReturnValue(
       of(makeReaction({ success: true, data: makeGithubResponse('v99.0.0') })),
     );

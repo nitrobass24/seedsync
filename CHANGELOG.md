@@ -40,6 +40,10 @@
 - **StreamHandler leaks in test setUp methods** — Tests added a handler to the shared root logger but never removed it. Loggers are singletons, so by test N the logger had N handlers and each log line printed N times. Fixed via `self.addCleanup(logger.removeHandler, handler)` across 8 test files / 10 setUp methods (#450, #457)
 - **Multiprocessing resource leak in `test_active_scanner.py`** — `scanner.close()` now registered with `addCleanup` so resources release even if assertions raise
 
+### Security
+
+- **`apk` and its package database are stripped from the runtime image** — `/sbin/apk`, `/etc/apk`, `/var/cache/apk`, `/lib/apk`, and the `libapk` shared libraries are removed in the runtime stage to keep the image under 64 MB (#437). This means in-image vulnerability scanners (Trivy, Grype) can't enumerate Alpine packages directly from a running container; consumers should scan the published `ghcr.io/nitrobass24/seedsync` image via SBOM or image-history tooling. Affected runtime packages: `lftp`, `openssh-client`, `ca-certificates`, `setpriv`, `libstdc++`. Derived images that need `apk add` should base on Alpine and reinstall what they need rather than extending this image.
+
 ## [0.17.0] - 2026-04-30
 
 ### Added

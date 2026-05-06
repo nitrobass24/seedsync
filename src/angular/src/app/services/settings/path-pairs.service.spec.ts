@@ -170,6 +170,20 @@ describe('PathPairsService', () => {
     expect(errorStatus).toBe(409);
   });
 
+  it('should return null on non-409 error from update()', () => {
+    // Mirrors the create() non-409 coverage. update() rethrows 409 (caller
+    // displays the conflict message) but falls back to of(null) on any other
+    // HTTP error so subscribers can detect failure without an unhandled throw.
+    connectedSubject.next(true);
+    httpMock.expectOne('/server/pathpairs').flush([makePair()]);
+
+    let result: PathPair | null | undefined;
+    service.update(makePair({ name: 'other' })).subscribe(r => result = r);
+
+    httpMock.expectOne('/server/pathpairs/pair-1').flush('error', { status: 500, statusText: 'Server Error' });
+    expect(result).toBeNull();
+  });
+
   // --- remove() ---
 
   it('should send DELETE and filter pair out of list', () => {
