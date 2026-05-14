@@ -36,8 +36,6 @@
 SeedSync is a tool to sync files from a remote Linux server (like your seedbox) to your local machine.
 It uses LFTP to transfer files fast!
 
-> **Note**: This is a modernized fork of [ipsingh06/seedsync](https://github.com/ipsingh06/seedsync) with updated dependencies and Docker-only deployment.
-
 ## Features
 
 * Built on top of [LFTP](http://lftp.tech/) — the fastest file transfer tool around
