@@ -53,7 +53,12 @@ def format_discord(
     if fields:
         embed["fields"] = fields
     payload = {"embeds": [embed]}
-    headers = {"Content-Type": "application/json"}
+    # Discord returns 403 Forbidden for requests with Python's default
+    # "Python-urllib/x.y" User-Agent. Identify ourselves explicitly. (#483)
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "seedsync (https://github.com/nitrobass24/seedsync)",
+    }
     return headers, json.dumps(payload).encode("utf-8")
 
 
