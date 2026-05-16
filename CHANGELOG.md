@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.18.1] - 2026-05-16
+
+### Fixed
+
+- **Discord webhook 403 Forbidden** — `format_discord` only set `Content-Type`, so urllib filled in its default `Python-urllib/x.y` User-Agent, which Discord blocks. Webhooks now identify themselves as `seedsync (https://github.com/nitrobass24/seedsync)`. Same headers dict serves both the Test button and the live notifier, so all Discord paths are covered. (#483, #484)
+
+### Changed
+
+- **Dependency updates** — react and react-dom 19.2.5 → 19.2.6 (#478, #479), Angular group +10 packages (#480), typescript-eslint 8.59.0 → 8.59.2 (#481), @babel/plugin-transform-modules-systemjs 7.29.4 (#477), fast-uri 3.1.0 → 3.1.2 (#475, #476), hono 4.12.14 → 4.12.18 (#474), ip-address and express-rate-limit (#473).
+
 ## [0.18.0] - 2026-05-04
 
 ### Changed

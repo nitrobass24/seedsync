@@ -14,6 +14,15 @@ class TestFormatDiscord(unittest.TestCase):
         headers, _ = format_discord("download_complete", "file.mkv")
         self.assertEqual("application/json", headers["Content-Type"])
 
+    def test_sets_non_default_user_agent(self):
+        """Discord returns 403 to requests with Python's default urllib UA, so
+        format_discord must supply its own. Regression test for #483."""
+        headers, _ = format_discord("download_complete", "file.mkv")
+        self.assertIn("User-Agent", headers)
+        ua = headers["User-Agent"]
+        self.assertNotIn("Python-urllib", ua)
+        self.assertIn("seedsync", ua.lower())
+
     def test_body_is_valid_json(self):
         _, body = format_discord("download_complete", "file.mkv")
         payload = json.loads(body)
