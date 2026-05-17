@@ -5,7 +5,7 @@
 SeedSync is a Docker-based tool that syncs files from a remote seedbox to a local machine using LFTP.
 
 - **Frontend**: Angular 21 (Bootstrap 5.3, Font Awesome 7, Vitest)
-- **Backend**: Python 3.12 with Bottle
+- **Backend**: Python 3.13 with Bottle
 - **Container**: Multi-arch Docker image (amd64, arm64)
 - **Registry**: ghcr.io/nitrobass24/seedsync
 
@@ -16,7 +16,7 @@ src/
 ├── angular/          # Angular 21 frontend
 ├── python/           # Python backend
 ├── docker/           # Docker build files
-└── e2e/              # End-to-end tests
+└── e2e-playwright/   # Playwright end-to-end tests
 website/              # Docusaurus documentation site
 ```
 
@@ -39,7 +39,7 @@ All work MUST follow this branching discipline:
    ```
 3. **Commit only to the feature branch**: Never commit directly to `develop` or `master`.
 4. **One concern per branch**: Do not mix unrelated changes into the same branch. If you discover a separate issue while working, finish or stash your current work, then create a new branch for the other issue.
-5. **Open a PR to `develop`**: When the work is complete, push the feature branch and open a PR targeting `develop`. Include a summary and test plan.
+5. **Open a PR to `develop`**: When the work is complete, push the feature branch and open a PR targeting `develop`. Include a summary and test plan. Releases are the only path that PRs to `master` — see the Release Process below.
 6. **Do not carry dirty working-tree changes across branches**: Before switching branches, either commit or stash. Never rely on uncommitted edits surviving a `git checkout`.
 
 ## Release Process
@@ -77,13 +77,25 @@ Update the version in `src/angular/package.json` to match the release version. T
 
 ### 4. Create Release
 
+Releases use a `release/vX.Y.Z` branch off `develop`, a PR into `master`, and a tag on the resulting merge commit. Never commit the release directly to `develop` or `master`.
+
 ```bash
-# Commit all changes
+# Branch from the latest develop
+git checkout develop && git pull origin develop
+git checkout -b release/vX.Y.Z
+
+# Stage the release commit (CHANGELOG / MODERNIZATION_PLAN / package.json)
 git add CHANGELOG.md MODERNIZATION_PLAN.md src/angular/package.json
 git commit -m "Release vX.Y.Z - Brief description"
-git push origin master
+git push -u origin release/vX.Y.Z
 
-# Create and push tag
+# Open a PR targeting master
+gh pr create --base master --head release/vX.Y.Z \
+  --title "Release vX.Y.Z - Brief description" \
+  --body "Sync develop → master for vX.Y.Z. See CHANGELOG.md for details."
+
+# After the PR is merged into master, fetch and tag the merge commit
+git checkout master && git pull origin master
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
@@ -154,11 +166,15 @@ Format should match CHANGELOG.md entries with:
 
 ### CI (`ci.yml`)
 
+Triggers: `push` to `master` or `develop`, `pull_request` against `master` or `develop`, and `push` of a tag matching `v[0-9]+.[0-9]+.[0-9]+`.
+
+Release-relevant matrix:
+
 | Trigger | Build & Test | Publish Image | Create Release |
 |---------|--------------|---------------|----------------|
 | PR to master | ✅ | ❌ | ❌ |
 | Push to master | ✅ | ❌ | ❌ |
-| Push tag (v*.*.*) | ✅ | ✅ | ✅ |
+| Push tag (`v*.*.*`) | ✅ | ✅ | ✅ |
 
 - **Build & Test**: Builds Docker image and verifies container starts
 - **Publish Image**: Pushes multi-arch image to ghcr.io (only on release tags)
