@@ -366,6 +366,7 @@ class Config(Persist):
 
     class Notifications(IC):
         webhook_url = PROP("webhook_url", Checkers.string_allow_empty, Converters.null)
+        notify_on_download_start = PROP("notify_on_download_start", Checkers.null, Converters.bool)
         notify_on_download_complete = PROP("notify_on_download_complete", Checkers.null, Converters.bool)
         notify_on_extraction_complete = PROP("notify_on_extraction_complete", Checkers.null, Converters.bool)
         notify_on_extraction_failed = PROP("notify_on_extraction_failed", Checkers.null, Converters.bool)
@@ -377,6 +378,7 @@ class Config(Persist):
         def __init__(self):
             super().__init__()
             self.webhook_url = ""
+            self.notify_on_download_start = False
             self.notify_on_download_complete = True
             self.notify_on_extraction_complete = True
             self.notify_on_extraction_failed = True

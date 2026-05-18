@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Notify on download start** — New `notify_on_download_start` option (disabled by default) emits a `download_start` event when a file enters the `DOWNLOADING` state. Fires through the existing webhook, Discord, and Telegram channels, with a yellow Discord embed color and "Download Started" label. (#486)
+
 ## [0.18.1] - 2026-05-16
 
 ### Fixed

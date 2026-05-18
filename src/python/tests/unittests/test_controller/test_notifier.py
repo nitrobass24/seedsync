@@ -20,6 +20,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
     ):
         config = MagicMock()
         config.notifications.webhook_url = webhook_url
+        config.notifications.notify_on_download_start = False
         config.notifications.notify_on_download_complete = True
         config.notifications.notify_on_extraction_complete = True
         config.notifications.notify_on_extraction_failed = True
@@ -166,6 +167,7 @@ class TestWebhookNotifierDispatch(unittest.TestCase):
     ):
         config = MagicMock()
         config.notifications.webhook_url = webhook_url
+        config.notifications.notify_on_download_start = False
         config.notifications.notify_on_download_complete = True
         config.notifications.notify_on_extraction_complete = True
         config.notifications.notify_on_extraction_failed = True
@@ -254,6 +256,60 @@ class TestWebhookNotifierDispatch(unittest.TestCase):
         notifier = self._make_notifier()
         with patch.object(notifier, "_fire_raw") as mock:
             self._trigger(notifier)
+            notifier.shutdown(timeout=1)
+            mock.assert_not_called()
+
+
+class TestWebhookNotifierDownloadStart(unittest.TestCase):
+    """Tests for the download_start event (state → DOWNLOADING)."""
+
+    def _make_config(self, **flags):
+        config = MagicMock()
+        config.notifications.webhook_url = "http://hook.test"
+        config.notifications.notify_on_download_start = flags.get("notify_on_download_start", True)
+        config.notifications.notify_on_download_complete = True
+        config.notifications.notify_on_extraction_complete = True
+        config.notifications.notify_on_extraction_failed = True
+        config.notifications.notify_on_delete_complete = True
+        config.notifications.discord_webhook_url = ""
+        config.notifications.telegram_bot_token = ""
+        config.notifications.telegram_chat_id = ""
+        return config
+
+    def _make_notifier(self, **flags):
+        return WebhookNotifier(self._make_config(**flags), logging.getLogger("test_download_start"))
+
+    def _transition(self, from_state, to_state):
+        old = ModelFile("test.mkv", False)
+        old.state = from_state
+        new = ModelFile("test.mkv", False)
+        new.state = to_state
+        return old, new
+
+    def test_default_to_downloading_fires_when_enabled(self):
+        notifier = self._make_notifier(notify_on_download_start=True)
+        old, new = self._transition(ModelFile.State.DEFAULT, ModelFile.State.DOWNLOADING)
+        with patch.object(notifier, "_fire_raw") as mock:
+            notifier.file_updated(old, new)
+            notifier.shutdown(timeout=1)
+            mock.assert_called_once()
+            # Payload body carries event_type
+            body = mock.call_args[0][3]
+            self.assertIn(b'"event_type": "download_start"', body)
+
+    def test_queued_to_downloading_fires_when_enabled(self):
+        notifier = self._make_notifier(notify_on_download_start=True)
+        old, new = self._transition(ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING)
+        with patch.object(notifier, "_fire_raw") as mock:
+            notifier.file_updated(old, new)
+            notifier.shutdown(timeout=1)
+            mock.assert_called_once()
+
+    def test_does_not_fire_when_disabled(self):
+        notifier = self._make_notifier(notify_on_download_start=False)
+        old, new = self._transition(ModelFile.State.DEFAULT, ModelFile.State.DOWNLOADING)
+        with patch.object(notifier, "_fire_raw") as mock:
+            notifier.file_updated(old, new)
             notifier.shutdown(timeout=1)
             mock.assert_not_called()
 

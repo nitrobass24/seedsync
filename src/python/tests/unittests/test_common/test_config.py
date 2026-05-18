@@ -665,6 +665,7 @@ class TestConfig(unittest.TestCase):
 
         [Notifications]
         webhook_url =
+        notify_on_download_start = False
         notify_on_download_complete = True
         notify_on_extraction_complete = True
         notify_on_extraction_failed = True

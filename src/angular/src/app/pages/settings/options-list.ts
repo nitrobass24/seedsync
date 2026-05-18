@@ -366,6 +366,12 @@ export const OPTIONS_CONTEXT_NOTIFICATIONS: IOptionsContext = {
     },
     {
       type: OptionType.Checkbox,
+      label: 'Notify on download start',
+      valuePath: ['notifications', 'notify_on_download_start'],
+      description: null,
+    },
+    {
+      type: OptionType.Checkbox,
       label: 'Notify on download complete',
       valuePath: ['notifications', 'notify_on_download_complete'],
       description: null,
