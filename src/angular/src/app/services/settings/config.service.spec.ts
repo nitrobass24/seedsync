@@ -56,6 +56,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     logging: { log_format: null },
     notifications: {
       webhook_url: null,
+      notify_on_download_start: false,
       notify_on_download_complete: false,
       notify_on_extraction_complete: false,
       notify_on_extraction_failed: false,

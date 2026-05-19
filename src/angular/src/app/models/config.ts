@@ -62,6 +62,7 @@ export interface Logging {
 
 export interface Notifications {
   webhook_url: string | null;
+  notify_on_download_start: boolean | null;
   notify_on_download_complete: boolean | null;
   notify_on_extraction_complete: boolean | null;
   notify_on_extraction_failed: boolean | null;
@@ -151,6 +152,7 @@ export const DEFAULT_LOGGING: Logging = {
 
 export const DEFAULT_NOTIFICATIONS: Notifications = {
   webhook_url: null,
+  notify_on_download_start: null,
   notify_on_download_complete: null,
   notify_on_extraction_complete: null,
   notify_on_extraction_failed: null,

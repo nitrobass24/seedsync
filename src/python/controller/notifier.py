@@ -48,6 +48,8 @@ class WebhookNotifier(IModelListener):
     def _resolve_event_type(self, state: ModelFile.State) -> str | None:
         """Map a file state to an event type string, gated by config flags."""
         notif = self._config.notifications
+        if state == ModelFile.State.DOWNLOADING and notif.notify_on_download_start:
+            return "download_start"
         if state == ModelFile.State.DOWNLOADED and notif.notify_on_download_complete:
             return "download_complete"
         if state == ModelFile.State.EXTRACTED and notif.notify_on_extraction_complete:
