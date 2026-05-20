@@ -216,6 +216,51 @@ class TestIntegrationsHandler(BaseTestWebApp):
         refreshed = self.path_pairs_config.get_pair(pair.id)
         self.assertEqual([], refreshed.arr_target_ids)
 
+    def test_delete_persists_path_pairs_before_integrations(self):
+        """Ordering invariant: path_pairs.to_file must complete before integrations.to_file.
+
+        If the order reverses, a crash between writes leaves integrations.json
+        without the instance but path_pairs.json still referencing it (dangling).
+        """
+        inst = self._add_instance()
+        pair = PathPair(name="TV", remote_path="/r/tv", local_path="/l/tv", arr_target_ids=[inst.id])
+        self.path_pairs_config.add_pair(pair)
+
+        call_order: list[str] = []
+        with (
+            patch.object(
+                self.path_pairs_config,
+                "to_file",
+                side_effect=lambda *_args, **_kw: call_order.append("path_pairs"),
+            ),
+            patch.object(
+                self.integrations_config,
+                "to_file",
+                side_effect=lambda *_args, **_kw: call_order.append("integrations"),
+            ),
+        ):
+            self.test_app.delete(f"/server/integrations/{inst.id}")
+
+        self.assertEqual(["path_pairs", "integrations"], call_order)
+
+    def test_delete_with_integrations_write_failure_leaves_no_dangling_refs(self):
+        """If the second write (integrations) fails, the first (path_pairs) has
+        already persisted with the detach applied — so on-disk path_pairs.json
+        no longer references the deleted instance, the worst-case outcome is an
+        orphan in integrations.json, not a dangling pointer."""
+        inst = self._add_instance()
+        pair = PathPair(name="TV", remote_path="/r/tv", local_path="/l/tv", arr_target_ids=[inst.id])
+        self.path_pairs_config.add_pair(pair)
+
+        with patch.object(self.integrations_config, "to_file", side_effect=OSError("disk full")):
+            self.test_app.delete(f"/server/integrations/{inst.id}", expect_errors=True)
+
+        # path_pairs.json was written first, before the failing integrations write.
+        with open(self.context.path_pairs_path) as f:
+            persisted_pairs = json.load(f)
+        self.assertEqual(1, len(persisted_pairs["path_pairs"]))
+        self.assertEqual([], persisted_pairs["path_pairs"][0]["arr_target_ids"])
+
     # ------------------------------------------------------------------
     # POST /server/integrations/<id>/test
     # ------------------------------------------------------------------

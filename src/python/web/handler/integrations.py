@@ -112,8 +112,12 @@ class IntegrationsHandler(IHandler):
             return HTTPResponse(body="Integration not found", status=404)
         # Detach from any path pair that referenced it so we don't leave dangling pointers.
         self.__path_pairs_config.detach_arr_target(instance_id)
-        self.__config.to_file(self.__integrations_path)
+        # Persist path_pairs *before* integrations: if the process dies between
+        # writes, an orphaned instance (still in integrations.json, no longer
+        # referenced) is recoverable; a dangling arr_target_id (instance gone,
+        # path pair still references it) is rejected by cross-validation on load.
         self.__path_pairs_config.to_file(self.__path_pairs_path)
+        self.__config.to_file(self.__integrations_path)
         return HTTPResponse(status=204)
 
     def __handle_test(self, instance_id: str):
