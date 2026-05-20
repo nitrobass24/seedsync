@@ -135,20 +135,50 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertEqual(7, self.context.config.lftp.num_max_parallel_downloads)
         self.controller.request_lftp_reconfigure.assert_called_once()
 
-    def test_set_persistence_failure_skips_rollback_when_concurrent_update(self):
-        """If another request overwrote the value before our rollback fires,
-        we must not clobber the newer value with our stale old_value."""
-        self.context.config.general.log_level = "INFO"
+    def test_set_serializes_concurrent_writers(self):
+        """The handler's __write_lock must serialize concurrent set_config calls.
 
-        # Simulate a concurrent write landing between set_property and rollback:
-        # to_file raises, but before the except handler runs, another mutation
-        # has already changed the in-memory value to "WARNING".
-        def fail_then_simulate_concurrent_write(*_args, **_kw):
-            self.context.config.general.log_level = "WARNING"
+        Without the lock, two threads can interleave the mutate → persist →
+        rollback sequence and the second thread's value can be captured into
+        to_file mid-way through the first thread's rollback. With the lock,
+        every full mutate→persist→rollback runs atomically.
+        """
+        import threading
+
+        # Block to_file just long enough that thread B's request would
+        # interleave with thread A's failed write if the lock were missing.
+        enter_to_file = threading.Event()
+        release_to_file = threading.Event()
+
+        def slow_failing_write(*_args, **_kw):
+            enter_to_file.set()
+            release_to_file.wait(timeout=5)
             raise OSError("disk full")
 
-        with patch.object(Config, "to_file", side_effect=fail_then_simulate_concurrent_write):
-            resp = self.test_app.get("/server/config/set/general/log_level/DEBUG", expect_errors=True)
-        self.assertEqual(500, resp.status_int)
-        # Rollback must be skipped — the newer "WARNING" survives, not "INFO".
+        results: dict[str, int] = {}
+
+        def writer_a():
+            with patch.object(Config, "to_file", side_effect=slow_failing_write):
+                resp = self.test_app.get("/server/config/set/general/log_level/DEBUG", expect_errors=True)
+                results["a"] = resp.status_int
+
+        def writer_b():
+            enter_to_file.wait(timeout=5)
+            resp = self.test_app.get("/server/config/set/general/log_level/WARNING", expect_errors=True)
+            results["b"] = resp.status_int
+
+        t_a = threading.Thread(target=writer_a)
+        t_b = threading.Thread(target=writer_b)
+        t_a.start()
+        t_b.start()
+        # Give B a moment to block on the lock, then release A.
+        enter_to_file.wait(timeout=5)
+        release_to_file.set()
+        t_a.join(timeout=10)
+        t_b.join(timeout=10)
+
+        # A failed (500), B saw a fully-rolled-back state, then succeeded (200).
+        self.assertEqual(500, results["a"])
+        self.assertEqual(200, results["b"])
+        # B's value wins because it ran after A's rollback completed.
         self.assertEqual("WARNING", self.context.config.general.log_level)

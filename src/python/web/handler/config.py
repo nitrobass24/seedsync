@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
+import threading
 from collections.abc import Callable
 from urllib.parse import unquote
 
@@ -47,6 +48,12 @@ class ConfigHandler(IHandler):
         self.__config_path = config_path
         self.__on_lftp_config_change = on_lftp_config_change
         self.__logger = logging.getLogger(self.__class__.__name__)
+        # Serializes the mutate → persist → rollback sequence in
+        # __handle_set_config. Without it, two concurrent writers can
+        # interleave (the in-memory mutation, the whole-config to_file,
+        # or the post-failure rollback) and leave on-disk and in-memory
+        # state diverged.
+        self.__write_lock = threading.Lock()
 
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
@@ -74,35 +81,22 @@ class ConfigHandler(IHandler):
         # real credentials with "********"
         if Config.is_sensitive(section, key) and value == Config.REDACTED_SENTINEL:
             return HTTPResponse(body="Cannot set sensitive field to redacted value", status=400)
-        # Capture the current native value before mutation so a persistence
-        # failure can be rolled back, keeping in-memory state aligned with
-        # what's on disk and preventing the LFTP hot-reload callback from
-        # firing on a value that never made it to the file.
-        old_value = getattr(inner_config, key)
-        try:
-            inner_config.set_property(key, value)
-        except ConfigError as e:
-            return HTTPResponse(body=str(e), status=400)
-        # set_property runs the value through the type converter, so capture
-        # the native form for the post-failure equality check below.
-        set_native = getattr(inner_config, key)
-        try:
-            self.__config.to_file(self.__config_path)
-        except OSError:
-            # Only roll back if the in-memory value is still what we just set.
-            # A concurrent request may have overwritten it with a newer value
-            # that we shouldn't clobber.
-            current = getattr(inner_config, key)
-            if current == set_native:
+        # Hold __write_lock across the mutate → persist → rollback sequence so
+        # writers can't interleave. With the lock, the rollback is unconditional:
+        # no other writer can have changed the value between set_property and
+        # the OSError handler.
+        with self.__write_lock:
+            old_value = getattr(inner_config, key)
+            try:
+                inner_config.set_property(key, value)
+            except ConfigError as e:
+                return HTTPResponse(body=str(e), status=400)
+            try:
+                self.__config.to_file(self.__config_path)
+            except OSError:
                 inner_config.set_property(key, old_value)
                 self.__logger.exception("Failed to persist config %s.%s", section, key)
-            else:
-                self.__logger.exception(
-                    "Failed to persist config %s.%s; a newer value is present, skipping rollback",
-                    section,
-                    key,
-                )
-            return HTTPResponse(body=f"Failed to persist config {section}.{key}", status=500)
+                return HTTPResponse(body=f"Failed to persist config {section}.{key}", status=500)
         if (section, key) in _LFTP_TUNING_KEYS and self.__on_lftp_config_change:
             self.__on_lftp_config_change()
         if Config.is_sensitive(section, key):
