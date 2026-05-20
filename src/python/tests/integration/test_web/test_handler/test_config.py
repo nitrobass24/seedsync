@@ -136,3 +136,21 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertEqual(200, resp.status_int)
         self.assertEqual(7, self.context.config.lftp.num_max_parallel_downloads)
         self.controller.request_lftp_reconfigure.assert_called_once()
+
+    def test_set_persistence_failure_skips_rollback_when_concurrent_update(self):
+        """If another request overwrote the value before our rollback fires,
+        we must not clobber the newer value with our stale old_value."""
+        self.context.config.general.log_level = "INFO"
+
+        # Simulate a concurrent write landing between set_property and rollback:
+        # to_file raises, but before the except handler runs, another mutation
+        # has already changed the in-memory value to "WARNING".
+        def fail_then_simulate_concurrent_write(*_args, **_kw):
+            self.context.config.general.log_level = "WARNING"
+            raise OSError("disk full")
+
+        with patch.object(Config, "to_file", side_effect=fail_then_simulate_concurrent_write):
+            resp = self.test_app.get("/server/config/set/general/log_level/DEBUG", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        # Rollback must be skipped — the newer "WARNING" survives, not "INFO".
+        self.assertEqual("WARNING", self.context.config.general.log_level)

@@ -83,11 +83,25 @@ class ConfigHandler(IHandler):
             inner_config.set_property(key, value)
         except ConfigError as e:
             return HTTPResponse(body=str(e), status=400)
+        # set_property runs the value through the type converter, so capture
+        # the native form for the post-failure equality check below.
+        set_native = getattr(inner_config, key)
         try:
             self.__config.to_file(self.__config_path)
         except OSError:
-            inner_config.set_property(key, old_value)
-            self.__logger.exception("Failed to persist config %s.%s", section, key)
+            # Only roll back if the in-memory value is still what we just set.
+            # A concurrent request may have overwritten it with a newer value
+            # that we shouldn't clobber.
+            current = getattr(inner_config, key)
+            if current == set_native:
+                inner_config.set_property(key, old_value)
+                self.__logger.exception("Failed to persist config %s.%s", section, key)
+            else:
+                self.__logger.exception(
+                    "Failed to persist config %s.%s; a newer value is present, skipping rollback",
+                    section,
+                    key,
+                )
             return HTTPResponse(body=f"Failed to persist config {section}.{key}", status=500)
         if (section, key) in _LFTP_TUNING_KEYS and self.__on_lftp_config_change:
             self.__on_lftp_config_change()
