@@ -1,8 +1,9 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from unittest.mock import patch
 from urllib.parse import quote
 
-from controller import AutoQueuePattern
+from controller import AutoQueuePattern, AutoQueuePersist
 from tests.integration.test_web.test_web_app import BaseTestWebApp
 
 
@@ -135,3 +136,16 @@ class TestAutoQueueHandler(BaseTestWebApp):
         resp = self.test_app.get("/server/autoqueue/remove/", expect_errors=True)
         self.assertEqual(404, resp.status_int)
         self.assertEqual(0, len(self.auto_queue_persist.patterns))
+
+    def test_add_returns_500_when_persistence_fails(self):
+        with patch.object(AutoQueuePersist, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.get("/server/autoqueue/add/onepattern", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual("Failed to persist auto-queue", resp.text)
+
+    def test_remove_returns_500_when_persistence_fails(self):
+        self.auto_queue_persist.add_pattern(AutoQueuePattern(pattern="onepattern"))
+        with patch.object(AutoQueuePersist, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.get("/server/autoqueue/remove/onepattern", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual("Failed to persist auto-queue", resp.text)
