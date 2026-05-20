@@ -123,9 +123,7 @@ class TestConfigHandler(BaseTestWebApp):
         """A failed write on a hot-reload key must not fire the LFTP callback."""
         self.context.config.lftp.num_max_parallel_downloads = 3
         with patch.object(Config, "to_file", side_effect=OSError("disk full")):
-            resp = self.test_app.get(
-                "/server/config/set/lftp/num_max_parallel_downloads/7", expect_errors=True
-            )
+            resp = self.test_app.get("/server/config/set/lftp/num_max_parallel_downloads/7", expect_errors=True)
         self.assertEqual(500, resp.status_int)
         self.assertEqual(3, self.context.config.lftp.num_max_parallel_downloads)
         self.controller.request_lftp_reconfigure.assert_not_called()
