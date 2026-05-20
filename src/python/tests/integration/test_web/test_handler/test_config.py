@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import json
+from unittest.mock import patch
 from urllib.parse import quote
 
 from common import Config
@@ -107,3 +108,77 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertEqual(400, resp.status_int)
         self.assertIn("Cannot set sensitive field to redacted value", str(resp.html))
         self.assertEqual("real-password", self.context.config.lftp.remote_password)
+
+    def test_set_persistence_failure_rolls_back(self):
+        """If to_file raises, in-memory state must revert and no LFTP callback fires."""
+        self.context.config.general.log_level = "INFO"
+        with patch.object(Config, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.get("/server/config/set/general/log_level/DEBUG", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertIn("Failed to persist config general.log_level", str(resp.html))
+        self.assertEqual("INFO", self.context.config.general.log_level)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
+    def test_set_persistence_failure_rolls_back_lftp_tuning_key(self):
+        """A failed write on a hot-reload key must not fire the LFTP callback."""
+        self.context.config.lftp.num_max_parallel_downloads = 3
+        with patch.object(Config, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.get("/server/config/set/lftp/num_max_parallel_downloads/7", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual(3, self.context.config.lftp.num_max_parallel_downloads)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
+    def test_set_persistence_success_fires_lftp_callback(self):
+        """Baseline: a successful write on a hot-reload key still fires the callback."""
+        resp = self.test_app.get("/server/config/set/lftp/num_max_parallel_downloads/7")
+        self.assertEqual(200, resp.status_int)
+        self.assertEqual(7, self.context.config.lftp.num_max_parallel_downloads)
+        self.controller.request_lftp_reconfigure.assert_called_once()
+
+    def test_set_serializes_concurrent_writers(self):
+        """The handler's __write_lock must serialize concurrent set_config calls.
+
+        Without the lock, two threads can interleave the mutate → persist →
+        rollback sequence and the second thread's value can be captured into
+        to_file mid-way through the first thread's rollback. With the lock,
+        every full mutate→persist→rollback runs atomically.
+        """
+        import threading
+
+        # Block to_file just long enough that thread B's request would
+        # interleave with thread A's failed write if the lock were missing.
+        enter_to_file = threading.Event()
+        release_to_file = threading.Event()
+
+        def slow_failing_write(*_args, **_kw):
+            enter_to_file.set()
+            release_to_file.wait(timeout=5)
+            raise OSError("disk full")
+
+        results: dict[str, int] = {}
+
+        def writer_a():
+            with patch.object(Config, "to_file", side_effect=slow_failing_write):
+                resp = self.test_app.get("/server/config/set/general/log_level/DEBUG", expect_errors=True)
+                results["a"] = resp.status_int
+
+        def writer_b():
+            enter_to_file.wait(timeout=5)
+            resp = self.test_app.get("/server/config/set/general/log_level/WARNING", expect_errors=True)
+            results["b"] = resp.status_int
+
+        t_a = threading.Thread(target=writer_a)
+        t_b = threading.Thread(target=writer_b)
+        t_a.start()
+        t_b.start()
+        # Give B a moment to block on the lock, then release A.
+        enter_to_file.wait(timeout=5)
+        release_to_file.set()
+        t_a.join(timeout=10)
+        t_b.join(timeout=10)
+
+        # A failed (500), B saw a fully-rolled-back state, then succeeded (200).
+        self.assertEqual(500, results["a"])
+        self.assertEqual(200, results["b"])
+        # B's value wins because it ran after A's rollback completed.
+        self.assertEqual("WARNING", self.context.config.general.log_level)
