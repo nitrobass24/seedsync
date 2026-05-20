@@ -6,6 +6,10 @@
 
 - **Notify on download start** — New `notify_on_download_start` option (disabled by default) emits a `download_start` event when a file enters the `DOWNLOADING` state. Fires through the existing webhook, Discord, and Telegram channels, with a yellow Discord embed color and "Download Started" label. (#486)
 
+### Fixed
+
+- **Config handler persistence atomicity** — `/server/config/set` now captures the pre-mutation value, attempts the disk write, and on `OSError` rolls back the in-memory state and returns a structured HTTP 500 instead of letting the exception bubble up as a stack trace. The LFTP hot-reload callback only fires after a successful write, preventing the runtime from being reconfigured to a value that never made it to disk. (#469)
+
 ## [0.18.1] - 2026-05-16
 
 ### Fixed

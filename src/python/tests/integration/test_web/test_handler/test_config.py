@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import json
+from unittest.mock import patch
 from urllib.parse import quote
 
 from common import Config
@@ -107,3 +108,31 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertEqual(400, resp.status_int)
         self.assertIn("Cannot set sensitive field to redacted value", str(resp.html))
         self.assertEqual("real-password", self.context.config.lftp.remote_password)
+
+    def test_set_persistence_failure_rolls_back(self):
+        """If to_file raises, in-memory state must revert and no LFTP callback fires."""
+        self.context.config.general.log_level = "INFO"
+        with patch.object(Config, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.get("/server/config/set/general/log_level/DEBUG", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertIn("Failed to persist config general.log_level", str(resp.html))
+        self.assertEqual("INFO", self.context.config.general.log_level)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
+    def test_set_persistence_failure_rolls_back_lftp_tuning_key(self):
+        """A failed write on a hot-reload key must not fire the LFTP callback."""
+        self.context.config.lftp.num_max_parallel_downloads = 3
+        with patch.object(Config, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.get(
+                "/server/config/set/lftp/num_max_parallel_downloads/7", expect_errors=True
+            )
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual(3, self.context.config.lftp.num_max_parallel_downloads)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
+    def test_set_persistence_success_fires_lftp_callback(self):
+        """Baseline: a successful write on a hot-reload key still fires the callback."""
+        resp = self.test_app.get("/server/config/set/lftp/num_max_parallel_downloads/7")
+        self.assertEqual(200, resp.status_int)
+        self.assertEqual(7, self.context.config.lftp.num_max_parallel_downloads)
+        self.controller.request_lftp_reconfigure.assert_called_once()
