@@ -6,6 +6,10 @@
 
 - **Notify on download start** — New `notify_on_download_start` option (disabled by default) emits a `download_start` event when a file enters the `DOWNLOADING` state. Fires through the existing webhook, Discord, and Telegram channels, with a yellow Discord embed color and "Download Started" label. (#486)
 
+### Fixed
+
+- **Auto-queue and path-pairs handlers wrap persistence in try/except** — `/server/autoqueue/{add,remove}` and `/server/pathpairs/{create,update,delete}` now return a controlled HTTP 500 with a structured body when the underlying `to_file` raises `OSError`, instead of leaking a stack trace. The in-memory mutation still happens (and may diverge from disk in the failure case); the change converts an unhandled exception into a recoverable client error. (#469)
+
 ## [0.18.1] - 2026-05-16
 
 ### Fixed
