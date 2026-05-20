@@ -460,6 +460,8 @@ class TestPathPairsHandler(BaseTestWebApp):
             )
         self.assertEqual(500, resp.status_int)
         self.assertEqual({"error": "failed to persist path pairs"}, json.loads(resp.text))
+        # Contract: in-memory mutation is *not* rolled back on persistence failure.
+        self.assertTrue(any(p.name == "X" for p in self.path_pairs_config.pairs))
 
     def test_update_returns_500_when_persistence_fails(self):
         pair = self._add_pair()
@@ -471,6 +473,8 @@ class TestPathPairsHandler(BaseTestWebApp):
             )
         self.assertEqual(500, resp.status_int)
         self.assertEqual({"error": "failed to persist path pairs"}, json.loads(resp.text))
+        # Contract: in-memory mutation is *not* rolled back on persistence failure.
+        self.assertFalse(self.path_pairs_config.get_pair(pair.id).enabled)
 
     def test_delete_returns_500_when_persistence_fails(self):
         pair = self._add_pair()
@@ -478,3 +482,5 @@ class TestPathPairsHandler(BaseTestWebApp):
             resp = self.test_app.delete(f"/server/pathpairs/{pair.id}", expect_errors=True)
         self.assertEqual(500, resp.status_int)
         self.assertEqual({"error": "failed to persist path pairs"}, json.loads(resp.text))
+        # Contract: in-memory removal is *not* rolled back on persistence failure.
+        self.assertIsNone(self.path_pairs_config.get_pair(pair.id))

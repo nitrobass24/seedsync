@@ -142,6 +142,10 @@ class TestAutoQueueHandler(BaseTestWebApp):
             resp = self.test_app.get("/server/autoqueue/add/onepattern", expect_errors=True)
         self.assertEqual(500, resp.status_int)
         self.assertEqual("Failed to persist auto-queue", resp.text)
+        # Contract: the in-memory mutation is *not* rolled back on persistence
+        # failure. The 500 signals "disk and memory may diverge — retry"; the
+        # pattern stays in memory so a subsequent retry persists the same state.
+        self.assertIn(AutoQueuePattern("onepattern"), self.auto_queue_persist.patterns)
 
     def test_remove_returns_500_when_persistence_fails(self):
         self.auto_queue_persist.add_pattern(AutoQueuePattern(pattern="onepattern"))
@@ -149,3 +153,5 @@ class TestAutoQueueHandler(BaseTestWebApp):
             resp = self.test_app.get("/server/autoqueue/remove/onepattern", expect_errors=True)
         self.assertEqual(500, resp.status_int)
         self.assertEqual("Failed to persist auto-queue", resp.text)
+        # Contract: the in-memory removal is *not* rolled back on persistence failure.
+        self.assertNotIn(AutoQueuePattern("onepattern"), self.auto_queue_persist.patterns)
