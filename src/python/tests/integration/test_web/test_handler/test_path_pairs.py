@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import json
+from unittest.mock import patch
 
 from common import ArrInstance, IntegrationsConfig, PathPair, PathPairsConfig, overrides
 from tests.integration.test_web.test_web_app import BaseTestWebApp
@@ -446,3 +447,34 @@ class TestPathPairsHandler(BaseTestWebApp):
         # Confirm gone
         list_resp2 = self.test_app.get("/server/pathpairs")
         self.assertEqual([], json.loads(list_resp2.text))
+
+    # ---------------------------------------------------------------
+    # Persistence-failure handling
+    # ---------------------------------------------------------------
+    def test_create_returns_500_when_persistence_fails(self):
+        with patch.object(PathPairsConfig, "to_file", side_effect=OSError("disk full")):
+            resp = self._post_json(
+                "/server/pathpairs",
+                {"name": "X", "remote_path": "/r/x", "local_path": "/l/x"},
+                expect_errors=True,
+            )
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual({"error": "failed to persist path pairs"}, json.loads(resp.text))
+
+    def test_update_returns_500_when_persistence_fails(self):
+        pair = self._add_pair()
+        with patch.object(PathPairsConfig, "to_file", side_effect=OSError("disk full")):
+            resp = self._put_json(
+                f"/server/pathpairs/{pair.id}",
+                {"enabled": False},
+                expect_errors=True,
+            )
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual({"error": "failed to persist path pairs"}, json.loads(resp.text))
+
+    def test_delete_returns_500_when_persistence_fails(self):
+        pair = self._add_pair()
+        with patch.object(PathPairsConfig, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.delete(f"/server/pathpairs/{pair.id}", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual({"error": "failed to persist path pairs"}, json.loads(resp.text))
