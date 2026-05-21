@@ -10,6 +10,7 @@
 
 - **Config handler persistence atomicity** — `/server/config/set` now captures the pre-mutation value, attempts the disk write, and on `OSError` rolls back the in-memory state and returns a structured HTTP 500 instead of letting the exception bubble up as a stack trace. The LFTP hot-reload callback only fires after a successful write, preventing the runtime from being reconfigured to a value that never made it to disk. (#469)
 - **Integration delete persistence ordering** — `/server/integrations/<id>` DELETE now writes `path_pairs.json` before `integrations.json`. A crash between the two writes previously left a dangling `arr_target_id` (instance gone from integrations but still referenced from a path pair), which is rejected by cross-validation on next load. The new order downgrades the worst-case crash outcome to a harmless orphaned instance. (#496)
+- **Auto-queue and path-pairs handlers wrap persistence in try/except** — `/server/autoqueue/{add,remove}` and `/server/pathpairs/{create,update,delete}` now return a controlled HTTP 500 with a structured body when the underlying `to_file` raises `OSError`, instead of leaking a stack trace. The in-memory mutation still happens (and may diverge from disk in the failure case); the change converts an unhandled exception into a recoverable client error. (#497)
 
 ## [0.18.1] - 2026-05-16
 

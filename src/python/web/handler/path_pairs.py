@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import json
+import logging
 from typing import Any, cast
 
 from bottle import HTTPResponse, request
@@ -17,6 +18,20 @@ class PathPairsHandler(IHandler):
         self.__config = path_pairs_config
         self.__integrations_config = integrations_config
         self.__path_pairs_path = path_pairs_path
+        self.__logger = logging.getLogger(self.__class__.__name__)
+
+    def _persist_or_500(self, action: str) -> HTTPResponse | None:
+        """Persist the config; return a 500 response on OSError, else None."""
+        try:
+            self.__config.to_file(self.__path_pairs_path)
+        except OSError:
+            self.__logger.exception("Failed to persist path pairs after %s", action)
+            return HTTPResponse(
+                body=json.dumps({"error": "failed to persist path pairs"}),
+                status=500,
+                headers={"Content-Type": "application/json"},
+            )
+        return None
 
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
@@ -114,7 +129,9 @@ class PathPairsHandler(IHandler):
             if "name" in str(e) and "already exists" in str(e):
                 return HTTPResponse(body=str(e), status=409)
             raise
-        self.__config.to_file(self.__path_pairs_path)
+        err = self._persist_or_500(f"creating pair {pair.id!r}")
+        if err is not None:
+            return err
         return HTTPResponse(body=json.dumps(pair.to_dict()), status=201, headers={"Content-Type": "application/json"})
 
     def __handle_update(self, pair_id: str):
@@ -154,7 +171,9 @@ class PathPairsHandler(IHandler):
             if "name" in str(e) and "already exists" in str(e):
                 return HTTPResponse(body=str(e), status=409)
             return HTTPResponse(body="Path pair not found", status=404)
-        self.__config.to_file(self.__path_pairs_path)
+        err = self._persist_or_500(f"updating pair {pair_id!r}")
+        if err is not None:
+            return err
         return HTTPResponse(body=json.dumps(updated.to_dict()), headers={"Content-Type": "application/json"})
 
     def __handle_delete(self, pair_id: str):
@@ -162,5 +181,7 @@ class PathPairsHandler(IHandler):
             self.__config.remove_pair(pair_id)
         except ValueError:
             return HTTPResponse(body="Path pair not found", status=404)
-        self.__config.to_file(self.__path_pairs_path)
+        err = self._persist_or_500(f"deleting pair {pair_id!r}")
+        if err is not None:
+            return err
         return HTTPResponse(status=204)

@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import logging
 from urllib.parse import unquote
 
 from bottle import HTTPResponse
@@ -17,6 +18,7 @@ class AutoQueueHandler(IHandler):
     def __init__(self, auto_queue_persist: AutoQueuePersist, persist_path: str):
         self.__auto_queue_persist = auto_queue_persist
         self.__persist_path = persist_path
+        self.__logger = logging.getLogger(self.__class__.__name__)
 
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
@@ -45,12 +47,6 @@ class AutoQueueHandler(IHandler):
             )
         try:
             self.__auto_queue_persist.add_pattern(aqp)
-            self.__auto_queue_persist.to_file(self.__persist_path)
-            return HTTPResponse(
-                body=f"Added auto-queue pattern '{pattern}'.",
-                content_type="text/plain",
-                headers=self._NOSNIFF_HEADERS,
-            )
         except ValueError as e:
             return HTTPResponse(
                 body=str(e),
@@ -58,6 +54,21 @@ class AutoQueueHandler(IHandler):
                 content_type="text/plain",
                 headers=self._NOSNIFF_HEADERS,
             )
+        try:
+            self.__auto_queue_persist.to_file(self.__persist_path)
+        except OSError:
+            self.__logger.exception("Failed to persist auto-queue after adding pattern %r", pattern)
+            return HTTPResponse(
+                body="Failed to persist auto-queue",
+                status=500,
+                content_type="text/plain",
+                headers=self._NOSNIFF_HEADERS,
+            )
+        return HTTPResponse(
+            body=f"Added auto-queue pattern '{pattern}'.",
+            content_type="text/plain",
+            headers=self._NOSNIFF_HEADERS,
+        )
 
     def __handle_remove_autoqueue(self, pattern: str):
         # value is double encoded
@@ -73,7 +84,16 @@ class AutoQueueHandler(IHandler):
                 headers=self._NOSNIFF_HEADERS,
             )
         self.__auto_queue_persist.remove_pattern(aqp)
-        self.__auto_queue_persist.to_file(self.__persist_path)
+        try:
+            self.__auto_queue_persist.to_file(self.__persist_path)
+        except OSError:
+            self.__logger.exception("Failed to persist auto-queue after removing pattern %r", pattern)
+            return HTTPResponse(
+                body="Failed to persist auto-queue",
+                status=500,
+                content_type="text/plain",
+                headers=self._NOSNIFF_HEADERS,
+            )
         return HTTPResponse(
             body=f"Removed auto-queue pattern '{pattern}'.",
             content_type="text/plain",
