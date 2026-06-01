@@ -142,14 +142,16 @@ jobs:
         working-directory: src/python
         env:
           PYTHONPATH: .
+        # Only the live-server suites stay excluded: test_lftp.py and
+        # test_sshcp.py drive a real lftp/SSH transfer against the seedsynctest
+        # account (also gated at runtime by SEEDSYNC_LIVE_SSH_TESTS). The
+        # mock-based lftp/ssh/scanner suites now run here (#529).
+        # test_multiprocessing_logger stays excluded as before (out of scope).
         run: >-
           pytest tests/unittests -v --tb=short
           --timeout=30
           --ignore=tests/unittests/test_lftp/test_lftp.py
-          --ignore=tests/unittests/test_lftp/test_lftp_queue_command.py
-          --ignore=tests/unittests/test_ssh
-          --ignore=tests/unittests/test_system
-          --ignore=tests/unittests/test_controller/test_scan/test_remote_scanner.py
+          --ignore=tests/unittests/test_ssh/test_sshcp.py
           --ignore=tests/unittests/test_common/test_multiprocessing_logger.py
 
   python-integration-test:
@@ -176,6 +178,11 @@ jobs:
         working-directory: src/python
         env:
           PYTHONPATH: .
+        # Only the web-handler integration tests run in CI. The
+        # tests/integration/test_controller and test_lftp suites drive a real
+        # lftp/SSH transfer against the seedsynctest account (gated by
+        # SEEDSYNC_LIVE_SSH_TESTS) and have no mock subset, so they cannot run
+        # without that live server (#529).
         run: >-
           pytest tests/integration/test_web -v --tb=short
           --timeout=30

@@ -19,6 +19,9 @@ class TestLftpQueueCommand(unittest.TestCase):
         lftp._Lftp__base_remote_dir_path = "/remote/path"
         lftp._Lftp__base_local_dir_path = "/local/path"
         lftp._Lftp__run_command = MagicMock()
+        # queue() logs the constructed command; __init__ is stubbed out, so
+        # supply a mock logger in its place.
+        lftp.logger = MagicMock()
         return lftp
 
     def test_queue_dir_no_excludes(self):
@@ -41,9 +44,9 @@ class TestLftpQueueCommand(unittest.TestCase):
         lftp.queue("mydir", True, exclude_patterns=["*.nfo", "*.txt", "Sample/"])
         cmd = lftp._Lftp__run_command.call_args[0][0]
         self.assertIn("mirror", cmd)
-        self.assertIn('--exclude "*.nfo"', cmd)
-        self.assertIn('--exclude "*.txt"', cmd)
-        self.assertIn('--exclude "Sample/"', cmd)
+        self.assertIn('--exclude-glob "*.nfo"', cmd)
+        self.assertIn('--exclude-glob "*.txt"', cmd)
+        self.assertIn('--exclude-glob "Sample/"', cmd)
 
     def test_queue_file_ignores_excludes(self):
         """Exclude patterns only apply to mirror (directory) downloads, not pget (file)."""

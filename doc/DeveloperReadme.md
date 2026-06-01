@@ -86,6 +86,26 @@ docker run --rm -v $(pwd)/src/python:/app -w /app \
   sh -c "pip install pytest && pytest tests/unittests -v"
 ```
 
+### Live-server SSH tests
+
+A few suites — `tests/unittests/test_lftp/test_lftp.py`,
+`tests/unittests/test_ssh/test_sshcp.py`, and the
+`tests/integration/test_controller` / `tests/integration/test_lftp` suites —
+drive a real lftp/SSH transfer against a `seedsynctest` SSH account on
+`localhost`. They are **skipped by default**, including under `make test` and in
+CI (neither provisions that account), so the fully-mocked lftp/ssh/scanner tests
+in the same packages still run.
+
+To run the live suites, set up the `seedsynctest` account (an SSH user on
+`localhost` with password `seedsyncpass` and key-based login enabled), then opt
+in with the `SEEDSYNC_LIVE_SSH_TESTS` environment variable. Run from the
+`src/python` directory (the same working directory and `PYTHONPATH` CI uses):
+
+```bash
+cd src/python
+SEEDSYNC_LIVE_SSH_TESTS=1 PYTHONPATH=. pytest tests/unittests/test_ssh/test_sshcp.py -v
+```
+
 ### Debugging
 
 ```bash

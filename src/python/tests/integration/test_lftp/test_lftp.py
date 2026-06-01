@@ -11,9 +11,10 @@ from filecmp import dircmp
 import timeout_decorator
 
 from lftp import Lftp
-from tests.utils import TestUtils
+from tests.utils import TestUtils, requires_live_ssh
 
 
+@requires_live_ssh
 class TestLftp(unittest.TestCase):
     temp_dir = None
 
