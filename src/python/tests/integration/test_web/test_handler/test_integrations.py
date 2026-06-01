@@ -138,6 +138,18 @@ class TestIntegrationsHandler(BaseTestWebApp):
         )
         self.assertEqual(400, resp.status_int)
 
+    def test_create_persist_failure_returns_500(self):
+        """A disk error while persisting surfaces as a controlled 500 with a
+        stable JSON error body, not an unhandled traceback. The in-memory add
+        survives (mirrors the path_pairs/auto_queue contract)."""
+        data = {"name": "Sonarr", "kind": "sonarr", "url": "http://localhost:8989", "api_key": "abc"}
+        with patch.object(self.integrations_config, "to_file", side_effect=OSError("disk full")):
+            resp = self._post("/server/integrations", data, expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual("failed to persist integrations", json.loads(resp.text)["error"])
+        # In-memory mutation survives the persist failure.
+        self.assertEqual(1, len(self.integrations_config.instances))
+
     # ------------------------------------------------------------------
     # PUT /server/integrations/<id>
     # ------------------------------------------------------------------
@@ -188,6 +200,21 @@ class TestIntegrationsHandler(BaseTestWebApp):
         self.assertEqual(409, resp.status_int)
         # Original a unchanged
         self.assertEqual("A", self.integrations_config.get_instance(a.id).name)
+
+    def test_update_persist_failure_returns_500(self):
+        """A disk error while persisting an update surfaces as a controlled 500
+        with a stable JSON error body. The in-memory update survives."""
+        inst = self._add_instance(name="Original", api_key="old")
+        with patch.object(self.integrations_config, "to_file", side_effect=OSError("disk full")):
+            resp = self._put(
+                f"/server/integrations/{inst.id}",
+                {"name": "Renamed", "kind": "sonarr", "url": "http://new", "api_key": "new"},
+                expect_errors=True,
+            )
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual("failed to persist integrations", json.loads(resp.text)["error"])
+        # In-memory mutation survives the persist failure.
+        self.assertEqual("Renamed", self.integrations_config.get_instance(inst.id).name)
 
     # ------------------------------------------------------------------
     # DELETE /server/integrations/<id>

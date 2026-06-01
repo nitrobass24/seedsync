@@ -426,7 +426,11 @@ class Config(Persist):
     @classmethod
     @overrides(Persist)
     def from_str(cls: type["Config"], content: str) -> "Config":
-        config_parser = configparser.ConfigParser()
+        # interpolation=None: config values are opaque strings (passwords,
+        # exclude patterns, rate limits) that may legitimately contain '%'.
+        # The default BasicInterpolation would treat '%' as a format token and
+        # raise on read/write (see #507).
+        config_parser = configparser.ConfigParser(interpolation=None)
         try:
             config_parser.read_string(content)
         except (configparser.MissingSectionHeaderError, configparser.ParsingError) as e:
@@ -440,7 +444,9 @@ class Config(Persist):
 
     @overrides(Persist)
     def to_str(self) -> str:
-        config_parser = configparser.ConfigParser()
+        # interpolation=None: see from_str. A '%' in any value must survive the
+        # write/read round-trip verbatim rather than being treated as a token.
+        config_parser = configparser.ConfigParser(interpolation=None)
         config_dict = self.as_dict()
         for section in config_dict:
             config_parser.add_section(section)

@@ -314,5 +314,37 @@ class TestWebhookNotifierDownloadStart(unittest.TestCase):
             mock.assert_not_called()
 
 
+class TestWebhookNotifierSchemeGuard(unittest.TestCase):
+    """_send_post's http/https allowlist is the SSRF/scheme guard for the
+    generic webhook and Discord/Telegram egress. Other tests patch _send_post
+    (or _fire_raw) itself, so the rejection branch and the urlopen call are
+    otherwise never executed."""
+
+    _LOGGER_NAME = "test_notifier_scheme"
+
+    def _make_notifier(self) -> WebhookNotifier:
+        return WebhookNotifier(MagicMock(), logging.getLogger(self._LOGGER_NAME))
+
+    def test_send_post_rejects_non_http_schemes(self):
+        for url in ("file:///etc/passwd", "ftp://example.com/payload", "gopher://example.com"):
+            with self.subTest(url=url):
+                notifier = self._make_notifier()
+                with (
+                    patch("urllib.request.urlopen") as mock_urlopen,
+                    self.assertLogs(self._LOGGER_NAME, level="WARNING") as logs,
+                ):
+                    notifier._send_post("Webhook", url, {}, b"payload")
+                mock_urlopen.assert_not_called()
+                self.assertTrue(any("rejected" in line for line in logs.output))
+
+    def test_send_post_allows_http_scheme(self):
+        """Sanity check that the guard isn't rejecting everything: a valid
+        http:// URL does reach urlopen."""
+        notifier = self._make_notifier()
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            notifier._send_post("Webhook", "http://example.com/hook", {}, b"payload")
+        mock_urlopen.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
