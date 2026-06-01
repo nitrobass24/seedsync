@@ -98,10 +98,12 @@ in the same packages still run.
 
 To run the live suites, set up the `seedsynctest` account (an SSH user on
 `localhost` with password `seedsyncpass` and key-based login enabled), then opt
-in with the `SEEDSYNC_LIVE_SSH_TESTS` environment variable:
+in with the `SEEDSYNC_LIVE_SSH_TESTS` environment variable. Run from the
+`src/python` directory (the same working directory and `PYTHONPATH` CI uses):
 
 ```bash
-SEEDSYNC_LIVE_SSH_TESTS=1 pytest tests/unittests/test_ssh/test_sshcp.py -v
+cd src/python
+SEEDSYNC_LIVE_SSH_TESTS=1 PYTHONPATH=. pytest tests/unittests/test_ssh/test_sshcp.py -v
 ```
 
 ### Debugging
