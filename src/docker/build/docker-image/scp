@@ -1,3 +1,0 @@
-#!/bin/sh
-SCP=/usr/bin/scp
-/usr/local/bin/run_as_user "$SCP" "$@"
