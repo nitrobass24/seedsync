@@ -45,6 +45,19 @@ services:
       - ./config:/config
       - /path/to/downloads:/downloads
     restart: unless-stopped
+    # Hardened runtime baseline (recommended). The container starts as root
+    # only to set up the PUID/PGID user, then drops to it via setpriv — so
+    # no-new-privileges is compatible and only a few capabilities are needed.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN # chown /config and the user's home/.ssh
+      - SETUID # create the user and setpriv into it
+      - SETGID # create the group and setpriv into it
+      - DAC_OVERRIDE # write user/group files during account setup
+      - FOWNER # chmod/chown files the root setup step does not own
 ```
 
 Start the container:
@@ -63,10 +76,21 @@ docker run -d \
   -p 8800:8800 \
   -e PUID=1000 \
   -e PGID=1000 \
+  --security-opt no-new-privileges \
+  --cap-drop ALL \
+  --cap-add CHOWN --cap-add SETUID --cap-add SETGID \
+  --cap-add DAC_OVERRIDE --cap-add FOWNER \
   -v /path/to/config:/config \
   -v /path/to/downloads:/downloads \
   ghcr.io/nitrobass24/seedsync:latest
 ```
+
+:::tip Hardened runtime
+The `--security-opt` and `--cap-drop`/`--cap-add` flags above drop all Linux
+capabilities except the few the container needs to create the `PUID`/`PGID`
+user at startup, and block privilege escalation. They're recommended but
+optional — omit them if you hit a permission error in an unusual environment.
+:::
 
 :::tip
 To control file permissions for downloaded files, add `-e UMASK=002` (for 775/664) or `-e UMASK=000` (for 777/666). See [Configuration](./configuration.md#environment-variables) for details.

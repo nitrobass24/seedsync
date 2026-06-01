@@ -1,7 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { compareVersions } from 'compare-versions';
+import { EMPTY } from 'rxjs';
+import { catchError, timeout } from 'rxjs/operators';
 
-import { RestService } from './rest.service';
+import { RestService, WebReaction } from './rest.service';
 import { LoggerService } from './logger.service';
 import { NotificationService } from './notification.service';
 import { NotificationLevel, createNotification } from '../../models/notification';
@@ -23,35 +25,48 @@ export class VersionCheckService {
   }
 
   private checkVersion(): void {
-    this.restService.sendRequest(this.GITHUB_LATEST_RELEASE_URL).subscribe({
-      next: (reaction) => {
-        if (reaction.success) {
-          let latestVersion: string;
-          let url: string;
-          try {
-            const jsonResponse: unknown = JSON.parse(reaction.data!);
-            if (!isGitHubReleaseResponse(jsonResponse)) {
-              this.logger.error('Unexpected github response: %O', jsonResponse);
-              return;
-            }
-            latestVersion = jsonResponse.tag_name;
-            url = jsonResponse.html_url;
-          } catch (e) {
-            this.logger.error('Unable to parse github response: %O', e);
-            return;
-          }
-          const message = Localization.Notification.NEW_VERSION_AVAILABLE(url);
-          this.logger.debug('Latest version: ', message);
-          if (isVersionNewer(latestVersion)) {
-            this.notificationService.show(
-              createNotification(NotificationLevel.INFO, message, true),
-            );
-          }
-        } else {
-          this.logger.warn('Unable to fetch latest version info: %O', reaction);
+    this.restService
+      .sendRequest(this.GITHUB_LATEST_RELEASE_URL)
+      .pipe(
+        // A stalled GitHub connection would otherwise leave this request open
+        // indefinitely (the browser applies no default timeout). The version
+        // banner is best-effort, so bound the wait and surface a timeout
+        // instead of hanging silently.
+        timeout({ each: 10000 }),
+        catchError((e: unknown) => {
+          this.logger.warn('Version check request timed out or failed: %O', e);
+          return EMPTY;
+        }),
+      )
+      .subscribe((reaction) => this.handleReaction(reaction));
+  }
+
+  private handleReaction(reaction: WebReaction): void {
+    if (reaction.success) {
+      let latestVersion: string;
+      let url: string;
+      try {
+        const jsonResponse: unknown = JSON.parse(reaction.data!);
+        if (!isGitHubReleaseResponse(jsonResponse)) {
+          this.logger.error('Unexpected github response: %O', jsonResponse);
+          return;
         }
-      },
-    });
+        latestVersion = jsonResponse.tag_name;
+        url = jsonResponse.html_url;
+      } catch (e) {
+        this.logger.error('Unable to parse github response: %O', e);
+        return;
+      }
+      const message = Localization.Notification.NEW_VERSION_AVAILABLE(url);
+      this.logger.debug('Latest version: ', message);
+      if (isVersionNewer(latestVersion)) {
+        this.notificationService.show(
+          createNotification(NotificationLevel.INFO, message, true),
+        );
+      }
+    } else {
+      this.logger.warn('Unable to fetch latest version info: %O', reaction);
+    }
   }
 }
 

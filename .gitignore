@@ -10,3 +10,12 @@ src/python/build
 src/python/site
 dev-config/
 /test-results/
+
+# OS / editor cruft and local agent state (audit quick-win #527)
+.DS_Store
+**/.DS_Store
+.claude/
+
+# Local-only audit artifacts — contain sensitive security details, keep out of git
+SECURITY_FINDINGS.md
+REVIEW.md

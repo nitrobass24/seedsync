@@ -1,7 +1,7 @@
 import '@angular/compiler';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { NEVER, of } from 'rxjs';
 
 import { VersionCheckService } from './version-check.service';
 import { RestService, WebReaction } from './rest.service';
@@ -141,6 +141,32 @@ describe('VersionCheckService', () => {
 
     expect(notifications.length).toBe(0);
     expect(mockLogger.warn).toHaveBeenCalled();
+  });
+
+  it('should log a warning and not show a notification when the request hangs past the timeout', () => {
+    vi.useFakeTimers();
+    try {
+      // NEVER never emits — it simulates a stalled GitHub connection that
+      // hangs forever rather than erroring. Without the timeout this would
+      // leave the request open indefinitely.
+      mockRestService.sendRequest.mockReturnValue(NEVER);
+
+      let notifications: Notification[] = [];
+      notificationService.notifications$.subscribe(n => notifications = n);
+
+      createService();
+
+      // Nothing should happen before the 10s timeout window elapses.
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+
+      // Advance past the timeout; the timeout operator should fire.
+      vi.advanceTimersByTime(10001);
+
+      expect(notifications.length).toBe(0);
+      expect(mockLogger.warn).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should log error and not crash on malformed JSON response', () => {
