@@ -13,7 +13,7 @@ from parameterized import parameterized
 
 from common import overrides
 from ssh import Sshcp, SshcpError
-from tests.utils import TestUtils
+from tests.utils import TestUtils, requires_live_ssh
 
 # This is outside so it can be used in the parameterized decorators
 # noinspection SpellCheckingInspection
@@ -23,6 +23,7 @@ _PARAMS = [("password", _PASSWORD), ("keyauth", None)]
 
 
 # noinspection SpellCheckingInspection
+@requires_live_ssh
 class TestSshcp(unittest.TestCase):
     __KEEP_FILES = False  # for debugging
 
