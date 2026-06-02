@@ -170,6 +170,23 @@ class TestControllerExit(unittest.TestCase):
         self.mp_logger.stop.assert_not_called()
 
     @timeout_decorator.timeout(5)
+    def test_exit_closes_queues_when_worker_terminate_raises(self):
+        """AC #2 (literal): a raise from a worker terminate()/join() — not just
+        lftp — must not skip the remaining reaping or the FD-releasing
+        close_queues phase, and must not propagate out of exit()."""
+        self.extract_process.terminate.side_effect = ValueError("process already closed")
+        self.move_process.join.side_effect = RuntimeError("join failed")
+
+        # Must not raise despite the worker-phase failures.
+        self.controller.exit()
+
+        # The failures were logged, and every phase still ran for every worker
+        # (close_queues in particular, so no FD leak).
+        self.controller.logger.exception.assert_called()
+        self._assert_full_teardown()
+        self.assertFalse(self.controller._Controller__started)
+
+    @timeout_decorator.timeout(5)
     def test_repeated_exit_with_hung_lftp_does_not_leak(self):
         """Repeated ServiceRestart with a hung lftp must close queues every
         cycle and never raise (AC #3 / AC #6)."""

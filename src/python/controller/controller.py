@@ -357,51 +357,53 @@ class Controller:
                     getattr(pc, "pair_id", None),
                 )
 
+    def __iter_worker_processes(self):
+        """All terminable worker processes, in teardown order."""
+        for pc in self.__pair_contexts:
+            yield pc.active_scan_process
+            yield pc.local_scan_process
+            yield pc.remote_scan_process
+        yield self.__extract_process
+        yield self.__validate_process
+        for cp in self.__pipeline.active_command_processes:
+            yield cp.process
+        yield from self.__pipeline.active_move_processes
+
+    def __safe_teardown(self, description: str, action):
+        # Teardown is best-effort: a raise from any single terminate/join/
+        # close_queues call (a hung or already-closed worker) must not skip the
+        # remaining reaping or the FD-releasing close_queues phase, nor propagate
+        # out of exit(). Otherwise each restart leaks queue FDs until the OS
+        # limit (OSError: [Errno 24] No file descriptors available) is hit.
+        try:
+            action()
+        except Exception:
+            self.logger.exception("Error during controller teardown: %s", description)
+
     def exit(self):
         self.logger.debug("Exiting controller")
-        if self.__started:
-            self.__shutdown_lftp_best_effort()
-            for pc in self.__pair_contexts:
-                pc.active_scan_process.terminate()
-                pc.local_scan_process.terminate()
-                pc.remote_scan_process.terminate()
-            self.__extract_process.terminate()
-            self.__validate_process.terminate()
-            for cp in self.__pipeline.active_command_processes:
-                cp.process.terminate()
-            for mp in self.__pipeline.active_move_processes:
-                mp.terminate()
-            for pc in self.__pair_contexts:
-                pc.active_scan_process.join()
-                pc.local_scan_process.join()
-                pc.remote_scan_process.join()
-            self.__extract_process.join()
-            self.__validate_process.join()
-            for cp in self.__pipeline.active_command_processes:
-                cp.process.join()
-            for mp in self.__pipeline.active_move_processes:
-                mp.join()
-            self.__mp_logger.stop()
+        if not self.__started:
+            return
 
-            # Close multiprocessing queues to release file descriptors.
-            # Without this, each restart cycle leaks FDs until the OS limit
-            # is exhausted (OSError: [Errno 24] No file descriptors available).
-            for pc in self.__pair_contexts:
-                pc.active_scan_process.close_queues()
-                pc.local_scan_process.close_queues()
-                pc.remote_scan_process.close_queues()
-                pc.active_scanner.close()
-            self.__extract_process.close_queues()
-            self.__validate_process.close_queues()
-            for cp in self.__pipeline.active_command_processes:
-                cp.process.close_queues()
-            for mp in self.__pipeline.active_move_processes:
-                mp.close_queues()
-            self.__pipeline.active_command_processes.clear()
-            self.__pipeline.active_move_processes.clear()
+        self.__shutdown_lftp_best_effort()
+        processes = list(self.__iter_worker_processes())
+        for p in processes:
+            self.__safe_teardown("terminate", p.terminate)
+        for p in processes:
+            self.__safe_teardown("join", p.join)
+        self.__safe_teardown("stop mp_logger", self.__mp_logger.stop)
 
-            self.__started = False
-            self.logger.info("Exited controller")
+        # Close multiprocessing queues to release file descriptors; this must run
+        # even if a terminate()/join() above failed, or each restart cycle leaks
+        # FDs until the OS limit is exhausted.
+        for p in processes:
+            self.__safe_teardown("close_queues", p.close_queues)
+        for pc in self.__pair_contexts:
+            self.__safe_teardown("close active_scanner", pc.active_scanner.close)
+        self.__pipeline.active_command_processes.clear()
+        self.__pipeline.active_move_processes.clear()
+        self.__started = False
+        self.logger.info("Exited controller")
 
     def get_model_files(self) -> list[ModelFile]:
         return self.__registry.get_files()
