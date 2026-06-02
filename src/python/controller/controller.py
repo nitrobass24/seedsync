@@ -309,6 +309,11 @@ class Controller:
         :return:
         """
         self.logger.debug("Starting controller")
+        # Mark started before launching children so that a partial failure here
+        # still lets exit() tear down whatever did start (exit() is best-effort).
+        # Otherwise exit() would early-return on __started=False and leak the
+        # already-started processes and their queue FDs.
+        self.__started = True
         for pc in self.__pair_contexts:
             pc.active_scan_process.start()
             pc.local_scan_process.start()
@@ -316,7 +321,6 @@ class Controller:
         self.__extract_process.start()
         self.__validate_process.start()
         self.__mp_logger.start()
-        self.__started = True
 
     def request_lftp_reconfigure(self) -> None:
         """Signal that LFTP tuning settings have changed and should be reapplied.

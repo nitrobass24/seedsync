@@ -187,6 +187,26 @@ class TestControllerExit(unittest.TestCase):
         self.assertFalse(self.controller._Controller__started)
 
     @timeout_decorator.timeout(5)
+    def test_partial_start_failure_leaves_started_true_so_exit_cleans_up(self):
+        """If start() fails partway, __started must be True so the job's cleanup
+        path (exit()) tears down the children that did start, instead of
+        early-returning on __started=False and leaking them (#537 review)."""
+        self.controller._Controller__started = False
+        # extract_process.start() raises after the pair scan processes started.
+        self.extract_process.start.side_effect = RuntimeError("boom")
+
+        with self.assertRaises(RuntimeError):
+            self.controller.start()
+
+        # Marked started despite the partial failure, so exit() proceeds.
+        self.assertTrue(self.controller._Controller__started)
+        self.controller.exit()
+        for proc in self._all_pair_processes():
+            proc.terminate.assert_called_once()
+            proc.close_queues.assert_called_once()
+        self.assertFalse(self.controller._Controller__started)
+
+    @timeout_decorator.timeout(5)
     def test_repeated_exit_with_hung_lftp_does_not_leak(self):
         """Repeated ServiceRestart with a hung lftp must close queues every
         cycle and never raise (AC #3 / AC #6)."""
