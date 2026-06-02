@@ -284,6 +284,9 @@ class TestAutoQueuePersist(unittest.TestCase):
                 done.set()
 
         thread = threading.Thread(target=run)
+        # Daemon so a hung op() (a regression where the lock isn't acquired and
+        # something else blocks) can't keep the test process alive.
+        thread.daemon = True
         with lock:
             thread.start()
             self.assertTrue(started.wait(2), f"{op_name}: worker thread never started")
@@ -323,30 +326,40 @@ class TestAutoQueuePersist(unittest.TestCase):
         cases = [
             ("pattern_added", lambda: listener.pattern_added(AutoQueuePattern(pattern="new"))),
             ("pattern_removed", lambda: listener.pattern_removed(AutoQueuePattern(pattern="seed"))),
-            ("snapshot_new_patterns", listener.snapshot_new_patterns),
-            ("clear_new_patterns", listener.clear_new_patterns),
+            ("drain_new_patterns", listener.drain_new_patterns),
         ]
         for op_name, op in cases:
             with self.subTest(op=op_name):
                 self._assert_blocks_until_lock_released(lock, op, op_name)
 
-    def test_snapshot_new_patterns_is_independent_of_later_mutation(self):
-        """The controller iterates a snapshot, not the live set, so concurrent
-        pattern_added/removed can never raise 'Set changed size during
-        iteration'. The snapshot must be fully decoupled from later mutations."""
+    def test_drain_new_patterns_returns_copy_and_clears(self):
+        """drain returns the current set and empties it in one locked step, so
+        the controller gets a private, safely-iterable copy and the listener
+        starts the next cycle empty."""
         listener = AutoQueuePersistListener()
         listener.pattern_added(AutoQueuePattern(pattern="a"))
 
-        snapshot = listener.snapshot_new_patterns()
+        drained = listener.drain_new_patterns()
 
-        # Mutating the live set after snapshotting must not change the snapshot,
-        # and iterating the snapshot while the live set churns must not raise.
-        for _ in snapshot:
+        self.assertEqual({AutoQueuePattern(pattern="a")}, drained)
+        # The set is now empty, and the returned copy is decoupled from the
+        # listener: mutating the listener (and iterating the copy meanwhile)
+        # must neither change nor raise on the copy.
+        for _ in drained:
             listener.pattern_added(AutoQueuePattern(pattern="b"))
-            listener.pattern_removed(AutoQueuePattern(pattern="a"))
+        self.assertEqual({AutoQueuePattern(pattern="a")}, drained)
 
-        self.assertEqual({AutoQueuePattern(pattern="a")}, snapshot)
-        self.assertEqual({AutoQueuePattern(pattern="b")}, listener.snapshot_new_patterns())
+    def test_drain_does_not_drop_pattern_added_after_drain(self):
+        """Regression for the snapshot-then-clear race: a pattern added after the
+        drain is retained for the next cycle, not silently cleared unprocessed."""
+        listener = AutoQueuePersistListener()
+        listener.pattern_added(AutoQueuePattern(pattern="first"))
+
+        self.assertEqual({AutoQueuePattern(pattern="first")}, listener.drain_new_patterns())
+
+        # A pattern added after the drain must survive to the next cycle.
+        listener.pattern_added(AutoQueuePattern(pattern="second"))
+        self.assertEqual({AutoQueuePattern(pattern="second")}, listener.drain_new_patterns())
 
 
 class TestAutoQueue(unittest.TestCase):
