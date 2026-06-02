@@ -7,8 +7,6 @@ import threading
 import unittest
 from unittest.mock import MagicMock
 
-import timeout_decorator
-
 from common import Config, PersistError, overrides
 from controller import AutoQueue, AutoQueuePattern, AutoQueuePersist, Controller, IAutoQueuePersistListener
 from controller.auto_queue import AutoQueuePersistListener
@@ -266,89 +264,89 @@ class TestAutoQueuePersist(unittest.TestCase):
         round_tripped = AutoQueuePersist.from_str(persist.to_str())
         self.assertIn(pattern, round_tripped.patterns)
 
-    @timeout_decorator.timeout(30)
-    def test_to_str_safe_during_concurrent_pattern_mutation(self):
-        """to_str() must not raise while another thread adds/removes patterns,
-        and its output must always round-trip via from_str().
-
-        The patterns list and to_str are read on the controller/web thread; a
-        concurrent web-thread add/remove must not corrupt serialization. This
-        pins the RLock contract against a regression to an unguarded list.
+    def _assert_blocks_until_lock_released(self, lock, op, op_name):
+        """Deterministically prove `op` acquires `lock`: while this thread holds
+        the lock, a second thread running `op` must NOT complete; once released,
+        it must. Fails on unguarded code (op completes immediately), passes on
+        the locked code — with no reliance on GIL timing.
         """
-        persist = AutoQueuePersist()
-        stop = threading.Event()
+        started = threading.Event()
+        done = threading.Event()
         errors: list[BaseException] = []
 
-        def mutate():
-            # Bounded churn (add then remove every 64 iterations) keeps each
-            # snapshot small; the point is mutation concurrent with serialize.
-            i = 0
+        def run():
+            started.set()
             try:
-                while not stop.is_set():
-                    persist.add_pattern(AutoQueuePattern(pattern=f"p{i}"))
-                    i += 1
-                    if i % 64 == 0:
-                        for j in range(i - 64, i):
-                            persist.remove_pattern(AutoQueuePattern(pattern=f"p{j}"))
-            except Exception as e:  # surface any thread error to the test
+                op()
+            except BaseException as e:
                 errors.append(e)
+            finally:
+                done.set()
 
-        thread = threading.Thread(target=mutate)
-        thread.start()
-        try:
-            for _ in range(2000):
-                content = persist.to_str()
-                # Output is always valid and round-trips through from_str().
-                AutoQueuePersist.from_str(content)
-        finally:
-            stop.set()
-            thread.join()
+        thread = threading.Thread(target=run)
+        with lock:
+            thread.start()
+            self.assertTrue(started.wait(2), f"{op_name}: worker thread never started")
+            # The op cannot finish while we hold the shared lock -> it acquires it.
+            self.assertFalse(done.wait(0.2), f"{op_name} did not acquire the shared lock")
+        thread.join(2)
+        self.assertTrue(done.is_set(), f"{op_name} did not complete after lock release")
+        self.assertEqual([], errors, f"{op_name} raised: {errors}")
 
-        self.assertEqual([], errors)
-
-    @timeout_decorator.timeout(30)
-    def test_new_patterns_set_iteration_safe_during_concurrent_add(self):
-        """Controller-thread iteration of the listener's new_patterns must not
-        raise 'Set changed size during iteration' while the web thread
-        concurrently fires pattern_added/pattern_removed.
-
-        Without the snapshot-under-lock fix, iterating the live set under
-        concurrent mutation eventually raises RuntimeError, which kills the
-        ControllerJob. The snapshot helper makes the read atomic.
-        """
+    def test_persist_mutators_and_readers_acquire_lock(self):
+        """add_pattern / remove_pattern / to_str / patterns all run inside the
+        shared RLock, so a web-thread mutation can never interleave with a
+        controller-thread serialize (the torn-snapshot / set-changed-size
+        regression). Proven deterministically via the shared lock."""
         persist = AutoQueuePersist()
+        persist.add_pattern(AutoQueuePattern(pattern="seed"))
+        lock = persist._AutoQueuePersist__lock
+
+        cases = [
+            ("add_pattern", lambda: persist.add_pattern(AutoQueuePattern(pattern="new"))),
+            ("remove_pattern", lambda: persist.remove_pattern(AutoQueuePattern(pattern="seed"))),
+            ("to_str", persist.to_str),
+            ("patterns", lambda: persist.patterns),
+        ]
+        for op_name, op in cases:
+            with self.subTest(op=op_name):
+                self._assert_blocks_until_lock_released(lock, op, op_name)
+
+    def test_listener_new_patterns_operations_acquire_lock(self):
+        """The listener's new_patterns set is mutated on the web thread and
+        read on the controller thread, so every accessor must take the listener
+        lock. Proven deterministically via the shared lock."""
         listener = AutoQueuePersistListener()
-        persist.add_listener(listener)
-        stop = threading.Event()
-        errors: list[BaseException] = []
+        listener.pattern_added(AutoQueuePattern(pattern="seed"))
+        lock = listener._AutoQueuePersistListener__lock
 
-        def mutate():
-            i = 0
-            try:
-                while not stop.is_set():
-                    persist.add_pattern(AutoQueuePattern(pattern=f"p{i}"))
-                    i += 1
-                    if i % 64 == 0:
-                        for j in range(i - 64, i):
-                            persist.remove_pattern(AutoQueuePattern(pattern=f"p{j}"))
-            except Exception as e:
-                errors.append(e)
+        cases = [
+            ("pattern_added", lambda: listener.pattern_added(AutoQueuePattern(pattern="new"))),
+            ("pattern_removed", lambda: listener.pattern_removed(AutoQueuePattern(pattern="seed"))),
+            ("snapshot_new_patterns", listener.snapshot_new_patterns),
+            ("clear_new_patterns", listener.clear_new_patterns),
+        ]
+        for op_name, op in cases:
+            with self.subTest(op=op_name):
+                self._assert_blocks_until_lock_released(lock, op, op_name)
 
-        thread = threading.Thread(target=mutate)
-        thread.start()
-        try:
-            for _ in range(2000):
-                # Mirror AutoQueue.__filter_candidates: snapshot then iterate.
-                for pattern in listener.snapshot_new_patterns():
-                    _ = pattern.pattern
-                listener.clear_new_patterns()
-        except Exception as e:
-            errors.append(e)
-        finally:
-            stop.set()
-            thread.join()
+    def test_snapshot_new_patterns_is_independent_of_later_mutation(self):
+        """The controller iterates a snapshot, not the live set, so concurrent
+        pattern_added/removed can never raise 'Set changed size during
+        iteration'. The snapshot must be fully decoupled from later mutations."""
+        listener = AutoQueuePersistListener()
+        listener.pattern_added(AutoQueuePattern(pattern="a"))
 
-        self.assertEqual([], errors)
+        snapshot = listener.snapshot_new_patterns()
+
+        # Mutating the live set after snapshotting must not change the snapshot,
+        # and iterating the snapshot while the live set churns must not raise.
+        for _ in snapshot:
+            listener.pattern_added(AutoQueuePattern(pattern="b"))
+            listener.pattern_removed(AutoQueuePattern(pattern="a"))
+
+        self.assertEqual({AutoQueuePattern(pattern="a")}, snapshot)
+        self.assertEqual({AutoQueuePattern(pattern="b")}, listener.snapshot_new_patterns())
 
 
 class TestAutoQueue(unittest.TestCase):
