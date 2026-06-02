@@ -435,8 +435,19 @@ class CommandPipeline:
             pc.local_scan_process.propagate_exception()
             pc.remote_scan_process.propagate_exception()
         self._mp_logger.propagate_exception()
-        self._extract_process.propagate_exception()
-        self._validate_process.propagate_exception()
+        # A fault in an extract/validate worker that surfaces outside its
+        # per-task guard (OOM, queue corruption, run_init/run_cleanup bug)
+        # must degrade that feature only, not kill the whole controller.
+        # Isolate each worker so one dead worker doesn't stop the other or
+        # halt all downloads.
+        try:
+            self._extract_process.propagate_exception()
+        except Exception:
+            self._logger.warning("Extract worker process failed: %s", self._extract_process.name, exc_info=True)
+        try:
+            self._validate_process.propagate_exception()
+        except Exception:
+            self._logger.warning("Validate worker process failed: %s", self._validate_process.name, exc_info=True)
 
     def spawn_deferred_move(self, pair_id: str | None, file_name: str):
         """Spawn the staging->final move for a file whose validation just finished.

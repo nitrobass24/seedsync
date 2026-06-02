@@ -4,8 +4,10 @@ import os
 import unittest
 from unittest.mock import MagicMock
 
+from common import AppError
 from controller.command_pipeline import CommandPipeline
 from controller.persist_keys import persist_key
+from lftp import LftpError
 from model import ModelFile
 
 
@@ -220,3 +222,51 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         self.assertIn(move_process, pipeline.active_move_processes)
         move_process.pop_failed.assert_not_called()
+
+    # --- propagate_exceptions: worker-fault isolation (#511) ---
+
+    def test_propagate_exceptions_clean_when_no_worker_errors(self):
+        """With no worker faults, all worker propagation calls run and nothing raises."""
+        pipeline = self._make_pipeline([])
+
+        pipeline.propagate_exceptions()
+
+        pipeline._mp_logger.propagate_exception.assert_called_once()
+        pipeline._extract_process.propagate_exception.assert_called_once()
+        pipeline._validate_process.propagate_exception.assert_called_once()
+
+    def test_propagate_exceptions_survives_extract_worker_crash(self):
+        """A dead extract worker is logged and swallowed; the validate worker is
+        still polled and the controller cycle is not killed."""
+        pipeline = self._make_pipeline([])
+        pipeline._extract_process.propagate_exception.side_effect = RuntimeError("worker OOM")
+
+        # Must not raise out of propagate_exceptions -> controller keeps running
+        pipeline.propagate_exceptions()
+
+        # Isolation: the sibling worker is still polled (per-worker try/except,
+        # not one shared guard around both).
+        pipeline._validate_process.propagate_exception.assert_called_once()
+        pipeline._logger.warning.assert_called()
+
+    def test_propagate_exceptions_survives_validate_worker_crash(self):
+        """A dead validate worker is logged and swallowed; the extract worker is
+        still polled and the controller cycle is not killed."""
+        pipeline = self._make_pipeline([])
+        pipeline._validate_process.propagate_exception.side_effect = RuntimeError("worker OOM")
+
+        pipeline.propagate_exceptions()
+
+        pipeline._extract_process.propagate_exception.assert_called_once()
+        pipeline._logger.warning.assert_called()
+
+    def test_propagate_exceptions_reraises_permanent_lftp_error(self):
+        """A permanent lftp credential failure must still raise AppError so the
+        engine stops (this engine-stopping behavior is unaffected by the new
+        worker guards)."""
+        pc = self._make_pair_context("pair-1")
+        pc.lftp.raise_pending_error.side_effect = LftpError("Login failed: 530")
+        pipeline = self._make_pipeline([pc])
+
+        with self.assertRaises(AppError):
+            pipeline.propagate_exceptions()
