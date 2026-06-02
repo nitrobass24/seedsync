@@ -3,14 +3,11 @@ import { inject } from '@angular/core';
 
 import { ConfigService } from '../settings/config.service';
 import { StorageKeys } from '../../common/storage-keys';
+import { REDACTED_SENTINEL } from '../../models/config';
 
-/**
- * Value the backend substitutes for web.api_key in /server/config/get
- * responses (see common/config.py). /server/config/get is auth-exempt, so the
- * config snapshot can hold this sentinel before the real key is known — it
- * must never be sent as a credential.
- */
-const REDACTED_SENTINEL = '********';
+// REDACTED_SENTINEL is the value the backend substitutes for web.api_key in the
+// auth-exempt /server/config/get response, so the config snapshot can hold it
+// before the real key is known — it must never be sent as a credential.
 
 function readPersistedApiKey(): string | null {
   try {

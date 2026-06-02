@@ -5,7 +5,7 @@ import { ConnectedService } from '../utils/connected.service';
 import { LoggerService } from '../utils/logger.service';
 import { RestService, WebReaction } from '../utils/rest.service';
 import { StreamDispatchService } from '../base/stream-dispatch.service';
-import { Config } from '../../models/config';
+import { Config, REDACTED_SENTINEL } from '../../models/config';
 import { StorageKeys } from '../../common/storage-keys';
 
 /** Value a config field may take (matches OptionComponent's value shape). */
@@ -17,13 +17,10 @@ type ConfigRecord = Record<string, Record<string, ConfigValue>>;
 /** Sentinel value sent to the backend when the user clears a text field. */
 export const EMPTY_VALUE_SENTINEL = '__empty__';
 
-/**
- * Value the backend substitutes for web.api_key in /server/config/get
- * responses (see common/config.py). It must never be treated as a real
- * key — pushing it to the stream would fail auth and could clobber a
- * good persisted key.
- */
-const REDACTED_SENTINEL = '********';
+// REDACTED_SENTINEL (imported from models/config) is the value the backend
+// substitutes for web.api_key in /server/config/get responses. It must never be
+// treated as a real key — pushing it to the stream would fail auth and could
+// clobber a good persisted key.
 
 @Injectable({ providedIn: 'root' })
 export class ConfigService {
