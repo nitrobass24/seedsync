@@ -980,6 +980,61 @@ class TestModelBuilder(unittest.TestCase):
         m_ab = m_a_ch["ab"]
         self.assertEqual(ModelFile.State.DOWNLOADED, m_ab.state)
 
+    @staticmethod
+    def __build_deep_wide_tree(name: str, depth: int, breadth: int, leaf_size: int) -> SystemFile:
+        """Build a balanced tree `depth` levels deep with `breadth` children per dir.
+
+        Leaves (depth == 0) are files of `leaf_size`; interior nodes are directories
+        whose size is the sum of their descendants. `leaf_size` may be a callable
+        taking the dotted leaf path to vary individual leaf sizes (used to simulate
+        an incomplete branch). Exercises the BFS in _check_root_downloaded over a
+        large tree (depth=4, breadth=4 -> 256 leaves).
+        """
+        if depth == 0:
+            size = leaf_size(name) if callable(leaf_size) else leaf_size
+            return SystemFile(name, size, False)
+        children = [
+            TestModelBuilder.__build_deep_wide_tree(f"{name}.{i}", depth - 1, breadth, leaf_size)
+            for i in range(breadth)
+        ]
+        sized = SystemFile(name, sum(c.size for c in children), True)
+        for child in children:
+            sized.add_child(child)
+        return sized
+
+    def test_build_state_deep_wide_tree_downloaded(self):
+        """_check_root_downloaded over a multi-level, multi-sibling tree resolves DOWNLOADED."""
+        # 4 levels deep, 4 children per directory -> 4^4 = 256 leaves
+        remote = TestModelBuilder.__build_deep_wide_tree("a", depth=4, breadth=4, leaf_size=10)
+        local = TestModelBuilder.__build_deep_wide_tree("a", depth=4, breadth=4, leaf_size=10)
+
+        self.model_builder.set_remote_files([remote])
+        self.model_builder.set_local_files([local])
+
+        model = self.model_builder.build_model()
+        m_a = model.get_file("a")
+        # every remote leaf is fully present locally -> root is DOWNLOADED
+        self.assertEqual(ModelFile.State.DOWNLOADED, m_a.state)
+
+    def test_build_state_deep_wide_tree_incomplete_leaf(self):
+        """A single under-sized deep leaf keeps the root DEFAULT (incomplete_children)."""
+        remote = TestModelBuilder.__build_deep_wide_tree("a", depth=4, breadth=4, leaf_size=10)
+        # One specific deep leaf is only partially present locally (1 < remote 10)
+        incomplete_leaf = "a.3.3.3.3"
+
+        def local_leaf_size(leaf_name: str) -> int:
+            return 1 if leaf_name == incomplete_leaf else 10
+
+        local = TestModelBuilder.__build_deep_wide_tree("a", depth=4, breadth=4, leaf_size=local_leaf_size)
+
+        self.model_builder.set_remote_files([remote])
+        self.model_builder.set_local_files([local])
+
+        model = self.model_builder.build_model()
+        m_a = model.get_file("a")
+        # one deep leaf is not downloaded -> root cannot be DOWNLOADED
+        self.assertEqual(ModelFile.State.DEFAULT, m_a.state)
+
     def test_build_children_state_downloaded_full_extra(self):
         """Fully downloaded but with an extra local-only file"""
         r_a = SystemFile("a", 300, True)

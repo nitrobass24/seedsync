@@ -177,6 +177,17 @@ class TestModelFile(unittest.TestCase):
         file_parent.add_child(file_child2)
         self.assertEqual([file_child1, file_child2], file_parent.get_children())
 
+    def test_iter_children(self):
+        file_parent = ModelFile("parent", True)
+        file_child1 = ModelFile("child1", True)
+        file_child2 = ModelFile("child2", False)
+        self.assertEqual([], list(file_parent.iter_children()))
+        file_parent.add_child(file_child1)
+        file_parent.add_child(file_child2)
+        # iter_children yields the same elements in the same order as get_children
+        self.assertEqual(file_parent.get_children(), list(file_parent.iter_children()))
+        self.assertEqual([file_child1, file_child2], list(file_parent.iter_children()))
+
     def test_child_equality(self):
         l_a = ModelFile("a", True)
         l_a.remote_size = 3 + 1 + 2
