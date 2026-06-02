@@ -17,7 +17,7 @@ class TestSystemFile(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             # noinspection PyUnusedLocal
             sf = SystemFile("", -42, False)
-        self.assertTrue("File size must be greater than zero" in str(context.exception))
+        self.assertTrue("File size must be non-negative" in str(context.exception))
 
     def test_is_dir(self):
         sf = SystemFile("", 0, True)
