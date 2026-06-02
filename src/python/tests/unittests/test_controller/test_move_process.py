@@ -186,9 +186,10 @@ class TestMoveProcess(unittest.TestCase):
 
         # Force the copied-size check to disagree with the source size.
         real_total = MoveProcess._get_total_size
-        with mock.patch.object(
-            MoveProcess, "_get_copied_size", staticmethod(lambda src, dst: real_total(src) + 1)
-        ), mock.patch("controller.move.move_process.os.rename", side_effect=OSError(errno.EXDEV, "cross-device")):
+        with (
+            mock.patch.object(MoveProcess, "_get_copied_size", staticmethod(lambda src, dst: real_total(src) + 1)),
+            mock.patch("controller.move.move_process.os.rename", side_effect=OSError(errno.EXDEV, "cross-device")),
+        ):
             self._run_process(process)
 
         failures = process.pop_failed()
@@ -214,9 +215,7 @@ class TestMoveProcess(unittest.TestCase):
 
         process = self._make_process(source_path=self.src_dir, dest_path=self.dst_dir, file_name="mydir")
         # Force the cross-device copy path so the size verification runs.
-        with mock.patch(
-            "controller.move.move_process.os.rename", side_effect=OSError(errno.EXDEV, "cross-device")
-        ):
+        with mock.patch("controller.move.move_process.os.rename", side_effect=OSError(errno.EXDEV, "cross-device")):
             self._run_process(process)
 
         # No false mismatch -- move succeeds and source is removed

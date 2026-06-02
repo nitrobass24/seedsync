@@ -323,9 +323,7 @@ class TestValidateProcess(unittest.TestCase):
         ]
         ssh_mock = MagicMock()
         # Remote shell output after $HOME expansion (not literal ~)
-        ssh_mock.shell.return_value = (
-            b"/home/user/downloads/mydir/a.txt\n/home/user/downloads/mydir/b.txt\n"
-        )
+        ssh_mock.shell.return_value = b"/home/user/downloads/mydir/a.txt\n/home/user/downloads/mydir/b.txt\n"
         mock_ssh.return_value = ssh_mock
 
         req = self._make_request(name="mydir", is_dir=True, remote_path="~/downloads")
