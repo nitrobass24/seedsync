@@ -84,7 +84,7 @@ class ConfigHandler(IHandler):
         # Hold __write_lock across the mutate → persist → rollback sequence so
         # writers can't interleave. With the lock, the rollback is unconditional:
         # no other writer can have changed the value between set_property and
-        # the OSError handler.
+        # the persist handler.
         with self.__write_lock:
             old_value = getattr(inner_config, key)
             try:
@@ -93,7 +93,13 @@ class ConfigHandler(IHandler):
                 return HTTPResponse(body=str(e), status=400)
             try:
                 self.__config.to_file(self.__config_path)
-            except OSError:
+            except Exception:
+                # Restore the in-memory value on ANY persist failure (not just
+                # OSError) so runtime state never diverges from disk. A non-OSError
+                # such as configparser.Error from serialization would otherwise
+                # escape and leave the new value live without ever being persisted
+                # (see #507). old_value is the prior valid value, so the rollback
+                # set_property cannot raise ConfigError.
                 inner_config.set_property(key, old_value)
                 self.__logger.exception("Failed to persist config %s.%s", section, key)
                 return HTTPResponse(body=f"Failed to persist config {section}.{key}", status=500)

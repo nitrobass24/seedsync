@@ -135,6 +135,22 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertEqual("INFO", self.context.config.general.log_level)
         self.controller.request_lftp_reconfigure.assert_not_called()
 
+    def test_set_persistence_failure_rolls_back_on_non_oserror(self):
+        """A non-OSError persist failure must also revert in-memory state.
+
+        Regression guard for #507 Part 2: serialization can raise non-OSError
+        exceptions (e.g. configparser.Error). Those must still trigger the
+        rollback rather than escaping and leaving the new value live but never
+        persisted.
+        """
+        self.context.config.general.log_level = "INFO"
+        with patch.object(Config, "to_file", side_effect=RuntimeError("serialize boom")):
+            resp = self.test_app.get("/server/config/set/general/log_level/DEBUG", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertIn("Failed to persist config general.log_level", str(resp.html))
+        self.assertEqual("INFO", self.context.config.general.log_level)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
     def test_set_persistence_failure_rolls_back_lftp_tuning_key(self):
         """A failed write on a hot-reload key must not fire the LFTP callback."""
         self.context.config.lftp.num_max_parallel_downloads = 3
