@@ -78,6 +78,10 @@ class CommandPipeline:
         # Track files with pending validation so extraction-completion doesn't race the move
         self.pending_validation_keys: set[str] = set()
 
+        # Worker ids already reported as dead, so a permanently-dead extract/
+        # validate worker is surfaced once at ERROR rather than every cycle.
+        self.__reported_dead_workers: set[int] = set()
+
     def queue(self, command: Controller.Command) -> None:
         """Put a command on the queue for processing."""
         self.command_queue.put(command)
@@ -440,6 +444,9 @@ class CommandPipeline:
         # must degrade that feature only, not kill the whole controller.
         # Isolate each worker so one dead worker doesn't stop the other or
         # halt all downloads.
+        # NOTE: this only ISOLATES the fault — the dead worker is not yet
+        # recreated, so extract/validate stays disabled until the service is
+        # restarted. Automatic worker recreation is tracked in #511's follow-up.
         try:
             self._extract_process.propagate_exception()
         except Exception:
@@ -448,6 +455,29 @@ class CommandPipeline:
             self._validate_process.propagate_exception()
         except Exception:
             self._logger.warning("Validate worker process failed: %s", self._validate_process.name, exc_info=True)
+        # propagate_exception() consumes the queued fault once, so without this a
+        # permanently-dead worker would go silent after the first cycle. Surface
+        # the dead state once at ERROR so the degradation stays visible.
+        self.__report_if_worker_dead(self._extract_process, "Extract")
+        self.__report_if_worker_dead(self._validate_process, "Validate")
+
+    def __report_if_worker_dead(self, worker, feature: str):
+        worker_id = id(worker)
+        if worker_id in self.__reported_dead_workers:
+            return
+        try:
+            alive = worker.is_alive()
+        except (ValueError, AssertionError):
+            # Never started or already closed — treat as not-running.
+            alive = False
+        if not alive:
+            self.__reported_dead_workers.add(worker_id)
+            self._logger.error(
+                "%s worker process %s has died; %s is disabled until the service is restarted.",
+                feature,
+                worker.name,
+                feature.lower(),
+            )
 
     def spawn_deferred_move(self, pair_id: str | None, file_name: str):
         """Spawn the staging->final move for a file whose validation just finished.

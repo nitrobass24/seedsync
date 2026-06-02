@@ -260,6 +260,25 @@ class TestCommandPipelineHelpers(unittest.TestCase):
         pipeline._extract_process.propagate_exception.assert_called_once()
         pipeline._logger.warning.assert_called()
 
+    def test_propagate_exceptions_reports_dead_worker_once(self):
+        """A worker whose process has died is surfaced once at ERROR (not every
+        cycle), so the degraded-until-restart state stays visible after the
+        queued fault is consumed. The live sibling is not reported."""
+        pipeline = self._make_pipeline([])
+        pipeline._extract_process.is_alive.return_value = False
+        pipeline._validate_process.is_alive.return_value = True
+
+        pipeline.propagate_exceptions()
+        pipeline.propagate_exceptions()
+
+        error_messages = [c.args[0] % c.args[1:] for c in pipeline._logger.error.call_args_list]
+        dead_reports = [m for m in error_messages if "has died" in m]
+        self.assertEqual(1, len(dead_reports), error_messages)
+        self.assertIn("Extract", dead_reports[0])
+        self.assertIn("restarted", dead_reports[0])
+        # The live validate worker is never reported dead.
+        self.assertFalse(any("Validate worker" in m for m in error_messages))
+
     def test_propagate_exceptions_reraises_permanent_lftp_error(self):
         """A permanent lftp credential failure must still raise AppError so the
         engine stops (this engine-stopping behavior is unaffected by the new
