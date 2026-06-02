@@ -2,6 +2,7 @@
 
 import fnmatch
 import json
+import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 
@@ -66,31 +67,47 @@ class AutoQueuePersist(Persist):
     __KEY_PATTERNS = "patterns"
 
     def __init__(self):
+        # Guards __patterns and __listeners. add/remove run on the web thread
+        # while patterns/to_str are read on the controller thread, so the list
+        # must be lock-guarded (mirrors common/path_pairs_config.py). RLock is
+        # reentrant so from_str -> add_pattern does not self-deadlock.
+        self.__lock = threading.RLock()
         self.__patterns: list[AutoQueuePattern] = []
         self.__listeners: list[IAutoQueuePersistListener] = []
 
     @property
     def patterns(self) -> set[AutoQueuePattern]:
-        return set(self.__patterns)
+        with self.__lock:
+            return set(self.__patterns)
 
     def add_pattern(self, pattern: AutoQueuePattern):
         # Check values
         if not pattern.pattern.strip():
             raise ValueError("Cannot add blank pattern")
 
-        if pattern not in self.__patterns:
+        with self.__lock:
+            if pattern in self.__patterns:
+                return
             self.__patterns.append(pattern)
-            for listener in self.__listeners:
-                listener.pattern_added(pattern)
+            listeners = list(self.__listeners)
+        # Notify outside the lock so the persist lock and any listener lock are
+        # never held simultaneously.
+        for listener in listeners:
+            listener.pattern_added(pattern)
 
     def remove_pattern(self, pattern: AutoQueuePattern):
-        if pattern in self.__patterns:
+        with self.__lock:
+            if pattern not in self.__patterns:
+                return
             self.__patterns.remove(pattern)
-            for listener in self.__listeners:
-                listener.pattern_removed(pattern)
+            listeners = list(self.__listeners)
+        # Notify outside the lock (see add_pattern).
+        for listener in listeners:
+            listener.pattern_removed(pattern)
 
     def add_listener(self, listener: IAutoQueuePersistListener):
-        self.__listeners.append(listener)
+        with self.__lock:
+            self.__listeners.append(listener)
 
     @classmethod
     @overrides(Persist)
@@ -108,7 +125,8 @@ class AutoQueuePersist(Persist):
     @overrides(Persist)
     def to_str(self) -> str:
         dct: dict[str, list[str]] = {}
-        dct[AutoQueuePersist.__KEY_PATTERNS] = [p.to_str() for p in self.__patterns]
+        with self.__lock:
+            dct[AutoQueuePersist.__KEY_PATTERNS] = [p.to_str() for p in self.__patterns]
         return json.dumps(dct, indent=Constants.JSON_PRETTY_PRINT_INDENT)
 
 
@@ -133,27 +151,46 @@ class AutoQueueModelListener(IModelListener):
 
 
 class AutoQueuePersistListener(IAutoQueuePersistListener):
-    """Keeps track of newly added patterns"""
+    """Keeps track of newly added patterns.
+
+    pattern_added/pattern_removed run on the web thread while the controller
+    thread reads (snapshot_new_patterns) and clears (clear_new_patterns) the
+    set. The lock keeps the controller-thread read from racing a web-thread
+    mutation, which would otherwise raise
+    'RuntimeError: Set changed size during iteration'.
+    """
 
     def __init__(self):
+        self.__lock = threading.RLock()
         self.new_patterns: set[AutoQueuePattern] = set()
 
     @overrides(IAutoQueuePersistListener)
     def pattern_added(self, pattern: AutoQueuePattern):
-        self.new_patterns.add(pattern)
+        with self.__lock:
+            self.new_patterns.add(pattern)
 
     @overrides(IAutoQueuePersistListener)
     def pattern_removed(self, pattern: AutoQueuePattern):
-        if pattern in self.new_patterns:
-            self.new_patterns.remove(pattern)
+        with self.__lock:
+            self.new_patterns.discard(pattern)
+
+    def snapshot_new_patterns(self) -> set[AutoQueuePattern]:
+        """Return an atomic copy of new_patterns for safe iteration."""
+        with self.__lock:
+            return set(self.new_patterns)
+
+    def clear_new_patterns(self) -> None:
+        with self.__lock:
+            self.new_patterns.clear()
 
 
 class AutoQueue:
     """
     Implements auto-queue functionality by sending commands to controller
-    as matching files are discovered
-    AutoQueue is in the same thread as Controller, so no synchronization is
-    needed for now
+    as matching files are discovered.
+    AutoQueue runs on the Controller thread, but pattern add/remove happens on
+    the web handler thread; shared state in AutoQueuePersist and
+    AutoQueuePersistListener is therefore lock-guarded.
     """
 
     def __init__(self, context: Context, persist: AutoQueuePersist, controller: Controller):
@@ -222,7 +259,7 @@ class AutoQueue:
         self.__model_listener.new_files.clear()
         self.__model_listener.modified_files.clear()
         # Clear the new patterns
-        self.__persist_listener.new_patterns.clear()
+        self.__persist_listener.clear_new_patterns()
 
     def __gather_queue_candidates(self) -> list[_Candidate]:
         candidates: list[ModelFile] = list(self.__model_listener.new_files)
@@ -354,9 +391,12 @@ class AutoQueue:
                 files_matched[(file.name, file.pair_id)] = None
 
         # Step 2: run new pattern through all the files
-        if self.__persist_listener.new_patterns:
+        # Snapshot under the listener's lock so a concurrent web-thread
+        # add/remove cannot mutate the set mid-iteration.
+        new_patterns = self.__persist_listener.snapshot_new_patterns()
+        if new_patterns:
             model_files = self.__controller.get_model_files()
-            for new_pattern in self.__persist_listener.new_patterns:
+            for new_pattern in new_patterns:
                 for file in model_files:
                     if accept(file) and self.__match(new_pattern, file):
                         files_matched[(file.name, file.pair_id)] = new_pattern

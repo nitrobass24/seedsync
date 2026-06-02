@@ -3,11 +3,15 @@
 import json
 import logging
 import sys
+import threading
 import unittest
 from unittest.mock import MagicMock
 
+import timeout_decorator
+
 from common import Config, PersistError, overrides
 from controller import AutoQueue, AutoQueuePattern, AutoQueuePersist, Controller, IAutoQueuePersistListener
+from controller.auto_queue import AutoQueuePersistListener
 from model import IModelListener, ModelFile
 
 
@@ -251,6 +255,100 @@ class TestAutoQueuePersist(unittest.TestCase):
         content = "{"
         with self.assertRaises(PersistError):
             AutoQueuePersist.from_str(content)
+
+    def test_add_pattern_visible_atomically(self):
+        # A pattern added via add_pattern is immediately and fully present in
+        # both patterns and the subsequent to_str() output (no torn snapshot).
+        persist = AutoQueuePersist()
+        pattern = AutoQueuePattern(pattern="one")
+        persist.add_pattern(pattern)
+        self.assertIn(pattern, persist.patterns)
+        round_tripped = AutoQueuePersist.from_str(persist.to_str())
+        self.assertIn(pattern, round_tripped.patterns)
+
+    @timeout_decorator.timeout(30)
+    def test_to_str_safe_during_concurrent_pattern_mutation(self):
+        """to_str() must not raise while another thread adds/removes patterns,
+        and its output must always round-trip via from_str().
+
+        The patterns list and to_str are read on the controller/web thread; a
+        concurrent web-thread add/remove must not corrupt serialization. This
+        pins the RLock contract against a regression to an unguarded list.
+        """
+        persist = AutoQueuePersist()
+        stop = threading.Event()
+        errors: list[BaseException] = []
+
+        def mutate():
+            # Bounded churn (add then remove every 64 iterations) keeps each
+            # snapshot small; the point is mutation concurrent with serialize.
+            i = 0
+            try:
+                while not stop.is_set():
+                    persist.add_pattern(AutoQueuePattern(pattern=f"p{i}"))
+                    i += 1
+                    if i % 64 == 0:
+                        for j in range(i - 64, i):
+                            persist.remove_pattern(AutoQueuePattern(pattern=f"p{j}"))
+            except Exception as e:  # surface any thread error to the test
+                errors.append(e)
+
+        thread = threading.Thread(target=mutate)
+        thread.start()
+        try:
+            for _ in range(2000):
+                content = persist.to_str()
+                # Output is always valid and round-trips through from_str().
+                AutoQueuePersist.from_str(content)
+        finally:
+            stop.set()
+            thread.join()
+
+        self.assertEqual([], errors)
+
+    @timeout_decorator.timeout(30)
+    def test_new_patterns_set_iteration_safe_during_concurrent_add(self):
+        """Controller-thread iteration of the listener's new_patterns must not
+        raise 'Set changed size during iteration' while the web thread
+        concurrently fires pattern_added/pattern_removed.
+
+        Without the snapshot-under-lock fix, iterating the live set under
+        concurrent mutation eventually raises RuntimeError, which kills the
+        ControllerJob. The snapshot helper makes the read atomic.
+        """
+        persist = AutoQueuePersist()
+        listener = AutoQueuePersistListener()
+        persist.add_listener(listener)
+        stop = threading.Event()
+        errors: list[BaseException] = []
+
+        def mutate():
+            i = 0
+            try:
+                while not stop.is_set():
+                    persist.add_pattern(AutoQueuePattern(pattern=f"p{i}"))
+                    i += 1
+                    if i % 64 == 0:
+                        for j in range(i - 64, i):
+                            persist.remove_pattern(AutoQueuePattern(pattern=f"p{j}"))
+            except Exception as e:
+                errors.append(e)
+
+        thread = threading.Thread(target=mutate)
+        thread.start()
+        try:
+            for _ in range(2000):
+                # Mirror AutoQueue.__filter_candidates: snapshot then iterate.
+                for pattern in listener.snapshot_new_patterns():
+                    _ = pattern.pattern
+                listener.clear_new_patterns()
+        except Exception as e:
+            errors.append(e)
+        finally:
+            stop.set()
+            thread.join()
+
+        self.assertEqual([], errors)
 
 
 class TestAutoQueue(unittest.TestCase):
