@@ -30,23 +30,27 @@ describe("ModelFileService", () => {
   let service: ModelFileService;
   let mockStreamDispatch: { registerHandler: ReturnType<typeof vi.fn> };
   let mockRestService: { sendRequest: ReturnType<typeof vi.fn> };
+  let mockLogger: {
+    debug: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+    info: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     mockStreamDispatch = { registerHandler: vi.fn() };
     mockRestService = { sendRequest: vi.fn() };
+    mockLogger = {
+      debug: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+    };
     TestBed.configureTestingModule({
       providers: [
         ModelFileService,
         { provide: StreamDispatchService, useValue: mockStreamDispatch },
-        {
-          provide: LoggerService,
-          useValue: {
-            debug: vi.fn(),
-            error: vi.fn(),
-            info: vi.fn(),
-            warn: vi.fn(),
-          },
-        },
+        { provide: LoggerService, useValue: mockLogger },
         { provide: RestService, useValue: mockRestService },
       ],
     });
@@ -224,5 +228,77 @@ describe("ModelFileService", () => {
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
       "/server/command/delete_remote/" + encoded,
     );
+  });
+
+  describe("malformed SSE payloads (issue #516)", () => {
+    const malformed = "{not valid json";
+
+    it("should not throw and should log on a malformed model-init event", () => {
+      expect(() => service.onEvent("model-init", malformed)).not.toThrow();
+      expect(mockLogger.error).toHaveBeenCalled();
+
+      // Existing (empty) state is preserved — no silent clear/poison.
+      let result: Map<string, ModelFile> | undefined;
+      service.files$.subscribe((f) => (result = f));
+      expect(result!.size).toBe(0);
+    });
+
+    it("should not throw and should preserve the map on a malformed model-added event", () => {
+      service.onEvent("model-init", JSON.stringify([makeFileJson("file1")]));
+
+      expect(() => service.onEvent("model-added", malformed)).not.toThrow();
+      expect(mockLogger.error).toHaveBeenCalled();
+
+      let result: Map<string, ModelFile> | undefined;
+      service.files$.subscribe((f) => (result = f));
+      expect(result!.size).toBe(1);
+      expect(result!.has("file1")).toBe(true);
+    });
+
+    it("should not throw and should preserve the map on a malformed model-updated event", () => {
+      service.onEvent(
+        "model-init",
+        JSON.stringify([makeFileJson("file1", "DEFAULT")]),
+      );
+
+      expect(() => service.onEvent("model-updated", malformed)).not.toThrow();
+      expect(mockLogger.error).toHaveBeenCalled();
+
+      let result: Map<string, ModelFile> | undefined;
+      service.files$.subscribe((f) => (result = f));
+      expect(result!.size).toBe(1);
+      expect(result!.get("file1")!.state).toBe("default");
+    });
+
+    it("should not throw and should preserve the map on a malformed model-removed event", () => {
+      service.onEvent(
+        "model-init",
+        JSON.stringify([makeFileJson("file1"), makeFileJson("file2")]),
+      );
+
+      expect(() => service.onEvent("model-removed", malformed)).not.toThrow();
+      expect(mockLogger.error).toHaveBeenCalled();
+
+      let result: Map<string, ModelFile> | undefined;
+      service.files$.subscribe((f) => (result = f));
+      expect(result!.size).toBe(2);
+      expect(result!.has("file1")).toBe(true);
+      expect(result!.has("file2")).toBe(true);
+    });
+
+    it("should still parse a valid event after a malformed one (no poisoned state)", () => {
+      service.onEvent("model-init", malformed);
+      // A subsequent valid init must replace state normally.
+      service.onEvent(
+        "model-init",
+        JSON.stringify([makeFileJson("file1"), makeFileJson("file2")]),
+      );
+
+      let result: Map<string, ModelFile> | undefined;
+      service.files$.subscribe((f) => (result = f));
+      expect(result!.size).toBe(2);
+      expect(result!.has("file1")).toBe(true);
+      expect(result!.has("file2")).toBe(true);
+    });
   });
 });

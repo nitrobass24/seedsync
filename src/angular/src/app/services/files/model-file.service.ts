@@ -84,28 +84,32 @@ export class ModelFileService implements StreamEventHandler {
   private parseEvent(name: string, data: string): void {
     const currentFiles = this.filesSubject.getValue();
 
+    // Guard the parse of server-controlled SSE payloads: a malformed/truncated
+    // event must not throw inside the listener callback. Log and skip the bad
+    // event, leaving existing state untouched (mirrors ConfigService.getConfig).
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data);
+    } catch (e) {
+      this.logger.error('Failed to parse %s event: %O', name, e);
+      return;
+    }
+
     if (name === this.EVENT_INIT) {
-      let t0: number;
-      let t1: number;
-
-      t0 = performance.now();
-      const parsed: ModelFileJson[] = JSON.parse(data);
-      t1 = performance.now();
-      this.logger.debug('Parsing took', (t1 - t0).toFixed(0), 'ms');
-
-      t0 = performance.now();
+      const init = parsed as ModelFileJson[];
+      const t0 = performance.now();
       const newMap = new Map<string, ModelFile>();
-      for (const file of parsed) {
+      for (const file of init) {
         const modelFile = modelFileFromJson(file);
         newMap.set(fileKey(modelFile.pair_id, modelFile.name), modelFile);
       }
-      t1 = performance.now();
+      const t1 = performance.now();
       this.logger.debug('ModelFile map creation took', (t1 - t0).toFixed(0), 'ms');
 
       this.filesSubject.next(newMap);
     } else if (name === this.EVENT_ADDED) {
-      const parsed: { new_file: ModelFileJson } = JSON.parse(data);
-      const file = modelFileFromJson(parsed.new_file);
+      const added = parsed as { new_file: ModelFileJson };
+      const file = modelFileFromJson(added.new_file);
       const key = fileKey(file.pair_id, file.name);
       if (currentFiles.has(key)) {
         this.logger.error('ModelFile named ' + key + ' already exists');
@@ -116,8 +120,8 @@ export class ModelFileService implements StreamEventHandler {
         this.logger.debug('Added file: %O', file);
       }
     } else if (name === this.EVENT_REMOVED) {
-      const parsed: { old_file: ModelFileJson } = JSON.parse(data);
-      const file = modelFileFromJson(parsed.old_file);
+      const removed = parsed as { old_file: ModelFileJson };
+      const file = modelFileFromJson(removed.old_file);
       const key = fileKey(file.pair_id, file.name);
       if (currentFiles.has(key)) {
         const updated = new Map(currentFiles);
@@ -128,8 +132,8 @@ export class ModelFileService implements StreamEventHandler {
         this.logger.error('Failed to find ModelFile named ' + key);
       }
     } else if (name === this.EVENT_UPDATED) {
-      const parsed: { new_file: ModelFileJson } = JSON.parse(data);
-      const file = modelFileFromJson(parsed.new_file);
+      const updatedFile = parsed as { new_file: ModelFileJson };
+      const file = modelFileFromJson(updatedFile.new_file);
       const key = fileKey(file.pair_id, file.name);
       if (currentFiles.has(key)) {
         const updated = new Map(currentFiles);
