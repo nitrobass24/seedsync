@@ -222,6 +222,51 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         self.assertIn(move_process, pipeline.active_move_processes)
         move_process.pop_failed.assert_not_called()
+        # An alive process must not be joined/closed (#537 review).
+        move_process.join.assert_not_called()
+        move_process.close_queues.assert_not_called()
+
+    def test_cleanup_reaps_finished_move_process(self):
+        """A finished move is joined and its queues closed in cleanup() so its FDs
+        are released immediately — it's dropped from the active list, so
+        Controller.exit() never sees it to reap later (#537 review)."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+        move_process = self._make_move_process("pair-1", "file.txt", failed_results=[])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        move_process.join.assert_called_once()
+        move_process.close_queues.assert_called_once()
+        self.assertEqual([], pipeline.active_move_processes)
+
+    def test_finalize_rescans_only_owning_pair(self):
+        """A move only changes the owning pair's local_path, so only that pair is
+        rescanned, not every pair (#537 review)."""
+        owner = self._make_pair_context("pair-1")
+        other = self._make_pair_context("pair-2")
+        pipeline = self._make_pipeline([owner, other])
+        move_process = self._make_move_process("pair-1", "file.txt", failed_results=[])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        owner.local_scan_process.force_scan.assert_called_once()
+        other.local_scan_process.force_scan.assert_not_called()
+
+    def test_finalize_rescans_all_pairs_when_owner_not_found(self):
+        """If the move's pair_id matches no context, fall back to rescanning all."""
+        pc1 = self._make_pair_context("pair-1")
+        pc2 = self._make_pair_context("pair-2")
+        pipeline = self._make_pipeline([pc1, pc2])
+        move_process = self._make_move_process("ghost-pair", "file.txt", failed_results=[])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        pc1.local_scan_process.force_scan.assert_called_once()
+        pc2.local_scan_process.force_scan.assert_called_once()
 
     # --- propagate_exceptions: worker-fault isolation (#511) ---
 

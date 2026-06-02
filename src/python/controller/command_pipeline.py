@@ -396,6 +396,12 @@ class CommandPipeline:
                 still_active_moves.append(move_process)
             else:
                 self._finalize_move_process(move_process)
+                # Reap the finished process now (join + close its queues) so its
+                # FDs are released immediately. It is dropped from
+                # active_move_processes below, so Controller.exit() never sees it
+                # and would otherwise leak its queue FDs until shutdown.
+                move_process.join()
+                move_process.close_queues()
         self.active_move_processes = still_active_moves
 
     def _finalize_move_process(self, move_process: MoveProcess) -> None:
@@ -418,8 +424,14 @@ class CommandPipeline:
         if failed:
             move_key = persist_key(move_process.pair_id, move_process.file_name)
             self.moved_file_keys.discard(move_key)
-        for pc in self._pair_contexts:
-            pc.local_scan_process.force_scan()
+        # The move only changed the owning pair's local_path, so rescan just that
+        # pair; fall back to all pairs only if the owner can't be located.
+        owner = next((pc for pc in self._pair_contexts if pc.pair_id == move_process.pair_id), None)
+        if owner is not None:
+            owner.local_scan_process.force_scan()
+        else:
+            for pc in self._pair_contexts:
+                pc.local_scan_process.force_scan()
 
     def propagate_exceptions(self):
         """
