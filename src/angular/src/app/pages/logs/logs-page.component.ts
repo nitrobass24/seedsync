@@ -69,6 +69,13 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   private pendingScrollToBottom = false;
   private readonly searchChange$ = new Subject<void>();
 
+  // Per-object monotonic trackBy keys (#522) — unique even for identical log
+  // lines, since each record/entry is a distinct object.
+  private liveSeq = 0;
+  private historySeq = 0;
+  private readonly recordKey = new WeakMap<LogRecord, number>();
+  private readonly historyKey = new WeakMap<LogHistoryEntry, number>();
+
   ngOnInit(): void {
     this.logService.logs$.pipe(
       takeUntilDestroyed(this.destroyRef),
@@ -158,20 +165,31 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   /**
-   * Stable trackBy for the live-log list (#522). Keying by record identity
-   * (time+logger+message) instead of `$index` lets Angular reuse DOM nodes when
-   * the buffer is front-trimmed, instead of re-keying every row by position.
+   * Stable, collision-free trackBy for the live-log list (#522). A monotonic
+   * sequence id is assigned per record *object* (via a WeakMap), so identical
+   * repeated log lines (same logger+message in the same millisecond — common
+   * under high-throughput DEBUG sync) still get distinct keys. Content-derived
+   * keys would collide there and trip Angular's duplicate-key reconcile
+   * (NG0955), dropping/mis-associating rows. Keying by object identity lets
+   * Angular reuse DOM nodes when the buffer is front-trimmed.
    */
-  trackRecord(_index: number, record: LogRecord): string {
-    return `${record.time.getTime()}|${record.loggerName}|${record.message}`;
+  trackRecord(_index: number, record: LogRecord): number {
+    let key = this.recordKey.get(record);
+    if (key === undefined) {
+      key = this.liveSeq++;
+      this.recordKey.set(record, key);
+    }
+    return key;
   }
 
-  /**
-   * Stable trackBy for the history list (#522): avoids re-keying up to 500 rows
-   * by position on every committed search/level change.
-   */
-  trackHistory(_index: number, entry: LogHistoryEntry): string {
-    return `${entry.timestamp}|${entry.logger}|${entry.message}`;
+  /** Stable, collision-free trackBy for the history list (#522); see trackRecord. */
+  trackHistory(_index: number, entry: LogHistoryEntry): number {
+    let key = this.historyKey.get(entry);
+    if (key === undefined) {
+      key = this.historySeq++;
+      this.historyKey.set(entry, key);
+    }
+    return key;
   }
 
   private refreshScrollButtonVisibility(): void {

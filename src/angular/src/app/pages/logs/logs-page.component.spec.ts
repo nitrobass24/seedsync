@@ -147,32 +147,41 @@ describe('LogsPageComponent live-log buffer cap (#522)', () => {
     expect(text).toContain('logger-1');
   });
 
-  it('trackRecord returns a stable non-index key for the same record', () => {
+  it('trackRecord is stable per record object and never collides for identical lines', () => {
     const record = makeRecord(7);
     const key = component.trackRecord(0, record);
-    // Stable across calls and across positions.
+    // Stable across calls and across positions (same object -> same key).
     expect(component.trackRecord(99, record)).toBe(key);
-    // Not the index, and derived from record identity.
-    expect(key).not.toBe('0');
-    expect(key).toContain('logger-7');
-    expect(key).toContain('message 7');
-    expect(key).toContain(String(record.time.getTime()));
+
+    // Two DISTINCT objects with IDENTICAL content must get DIFFERENT keys —
+    // the regression that content-derived keys (time+logger+message) caused.
+    const dupA = makeRecord(0);
+    const dupB = { ...dupA };
+    expect(dupA).toEqual(dupB);
+    expect(component.trackRecord(0, dupA)).not.toBe(component.trackRecord(1, dupB));
   });
 
-  it('trackHistory returns a stable non-index key for the same entry', () => {
-    const entry = {
-      timestamp: '2026-06-01 12:00:00',
-      level: 'INFO',
-      logger: 'hist-logger',
-      process: 'p',
-      thread: 't',
-      message: 'history message',
-    };
+  it('renders one row per record even for identical repeated log lines', () => {
+    const a = makeRecord(0);
+    const b = { ...a }; // identical content, distinct object
+    const c = { ...a };
+    logs$.next(a);
+    logs$.next(b);
+    logs$.next(c);
+    fixture.detectChanges();
+
+    // No duplicate-key collapse: a <p class="record"> per buffered record.
+    const rows = (fixture.nativeElement as HTMLElement).querySelectorAll('p.record');
+    expect(rows.length).toBe(component.records.length);
+    expect(component.records.length).toBe(3);
+  });
+
+  it('trackHistory is stable per entry object and never collides for identical entries', () => {
+    const entry = { timestamp: '2026-06-01 12:00:00', level: 'INFO', logger: 'h', process: 'p', thread: 't', message: 'm' };
     const key = component.trackHistory(0, entry);
     expect(component.trackHistory(42, entry)).toBe(key);
-    expect(key).not.toBe('0');
-    expect(key).toContain('hist-logger');
-    expect(key).toContain('history message');
-    expect(key).toContain('2026-06-01 12:00:00');
+
+    const dup = { ...entry };
+    expect(component.trackHistory(0, dup)).not.toBe(key);
   });
 });
