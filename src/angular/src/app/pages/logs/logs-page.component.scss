@@ -35,6 +35,13 @@
             color: var(--ss-text-muted);
             margin-bottom: 5px;
         }
+
+        // Distinct from p.record so log-record queries never match this banner.
+        .history-load-error {
+            color: var(--ss-log-error-text);
+            font-size: 90%;
+            margin: 0;
+        }
     }
 
     .log-divider {
