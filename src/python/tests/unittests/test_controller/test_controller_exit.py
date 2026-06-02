@@ -206,6 +206,7 @@ class TestControllerExit(unittest.TestCase):
         self.controller.exit()
         for proc in self._all_pair_processes():
             proc.terminate.assert_called_once()
+            proc.join.assert_called_once()
             proc.close_queues.assert_called_once()
         self.assertFalse(self.controller._Controller__started)
 
