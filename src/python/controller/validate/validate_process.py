@@ -7,12 +7,11 @@ import hmac
 import multiprocessing
 import os
 import queue
-import shlex
 import time
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from common import AppProcess, overrides
+from common import AppProcess, escape_remote_path_double, escape_remote_path_single, overrides
 
 if TYPE_CHECKING:
     from ssh import Sshcp
@@ -249,8 +248,7 @@ class ValidateProcess(AppProcess):
 
         # Build remote file set via SSH find
         remote_dir = os.path.join(req.remote_path, req.name)
-        quoted_dir = shlex.quote(remote_dir)
-        find_cmd = f"find {quoted_dir} -type f"
+        find_cmd = f"find {self._escape_remote(remote_dir)} -type f"
         try:
             find_output = sshcp.shell(find_cmd)
             remote_abs_paths = find_output.decode().strip().split("\n")
@@ -258,8 +256,7 @@ class ValidateProcess(AppProcess):
             for abs_path in remote_abs_paths:
                 abs_path = abs_path.strip()
                 if abs_path:
-                    rel = os.path.relpath(abs_path, req.remote_path)
-                    remote_rel_paths.add(rel)
+                    remote_rel_paths.add(self._remote_key(abs_path, req.name))
         except Exception as e:
             raise ValueError(f"Failed to list remote directory {remote_dir}: {e!s}") from e
 
@@ -321,6 +318,31 @@ class ValidateProcess(AppProcess):
         return sshcp
 
     @staticmethod
+    def _escape_remote(path: str) -> str:
+        """Quote a remote path, expanding a leading ~ to $HOME (mirrors scanner/delete)."""
+        if path.startswith("~"):
+            return escape_remote_path_double(path)
+        return escape_remote_path_single(path)
+
+    @staticmethod
+    def _remote_key(abs_path: str, name: str) -> str:
+        """Derive a `name/subpath` key from a remote `find` result.
+
+        The find command is rooted at a directory whose final component is `name`,
+        so every emitted path looks like `.../<name>/<subpath>`. Anchoring on the
+        last `<name>` component makes the key independent of whether the remote
+        shell expanded a leading ~ to $HOME (issue #519), so remote keys always
+        match the local keys (`relpath(local_file, local_path)` == `name/subpath`).
+        """
+        parts = abs_path.split("/")
+        # Find the last occurrence of the directory leaf to anchor the key.
+        for idx in range(len(parts) - 1, -1, -1):
+            if parts[idx] == name:
+                return "/".join(parts[idx:])
+        # Fallback: leaf not found (unexpected); use the basename under name.
+        return os.path.join(name, os.path.basename(abs_path))
+
+    @staticmethod
     def _build_hash_cmd(algorithm: str, quoted_file: str) -> str:
         """Build the remote hash command for the given algorithm."""
         if algorithm == "md5":
@@ -334,7 +356,7 @@ class ValidateProcess(AppProcess):
     def _hash_remote_file(self, req: ValidateRequest, rel_path: str, algorithm: str, sshcp: Sshcp) -> str:
         """Compute hash of a remote file via SSH."""
         remote_file = os.path.join(req.remote_path, rel_path)
-        quoted_file = shlex.quote(remote_file)
+        quoted_file = self._escape_remote(remote_file)
         cmd = self._build_hash_cmd(algorithm, quoted_file)
 
         output = sshcp.shell(cmd)
