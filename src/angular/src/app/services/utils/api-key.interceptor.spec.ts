@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { TestBed } from "@angular/core/testing";
 import {
   provideHttpClient,
@@ -12,6 +12,7 @@ import {
 
 import { apiKeyInterceptor } from "./api-key.interceptor";
 import { ConfigService } from "../settings/config.service";
+import { StorageKeys } from "../../common/storage-keys";
 import { Web } from "../../models/config";
 
 // Shape used by the interceptor's partial-config tests. The interceptor only
@@ -23,9 +24,33 @@ describe("apiKeyInterceptor", () => {
   let http: HttpClient;
   let httpTesting: HttpTestingController;
   let mockConfigService: { configSnapshot: MockConfigSnapshot };
+  let store: Record<string, string>;
+  let mockSessionStorage: {
+    getItem: ReturnType<typeof vi.fn>;
+    setItem: ReturnType<typeof vi.fn>;
+    removeItem: ReturnType<typeof vi.fn>;
+  };
+  let originalSessionStorage: Storage;
 
   beforeEach(() => {
     mockConfigService = { configSnapshot: null };
+
+    store = {};
+    mockSessionStorage = {
+      getItem: vi.fn((key: string) => (key in store ? store[key] : null)),
+      setItem: vi.fn((key: string, value: string) => {
+        store[key] = value;
+      }),
+      removeItem: vi.fn((key: string) => {
+        delete store[key];
+      }),
+    };
+    originalSessionStorage = globalThis.sessionStorage;
+    Object.defineProperty(globalThis, "sessionStorage", {
+      value: mockSessionStorage,
+      configurable: true,
+      writable: true,
+    });
 
     TestBed.configureTestingModule({
       providers: [
@@ -41,6 +66,11 @@ describe("apiKeyInterceptor", () => {
 
   afterEach(() => {
     httpTesting.verify();
+    Object.defineProperty(globalThis, "sessionStorage", {
+      value: originalSessionStorage,
+      configurable: true,
+      writable: true,
+    });
   });
 
   // --- API key added to /server/* requests ---
@@ -146,6 +176,66 @@ describe("apiKeyInterceptor", () => {
 
     const req = httpTesting.expectOne("/serverExtra");
     expect(req.request.headers.has("X-Api-Key")).toBe(false);
+    req.flush("");
+  });
+
+  // --- Persisted real key recovery (#514) ---
+
+  it("should use the persisted sessionStorage key when the snapshot is redacted", () => {
+    // /server/config/get redacts the key to '********'; the persisted real key
+    // must be used so REST requests authenticate after a reload.
+    store[StorageKeys.API_KEY] = "real-key";
+    mockConfigService.configSnapshot = { web: { api_key: "********" } };
+
+    http.get("/server/config/get", { responseType: "text" }).subscribe();
+
+    const req = httpTesting.expectOne("/server/config/get");
+    expect(req.request.headers.get("X-Api-Key")).toBe("real-key");
+    req.flush("");
+  });
+
+  it("should prefer the persisted key over the snapshot key", () => {
+    store[StorageKeys.API_KEY] = "persisted-key";
+    mockConfigService.configSnapshot = { web: { api_key: "snapshot-key" } };
+
+    http.get("/server/config/get", { responseType: "text" }).subscribe();
+
+    const req = httpTesting.expectOne("/server/config/get");
+    expect(req.request.headers.get("X-Api-Key")).toBe("persisted-key");
+    req.flush("");
+  });
+
+  it("should never send the redacted sentinel as a credential", () => {
+    // No persisted key, and the snapshot only holds the redacted sentinel.
+    mockConfigService.configSnapshot = { web: { api_key: "********" } };
+
+    http.get("/server/config/get", { responseType: "text" }).subscribe();
+
+    const req = httpTesting.expectOne("/server/config/get");
+    expect(req.request.headers.has("X-Api-Key")).toBe(false);
+    req.flush("");
+  });
+
+  it("should fall back to the snapshot key when nothing is persisted", () => {
+    mockConfigService.configSnapshot = { web: { api_key: "snapshot-key" } };
+
+    http.get("/server/config/get", { responseType: "text" }).subscribe();
+
+    const req = httpTesting.expectOne("/server/config/get");
+    expect(req.request.headers.get("X-Api-Key")).toBe("snapshot-key");
+    req.flush("");
+  });
+
+  it("should tolerate sessionStorage throwing and fall back to the snapshot", () => {
+    mockSessionStorage.getItem.mockImplementation(() => {
+      throw new Error("denied");
+    });
+    mockConfigService.configSnapshot = { web: { api_key: "snapshot-key" } };
+
+    http.get("/server/config/get", { responseType: "text" }).subscribe();
+
+    const req = httpTesting.expectOne("/server/config/get");
+    expect(req.request.headers.get("X-Api-Key")).toBe("snapshot-key");
     req.flush("");
   });
 });

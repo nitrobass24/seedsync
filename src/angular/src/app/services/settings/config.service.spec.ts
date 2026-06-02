@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { TestBed } from "@angular/core/testing";
 // Injector not needed — TestBed handles DI
 import { BehaviorSubject, of } from "rxjs";
@@ -8,6 +8,7 @@ import { ConnectedService } from "../utils/connected.service";
 import { LoggerService } from "../utils/logger.service";
 import { RestService, WebReaction } from "../utils/rest.service";
 import { StreamDispatchService } from "../base/stream-dispatch.service";
+import { StorageKeys } from "../../common/storage-keys";
 import { Config } from "../../models/config";
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
@@ -80,11 +81,50 @@ describe("ConfigService", () => {
   let connectedSubject: BehaviorSubject<boolean>;
   let mockRestService: { sendRequest: ReturnType<typeof vi.fn> };
   let mockStreamDispatch: { setApiKey: ReturnType<typeof vi.fn> };
+  let store: Record<string, string>;
+  let mockSessionStorage: {
+    getItem: ReturnType<typeof vi.fn>;
+    setItem: ReturnType<typeof vi.fn>;
+    removeItem: ReturnType<typeof vi.fn>;
+  };
+  let originalSessionStorage: Storage;
+
+  /**
+   * Lazily construct the service. The constructor fetches config and
+   * rehydrates the persisted API key, so each test configures its mocks
+   * (sendRequest return values, seeded sessionStorage) BEFORE calling this.
+   */
+  function createService(): ConfigService {
+    service = TestBed.inject(ConfigService);
+    return service;
+  }
 
   beforeEach(() => {
     connectedSubject = new BehaviorSubject<boolean>(false);
-    mockRestService = { sendRequest: vi.fn() };
+    // Safe default so the constructor's init fetch never crashes on undefined.
+    mockRestService = {
+      sendRequest: vi.fn().mockReturnValue(
+        of({ success: false, data: null, errorMessage: "not configured" }),
+      ),
+    };
     mockStreamDispatch = { setApiKey: vi.fn() };
+
+    store = {};
+    mockSessionStorage = {
+      getItem: vi.fn((key: string) => (key in store ? store[key] : null)),
+      setItem: vi.fn((key: string, value: string) => {
+        store[key] = value;
+      }),
+      removeItem: vi.fn((key: string) => {
+        delete store[key];
+      }),
+    };
+    originalSessionStorage = globalThis.sessionStorage;
+    Object.defineProperty(globalThis, "sessionStorage", {
+      value: mockSessionStorage,
+      configurable: true,
+      writable: true,
+    });
 
     TestBed.configureTestingModule({
       providers: [
@@ -109,18 +149,28 @@ describe("ConfigService", () => {
         },
       ],
     });
-    service = TestBed.inject(ConfigService);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, "sessionStorage", {
+      value: originalSessionStorage,
+      configurable: true,
+      writable: true,
+    });
   });
 
   // --- Initial state ---
 
   it("should emit null as the initial config", () => {
+    // Default mock returns a failure reaction, so the init fetch leaves config null.
+    createService();
     let result: Config | null | undefined;
     service.config$.subscribe((c) => (result = c));
     expect(result).toBeNull();
   });
 
   it("should return null from configSnapshot initially", () => {
+    createService();
     expect(service.configSnapshot).toBeNull();
   });
 
@@ -132,6 +182,7 @@ describe("ConfigService", () => {
       of({ success: true, data: JSON.stringify(config), errorMessage: null }),
     );
 
+    createService();
     connectedSubject.next(true);
 
     let result: Config | null | undefined;
@@ -148,6 +199,7 @@ describe("ConfigService", () => {
       of({ success: true, data: JSON.stringify(config), errorMessage: null }),
     );
 
+    createService();
     connectedSubject.next(true);
     expect(service.configSnapshot).toEqual(config);
   });
@@ -158,36 +210,99 @@ describe("ConfigService", () => {
       of({ success: true, data: JSON.stringify(config), errorMessage: null }),
     );
 
+    createService();
     connectedSubject.next(true);
     expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith("my-key");
   });
 
-  // --- Disconnect ---
+  // --- Init-ordering deadlock fix (#514) ---
 
-  it("should emit null config when disconnected", () => {
+  it("should fetch config at init independent of connected$", () => {
     const config = makeConfig();
     mockRestService.sendRequest.mockReturnValue(
       of({ success: true, data: JSON.stringify(config), errorMessage: null }),
     );
+
+    // connected$ is still false (never emits true)
+    createService();
+
+    let result: Config | null | undefined;
+    service.config$.subscribe((c) => (result = c));
+    expect(result).toEqual(config);
+    expect(mockRestService.sendRequest).toHaveBeenCalledWith(
+      "/server/config/get",
+    );
+  });
+
+  it("should rehydrate persisted api_key from sessionStorage at init and push it to the stream before any connect", () => {
+    store[StorageKeys.API_KEY] = "real-key";
+
+    // connected$ stays false; the key must reach the stream during construction
+    createService();
+
+    expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith("real-key");
+  });
+
+  it("should NOT push the redacted sentinel to the stream and should keep the persisted key", () => {
+    store[StorageKeys.API_KEY] = "real-key";
+    const config = makeConfig({ web: { port: 8080, api_key: "********" } });
+    mockRestService.sendRequest.mockReturnValue(
+      of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+    );
+
+    createService();
+
+    // The persisted real key is pushed at init, but the redacted '********'
+    // returned by /server/config/get must never reach the stream.
+    expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith("real-key");
+    expect(mockStreamDispatch.setApiKey).not.toHaveBeenCalledWith("********");
+    expect(store[StorageKeys.API_KEY]).toBe("real-key");
+  });
+
+  it("should tolerate sessionStorage throwing during init (private browsing)", () => {
+    mockSessionStorage.getItem.mockImplementation(() => {
+      throw new Error("denied");
+    });
+    const config = makeConfig();
+    mockRestService.sendRequest.mockReturnValue(
+      of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+    );
+
+    expect(() => createService()).not.toThrow();
+  });
+
+  // --- Disconnect ---
+
+  it("should retain config on disconnect so the UI keeps working", () => {
+    const config = makeConfig();
+    mockRestService.sendRequest.mockReturnValue(
+      of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+    );
+    createService();
     connectedSubject.next(true);
 
     connectedSubject.next(false);
 
+    // Config is fetched at init independent of the stream, so a transient
+    // disconnect must not wipe it out (and trigger a deadlock-prone refetch loop).
     let result: Config | null | undefined;
     service.config$.subscribe((c) => (result = c));
-    expect(result).toBeNull();
+    expect(result).toEqual(config);
   });
 
-  it("should sync null API key when disconnected", () => {
-    const config = makeConfig();
+  it("should NOT clear the api key on disconnect so the next reconnect can authenticate", () => {
+    const config = makeConfig({ web: { port: 8080, api_key: "my-key" } });
     mockRestService.sendRequest.mockReturnValue(
       of({ success: true, data: JSON.stringify(config), errorMessage: null }),
     );
+    createService();
     connectedSubject.next(true);
     mockStreamDispatch.setApiKey.mockClear();
 
     connectedSubject.next(false);
-    expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith(null);
+
+    // The key must stay on the stream so the backoff-driven reconnect carries it.
+    expect(mockStreamDispatch.setApiKey).not.toHaveBeenCalledWith(null);
   });
 
   // --- Error handling ---
@@ -201,6 +316,7 @@ describe("ConfigService", () => {
       }),
     );
 
+    createService();
     connectedSubject.next(true);
 
     let result: Config | null | undefined;
@@ -213,6 +329,7 @@ describe("ConfigService", () => {
       of({ success: true, data: "not valid json {{{", errorMessage: null }),
     );
 
+    createService();
     connectedSubject.next(true);
 
     let result: Config | null | undefined;
@@ -227,6 +344,7 @@ describe("ConfigService", () => {
     mockRestService.sendRequest.mockReturnValue(
       of({ success: true, data: JSON.stringify(config), errorMessage: null }),
     );
+    createService();
     connectedSubject.next(true);
 
     let result: WebReaction | undefined;
@@ -241,6 +359,7 @@ describe("ConfigService", () => {
     mockRestService.sendRequest.mockReturnValue(
       of({ success: true, data: JSON.stringify(config), errorMessage: null }),
     );
+    createService();
     connectedSubject.next(true);
 
     let result: WebReaction | undefined;
@@ -251,7 +370,8 @@ describe("ConfigService", () => {
   });
 
   it("should return error when config is null", () => {
-    // Config is null by default (not connected)
+    // Default mock returns failure, so config stays null after init.
+    createService();
     let result: WebReaction | undefined;
     service.set("web", "port", "9090").subscribe((r: WebReaction) => (result = r));
 
@@ -260,13 +380,18 @@ describe("ConfigService", () => {
 
   it("should call REST with double-encoded value", () => {
     const config = makeConfig();
+    // init fetch -> connect fetch -> set response
     mockRestService.sendRequest
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
       .mockReturnValueOnce(
         of({ success: true, data: JSON.stringify(config), errorMessage: null }),
       )
       .mockReturnValueOnce(
         of({ success: true, data: null, errorMessage: null }),
       );
+    createService();
     connectedSubject.next(true);
 
     service.set("web", "api_key", "my/key");
@@ -284,8 +409,12 @@ describe("ConfigService", () => {
         of({ success: true, data: JSON.stringify(config), errorMessage: null }),
       )
       .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
         of({ success: true, data: null, errorMessage: null }),
       );
+    createService();
     connectedSubject.next(true);
 
     service.set("web", "api_key", "");
@@ -297,6 +426,76 @@ describe("ConfigService", () => {
     expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith(null);
   });
 
+  it("should remove persisted api_key from sessionStorage when set empty", () => {
+    const config = makeConfig({ web: { port: 8080, api_key: "old" } });
+    store[StorageKeys.API_KEY] = "old";
+    mockRestService.sendRequest
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
+        of({ success: true, data: null, errorMessage: null }),
+      );
+    createService();
+    connectedSubject.next(true);
+
+    service.set("web", "api_key", "");
+
+    expect(mockSessionStorage.removeItem).toHaveBeenCalledWith(StorageKeys.API_KEY);
+    expect(store[StorageKeys.API_KEY]).toBeUndefined();
+    expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith(null);
+  });
+
+  it("should persist the real api_key to sessionStorage on successful set", () => {
+    const config = makeConfig({ web: { port: 8080, api_key: "old" } });
+    mockRestService.sendRequest
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
+        of({ success: true, data: null, errorMessage: null }),
+      );
+    createService();
+    connectedSubject.next(true);
+
+    service.set("web", "api_key", "new-key");
+
+    expect(mockSessionStorage.setItem).toHaveBeenCalledWith(
+      StorageKeys.API_KEY,
+      "new-key",
+    );
+    expect(store[StorageKeys.API_KEY]).toBe("new-key");
+  });
+
+  it("should not throw when sessionStorage throws during set", () => {
+    const config = makeConfig({ web: { port: 8080, api_key: "old" } });
+    mockRestService.sendRequest
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
+        of({ success: true, data: null, errorMessage: null }),
+      );
+    createService();
+    connectedSubject.next(true);
+    mockSessionStorage.setItem.mockImplementation(() => {
+      throw new Error("denied");
+    });
+
+    expect(() => service.set("web", "api_key", "new-key")).not.toThrow();
+    // Stream still receives the key even if persistence failed.
+    expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith("new-key");
+  });
+
   it("should update BehaviorSubject on successful set", () => {
     const config = makeConfig({ web: { port: 8080, api_key: "old" } });
     mockRestService.sendRequest
@@ -304,8 +503,12 @@ describe("ConfigService", () => {
         of({ success: true, data: JSON.stringify(config), errorMessage: null }),
       )
       .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
         of({ success: true, data: null, errorMessage: null }),
       );
+    createService();
     connectedSubject.next(true);
 
     service.set("web", "api_key", "new-key");
@@ -320,8 +523,12 @@ describe("ConfigService", () => {
         of({ success: true, data: JSON.stringify(config), errorMessage: null }),
       )
       .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
         of({ success: false, data: null, errorMessage: "fail" }),
       );
+    createService();
     connectedSubject.next(true);
 
     service.set("web", "api_key", "new-key");
@@ -336,8 +543,12 @@ describe("ConfigService", () => {
         of({ success: true, data: JSON.stringify(config), errorMessage: null }),
       )
       .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
         of({ success: true, data: null, errorMessage: null }),
       );
+    createService();
     connectedSubject.next(true);
     mockStreamDispatch.setApiKey.mockClear();
 
@@ -353,8 +564,12 @@ describe("ConfigService", () => {
         of({ success: true, data: JSON.stringify(config), errorMessage: null }),
       )
       .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
         of({ success: true, data: null, errorMessage: null }),
       );
+    createService();
     connectedSubject.next(true);
 
     service.set("autoqueue", "enabled", true);
@@ -373,8 +588,12 @@ describe("ConfigService", () => {
         of({ success: true, data: JSON.stringify(config), errorMessage: null }),
       )
       .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
         of({ success: true, data: null, errorMessage: null }),
       );
+    createService();
     connectedSubject.next(true);
 
     service.set("autoqueue", "enabled", false);
@@ -393,8 +612,12 @@ describe("ConfigService", () => {
         of({ success: true, data: JSON.stringify(config), errorMessage: null }),
       )
       .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
         of({ success: true, data: null, errorMessage: null }),
       );
+    createService();
     connectedSubject.next(true);
 
     service.set("lftp", "net_limit_rate", null);
@@ -411,8 +634,12 @@ describe("ConfigService", () => {
         of({ success: true, data: JSON.stringify(config), errorMessage: null }),
       )
       .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
         of({ success: true, data: null, errorMessage: null }),
       );
+    createService();
     connectedSubject.next(true);
     mockStreamDispatch.setApiKey.mockClear();
 

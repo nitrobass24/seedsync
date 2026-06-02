@@ -23,7 +23,12 @@ export interface StreamEventHandler {
 @Injectable({ providedIn: 'root' })
 export class StreamDispatchService {
   private readonly STREAM_URL = '/server/stream';
-  private readonly RETRY_INTERVAL_MS = 3000;
+  /** Base delay for the first reconnect attempt. */
+  private readonly RETRY_BASE_MS = 1000;
+  /** Upper bound on the exponential backoff delay. */
+  private readonly RETRY_MAX_MS = 30000;
+  /** Maximum random jitter added to each backoff delay. */
+  private readonly RETRY_JITTER_MS = 1000;
 
   private readonly logger = inject(LoggerService);
   private readonly zone = inject(NgZone);
@@ -45,6 +50,7 @@ export class StreamDispatchService {
   private apiKey: string | null = null;
   private eventSource: EventSource | null = null;
   private retryTimeout: ReturnType<typeof setTimeout> | null = null;
+  private retryAttempt = 0;
 
   setApiKey(key: string | null): void {
     if (key === this.apiKey) {
@@ -53,6 +59,8 @@ export class StreamDispatchService {
     this.apiKey = key;
     // Reconnect with the new key if we have an active connection or pending retry
     if (this.eventSource || this.retryTimeout) {
+      // A key change should retry promptly, not wait out the current backoff.
+      this.retryAttempt = 0;
       this.closeAndCancelRetry();
       this.connectStream();
     }
@@ -86,6 +94,8 @@ export class StreamDispatchService {
 
     eventSource.onopen = () => {
       this.logger.info('Connected to server stream');
+      // A successful connection resets the backoff so the next drop retries fast.
+      this.retryAttempt = 0;
       for (const handler of this.handlers) {
         this.zone.run(() => handler.onConnected());
       }
@@ -105,10 +115,23 @@ export class StreamDispatchService {
         this.zone.run(() => handler.onDisconnected());
       }
 
+      const delay = this.nextRetryDelayMs();
+      this.retryAttempt += 1;
       this.retryTimeout = setTimeout(() => {
         this.retryTimeout = null;
         this.connectStream();
-      }, this.RETRY_INTERVAL_MS);
+      }, delay);
     };
+  }
+
+  /**
+   * Capped exponential backoff with jitter. Prevents a tight reconnect loop
+   * (e.g. when the server keeps returning 401 for a bad/missing API key) from
+   * hammering the backend on a fixed cadence.
+   */
+  private nextRetryDelayMs(): number {
+    const exponential = Math.min(this.RETRY_MAX_MS, this.RETRY_BASE_MS * 2 ** this.retryAttempt);
+    const jitter = Math.random() * this.RETRY_JITTER_MS;
+    return exponential + jitter;
   }
 }
