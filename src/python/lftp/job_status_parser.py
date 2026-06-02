@@ -26,7 +26,7 @@ class LftpJobStatusParser:
         r"m|mb|mib|M|Mb|MB|MiB|Mib|"
         r"g|gb|gib|G|Gb|GB|GiB|Gib"
     )
-    __TIME_UNITS_REGEX = r"(?P<eta_d>\d*d)?(?P<eta_h>\d*h)?(?P<eta_m>\d*m)?(?P<eta_s>\d*s)?"
+    __TIME_UNITS_REGEX = r"(?P<eta_d>\d+d)?(?P<eta_h>\d+h)?(?P<eta_m>\d+m)?(?P<eta_s>\d+s)?"
 
     __QUOTED_FILE_NAME_REGEX = r"`(?P<name>.*)'"
 
@@ -101,9 +101,12 @@ class LftpJobStatusParser:
         # pexpect echoes the command back, and when lftp is writing status data
         # simultaneously, the echo can be interleaved mid-line, splitting
         # filenames across lines. Stripping before splitting reconstructs them.
-        # Order matters: first strip echo+newline pairs, then any remaining echo.
+        # The echo only ever appears at a line boundary, so anchor the removal
+        # there: strip echo+newline pairs (rejoins a filename split across the
+        # break) and standalone echo lines. This avoids deleting a literal
+        # 'jobs -v' that is part of a real filename (e.g. 'My.jobs -v.Release').
         output = output.replace("jobs -v\n", "")
-        output = output.replace("jobs -v", "")
+        output = re.sub(r"(?m)^[ \t]*jobs -v[ \t]*$", "", output)
         lines = [s.strip() for s in output.splitlines()]
         lines = list(filter(None, lines))  # remove blank lines
         # remove any remaining log line
@@ -563,12 +566,15 @@ class LftpJobStatusParser:
             if not lines:
                 raise ValueError("Missing queue status")
 
-            # Look for 'Now executing' lines
-            line = lines.pop(0)
-            if re.match("Queue is stopped.", line):
+            # Look for 'Now executing' lines. Peek rather than unconditionally
+            # pop: if neither status line is present (e.g. 'Commands queued:'
+            # follows the header directly), the status line must be left in
+            # place for the 'Commands queued:' check below.
+            if lines and re.match("Queue is stopped.", lines[0]):
                 # Nothing to do
-                pass
-            elif re.match("Now executing:", line):
+                lines.pop(0)
+            elif lines and re.match("Now executing:", lines[0]):
+                lines.pop(0)
                 # Remove any more lines associated with 'now executing'
                 while lines and re.match(r"^-\[\d+\]", lines[0]):
                     lines.pop(0)
