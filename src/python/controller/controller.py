@@ -343,11 +343,25 @@ class Controller:
         self.__pipeline.step()
         self.__updater.update()
 
+    def __shutdown_lftp_best_effort(self):
+        # A hung/dead lftp PTY can raise here; guard each call so one failure
+        # does not abort teardown of the remaining pairs or the worker
+        # terminate/join/close_queues phases in exit() (otherwise orphaned
+        # processes leak FDs on every restart).
+        for pc in self.__pair_contexts:
+            try:
+                pc.lftp.exit()
+            except Exception:
+                self.logger.exception(
+                    "Error shutting down lftp for pair %s; continuing teardown",
+                    getattr(pc, "pair_id", None),
+                )
+
     def exit(self):
         self.logger.debug("Exiting controller")
         if self.__started:
+            self.__shutdown_lftp_best_effort()
             for pc in self.__pair_contexts:
-                pc.lftp.exit()
                 pc.active_scan_process.terminate()
                 pc.local_scan_process.terminate()
                 pc.remote_scan_process.terminate()
