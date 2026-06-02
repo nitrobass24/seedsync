@@ -164,6 +164,19 @@ class TestAutoQueueHandler(BaseTestWebApp):
         self.assertNotIn(AutoQueuePattern("onepattern"), self.auto_queue_persist.patterns)
         self.assertNotIn(AutoQueuePattern("onepattern"), listener.new_patterns)
 
+    def test_add_500_rolls_back_on_non_oserror_persist_failure(self):
+        # Review (#537): rollback must fire for ANY persist failure, not just
+        # OSError (e.g. a to_str()/serialization error), or the listener side
+        # effect leaks while nothing reached disk.
+        listener = AutoQueuePersistListener()
+        self.auto_queue_persist.add_listener(listener)
+        with patch.object(AutoQueuePersist, "to_file", side_effect=RuntimeError("serialize boom")):
+            resp = self.test_app.get("/server/autoqueue/add/onepattern", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual("Failed to persist auto-queue", resp.text)
+        self.assertNotIn(AutoQueuePattern("onepattern"), self.auto_queue_persist.patterns)
+        self.assertNotIn(AutoQueuePattern("onepattern"), listener.new_patterns)
+
     def test_remove_returns_500_when_persistence_fails(self):
         self.auto_queue_persist.add_pattern(AutoQueuePattern(pattern="onepattern"))
         with patch.object(AutoQueuePersist, "to_file", side_effect=OSError("disk full")):

@@ -47,21 +47,23 @@ class AutoQueueHandler(IHandler):
 
         aqp = AutoQueuePattern(pattern=pattern)
 
-        if aqp in self.__auto_queue_persist.patterns:
-            return HTTPResponse(
-                body=f"Auto-queue pattern '{pattern}' already exists.",
-                status=400,
-                content_type="text/plain",
-                headers=self._NOSNIFF_HEADERS,
-            )
-        # Hold __write_lock across the mutate → persist → rollback sequence so
-        # writers can't interleave. add_pattern fires pattern_added, which the
-        # AutoQueuePersistListener records in new_patterns and the controller
-        # replays against all model files on the next cycle (auto-queueing
-        # matching files). If persisting fails we MUST undo that side effect,
-        # otherwise the pattern would auto-queue files this session yet be gone
-        # on restart — "phantom" queueing that contradicts the 500 (see #518).
+        # Hold __write_lock across the existence check AND the mutate → persist →
+        # rollback sequence so the test-and-set is atomic: two concurrent adds of
+        # the same pattern can't both pass the "already exists" check. add_pattern
+        # fires pattern_added, which the AutoQueuePersistListener records in
+        # new_patterns and the controller replays against all model files on the
+        # next cycle (auto-queueing matching files). If persisting fails we MUST
+        # undo that side effect, otherwise the pattern would auto-queue files this
+        # session yet be gone on restart — "phantom" queueing that contradicts the
+        # 500 (see #518).
         with self.__write_lock:
+            if aqp in self.__auto_queue_persist.patterns:
+                return HTTPResponse(
+                    body=f"Auto-queue pattern '{pattern}' already exists.",
+                    status=400,
+                    content_type="text/plain",
+                    headers=self._NOSNIFF_HEADERS,
+                )
             try:
                 self.__auto_queue_persist.add_pattern(aqp)
             except ValueError as e:
@@ -73,10 +75,12 @@ class AutoQueueHandler(IHandler):
                 )
             try:
                 self.__auto_queue_persist.to_file(self.__persist_path)
-            except OSError:
-                # Roll back: remove_pattern fires pattern_removed, which discards
-                # the pattern from the listener's new_patterns, undoing the side
-                # effect above so disk and memory stay consistent.
+            except Exception:
+                # Roll back on ANY persist failure (not just OSError — e.g. a
+                # to_str()/serialization error). remove_pattern fires
+                # pattern_removed, which discards the pattern from the listener's
+                # new_patterns, undoing the side effect above so disk and memory
+                # stay consistent.
                 self.__auto_queue_persist.remove_pattern(aqp)
                 self.__logger.exception("Failed to persist auto-queue after adding pattern %r", pattern)
                 return HTTPResponse(
@@ -97,22 +101,23 @@ class AutoQueueHandler(IHandler):
 
         aqp = AutoQueuePattern(pattern=pattern)
 
-        if aqp not in self.__auto_queue_persist.patterns:
-            return HTTPResponse(
-                body=f"Auto-queue pattern '{pattern}' doesn't exist.",
-                status=400,
-                content_type="text/plain",
-                headers=self._NOSNIFF_HEADERS,
-            )
-        # Hold __write_lock across the mutate → persist → rollback sequence so
-        # writers can't interleave (see __handle_add_autoqueue).
+        # Hold __write_lock across the existence check AND the mutate → persist →
+        # rollback sequence so the test-and-set is atomic (see __handle_add_autoqueue).
         with self.__write_lock:
+            if aqp not in self.__auto_queue_persist.patterns:
+                return HTTPResponse(
+                    body=f"Auto-queue pattern '{pattern}' doesn't exist.",
+                    status=400,
+                    content_type="text/plain",
+                    headers=self._NOSNIFF_HEADERS,
+                )
             self.__auto_queue_persist.remove_pattern(aqp)
             try:
                 self.__auto_queue_persist.to_file(self.__persist_path)
-            except OSError:
-                # Roll back: re-add the pattern so in-memory state matches the
-                # on-disk file (the pattern was persisted before this removal).
+            except Exception:
+                # Roll back on ANY persist failure: re-add the pattern so
+                # in-memory state matches the on-disk file (the pattern was
+                # persisted before this removal).
                 self.__auto_queue_persist.add_pattern(aqp)
                 self.__logger.exception("Failed to persist auto-queue after removing pattern %r", pattern)
                 return HTTPResponse(
