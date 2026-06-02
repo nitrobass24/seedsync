@@ -231,7 +231,7 @@ class Seedsync:
                 now = datetime.now()
                 if (now - prev_persist_timestamp).total_seconds() > Constants.MIN_PERSIST_TO_FILE_INTERVAL_IN_SECS:
                     prev_persist_timestamp = now
-                    self.persist()
+                    self._persist_periodic()
 
                 # Propagate exceptions from child threads
                 # Any exception here exits the main loop for clean shutdown
@@ -245,8 +245,8 @@ class Seedsync:
                 # Nothing else to do
                 time.sleep(Constants.MAIN_THREAD_SLEEP_INTERVAL_IN_SECS)
 
-        except Exception:
-            self.context.logger.info("Exiting Seedsync")
+        except Exception as e:
+            self._log_shutdown_cause(e)
 
             # This sleep is important to allow the jobs to finish setup before we terminate them
             # If we kill too early, the jobs may leave lingering threads around
@@ -268,8 +268,9 @@ class Seedsync:
             webhook_notifier.shutdown()
             arr_notifier.shutdown()
 
-            # Last persist
-            self.persist()
+            # Last persist; guarded so a write failure cannot mask the original
+            # in-flight exception that is re-raised below.
+            self._final_persist()
 
             # Raise any exceptions so they can be logged properly
             # Note: ServiceRestart and ServiceExit will be caught and handled
@@ -284,6 +285,34 @@ class Seedsync:
         self.context.config.to_file(self.config_path)
         self.context.path_pairs_config.to_file(self.path_pairs_path)
         self.context.integrations_config.to_file(self.integrations_path)
+
+    def _persist_periodic(self) -> None:
+        # A transient write failure (disk full, read-only mount, permission change)
+        # during a routine periodic save must never terminate the service. Catch
+        # broad Exception (not BaseException, so KeyboardInterrupt/SystemExit still
+        # propagate), log the traceback at ERROR, and let the supervisor loop continue.
+        try:
+            self.persist()
+        except Exception:
+            self.context.logger.exception("Periodic persist failed; continuing")
+
+    def _log_shutdown_cause(self, e: BaseException) -> None:
+        # Intentional exit/restart stay friendly at INFO; genuine crashes surface
+        # at ERROR with a traceback so an abnormal shutdown is visible (not
+        # conflated with a normal exit). Call from within the handling `except`
+        # so logger.exception() captures the live traceback.
+        if isinstance(e, (ServiceExit, ServiceRestart)):
+            self.context.logger.info("Exiting Seedsync")
+        else:
+            self.context.logger.exception("Seedsync exiting due to unexpected error")
+
+    def _final_persist(self) -> None:
+        # Last persist during shutdown. Guard it so a write failure here cannot
+        # mask the original in-flight exception that run() re-raises afterwards.
+        try:
+            self.persist()
+        except Exception:
+            self.context.logger.exception("Final persist during shutdown failed")
 
     def signal(self, signum: int, _: FrameType | None) -> None:
         # noinspection PyUnresolvedReferences

@@ -2,6 +2,7 @@
 
 import fnmatch
 import json
+import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 
@@ -66,31 +67,47 @@ class AutoQueuePersist(Persist):
     __KEY_PATTERNS = "patterns"
 
     def __init__(self):
+        # Guards __patterns and __listeners. add/remove run on the web thread
+        # while patterns/to_str are read on the controller thread, so the list
+        # must be lock-guarded (mirrors common/path_pairs_config.py). RLock is
+        # reentrant so from_str -> add_pattern does not self-deadlock.
+        self.__lock = threading.RLock()
         self.__patterns: list[AutoQueuePattern] = []
         self.__listeners: list[IAutoQueuePersistListener] = []
 
     @property
     def patterns(self) -> set[AutoQueuePattern]:
-        return set(self.__patterns)
+        with self.__lock:
+            return set(self.__patterns)
 
     def add_pattern(self, pattern: AutoQueuePattern):
         # Check values
         if not pattern.pattern.strip():
             raise ValueError("Cannot add blank pattern")
 
-        if pattern not in self.__patterns:
+        with self.__lock:
+            if pattern in self.__patterns:
+                return
             self.__patterns.append(pattern)
-            for listener in self.__listeners:
-                listener.pattern_added(pattern)
+            listeners = list(self.__listeners)
+        # Notify outside the lock so the persist lock and any listener lock are
+        # never held simultaneously.
+        for listener in listeners:
+            listener.pattern_added(pattern)
 
     def remove_pattern(self, pattern: AutoQueuePattern):
-        if pattern in self.__patterns:
+        with self.__lock:
+            if pattern not in self.__patterns:
+                return
             self.__patterns.remove(pattern)
-            for listener in self.__listeners:
-                listener.pattern_removed(pattern)
+            listeners = list(self.__listeners)
+        # Notify outside the lock (see add_pattern).
+        for listener in listeners:
+            listener.pattern_removed(pattern)
 
     def add_listener(self, listener: IAutoQueuePersistListener):
-        self.__listeners.append(listener)
+        with self.__lock:
+            self.__listeners.append(listener)
 
     @classmethod
     @overrides(Persist)
@@ -108,7 +125,8 @@ class AutoQueuePersist(Persist):
     @overrides(Persist)
     def to_str(self) -> str:
         dct: dict[str, list[str]] = {}
-        dct[AutoQueuePersist.__KEY_PATTERNS] = [p.to_str() for p in self.__patterns]
+        with self.__lock:
+            dct[AutoQueuePersist.__KEY_PATTERNS] = [p.to_str() for p in self.__patterns]
         return json.dumps(dct, indent=Constants.JSON_PRETTY_PRINT_INDENT)
 
 
@@ -133,27 +151,51 @@ class AutoQueueModelListener(IModelListener):
 
 
 class AutoQueuePersistListener(IAutoQueuePersistListener):
-    """Keeps track of newly added patterns"""
+    """Keeps track of newly added patterns.
+
+    pattern_added/pattern_removed run on the web thread while the controller
+    thread drains (drain_new_patterns) the set. The lock keeps the
+    controller-thread read from racing a web-thread mutation, which would
+    otherwise raise 'RuntimeError: Set changed size during iteration'.
+    """
 
     def __init__(self):
+        self.__lock = threading.RLock()
         self.new_patterns: set[AutoQueuePattern] = set()
 
     @overrides(IAutoQueuePersistListener)
     def pattern_added(self, pattern: AutoQueuePattern):
-        self.new_patterns.add(pattern)
+        with self.__lock:
+            self.new_patterns.add(pattern)
 
     @overrides(IAutoQueuePersistListener)
     def pattern_removed(self, pattern: AutoQueuePattern):
-        if pattern in self.new_patterns:
-            self.new_patterns.remove(pattern)
+        with self.__lock:
+            self.new_patterns.discard(pattern)
+
+    def drain_new_patterns(self) -> set[AutoQueuePattern]:
+        """Atomically return a copy of new_patterns and clear it in one locked
+        step.
+
+        Draining (snapshot + clear together) closes a race that a separate
+        snapshot-then-clear leaves open: a pattern added by a concurrent
+        pattern_added() between the snapshot and the clear would be wiped
+        without ever being processed. With an atomic drain, such a pattern
+        simply stays in the set for the next cycle.
+        """
+        with self.__lock:
+            drained = set(self.new_patterns)
+            self.new_patterns.clear()
+            return drained
 
 
 class AutoQueue:
     """
     Implements auto-queue functionality by sending commands to controller
-    as matching files are discovered
-    AutoQueue is in the same thread as Controller, so no synchronization is
-    needed for now
+    as matching files are discovered.
+    AutoQueue runs on the Controller thread, but pattern add/remove happens on
+    the web handler thread; shared state in AutoQueuePersist and
+    AutoQueuePersistListener is therefore lock-guarded.
     """
 
     def __init__(self, context: Context, persist: AutoQueuePersist, controller: Controller):
@@ -205,9 +247,17 @@ class AutoQueue:
         if not any_auto_feature:
             return
 
-        files_to_queue = self.__gather_queue_candidates() if self.__enabled else []
-        files_to_extract = self.__gather_extract_candidates() if self.__auto_extract_enabled else []
-        files_to_delete_remote = self.__gather_delete_remote_candidates() if self.__auto_delete_remote_enabled else []
+        # Drain the newly-added patterns once for this whole cycle. Draining
+        # (snapshot + clear atomically) instead of snapshotting per-gather and
+        # clearing separately at the end ensures a pattern added concurrently
+        # mid-cycle is retained for the next cycle rather than cleared unprocessed.
+        new_patterns = self.__persist_listener.drain_new_patterns()
+
+        files_to_queue = self.__gather_queue_candidates(new_patterns) if self.__enabled else []
+        files_to_extract = self.__gather_extract_candidates(new_patterns) if self.__auto_extract_enabled else []
+        files_to_delete_remote = (
+            self.__gather_delete_remote_candidates(new_patterns) if self.__auto_delete_remote_enabled else []
+        )
 
         # Send commands (order matters: queue, extract, then delete remote)
         self.__send_commands(files_to_queue, Controller.Command.Action.QUEUE, "Auto queueing")
@@ -218,13 +268,11 @@ class AutoQueue:
         if self.__auto_delete_remote_enabled:
             self.__retry_delete_remote(files_to_delete_remote)
 
-        # Clear the processed files
+        # Clear the processed files (new patterns were already drained above)
         self.__model_listener.new_files.clear()
         self.__model_listener.modified_files.clear()
-        # Clear the new patterns
-        self.__persist_listener.new_patterns.clear()
 
-    def __gather_queue_candidates(self) -> list[_Candidate]:
+    def __gather_queue_candidates(self, new_patterns: set[AutoQueuePattern]) -> list[_Candidate]:
         candidates: list[ModelFile] = list(self.__model_listener.new_files)
         for old_file, new_file in self.__model_listener.modified_files:
             if old_file.remote_size != new_file.remote_size:
@@ -236,9 +284,10 @@ class AutoQueue:
                 and f.state == ModelFile.State.DEFAULT
                 and self._is_auto_queue_enabled_for_file(f)
             ),
+            new_patterns=new_patterns,
         )
 
-    def __gather_extract_candidates(self) -> list[_Candidate]:
+    def __gather_extract_candidates(self, new_patterns: set[AutoQueuePattern]) -> list[_Candidate]:
         candidates: list[ModelFile] = list(self.__model_listener.new_files)
         # Candidate modified files that just became DOWNLOADED
         # But not files that went EXTRACTING -> DOWNLOADED (failed extraction)
@@ -257,9 +306,10 @@ class AutoQueue:
                 and f.local_size > 0
                 and f.is_extractable
             ),
+            new_patterns=new_patterns,
         )
 
-    def __gather_delete_remote_candidates(self) -> list[_Candidate]:
+    def __gather_delete_remote_candidates(self, new_patterns: set[AutoQueuePattern]) -> list[_Candidate]:
         candidates: list[ModelFile] = list(self.__model_listener.new_files)
         for old_file, new_file in self.__model_listener.modified_files:
             if old_file.state != new_file.state and new_file.state in (
@@ -279,6 +329,7 @@ class AutoQueue:
                     )
                 )
             ),
+            new_patterns=new_patterns,
         )
 
     def __send_commands(
@@ -328,7 +379,12 @@ class AutoQueue:
             return self.__pair_auto_queue.get(file.pair_id, False)
         return True
 
-    def __filter_candidates(self, candidates: list[ModelFile], accept: Callable[[ModelFile], bool]) -> list[_Candidate]:
+    def __filter_candidates(
+        self,
+        candidates: list[ModelFile],
+        accept: Callable[[ModelFile], bool],
+        new_patterns: set[AutoQueuePattern],
+    ) -> list[_Candidate]:
         """
         Given a list of candidate files, filter out those that match the accept criteria
         Also takes into consideration new patterns that were added
@@ -336,6 +392,8 @@ class AutoQueue:
         new patterns
         :param candidates:
         :param accept:
+        :param new_patterns: patterns added since the last cycle (drained once by
+            the caller), matched retroactively against all existing model files
         :return: list of (filename, pair_id, pattern) tuples
         """
         # Files accepted and matched, (name, pair_id) -> pattern map
@@ -353,10 +411,11 @@ class AutoQueue:
             elif accept(file):
                 files_matched[(file.name, file.pair_id)] = None
 
-        # Step 2: run new pattern through all the files
-        if self.__persist_listener.new_patterns:
+        # Step 2: run new patterns (drained once by process() for this cycle)
+        # through all the files
+        if new_patterns:
             model_files = self.__controller.get_model_files()
-            for new_pattern in self.__persist_listener.new_patterns:
+            for new_pattern in new_patterns:
                 for file in model_files:
                     if accept(file) and self.__match(new_pattern, file):
                         files_matched[(file.name, file.pair_id)] = new_pattern

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .controller import Controller
 
-from common import AppError, Context, MultiprocessingLogger
+from common import AppError, AppProcess, Context, MultiprocessingLogger
 from lftp import LftpError
 from model import ModelError, ModelFile
 
@@ -77,6 +77,10 @@ class CommandPipeline:
 
         # Track files with pending validation so extraction-completion doesn't race the move
         self.pending_validation_keys: set[str] = set()
+
+        # Worker ids already reported as dead, so a permanently-dead extract/
+        # validate worker is surfaced once at ERROR rather than every cycle.
+        self.__reported_dead_workers: set[int] = set()
 
     def queue(self, command: Controller.Command) -> None:
         """Put a command on the queue for processing."""
@@ -391,15 +395,43 @@ class CommandPipeline:
             if move_process.is_alive():
                 still_active_moves.append(move_process)
             else:
-                try:
-                    move_process.propagate_exception()
-                except Exception:
-                    self._logger.warning("Move process failed: %s", move_process.name, exc_info=True)
-                    move_key = persist_key(move_process.pair_id, move_process.file_name)
-                    self.moved_file_keys.discard(move_key)
-                for pc in self._pair_contexts:
-                    pc.local_scan_process.force_scan()
+                self._finalize_move_process(move_process)
+                # Reap the finished process now (join + close its queues) so its
+                # FDs are released immediately. It is dropped from
+                # active_move_processes below, so Controller.exit() never sees it
+                # and would otherwise leak its queue FDs until shutdown.
+                move_process.join()
+                move_process.close_queues()
         self.active_move_processes = still_active_moves
+
+    def _finalize_move_process(self, move_process: MoveProcess) -> None:
+        """Finalize a completed move: surface failures, discard key on failure, rescan.
+
+        A move can fail two ways: by raising (propagate_exception) or by
+        reporting a MoveFailedResult on its failed queue (silent return paths
+        such as a vanished source or a size mismatch). In both cases the moved
+        key is discarded so the next force_scan re-spawns the move (retry).
+        """
+        failed = False
+        try:
+            move_process.propagate_exception()
+        except Exception:
+            self._logger.warning("Move process failed: %s", move_process.name, exc_info=True)
+            failed = True
+        for result in move_process.pop_failed():
+            self._logger.error(f"Move failed for '{result.name}': {result.error_message}")
+            failed = True
+        if failed:
+            move_key = persist_key(move_process.pair_id, move_process.file_name)
+            self.moved_file_keys.discard(move_key)
+        # The move only changed the owning pair's local_path, so rescan just that
+        # pair; fall back to all pairs only if the owner can't be located.
+        owner = next((pc for pc in self._pair_contexts if pc.pair_id == move_process.pair_id), None)
+        if owner is not None:
+            owner.local_scan_process.force_scan()
+        else:
+            for pc in self._pair_contexts:
+                pc.local_scan_process.force_scan()
 
     def propagate_exceptions(self):
         """
@@ -419,8 +451,45 @@ class CommandPipeline:
             pc.local_scan_process.propagate_exception()
             pc.remote_scan_process.propagate_exception()
         self._mp_logger.propagate_exception()
-        self._extract_process.propagate_exception()
-        self._validate_process.propagate_exception()
+        # A fault in an extract/validate worker that surfaces outside its
+        # per-task guard (OOM, queue corruption, run_init/run_cleanup bug)
+        # must degrade that feature only, not kill the whole controller.
+        # Isolate each worker so one dead worker doesn't stop the other or
+        # halt all downloads.
+        # NOTE: this only ISOLATES the fault — the dead worker is not yet
+        # recreated, so extract/validate stays disabled until the service is
+        # restarted. Automatic worker recreation is tracked in #511's follow-up.
+        try:
+            self._extract_process.propagate_exception()
+        except Exception:
+            self._logger.warning("Extract worker process failed: %s", self._extract_process.name, exc_info=True)
+        try:
+            self._validate_process.propagate_exception()
+        except Exception:
+            self._logger.warning("Validate worker process failed: %s", self._validate_process.name, exc_info=True)
+        # propagate_exception() consumes the queued fault once, so without this a
+        # permanently-dead worker would go silent after the first cycle. Surface
+        # the dead state once at ERROR so the degradation stays visible.
+        self.__report_if_worker_dead(self._extract_process, "Extract")
+        self.__report_if_worker_dead(self._validate_process, "Validate")
+
+    def __report_if_worker_dead(self, worker: AppProcess, feature: str) -> None:
+        worker_id = id(worker)
+        if worker_id in self.__reported_dead_workers:
+            return
+        try:
+            alive = worker.is_alive()
+        except (ValueError, AssertionError):
+            # Never started or already closed — treat as not-running.
+            alive = False
+        if not alive:
+            self.__reported_dead_workers.add(worker_id)
+            self._logger.error(
+                "%s worker process %s has died; %s is disabled until the service is restarted.",
+                feature,
+                worker.name,
+                feature.lower(),
+            )
 
     def spawn_deferred_move(self, pair_id: str | None, file_name: str):
         """Spawn the staging->final move for a file whose validation just finished.
@@ -459,11 +528,15 @@ class CommandPipeline:
             self.moved_file_keys.add(move_key)
             return
 
-        self.moved_file_keys.add(move_key)
         process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name, pair_id=pair_id)
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
-        self.active_move_processes.append(process)
+        # Start before publishing bookkeeping: if start() raises we must not leave
+        # a stale move_key (which would block every future retry of this move) or
+        # a never-started process in active_move_processes (cleanup() would then
+        # join()/close_queues() it and raise AssertionError).
         process.start()
+        self.moved_file_keys.add(move_key)
+        self.active_move_processes.append(process)
         self._logger.info(f"Spawned move process for {file_name} (staging -> local)")
 
     def _get_pair_context_for_command(self, command: Controller.Command) -> PairContext | None:

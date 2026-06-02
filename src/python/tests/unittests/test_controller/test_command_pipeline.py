@@ -2,9 +2,12 @@
 
 import os
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
+from common import AppError
 from controller.command_pipeline import CommandPipeline
+from controller.persist_keys import persist_key
+from lftp import LftpError
 from model import ModelFile
 
 
@@ -132,3 +135,222 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         self.assertFalse(pipeline.command_queue.empty())
         self.assertIs(command, pipeline.command_queue.get())
+
+    # --- cleanup: move process failure handling (#510) ---
+
+    def _make_move_process(self, pair_id, file_name, *, failed_results=None):
+        """Create a fake finished MoveProcess for cleanup tests."""
+        move_process = MagicMock()
+        move_process.is_alive.return_value = False
+        move_process.pair_id = pair_id
+        move_process.file_name = file_name
+        move_process.name = "MoveProcess"
+        # No raised exception by default
+        move_process.propagate_exception.return_value = None
+        move_process.pop_failed.return_value = failed_results or []
+        return move_process
+
+    def test_cleanup_discards_key_when_move_reports_failure(self):
+        """A move that reports a failure via pop_failed must discard its moved key
+        and force a rescan so the move is retried."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+
+        move_key = persist_key("pair-1", "file.txt")
+        pipeline.moved_file_keys.add(move_key)
+
+        failure = MagicMock()
+        failure.name = "file.txt"
+        failure.error_message = "source does not exist"
+        move_process = self._make_move_process("pair-1", "file.txt", failed_results=[failure])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        # Key discarded -> next force_scan re-spawns the move (retry)
+        self.assertNotIn(move_key, pipeline.moved_file_keys)
+        pc.local_scan_process.force_scan.assert_called_once()
+        # Finished process removed from the active list
+        self.assertEqual([], pipeline.active_move_processes)
+
+    def test_cleanup_keeps_key_when_move_succeeds(self):
+        """A move that reports no failure must keep its moved key (no retry)."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+
+        move_key = persist_key("pair-1", "file.txt")
+        pipeline.moved_file_keys.add(move_key)
+
+        move_process = self._make_move_process("pair-1", "file.txt", failed_results=[])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        # Successful move keeps the key so it isn't re-spawned
+        self.assertIn(move_key, pipeline.moved_file_keys)
+        # A rescan still happens to pick up the moved file
+        pc.local_scan_process.force_scan.assert_called_once()
+        self.assertEqual([], pipeline.active_move_processes)
+
+    def test_cleanup_discards_key_when_move_raises(self):
+        """A move that raises (propagate_exception) must also discard its key."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+
+        move_key = persist_key("pair-1", "file.txt")
+        pipeline.moved_file_keys.add(move_key)
+
+        move_process = self._make_move_process("pair-1", "file.txt")
+        move_process.propagate_exception.side_effect = RuntimeError("boom")
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        self.assertNotIn(move_key, pipeline.moved_file_keys)
+        pc.local_scan_process.force_scan.assert_called_once()
+
+    def test_cleanup_keeps_alive_move_process(self):
+        """A still-running move process must remain in the active list untouched."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+
+        move_process = MagicMock()
+        move_process.is_alive.return_value = True
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        self.assertIn(move_process, pipeline.active_move_processes)
+        move_process.pop_failed.assert_not_called()
+        # An alive process must not be joined/closed (#537 review).
+        move_process.join.assert_not_called()
+        move_process.close_queues.assert_not_called()
+
+    def test_cleanup_reaps_finished_move_process(self):
+        """A finished move is joined and its queues closed in cleanup() so its FDs
+        are released immediately — it's dropped from the active list, so
+        Controller.exit() never sees it to reap later (#537 review)."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+        move_process = self._make_move_process("pair-1", "file.txt", failed_results=[])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        move_process.join.assert_called_once()
+        move_process.close_queues.assert_called_once()
+        self.assertEqual([], pipeline.active_move_processes)
+
+    def test_finalize_rescans_only_owning_pair(self):
+        """A move only changes the owning pair's local_path, so only that pair is
+        rescanned, not every pair (#537 review)."""
+        owner = self._make_pair_context("pair-1")
+        other = self._make_pair_context("pair-2")
+        pipeline = self._make_pipeline([owner, other])
+        move_process = self._make_move_process("pair-1", "file.txt", failed_results=[])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        owner.local_scan_process.force_scan.assert_called_once()
+        other.local_scan_process.force_scan.assert_not_called()
+
+    def test_finalize_rescans_all_pairs_when_owner_not_found(self):
+        """If the move's pair_id matches no context, fall back to rescanning all."""
+        pc1 = self._make_pair_context("pair-1")
+        pc2 = self._make_pair_context("pair-2")
+        pipeline = self._make_pipeline([pc1, pc2])
+        move_process = self._make_move_process("ghost-pair", "file.txt", failed_results=[])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        pc1.local_scan_process.force_scan.assert_called_once()
+        pc2.local_scan_process.force_scan.assert_called_once()
+
+    @patch("controller.command_pipeline.os.path.exists", return_value=True)
+    @patch("controller.command_pipeline.MoveProcess")
+    def test_spawn_move_process_start_failure_leaves_no_stale_state(self, mock_move_cls, _mock_exists):
+        """If MoveProcess.start() raises, no stale move_key (which would block all
+        retries) or never-started process (which cleanup() would join() and raise
+        on) is published (#537 review)."""
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.local_path = "/local/pair-1"
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+        mock_move_cls.return_value.start.side_effect = OSError("cannot fork")
+
+        with self.assertRaises(OSError):
+            pipeline.spawn_move_process("file.txt", pc)
+
+        self.assertNotIn(persist_key("pair-1", "file.txt"), pipeline.moved_file_keys)
+        self.assertEqual([], pipeline.active_move_processes)
+
+    # --- propagate_exceptions: worker-fault isolation (#511) ---
+
+    def test_propagate_exceptions_clean_when_no_worker_errors(self):
+        """With no worker faults, all worker propagation calls run and nothing raises."""
+        pipeline = self._make_pipeline([])
+
+        pipeline.propagate_exceptions()
+
+        pipeline._mp_logger.propagate_exception.assert_called_once()
+        pipeline._extract_process.propagate_exception.assert_called_once()
+        pipeline._validate_process.propagate_exception.assert_called_once()
+
+    def test_propagate_exceptions_survives_extract_worker_crash(self):
+        """A dead extract worker is logged and swallowed; the validate worker is
+        still polled and the controller cycle is not killed."""
+        pipeline = self._make_pipeline([])
+        pipeline._extract_process.propagate_exception.side_effect = RuntimeError("worker OOM")
+
+        # Must not raise out of propagate_exceptions -> controller keeps running
+        pipeline.propagate_exceptions()
+
+        # Isolation: the sibling worker is still polled (per-worker try/except,
+        # not one shared guard around both).
+        pipeline._validate_process.propagate_exception.assert_called_once()
+        pipeline._logger.warning.assert_called()
+
+    def test_propagate_exceptions_survives_validate_worker_crash(self):
+        """A dead validate worker is logged and swallowed; the extract worker is
+        still polled and the controller cycle is not killed."""
+        pipeline = self._make_pipeline([])
+        pipeline._validate_process.propagate_exception.side_effect = RuntimeError("worker OOM")
+
+        pipeline.propagate_exceptions()
+
+        pipeline._extract_process.propagate_exception.assert_called_once()
+        pipeline._logger.warning.assert_called()
+
+    def test_propagate_exceptions_reports_dead_worker_once(self):
+        """A worker whose process has died is surfaced once at ERROR (not every
+        cycle), so the degraded-until-restart state stays visible after the
+        queued fault is consumed. The live sibling is not reported."""
+        pipeline = self._make_pipeline([])
+        pipeline._extract_process.is_alive.return_value = False
+        pipeline._validate_process.is_alive.return_value = True
+
+        pipeline.propagate_exceptions()
+        pipeline.propagate_exceptions()
+
+        error_messages = [c.args[0] % c.args[1:] for c in pipeline._logger.error.call_args_list]
+        dead_reports = [m for m in error_messages if "has died" in m]
+        self.assertEqual(1, len(dead_reports), error_messages)
+        self.assertIn("Extract", dead_reports[0])
+        self.assertIn("restarted", dead_reports[0])
+        # The live validate worker is never reported dead.
+        self.assertFalse(any("Validate worker" in m for m in error_messages))
+
+    def test_propagate_exceptions_reraises_permanent_lftp_error(self):
+        """A permanent lftp credential failure must still raise AppError so the
+        engine stops (this engine-stopping behavior is unaffected by the new
+        worker guards)."""
+        pc = self._make_pair_context("pair-1")
+        pc.lftp.raise_pending_error.side_effect = LftpError("Login failed: 530")
+        pipeline = self._make_pipeline([pc])
+
+        with self.assertRaises(AppError):
+            pipeline.propagate_exceptions()

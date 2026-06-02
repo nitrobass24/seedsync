@@ -3,11 +3,13 @@
 import json
 import logging
 import sys
+import threading
 import unittest
 from unittest.mock import MagicMock
 
 from common import Config, PersistError, overrides
 from controller import AutoQueue, AutoQueuePattern, AutoQueuePersist, Controller, IAutoQueuePersistListener
+from controller.auto_queue import AutoQueuePersistListener
 from model import IModelListener, ModelFile
 
 
@@ -251,6 +253,113 @@ class TestAutoQueuePersist(unittest.TestCase):
         content = "{"
         with self.assertRaises(PersistError):
             AutoQueuePersist.from_str(content)
+
+    def test_add_pattern_visible_atomically(self):
+        # A pattern added via add_pattern is immediately and fully present in
+        # both patterns and the subsequent to_str() output (no torn snapshot).
+        persist = AutoQueuePersist()
+        pattern = AutoQueuePattern(pattern="one")
+        persist.add_pattern(pattern)
+        self.assertIn(pattern, persist.patterns)
+        round_tripped = AutoQueuePersist.from_str(persist.to_str())
+        self.assertIn(pattern, round_tripped.patterns)
+
+    def _assert_blocks_until_lock_released(self, lock, op, op_name):
+        """Deterministically prove `op` acquires `lock`: while this thread holds
+        the lock, a second thread running `op` must NOT complete; once released,
+        it must. Fails on unguarded code (op completes immediately), passes on
+        the locked code — with no reliance on GIL timing.
+        """
+        started = threading.Event()
+        done = threading.Event()
+        errors: list[BaseException] = []
+
+        def run():
+            started.set()
+            try:
+                op()
+            except BaseException as e:
+                errors.append(e)
+            finally:
+                done.set()
+
+        thread = threading.Thread(target=run)
+        # Daemon so a hung op() (a regression where the lock isn't acquired and
+        # something else blocks) can't keep the test process alive.
+        thread.daemon = True
+        with lock:
+            thread.start()
+            self.assertTrue(started.wait(2), f"{op_name}: worker thread never started")
+            # The op cannot finish while we hold the shared lock -> it acquires it.
+            self.assertFalse(done.wait(0.2), f"{op_name} did not acquire the shared lock")
+        thread.join(2)
+        self.assertTrue(done.is_set(), f"{op_name} did not complete after lock release")
+        self.assertEqual([], errors, f"{op_name} raised: {errors}")
+
+    def test_persist_mutators_and_readers_acquire_lock(self):
+        """add_pattern / remove_pattern / to_str / patterns all run inside the
+        shared RLock, so a web-thread mutation can never interleave with a
+        controller-thread serialize (the torn-snapshot / set-changed-size
+        regression). Proven deterministically via the shared lock."""
+        persist = AutoQueuePersist()
+        persist.add_pattern(AutoQueuePattern(pattern="seed"))
+        lock = persist._AutoQueuePersist__lock
+
+        cases = [
+            ("add_pattern", lambda: persist.add_pattern(AutoQueuePattern(pattern="new"))),
+            ("remove_pattern", lambda: persist.remove_pattern(AutoQueuePattern(pattern="seed"))),
+            ("to_str", persist.to_str),
+            ("patterns", lambda: persist.patterns),
+        ]
+        for op_name, op in cases:
+            with self.subTest(op=op_name):
+                self._assert_blocks_until_lock_released(lock, op, op_name)
+
+    def test_listener_new_patterns_operations_acquire_lock(self):
+        """The listener's new_patterns set is mutated on the web thread and
+        read on the controller thread, so every accessor must take the listener
+        lock. Proven deterministically via the shared lock."""
+        listener = AutoQueuePersistListener()
+        listener.pattern_added(AutoQueuePattern(pattern="seed"))
+        lock = listener._AutoQueuePersistListener__lock
+
+        cases = [
+            ("pattern_added", lambda: listener.pattern_added(AutoQueuePattern(pattern="new"))),
+            ("pattern_removed", lambda: listener.pattern_removed(AutoQueuePattern(pattern="seed"))),
+            ("drain_new_patterns", listener.drain_new_patterns),
+        ]
+        for op_name, op in cases:
+            with self.subTest(op=op_name):
+                self._assert_blocks_until_lock_released(lock, op, op_name)
+
+    def test_drain_new_patterns_returns_copy_and_clears(self):
+        """drain returns the current set and empties it in one locked step, so
+        the controller gets a private, safely-iterable copy and the listener
+        starts the next cycle empty."""
+        listener = AutoQueuePersistListener()
+        listener.pattern_added(AutoQueuePattern(pattern="a"))
+
+        drained = listener.drain_new_patterns()
+
+        self.assertEqual({AutoQueuePattern(pattern="a")}, drained)
+        # The set is now empty, and the returned copy is decoupled from the
+        # listener: mutating the listener (and iterating the copy meanwhile)
+        # must neither change nor raise on the copy.
+        for _ in drained:
+            listener.pattern_added(AutoQueuePattern(pattern="b"))
+        self.assertEqual({AutoQueuePattern(pattern="a")}, drained)
+
+    def test_drain_does_not_drop_pattern_added_after_drain(self):
+        """Regression for the snapshot-then-clear race: a pattern added after the
+        drain is retained for the next cycle, not silently cleared unprocessed."""
+        listener = AutoQueuePersistListener()
+        listener.pattern_added(AutoQueuePattern(pattern="first"))
+
+        self.assertEqual({AutoQueuePattern(pattern="first")}, listener.drain_new_patterns())
+
+        # A pattern added after the drain must survive to the next cycle.
+        listener.pattern_added(AutoQueuePattern(pattern="second"))
+        self.assertEqual({AutoQueuePattern(pattern="second")}, listener.drain_new_patterns())
 
 
 class TestAutoQueue(unittest.TestCase):

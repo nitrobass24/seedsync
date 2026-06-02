@@ -11,6 +11,13 @@ from controller import Controller
 
 from ..web_app import IHandler, WebApp
 
+# Upper bound (in seconds) on how long a file-action request will block waiting
+# for the controller thread to signal the callback. The healthy path resolves in
+# well under a second (the controller processes commands every ~0.5s), so this is
+# a generous margin that still prevents a stalled controller from hanging the
+# WSGI request thread indefinitely.
+_ACTION_TIMEOUT_IN_SECS = 30
+
 
 def _validate_filename(file_name: str) -> bool:
     """
@@ -75,8 +82,12 @@ class WebResponseActionCallback(Controller.Command.ICallback):
         self.success = True
         self.__event.set()
 
-    def wait(self):
-        self.__event.wait()
+    def wait(self) -> bool:
+        """Block until the controller signals the callback or the timeout elapses.
+
+        Returns True if the event fired (success/failure recorded), False on timeout.
+        """
+        return self.__event.wait(timeout=_ACTION_TIMEOUT_IN_SECS)
 
 
 class ControllerHandler(IHandler):
@@ -105,7 +116,8 @@ class ControllerHandler(IHandler):
         callback = WebResponseActionCallback()
         command.add_callback(callback)
         self.__controller.queue_command(command)
-        callback.wait()
+        if not callback.wait():
+            return HTTPResponse(body="Controller did not respond in time", status=504)
         if callback.success:
             return HTTPResponse(body=success_msg.format(decoded))
         return HTTPResponse(body=callback.error or "Unknown error", status=400)

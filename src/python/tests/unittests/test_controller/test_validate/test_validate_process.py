@@ -302,6 +302,109 @@ class TestValidateProcess(unittest.TestCase):
         failed = self.process.pop_failed()
         self.assertEqual(0, len(failed))
 
+    @patch("controller.validate.validate_process.os.path.exists", return_value=True)
+    @patch("controller.validate.validate_process.os.path.isdir", return_value=True)
+    @patch("controller.validate.validate_process.os.walk")
+    @patch.object(ValidateProcess, "_create_ssh")
+    @patch.object(ValidateProcess, "_hash_remote_file", return_value="abc123")
+    @patch.object(ValidateProcess, "_hash_local_file", return_value="abc123")
+    def test_directory_validation_tilde_remote_path_matches(
+        self, mock_local_hash, mock_remote_hash, mock_ssh, mock_walk, mock_isdir, mock_exists
+    ):
+        """A tilde-based remote_path must still match local keys (regression for #519).
+
+        With remote_path='~/downloads', the remote shell expands ~ to $HOME, so
+        find emits absolute paths like /home/user/downloads/mydir/a.txt. The fixed
+        key derivation roots relpath at remote_dir and prefixes req.name, so remote
+        keys (mydir/a.txt) match local keys despite the tilde base mismatch.
+        """
+        mock_walk.return_value = [
+            ("/local/mydir", [], ["a.txt", "b.txt"]),
+        ]
+        ssh_mock = MagicMock()
+        # Remote shell output after $HOME expansion (not literal ~)
+        ssh_mock.shell.return_value = b"/home/user/downloads/mydir/a.txt\n/home/user/downloads/mydir/b.txt\n"
+        mock_ssh.return_value = ssh_mock
+
+        req = self._make_request(name="mydir", is_dir=True, remote_path="~/downloads")
+        self.process.validate(req)
+        self.process.run_loop()
+
+        completed = self.process.pop_completed()
+        self.assertEqual(1, len(completed))
+        self.assertEqual("mydir", completed[0].name)
+
+        failed = self.process.pop_failed()
+        self.assertEqual(0, len(failed))
+
+    @patch("controller.validate.validate_process.os.path.exists", return_value=True)
+    @patch("controller.validate.validate_process.os.path.isdir", return_value=True)
+    @patch("controller.validate.validate_process.os.walk")
+    @patch.object(ValidateProcess, "_create_ssh")
+    @patch.object(ValidateProcess, "_hash_remote_file", return_value="abc123")
+    @patch.object(ValidateProcess, "_hash_local_file", return_value="abc123")
+    def test_directory_find_command_expands_tilde(
+        self, mock_local_hash, mock_remote_hash, mock_ssh, mock_walk, mock_isdir, mock_exists
+    ):
+        """The find command must expand a leading ~ to $HOME (double-quoted), not single-quote it."""
+        mock_walk.return_value = [
+            ("/local/mydir", [], ["a.txt"]),
+        ]
+        ssh_mock = MagicMock()
+        ssh_mock.shell.return_value = b"/home/user/downloads/mydir/a.txt\n"
+        mock_ssh.return_value = ssh_mock
+
+        req = self._make_request(name="mydir", is_dir=True, remote_path="~/downloads")
+        self.process.validate(req)
+        self.process.run_loop()
+
+        find_calls = [c.args[0] for c in ssh_mock.shell.call_args_list if c.args[0].startswith("find ")]
+        self.assertEqual(1, len(find_calls))
+        find_cmd = find_calls[0]
+        self.assertIn('"$HOME/downloads/mydir"', find_cmd)
+        self.assertNotIn("'~", find_cmd)
+
+    @patch.object(ValidateProcess, "_create_ssh")
+    def test_hash_remote_file_expands_tilde(self, mock_ssh):
+        """_hash_remote_file must expand a leading ~ to $HOME before issuing the hash command."""
+        ssh_mock = MagicMock()
+        ssh_mock.shell.return_value = b"abc123  file\n"
+
+        req = self._make_request(name="mydir", is_dir=True, remote_path="~/downloads")
+        result = self.process._hash_remote_file(req, "mydir/a.txt", "md5", ssh_mock)
+
+        self.assertEqual("abc123", result)
+        cmd = ssh_mock.shell.call_args.args[0]
+        self.assertIn('"$HOME/downloads/mydir/a.txt"', cmd)
+        self.assertNotIn("'~", cmd)
+
+    @patch("controller.validate.validate_process.os.path.exists", return_value=True)
+    @patch("controller.validate.validate_process.os.path.isdir", return_value=True)
+    @patch("controller.validate.validate_process.os.walk")
+    @patch.object(ValidateProcess, "_create_ssh")
+    @patch.object(ValidateProcess, "_hash_remote_file", return_value="abc123")
+    @patch.object(ValidateProcess, "_hash_local_file", return_value="abc123")
+    def test_directory_find_command_single_quotes_absolute(
+        self, mock_local_hash, mock_remote_hash, mock_ssh, mock_walk, mock_isdir, mock_exists
+    ):
+        """An absolute remote_path must be single-quoted (no $HOME expansion)."""
+        mock_walk.return_value = [
+            ("/local/mydir", [], ["a.txt"]),
+        ]
+        ssh_mock = MagicMock()
+        ssh_mock.shell.return_value = b"/remote/mydir/a.txt\n"
+        mock_ssh.return_value = ssh_mock
+
+        req = self._make_request(name="mydir", is_dir=True)
+        self.process.validate(req)
+        self.process.run_loop()
+
+        find_calls = [c.args[0] for c in ssh_mock.shell.call_args_list if c.args[0].startswith("find ")]
+        self.assertEqual(1, len(find_calls))
+        find_cmd = find_calls[0]
+        self.assertIn("'/remote/mydir'", find_cmd)
+        self.assertNotIn("$HOME", find_cmd)
+
     def test_close_queues_releases_resources(self):
         # close_queues is also called in tearDown; calling it twice should be safe
         self.process.run_loop()

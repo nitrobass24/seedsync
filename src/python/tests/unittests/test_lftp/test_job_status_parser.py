@@ -41,6 +41,14 @@ class TestLftpJobStatusParser(unittest.TestCase):
         self.assertEqual(1 * 60 * 60 + 1 * 60 + 1, LftpJobStatusParser._eta_to_seconds("1h1m1s"))
         self.assertEqual(1 * 60 + 1, LftpJobStatusParser._eta_to_seconds("1m1s"))
 
+    def test_eta_to_seconds_digitless(self):
+        """Digit-less ETA tokens (e.g. 'm', 'd') must yield 0 instead of raising ValueError."""
+        self.assertEqual(0, LftpJobStatusParser._eta_to_seconds("d"))
+        self.assertEqual(0, LftpJobStatusParser._eta_to_seconds("h"))
+        self.assertEqual(0, LftpJobStatusParser._eta_to_seconds("m"))
+        self.assertEqual(0, LftpJobStatusParser._eta_to_seconds("s"))
+        self.assertEqual(0, LftpJobStatusParser._eta_to_seconds(""))
+
     def test_empty_output_1(self):
         output = ""
         parser = LftpJobStatusParser()
@@ -1613,3 +1621,68 @@ class TestLftpJobStatusParser(unittest.TestCase):
         parser = LftpJobStatusParser()
         with self.assertRaises(LftpJobStatusParserError):
             parser.parse(output)
+
+    def test_filename_containing_jobs_v_literal(self):
+        """A filename containing the literal 'jobs -v' must not be corrupted by echo stripping.
+
+        Regression for #517 BUG 1: the unconditional global replace('jobs -v', '')
+        deleted every 'jobs -v' substring, so a queued mirror of 'My.jobs -v.Release'
+        parsed as 'My..Release' and never matched scanner entries.
+        """
+        output = (
+            "jobs -v\n"
+            "[0] queue (sftp://someone:@localhost)\n"
+            "sftp://someone:@localhost/home/someone\n"
+            "Queue is stopped.\n"
+            "Commands queued:\n"
+            " 1. mirror -c /tmp/test_lftp/remote/My.jobs -v.Release /tmp/test_lftp/local/\n"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("My.jobs -v.Release", statuses[0].name)
+        self.assertEqual(LftpJobStatus.State.QUEUED, statuses[0].state)
+
+    def test_eta_with_digitless_unit_does_not_raise(self):
+        """A malformed ETA unit (e.g. 'eta:m') must not abort the whole status parse.
+
+        Regression for #517 BUG 2: a digit-less ETA token previously raised
+        ValueError -> LftpJobStatusParserError, suppressing all status.
+        """
+        output = (
+            "jobs -v\n"
+            "[1] pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/\n"
+            "sftp://someone:@localhost/home/someone\n"
+            "`/tmp/test_lftp/remote/c' at 4585 (3%) 1.2K/s eta:m [Receiving data]\n"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("c", statuses[0].name)
+
+    def test_queue_header_immediately_followed_by_commands_queued(self):
+        """'Commands queued:' directly after the second sftp header (no status line).
+
+        Regression for #517 BUG 3: the unconditional pop consumed the
+        'Commands queued:' line, the queued block was never parsed, and the
+        leftover numbered lines raised 'First line is not a matching header'.
+        """
+        output = """
+        [0] queue (sftp://someone:@localhost)
+        sftp://someone:@localhost/home/someone
+        Commands queued:
+         1. mirror -c /tmp/test_lftp/remote/a /tmp/test_lftp/local/
+         2. pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        golden = [
+            LftpJobStatus(
+                job_id=1, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.QUEUED, name="a", flags="-c"
+            ),
+            LftpJobStatus(
+                job_id=2, job_type=LftpJobStatus.Type.PGET, state=LftpJobStatus.State.QUEUED, name="c", flags="-c"
+            ),
+        ]
+        self.assertEqual(len(golden), len(statuses))
+        self.assertEqual(golden, statuses)

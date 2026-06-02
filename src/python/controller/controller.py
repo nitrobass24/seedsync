@@ -5,14 +5,14 @@ from __future__ import annotations
 import os
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     pass
 
-from common import AppOneShotProcess, Constants, Context, MultiprocessingLogger
+from common import AppOneShotProcess, AppProcess, Constants, Context, MultiprocessingLogger
 from lftp import Lftp
 from model import IModelListener, Model, ModelFile
 
@@ -309,6 +309,11 @@ class Controller:
         :return:
         """
         self.logger.debug("Starting controller")
+        # Mark started before launching children so that a partial failure here
+        # still lets exit() tear down whatever did start (exit() is best-effort).
+        # Otherwise exit() would early-return on __started=False and leak the
+        # already-started processes and their queue FDs.
+        self.__started = True
         for pc in self.__pair_contexts:
             pc.active_scan_process.start()
             pc.local_scan_process.start()
@@ -316,7 +321,6 @@ class Controller:
         self.__extract_process.start()
         self.__validate_process.start()
         self.__mp_logger.start()
-        self.__started = True
 
     def request_lftp_reconfigure(self) -> None:
         """Signal that LFTP tuning settings have changed and should be reapplied.
@@ -343,51 +347,85 @@ class Controller:
         self.__pipeline.step()
         self.__updater.update()
 
+    def __shutdown_lftp_best_effort(self):
+        # A hung/dead lftp PTY can raise here; guard each call so one failure
+        # does not abort teardown of the remaining pairs or the worker
+        # terminate/join/close_queues phases in exit() (otherwise orphaned
+        # processes leak FDs on every restart).
+        for pc in self.__pair_contexts:
+            try:
+                pc.lftp.exit()
+            except Exception:
+                self.logger.exception(
+                    "Error shutting down lftp for pair %s; continuing teardown",
+                    getattr(pc, "pair_id", None),
+                )
+
+    def __iter_worker_processes(self) -> Iterator[AppProcess]:
+        """All terminable worker processes, in teardown order."""
+        for pc in self.__pair_contexts:
+            yield pc.active_scan_process
+            yield pc.local_scan_process
+            yield pc.remote_scan_process
+        yield self.__extract_process
+        yield self.__validate_process
+        for cp in self.__pipeline.active_command_processes:
+            yield cp.process
+        yield from self.__pipeline.active_move_processes
+
+    # Bound each worker join during teardown: a worker stuck in uninterruptible
+    # I/O (e.g. a dead NAS mount that ignores the SIGTERM from terminate()) would
+    # otherwise hang join() — and thus exit() — forever, wedging ServiceRestart.
+    __JOIN_TIMEOUT_IN_SECS = 2
+
+    def __safe_teardown(self, description: str, action: Callable[[], object]) -> None:
+        # Teardown is best-effort: a raise from any single terminate/join/
+        # close_queues call (a hung or already-closed worker) must not skip the
+        # remaining reaping or the FD-releasing close_queues phase, nor propagate
+        # out of exit(). Otherwise each restart leaks queue FDs until the OS
+        # limit (OSError: [Errno 24] No file descriptors available) is hit.
+        try:
+            action()
+        except Exception:
+            self.logger.exception("Error during controller teardown: %s", description)
+
+    def __bounded_join(self, p: AppProcess) -> None:
+        self.__safe_teardown("join", lambda: p.join(self.__JOIN_TIMEOUT_IN_SECS))
+        try:
+            still_alive = p.is_alive()
+        except (ValueError, AssertionError):
+            still_alive = False
+        if still_alive:
+            self.logger.warning(
+                "Worker %s did not exit within %ss; continuing teardown",
+                getattr(p, "name", "?"),
+                self.__JOIN_TIMEOUT_IN_SECS,
+            )
+
     def exit(self):
         self.logger.debug("Exiting controller")
-        if self.__started:
-            for pc in self.__pair_contexts:
-                pc.lftp.exit()
-                pc.active_scan_process.terminate()
-                pc.local_scan_process.terminate()
-                pc.remote_scan_process.terminate()
-            self.__extract_process.terminate()
-            self.__validate_process.terminate()
-            for cp in self.__pipeline.active_command_processes:
-                cp.process.terminate()
-            for mp in self.__pipeline.active_move_processes:
-                mp.terminate()
-            for pc in self.__pair_contexts:
-                pc.active_scan_process.join()
-                pc.local_scan_process.join()
-                pc.remote_scan_process.join()
-            self.__extract_process.join()
-            self.__validate_process.join()
-            for cp in self.__pipeline.active_command_processes:
-                cp.process.join()
-            for mp in self.__pipeline.active_move_processes:
-                mp.join()
-            self.__mp_logger.stop()
+        if not self.__started:
+            return
 
-            # Close multiprocessing queues to release file descriptors.
-            # Without this, each restart cycle leaks FDs until the OS limit
-            # is exhausted (OSError: [Errno 24] No file descriptors available).
-            for pc in self.__pair_contexts:
-                pc.active_scan_process.close_queues()
-                pc.local_scan_process.close_queues()
-                pc.remote_scan_process.close_queues()
-                pc.active_scanner.close()
-            self.__extract_process.close_queues()
-            self.__validate_process.close_queues()
-            for cp in self.__pipeline.active_command_processes:
-                cp.process.close_queues()
-            for mp in self.__pipeline.active_move_processes:
-                mp.close_queues()
-            self.__pipeline.active_command_processes.clear()
-            self.__pipeline.active_move_processes.clear()
+        self.__shutdown_lftp_best_effort()
+        processes = list(self.__iter_worker_processes())
+        for p in processes:
+            self.__safe_teardown("terminate", p.terminate)
+        for p in processes:
+            self.__bounded_join(p)
+        self.__safe_teardown("stop mp_logger", self.__mp_logger.stop)
 
-            self.__started = False
-            self.logger.info("Exited controller")
+        # Close multiprocessing queues to release file descriptors; this must run
+        # even if a terminate()/join() above failed, or each restart cycle leaks
+        # FDs until the OS limit is exhausted.
+        for p in processes:
+            self.__safe_teardown("close_queues", p.close_queues)
+        for pc in self.__pair_contexts:
+            self.__safe_teardown("close active_scanner", pc.active_scanner.close)
+        self.__pipeline.active_command_processes.clear()
+        self.__pipeline.active_move_processes.clear()
+        self.__started = False
+        self.logger.info("Exited controller")
 
     def get_model_files(self) -> list[ModelFile]:
         return self.__registry.get_files()
