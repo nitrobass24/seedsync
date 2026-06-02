@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TestBed } from "@angular/core/testing";
 // Injector not needed — TestBed handles DI
 import { BehaviorSubject, of } from "rxjs";
@@ -8,7 +8,6 @@ import { ConnectedService } from "../utils/connected.service";
 import { LoggerService } from "../utils/logger.service";
 import { RestService, WebReaction } from "../utils/rest.service";
 import { StreamDispatchService } from "../base/stream-dispatch.service";
-import { StorageKeys } from "../../common/storage-keys";
 import { Config } from "../../models/config";
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
@@ -81,18 +80,10 @@ describe("ConfigService", () => {
   let connectedSubject: BehaviorSubject<boolean>;
   let mockRestService: { sendRequest: ReturnType<typeof vi.fn> };
   let mockStreamDispatch: { setApiKey: ReturnType<typeof vi.fn> };
-  let store: Record<string, string>;
-  let mockSessionStorage: {
-    getItem: ReturnType<typeof vi.fn>;
-    setItem: ReturnType<typeof vi.fn>;
-    removeItem: ReturnType<typeof vi.fn>;
-  };
-  let originalSessionStorage: Storage;
 
   /**
-   * Lazily construct the service. The constructor fetches config and
-   * rehydrates the persisted API key, so each test configures its mocks
-   * (sendRequest return values, seeded sessionStorage) BEFORE calling this.
+   * Lazily construct the service. The constructor fetches config, so each test
+   * configures its mocks (sendRequest return values) BEFORE calling this.
    */
   function createService(): ConfigService {
     service = TestBed.inject(ConfigService);
@@ -108,23 +99,6 @@ describe("ConfigService", () => {
       ),
     };
     mockStreamDispatch = { setApiKey: vi.fn() };
-
-    store = {};
-    mockSessionStorage = {
-      getItem: vi.fn((key: string) => (key in store ? store[key] : null)),
-      setItem: vi.fn((key: string, value: string) => {
-        store[key] = value;
-      }),
-      removeItem: vi.fn((key: string) => {
-        delete store[key];
-      }),
-    };
-    originalSessionStorage = globalThis.sessionStorage;
-    Object.defineProperty(globalThis, "sessionStorage", {
-      value: mockSessionStorage,
-      configurable: true,
-      writable: true,
-    });
 
     TestBed.configureTestingModule({
       providers: [
@@ -148,14 +122,6 @@ describe("ConfigService", () => {
           useValue: mockStreamDispatch,
         },
       ],
-    });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(globalThis, "sessionStorage", {
-      value: originalSessionStorage,
-      configurable: true,
-      writable: true,
     });
   });
 
@@ -234,17 +200,7 @@ describe("ConfigService", () => {
     );
   });
 
-  it("should rehydrate persisted api_key from sessionStorage at init and push it to the stream before any connect", () => {
-    store[StorageKeys.API_KEY] = "real-key";
-
-    // connected$ stays false; the key must reach the stream during construction
-    createService();
-
-    expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith("real-key");
-  });
-
-  it("should NOT push the redacted sentinel to the stream and should keep the persisted key", () => {
-    store[StorageKeys.API_KEY] = "real-key";
+  it("should NOT push the redacted sentinel from /server/config/get to the stream", () => {
     const config = makeConfig({ web: { port: 8080, api_key: "********" } });
     mockRestService.sendRequest.mockReturnValue(
       of({ success: true, data: JSON.stringify(config), errorMessage: null }),
@@ -252,23 +208,9 @@ describe("ConfigService", () => {
 
     createService();
 
-    // The persisted real key is pushed at init, but the redacted '********'
-    // returned by /server/config/get must never reach the stream.
-    expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith("real-key");
+    // The redacted '********' returned by the auth-exempt config endpoint must
+    // never be pushed to the stream as a credential.
     expect(mockStreamDispatch.setApiKey).not.toHaveBeenCalledWith("********");
-    expect(store[StorageKeys.API_KEY]).toBe("real-key");
-  });
-
-  it("should tolerate sessionStorage throwing during init (private browsing)", () => {
-    mockSessionStorage.getItem.mockImplementation(() => {
-      throw new Error("denied");
-    });
-    const config = makeConfig();
-    mockRestService.sendRequest.mockReturnValue(
-      of({ success: true, data: JSON.stringify(config), errorMessage: null }),
-    );
-
-    expect(() => createService()).not.toThrow();
   });
 
   // --- Disconnect ---
@@ -426,30 +368,7 @@ describe("ConfigService", () => {
     expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith(null);
   });
 
-  it("should remove persisted api_key from sessionStorage when set empty", () => {
-    const config = makeConfig({ web: { port: 8080, api_key: "old" } });
-    store[StorageKeys.API_KEY] = "old";
-    mockRestService.sendRequest
-      .mockReturnValueOnce(
-        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
-      )
-      .mockReturnValueOnce(
-        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
-      )
-      .mockReturnValueOnce(
-        of({ success: true, data: null, errorMessage: null }),
-      );
-    createService();
-    connectedSubject.next(true);
-
-    service.set("web", "api_key", "");
-
-    expect(mockSessionStorage.removeItem).toHaveBeenCalledWith(StorageKeys.API_KEY);
-    expect(store[StorageKeys.API_KEY]).toBeUndefined();
-    expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith(null);
-  });
-
-  it("should persist the real api_key to sessionStorage on successful set", () => {
+  it("should push the real api_key to the stream on successful set", () => {
     const config = makeConfig({ web: { port: 8080, api_key: "old" } });
     mockRestService.sendRequest
       .mockReturnValueOnce(
@@ -466,33 +385,8 @@ describe("ConfigService", () => {
 
     service.set("web", "api_key", "new-key");
 
-    expect(mockSessionStorage.setItem).toHaveBeenCalledWith(
-      StorageKeys.API_KEY,
-      "new-key",
-    );
-    expect(store[StorageKeys.API_KEY]).toBe("new-key");
-  });
-
-  it("should not throw when sessionStorage throws during set", () => {
-    const config = makeConfig({ web: { port: 8080, api_key: "old" } });
-    mockRestService.sendRequest
-      .mockReturnValueOnce(
-        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
-      )
-      .mockReturnValueOnce(
-        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
-      )
-      .mockReturnValueOnce(
-        of({ success: true, data: null, errorMessage: null }),
-      );
-    createService();
-    connectedSubject.next(true);
-    mockSessionStorage.setItem.mockImplementation(() => {
-      throw new Error("denied");
-    });
-
-    expect(() => service.set("web", "api_key", "new-key")).not.toThrow();
-    // Stream still receives the key even if persistence failed.
+    // set() is the only place the real key is available client-side; it is
+    // pushed to the stream (but not persisted anywhere).
     expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith("new-key");
   });
 

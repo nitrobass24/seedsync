@@ -6,7 +6,6 @@ import { LoggerService } from '../utils/logger.service';
 import { RestService, WebReaction } from '../utils/rest.service';
 import { StreamDispatchService } from '../base/stream-dispatch.service';
 import { Config, REDACTED_SENTINEL } from '../../models/config';
-import { StorageKeys } from '../../common/storage-keys';
 
 /** Value a config field may take (matches OptionComponent's value shape). */
 export type ConfigValue = string | number | boolean | null;
@@ -42,26 +41,16 @@ export class ConfigService {
   }
 
   constructor() {
-    // Rehydrate any persisted API key BEFORE the stream connects, so the
-    // first connection on an auth-enabled instance carries the key. This is
-    // the only client-side data that can re-authenticate after a reload —
-    // /server/config/get redacts web.api_key, so it cannot supply the key.
-    const persistedKey = this.readPersistedApiKey();
-    if (persistedKey) {
-      this.setStreamApiKey(persistedKey);
-    }
-
     // Fetch config at init independent of the stream connection.
     // /server/config/get is auth-exempt, so config$ can populate for the UI
     // even before (and without) an authenticated stream connection. This
     // breaks the init-ordering deadlock where the config fetch was gated
-    // behind a stream that could never connect without the key.
+    // behind a stream that could never connect without the key. The key itself
+    // is NOT persisted client-side; after a reload on an auth-enabled instance
+    // the user re-enters it in Settings (which re-pushes it to the stream).
     this.getConfig();
 
     this.connectedService.connected$.subscribe((connected) => {
-      // The connected$ subscription now only refreshes config on (re)connect;
-      // bootstrap is handled above. On disconnect, leave any persisted key in
-      // place so the next connect attempt can still authenticate.
       if (connected) {
         this.getConfig();
       }
@@ -93,12 +82,10 @@ export class ConfigService {
             const configRecord = config as unknown as ConfigRecord;
             const newConfig = { ...config, [section]: { ...configRecord[section], [option]: value } };
             this.configSubject.next(newConfig);
-            // Propagate API key changes to the SSE stream immediately. This is
-            // the only place the real (un-redacted) key is available, so it is
-            // also where we persist it for recovery after a reload.
+            // Propagate API key changes to the SSE stream immediately. set() is
+            // the only place the real (un-redacted) key is available client-side.
             if (section === 'web' && option === 'api_key') {
               const realKey = String(value ?? '') || null;
-              this.writePersistedApiKey(realKey);
               this.setStreamApiKey(realKey);
             }
           }
@@ -148,26 +135,5 @@ export class ConfigService {
     // StreamDispatchService -> ConnectedService -> ConfigService
     const streamDispatch = this.injector.get(StreamDispatchService);
     streamDispatch.setApiKey(apiKey);
-  }
-
-  private readPersistedApiKey(): string | null {
-    try {
-      return sessionStorage.getItem(StorageKeys.API_KEY);
-    } catch {
-      // sessionStorage may be unavailable (private browsing, test environments)
-      return null;
-    }
-  }
-
-  private writePersistedApiKey(apiKey: string | null): void {
-    try {
-      if (apiKey) {
-        sessionStorage.setItem(StorageKeys.API_KEY, apiKey);
-      } else {
-        sessionStorage.removeItem(StorageKeys.API_KEY);
-      }
-    } catch {
-      // sessionStorage may be unavailable (private browsing, test environments)
-    }
   }
 }
