@@ -528,11 +528,15 @@ class CommandPipeline:
             self.moved_file_keys.add(move_key)
             return
 
-        self.moved_file_keys.add(move_key)
         process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name, pair_id=pair_id)
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
-        self.active_move_processes.append(process)
+        # Start before publishing bookkeeping: if start() raises we must not leave
+        # a stale move_key (which would block every future retry of this move) or
+        # a never-started process in active_move_processes (cleanup() would then
+        # join()/close_queues() it and raise AssertionError).
         process.start()
+        self.moved_file_keys.add(move_key)
+        self.active_move_processes.append(process)
         self._logger.info(f"Spawned move process for {file_name} (staging -> local)")
 
     def _get_pair_context_for_command(self, command: Controller.Command) -> PairContext | None:

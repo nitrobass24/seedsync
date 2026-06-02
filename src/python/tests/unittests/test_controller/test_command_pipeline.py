@@ -2,7 +2,7 @@
 
 import os
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from common import AppError
 from controller.command_pipeline import CommandPipeline
@@ -267,6 +267,26 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         pc1.local_scan_process.force_scan.assert_called_once()
         pc2.local_scan_process.force_scan.assert_called_once()
+
+    @patch("controller.command_pipeline.os.path.exists", return_value=True)
+    @patch("controller.command_pipeline.MoveProcess")
+    def test_spawn_move_process_start_failure_leaves_no_stale_state(self, mock_move_cls, _mock_exists):
+        """If MoveProcess.start() raises, no stale move_key (which would block all
+        retries) or never-started process (which cleanup() would join() and raise
+        on) is published (#537 review)."""
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.local_path = "/local/pair-1"
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+        mock_move_cls.return_value.start.side_effect = OSError("cannot fork")
+
+        with self.assertRaises(OSError):
+            pipeline.spawn_move_process("file.txt", pc)
+
+        self.assertNotIn(persist_key("pair-1", "file.txt"), pipeline.moved_file_keys)
+        self.assertEqual([], pipeline.active_move_processes)
 
     # --- propagate_exceptions: worker-fault isolation (#511) ---
 
