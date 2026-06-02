@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import logging
+import threading
 from urllib.parse import unquote
 
 from bottle import HTTPResponse
@@ -19,6 +20,14 @@ class AutoQueueHandler(IHandler):
         self.__auto_queue_persist = auto_queue_persist
         self.__persist_path = persist_path
         self.__logger = logging.getLogger(self.__class__.__name__)
+        # Serializes the mutate → persist → rollback sequence in the add/remove
+        # handlers (mirrors ConfigHandler). add_pattern/remove_pattern fire
+        # listener side effects (AutoQueuePersistListener.new_patterns drives a
+        # queue replay on the next controller cycle), so a persist failure must
+        # roll back both __patterns and the listener state atomically. Without
+        # the lock, two concurrent writers could interleave mutate/persist/
+        # rollback and leave on-disk and in-memory state diverged.
+        self.__write_lock = threading.Lock()
 
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
@@ -45,25 +54,37 @@ class AutoQueueHandler(IHandler):
                 content_type="text/plain",
                 headers=self._NOSNIFF_HEADERS,
             )
-        try:
-            self.__auto_queue_persist.add_pattern(aqp)
-        except ValueError as e:
-            return HTTPResponse(
-                body=str(e),
-                status=400,
-                content_type="text/plain",
-                headers=self._NOSNIFF_HEADERS,
-            )
-        try:
-            self.__auto_queue_persist.to_file(self.__persist_path)
-        except OSError:
-            self.__logger.exception("Failed to persist auto-queue after adding pattern %r", pattern)
-            return HTTPResponse(
-                body="Failed to persist auto-queue",
-                status=500,
-                content_type="text/plain",
-                headers=self._NOSNIFF_HEADERS,
-            )
+        # Hold __write_lock across the mutate → persist → rollback sequence so
+        # writers can't interleave. add_pattern fires pattern_added, which the
+        # AutoQueuePersistListener records in new_patterns and the controller
+        # replays against all model files on the next cycle (auto-queueing
+        # matching files). If persisting fails we MUST undo that side effect,
+        # otherwise the pattern would auto-queue files this session yet be gone
+        # on restart — "phantom" queueing that contradicts the 500 (see #518).
+        with self.__write_lock:
+            try:
+                self.__auto_queue_persist.add_pattern(aqp)
+            except ValueError as e:
+                return HTTPResponse(
+                    body=str(e),
+                    status=400,
+                    content_type="text/plain",
+                    headers=self._NOSNIFF_HEADERS,
+                )
+            try:
+                self.__auto_queue_persist.to_file(self.__persist_path)
+            except OSError:
+                # Roll back: remove_pattern fires pattern_removed, which discards
+                # the pattern from the listener's new_patterns, undoing the side
+                # effect above so disk and memory stay consistent.
+                self.__auto_queue_persist.remove_pattern(aqp)
+                self.__logger.exception("Failed to persist auto-queue after adding pattern %r", pattern)
+                return HTTPResponse(
+                    body="Failed to persist auto-queue",
+                    status=500,
+                    content_type="text/plain",
+                    headers=self._NOSNIFF_HEADERS,
+                )
         return HTTPResponse(
             body=f"Added auto-queue pattern '{pattern}'.",
             content_type="text/plain",
@@ -83,17 +104,23 @@ class AutoQueueHandler(IHandler):
                 content_type="text/plain",
                 headers=self._NOSNIFF_HEADERS,
             )
-        self.__auto_queue_persist.remove_pattern(aqp)
-        try:
-            self.__auto_queue_persist.to_file(self.__persist_path)
-        except OSError:
-            self.__logger.exception("Failed to persist auto-queue after removing pattern %r", pattern)
-            return HTTPResponse(
-                body="Failed to persist auto-queue",
-                status=500,
-                content_type="text/plain",
-                headers=self._NOSNIFF_HEADERS,
-            )
+        # Hold __write_lock across the mutate → persist → rollback sequence so
+        # writers can't interleave (see __handle_add_autoqueue).
+        with self.__write_lock:
+            self.__auto_queue_persist.remove_pattern(aqp)
+            try:
+                self.__auto_queue_persist.to_file(self.__persist_path)
+            except OSError:
+                # Roll back: re-add the pattern so in-memory state matches the
+                # on-disk file (the pattern was persisted before this removal).
+                self.__auto_queue_persist.add_pattern(aqp)
+                self.__logger.exception("Failed to persist auto-queue after removing pattern %r", pattern)
+                return HTTPResponse(
+                    body="Failed to persist auto-queue",
+                    status=500,
+                    content_type="text/plain",
+                    headers=self._NOSNIFF_HEADERS,
+                )
         return HTTPResponse(
             body=f"Removed auto-queue pattern '{pattern}'.",
             content_type="text/plain",
