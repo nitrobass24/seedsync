@@ -32,6 +32,9 @@ def _make_worker_process():
     proc.terminate = MagicMock()
     proc.join = MagicMock()
     proc.close_queues = MagicMock()
+    # Reaped cleanly by default: dead after join (so the bounded join doesn't
+    # log a spurious "did not exit" warning).
+    proc.is_alive.return_value = False
     return proc
 
 
@@ -204,6 +207,21 @@ class TestControllerExit(unittest.TestCase):
         for proc in self._all_pair_processes():
             proc.terminate.assert_called_once()
             proc.close_queues.assert_called_once()
+        self.assertFalse(self.controller._Controller__started)
+
+    @timeout_decorator.timeout(5)
+    def test_exit_continues_when_worker_join_times_out(self):
+        """A worker still alive after the bounded join (stuck in uninterruptible
+        I/O, ignoring SIGTERM) must not hang exit(): a warning is logged and
+        teardown still completes for every worker (#537 review)."""
+        self.extract_process.is_alive.return_value = True
+
+        # Must not hang (timeout_decorator) and must not raise.
+        self.controller.exit()
+
+        # The stuck worker was reported, and all phases still ran.
+        self.controller.logger.warning.assert_called()
+        self._assert_full_teardown()
         self.assertFalse(self.controller._Controller__started)
 
     @timeout_decorator.timeout(5)

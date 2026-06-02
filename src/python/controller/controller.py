@@ -373,6 +373,11 @@ class Controller:
             yield cp.process
         yield from self.__pipeline.active_move_processes
 
+    # Bound each worker join during teardown: a worker stuck in uninterruptible
+    # I/O (e.g. a dead NAS mount that ignores the SIGTERM from terminate()) would
+    # otherwise hang join() — and thus exit() — forever, wedging ServiceRestart.
+    __JOIN_TIMEOUT_IN_SECS = 2
+
     def __safe_teardown(self, description: str, action: Callable[[], object]) -> None:
         # Teardown is best-effort: a raise from any single terminate/join/
         # close_queues call (a hung or already-closed worker) must not skip the
@@ -384,6 +389,19 @@ class Controller:
         except Exception:
             self.logger.exception("Error during controller teardown: %s", description)
 
+    def __bounded_join(self, p: AppProcess) -> None:
+        self.__safe_teardown("join", lambda: p.join(self.__JOIN_TIMEOUT_IN_SECS))
+        try:
+            still_alive = p.is_alive()
+        except (ValueError, AssertionError):
+            still_alive = False
+        if still_alive:
+            self.logger.warning(
+                "Worker %s did not exit within %ss; continuing teardown",
+                getattr(p, "name", "?"),
+                self.__JOIN_TIMEOUT_IN_SECS,
+            )
+
     def exit(self):
         self.logger.debug("Exiting controller")
         if not self.__started:
@@ -394,7 +412,7 @@ class Controller:
         for p in processes:
             self.__safe_teardown("terminate", p.terminate)
         for p in processes:
-            self.__safe_teardown("join", p.join)
+            self.__bounded_join(p)
         self.__safe_teardown("stop mp_logger", self.__mp_logger.stop)
 
         # Close multiprocessing queues to release file descriptors; this must run
