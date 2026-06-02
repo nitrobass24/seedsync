@@ -7,6 +7,8 @@ import unittest
 from datetime import datetime
 from threading import Thread
 
+import timeout_decorator
+
 from system import SystemScanner, SystemScannerError
 
 
@@ -649,3 +651,37 @@ class TestSystemScanner(unittest.TestCase):
         self.assertEqual("dir�dir", folder.name)
         self.assertEqual("file�file", file.name)
         self.assertEqual(128, file.size)
+
+    def test_symlink_to_outside_directory_is_traversed(self):
+        """Pins current behavior: the scanner follows directory symlinks
+        (DirEntry.is_dir defaults to follow_symlinks=True) and recurses into the
+        target, even when it points outside the scan root. path_to_scan comes
+        from config (untrusted when no api_key is set), so this guards against a
+        silent change in traversal behavior."""
+        outside = tempfile.mkdtemp(prefix="test_scanner_outside")
+        try:
+            with open(os.path.join(outside, "secret.txt"), "wb") as f:
+                f.write(b"x" * 100)
+            os.symlink(outside, os.path.join(TestSystemScanner.temp_dir, "link_to_outside"))
+
+            files = SystemScanner(TestSystemScanner.temp_dir).scan()
+
+            by_name = {f.name: f for f in files}
+            self.assertIn("link_to_outside", by_name)
+            link = by_name["link_to_outside"]
+            self.assertTrue(link.is_dir)
+            self.assertEqual(100, link.size)
+            self.assertEqual(["secret.txt"], [c.name for c in link.children])
+        finally:
+            shutil.rmtree(outside)
+
+    @timeout_decorator.timeout(15)
+    def test_cyclic_symlink_terminates_with_error(self):
+        """A self-referential directory symlink must not hang the scan. Symlink
+        resolution is bounded by the OS (ELOOP), so the scan terminates by
+        raising OSError rather than recursing forever. The timeout guards
+        against a regression to an unbounded loop; pinning OSError documents
+        that cycles are not silently swallowed."""
+        os.symlink(TestSystemScanner.temp_dir, os.path.join(TestSystemScanner.temp_dir, "loop"))
+        with self.assertRaises(OSError):
+            SystemScanner(TestSystemScanner.temp_dir).scan()

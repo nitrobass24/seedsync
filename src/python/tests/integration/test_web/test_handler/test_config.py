@@ -44,6 +44,22 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertEqual(200, resp.status_int)
         self.assertEqual(8080, self.context.config.web.port)
 
+    def test_set_percent_value_persists_and_reloads(self):
+        """A config value containing '%' must set, persist, and reload cleanly.
+
+        Regression guard for #507: the persist path (to_file -> Config.to_str)
+        used configparser's default BasicInterpolation, which raised on '%'.
+        """
+        value = "100%secret"
+        uri = quote(quote(value, safe=""), safe="")
+        resp = self.test_app.get("/server/config/set/lftp/remote_password/" + uri)
+        self.assertEqual(200, resp.status_int)
+        self.assertEqual(value, self.context.config.lftp.remote_password)
+        # Reload from the persisted settings file to confirm the on-disk round trip.
+        with open(self.context.config_path) as f:
+            reloaded = Config.from_str(f.read())
+        self.assertEqual(value, reloaded.lftp.remote_password)
+
     def test_set_missing_section(self):
         self.assertFalse(self.context.config.has_section("bad_section"))
         resp = self.test_app.get("/server/config/set/bad_section/option/value", expect_errors=True)

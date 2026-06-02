@@ -291,3 +291,58 @@ class TestExtractErrorCases(unittest.TestCase):
 
         self.assertTrue(os.path.isfile(os.path.join(self.out_dir, "file_a.txt")))
         self.assertTrue(os.path.isfile(os.path.join(self.out_dir, "file_b.txt")))
+
+
+class TestExtractPathValidation(unittest.TestCase):
+    """Post-extraction path-validation guard (extract.py): symlinks in the
+    output are stripped, and any extracted path whose realpath escapes the
+    output directory raises ExtractError. Archive contents are attacker-
+    controlled when the seedbox is hostile, so this walk is the only barrier."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix="test_extract_pathval_")
+        self.out_dir = os.path.join(self.temp_dir, "output")
+        os.makedirs(self.out_dir)
+        # A file whose ZIP magic bytes make _detect_format report "ZIP" so we
+        # reach the validation walk; extraction itself (_run_7z) is mocked.
+        self.zip_path = os.path.join(self.temp_dir, "archive.zip")
+        with open(self.zip_path, "wb") as f:
+            f.write(b"PK\x03\x04" + b"\x00" * 64)
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir)
+
+    def test_planted_symlink_is_removed(self):
+        """A symlink planted in the extracted output is removed; real files
+        survive and extraction succeeds (no error)."""
+        target = os.path.join(self.temp_dir, "outside_target.txt")
+        with open(target, "wb") as f:
+            f.write(b"sensitive")
+
+        def fake_run_7z(_archive_path, out_dir_path):
+            with open(os.path.join(out_dir_path, "real.txt"), "wb") as f:
+                f.write(b"ok")
+            os.symlink(target, os.path.join(out_dir_path, "evil_link"))
+
+        with patch.object(Extract, "_run_7z", side_effect=fake_run_7z):
+            Extract.extract_archive(self.zip_path, self.out_dir)
+
+        # lexists() checks the link itself, not its target.
+        self.assertFalse(os.path.lexists(os.path.join(self.out_dir, "evil_link")))
+        self.assertTrue(os.path.isfile(os.path.join(self.out_dir, "real.txt")))
+        # Target outside the output dir is untouched.
+        self.assertTrue(os.path.isfile(target))
+
+    def test_escaping_path_raises_extract_error(self):
+        """An extracted entry whose realpath escapes the output directory raises
+        ExtractError. os.walk is stubbed to simulate 7z emitting a '../'
+        traversal entry (the classic zip-slip vector)."""
+        real_out = os.path.realpath(self.out_dir)
+        fake_walk = [(real_out, [], ["../../escaped_payload"])]
+        with (
+            patch.object(Extract, "_run_7z"),
+            patch("os.walk", return_value=fake_walk),
+        ):
+            with self.assertRaises(ExtractError) as ctx:
+                Extract.extract_archive(self.zip_path, self.out_dir)
+        self.assertIn("escapes target directory", str(ctx.exception))
