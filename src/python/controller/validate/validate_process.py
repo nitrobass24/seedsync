@@ -333,6 +333,14 @@ class ValidateProcess(AppProcess):
         last `<name>` component makes the key independent of whether the remote
         shell expanded a leading ~ to $HOME (issue #519), so remote keys always
         match the local keys (`relpath(local_file, local_path)` == `name/subpath`).
+
+        Known limitation: this is a heuristic. If the tree contains a *nested*
+        directory whose name equals `name` (e.g. `.../mydir/mydir/a.txt` for
+        name="mydir"), last-occurrence anchoring yields `mydir/a.txt` while the
+        local key is `mydir/mydir/a.txt`, producing a false (non-checksum)
+        mismatch. No name-based anchor is fully robust without the shell-expanded
+        find root; the robust fix (capture the expanded base via `cd <root>;
+        pwd; find .` and derive keys from it) is tracked as a #519 follow-up.
         """
         parts = abs_path.split("/")
         # Find the last occurrence of the directory leaf to anchor the key.
