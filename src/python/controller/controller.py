@@ -5,14 +5,14 @@ from __future__ import annotations
 import os
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     pass
 
-from common import AppOneShotProcess, Constants, Context, MultiprocessingLogger
+from common import AppOneShotProcess, AppProcess, Constants, Context, MultiprocessingLogger
 from lftp import Lftp
 from model import IModelListener, Model, ModelFile
 
@@ -357,7 +357,7 @@ class Controller:
                     getattr(pc, "pair_id", None),
                 )
 
-    def __iter_worker_processes(self):
+    def __iter_worker_processes(self) -> Iterator[AppProcess]:
         """All terminable worker processes, in teardown order."""
         for pc in self.__pair_contexts:
             yield pc.active_scan_process
@@ -369,7 +369,7 @@ class Controller:
             yield cp.process
         yield from self.__pipeline.active_move_processes
 
-    def __safe_teardown(self, description: str, action):
+    def __safe_teardown(self, description: str, action: Callable[[], object]) -> None:
         # Teardown is best-effort: a raise from any single terminate/join/
         # close_queues call (a hung or already-closed worker) must not skip the
         # remaining reaping or the FD-releasing close_queues phase, nor propagate

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .controller import Controller
 
-from common import AppError, Context, MultiprocessingLogger
+from common import AppError, AppProcess, Context, MultiprocessingLogger
 from lftp import LftpError
 from model import ModelError, ModelFile
 
@@ -461,7 +461,7 @@ class CommandPipeline:
         self.__report_if_worker_dead(self._extract_process, "Extract")
         self.__report_if_worker_dead(self._validate_process, "Validate")
 
-    def __report_if_worker_dead(self, worker, feature: str):
+    def __report_if_worker_dead(self, worker: AppProcess, feature: str) -> None:
         worker_id = id(worker)
         if worker_id in self.__reported_dead_workers:
             return
