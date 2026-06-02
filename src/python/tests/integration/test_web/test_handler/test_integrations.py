@@ -282,6 +282,9 @@ class TestIntegrationsHandler(BaseTestWebApp):
         with patch.object(self.integrations_config, "to_file", side_effect=OSError("disk full")):
             resp = self.test_app.delete(f"/server/integrations/{inst.id}", expect_errors=True)
         self.assertEqual(500, resp.status_int)
+        # Same controlled JSON error shape as the create/update persist failures,
+        # not a raw Bottle 500 from an unhandled OSError.
+        self.assertEqual("failed to persist integrations", json.loads(resp.text)["error"])
 
         # path_pairs.json was written first, before the failing integrations write.
         with open(self.context.path_pairs_path) as f:

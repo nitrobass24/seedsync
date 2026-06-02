@@ -134,7 +134,9 @@ class IntegrationsHandler(IHandler):
         # referenced) is recoverable; a dangling arr_target_id (instance gone,
         # path pair still references it) is rejected by cross-validation on load.
         self.__path_pairs_config.to_file(self.__path_pairs_path)
-        self.__config.to_file(self.__integrations_path)
+        err = self._persist_or_500(f"deleting instance {instance_id!r}")
+        if err is not None:
+            return err
         return HTTPResponse(status=204)
 
     def __handle_test(self, instance_id: str):
