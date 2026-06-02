@@ -34,6 +34,16 @@ import { LoggerService } from '../../services/utils/logger.service';
 export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   readonly LogLevel = LogLevel;
 
+  /**
+   * Cap on the live-log buffer (#522). During DEBUG logging on an active sync
+   * the SSE stream is unbounded; without a cap `records` grows forever, causing
+   * unbounded memory, an O(n) array copy per event, and a DOM paragraph per
+   * record. We keep a ring-buffer tail of the newest records and drop the
+   * oldest on overflow. Full history remains server-queryable via fetchHistory,
+   * so no log data is truly lost — only the live tail is bounded.
+   */
+  static readonly MAX_LIVE_RECORDS = 2000;
+
   private readonly elementRef = inject(ElementRef);
   private readonly changeDetector = inject(ChangeDetectorRef);
   private readonly logService = inject(LogService);
@@ -69,7 +79,12 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.logTail &&
           LogsPageComponent.isElementInViewport(this.logTail.nativeElement);
 
-        this.records = [...this.records, record];
+        const next = [...this.records, record];
+        // Front-trim the oldest on overflow so the newest record is never
+        // dropped (#522). Below the cap this slice is a no-op.
+        this.records = next.length > LogsPageComponent.MAX_LIVE_RECORDS
+          ? next.slice(next.length - LogsPageComponent.MAX_LIVE_RECORDS)
+          : next;
         this.changeDetector.detectChanges();
 
         if (shouldScroll) {
@@ -140,6 +155,23 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   onLevelChange(): void {
     this.searchChange$.next();
+  }
+
+  /**
+   * Stable trackBy for the live-log list (#522). Keying by record identity
+   * (time+logger+message) instead of `$index` lets Angular reuse DOM nodes when
+   * the buffer is front-trimmed, instead of re-keying every row by position.
+   */
+  trackRecord(_index: number, record: LogRecord): string {
+    return `${record.time.getTime()}|${record.loggerName}|${record.message}`;
+  }
+
+  /**
+   * Stable trackBy for the history list (#522): avoids re-keying up to 500 rows
+   * by position on every committed search/level change.
+   */
+  trackHistory(_index: number, entry: LogHistoryEntry): string {
+    return `${entry.timestamp}|${entry.logger}|${entry.message}`;
   }
 
   private refreshScrollButtonVisibility(): void {
