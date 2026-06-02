@@ -53,6 +53,18 @@ describe('AutoQueueService', () => {
     expect(snapshot()).toEqual([{ pattern: '*.mkv' }]);
   });
 
+  it('should fall back to an empty list (and not throw) on malformed pattern JSON', () => {
+    mockRestService.sendRequest.mockReturnValue(
+      of(makeReaction({ success: true, data: 'not-json{' })),
+    );
+    const logger = TestBed.inject(LoggerService);
+
+    expect(() => connectedSubject.next(true)).not.toThrow();
+
+    expect(snapshot()).toEqual([]);
+    expect(vi.mocked(logger.error)).toHaveBeenCalled();
+  });
+
   it('should clear patterns when disconnected', () => {
     mockRestService.sendRequest.mockReturnValue(
       of(makeReaction({ success: true, data: JSON.stringify([{ pattern: '*.mkv' }]) })),
