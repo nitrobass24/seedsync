@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { TestBed } from "@angular/core/testing";
 import { BehaviorSubject, of } from "rxjs";
-import { ViewFileService, ViewFileFilterCriteria } from "./view-file.service";
+import { ViewFileService, ViewFileFilterCriteria, VIEW_FILE_COALESCE_MS } from "./view-file.service";
 import { ModelFileService } from "./model-file.service";
 import { PathPairsService } from "../settings/path-pairs.service";
 import { LoggerService } from "../utils/logger.service";
@@ -714,5 +714,270 @@ describe("ViewFileService", () => {
     const files = latestFiles();
     expect(files.find((f) => f.pairId === "pair-a")!.status).toBe(ViewFileStatus.DOWNLOADING);
     expect(files.find((f) => f.pairId === "pair-b")!.status).toBe(ViewFileStatus.DEFAULT);
+  });
+
+  // --- Reference identity: unchanged rows keep === identity (issue #521 #4) ---
+
+  it("should preserve object identity of unchanged rows when toggling one checkbox", () => {
+    emitModelFiles([
+      makeModelFile({ name: "a", remote_size: 100, local_size: 100, state: ModelFileState.DOWNLOADED }),
+      makeModelFile({ name: "b", remote_size: 100, local_size: 100, state: ModelFileState.DOWNLOADED }),
+      makeModelFile({ name: "c", remote_size: 100, local_size: 100, state: ModelFileState.DOWNLOADED }),
+    ]);
+    const before = latestFiles();
+
+    service.toggleCheck(before.find((f) => f.name === "b")!);
+    const after = latestFiles();
+
+    // Only the toggled row's object reference changed; isChecked stays derived.
+    expect(after.find((f) => f.name === "b")!.isChecked).toBe(true);
+    expect(after.find((f) => f.name === "b")!).not.toBe(before.find((f) => f.name === "b")!);
+    expect(after.find((f) => f.name === "a")!).toBe(before.find((f) => f.name === "a")!);
+    expect(after.find((f) => f.name === "c")!).toBe(before.find((f) => f.name === "c")!);
+  });
+
+  it("should preserve object identity of unchanged rows on a single-file SSE update", () => {
+    emitModelFiles([
+      makeModelFile({ name: "a", remote_size: 200, local_size: 50, state: ModelFileState.DOWNLOADING }),
+      makeModelFile({ name: "b", remote_size: 200, local_size: 50, state: ModelFileState.DOWNLOADING }),
+      makeModelFile({ name: "c", remote_size: 200, local_size: 50, state: ModelFileState.DOWNLOADING }),
+    ]);
+    const before = latestFiles();
+
+    // Only "b" advances (eta/local_size change → an "updated" key).
+    emitModelFiles([
+      makeModelFile({ name: "a", remote_size: 200, local_size: 50, state: ModelFileState.DOWNLOADING }),
+      makeModelFile({ name: "b", remote_size: 200, local_size: 120, state: ModelFileState.DOWNLOADING }),
+      makeModelFile({ name: "c", remote_size: 200, local_size: 50, state: ModelFileState.DOWNLOADING }),
+    ]);
+    const after = latestFiles();
+
+    expect(after.find((f) => f.name === "b")!.percentDownloaded).toBe(60);
+    expect(after.find((f) => f.name === "b")!).not.toBe(before.find((f) => f.name === "b")!);
+    expect(after.find((f) => f.name === "a")!).toBe(before.find((f) => f.name === "a")!);
+    expect(after.find((f) => f.name === "c")!).toBe(before.find((f) => f.name === "c")!);
+  });
+
+  it("should preserve object identity of rows whose pairName is unchanged", () => {
+    pairsSubject.next([
+      { id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false, arr_target_ids: [] },
+    ]);
+    emitModelFiles([
+      makeModelFile({ name: "x", pair_id: "pair-a", remote_size: 100 }),
+      makeModelFile({ name: "y", pair_id: null, remote_size: 100 }),
+    ]);
+    const before = latestFiles();
+
+    // Add a second pair; only pair-a-resolved rows are affected, pair-b not present.
+    pairsSubject.next([
+      { id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false, arr_target_ids: [] },
+      { id: "pair-b", name: "Media", remote_path: "/r2", local_path: "/l2", enabled: true, auto_queue: false, arr_target_ids: [] },
+    ]);
+    const after = latestFiles();
+
+    // Neither row's resolved pairName changed → both keep identity.
+    expect(after.find((f) => f.name === "x")!.pairName).toBe("Seedbox");
+    expect(after.find((f) => f.name === "x")!).toBe(before.find((f) => f.name === "x")!);
+    expect(after.find((f) => f.name === "y")!).toBe(before.find((f) => f.name === "y")!);
+  });
+
+  it("should re-spread only the row whose pairName actually changed", () => {
+    pairsSubject.next([]);
+    emitModelFiles([
+      makeModelFile({ name: "x", pair_id: "pair-a", remote_size: 100 }),
+      makeModelFile({ name: "y", pair_id: null, remote_size: 100 }),
+    ]);
+    const before = latestFiles();
+    expect(before.find((f) => f.name === "x")!.pairName).toBeNull();
+
+    // pair-a name now resolvable → only "x" changes; "y" (null pair) keeps identity.
+    pairsSubject.next([
+      { id: "pair-a", name: "Seedbox", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false, arr_target_ids: [] },
+    ]);
+    const after = latestFiles();
+
+    expect(after.find((f) => f.name === "x")!.pairName).toBe("Seedbox");
+    expect(after.find((f) => f.name === "x")!).not.toBe(before.find((f) => f.name === "x")!);
+    expect(after.find((f) => f.name === "y")!).toBe(before.find((f) => f.name === "y")!);
+  });
+
+  // --- Bulk remove single-pass (issue #521 #3) ---
+
+  it("should correctly remove an interleaved set of files in a single pass", () => {
+    emitModelFiles([
+      makeModelFile({ name: "f0", remote_size: 100 }),
+      makeModelFile({ name: "f1", remote_size: 100 }),
+      makeModelFile({ name: "f2", remote_size: 100 }),
+      makeModelFile({ name: "f3", remote_size: 100 }),
+      makeModelFile({ name: "f4", remote_size: 100 }),
+    ]);
+
+    // Remove an interleaved pattern (f1, f3) — survivors keep relative order.
+    emitModelFiles([
+      makeModelFile({ name: "f0", remote_size: 100 }),
+      makeModelFile({ name: "f2", remote_size: 100 }),
+      makeModelFile({ name: "f4", remote_size: 100 }),
+    ]);
+
+    const files = latestFiles();
+    expect(files.map((f) => f.name)).toEqual(["f0", "f2", "f4"]);
+  });
+
+  it("should drop checkedSet entries for removed files and re-emit checked$", () => {
+    emitModelFiles([
+      makeModelFile({ name: "keep", remote_size: 100, local_size: 100, state: ModelFileState.DOWNLOADED }),
+      makeModelFile({ name: "gone", remote_size: 100, local_size: 100, state: ModelFileState.DOWNLOADED }),
+    ]);
+    service.toggleCheck(latestFiles().find((f) => f.name === "gone")!);
+
+    let checked = new Set<string>();
+    service.checked$.subscribe((s) => (checked = s));
+    expect(checked.has(fileKey(null, "gone"))).toBe(true);
+
+    emitModelFiles([
+      makeModelFile({ name: "keep", remote_size: 100, local_size: 100, state: ModelFileState.DOWNLOADED }),
+    ]);
+
+    expect(latestFiles().map((f) => f.name)).toEqual(["keep"]);
+    expect(checked.has(fileKey(null, "gone"))).toBe(false);
+  });
+
+  // --- Filter memoization (issue #521 #2) ---
+
+  it("should reuse the filtered array reference when membership is unchanged", () => {
+    emitModelFiles([
+      makeModelFile({ name: "a", remote_size: 200, local_size: 50, state: ModelFileState.DOWNLOADING }),
+      makeModelFile({ name: "b", remote_size: 200, local_size: 0, state: ModelFileState.DEFAULT }),
+    ]);
+    const criteria: ViewFileFilterCriteria = {
+      meetsCriteria: (vf) => vf.status === ViewFileStatus.DEFAULT,
+    };
+    service.setFilterCriteria(criteria);
+
+    let emissions = 0;
+    let lastFiltered: ViewFile[] = [];
+    service.filteredFiles$.subscribe((f) => {
+      emissions += 1;
+      lastFiltered = f;
+    });
+    const baselineEmissions = emissions;
+    const filteredBefore = lastFiltered;
+    expect(filteredBefore.map((f) => f.name)).toEqual(["b"]);
+
+    // Update "a" (not in the filtered set) — "b" (the only filtered row) is left
+    // identical, so filtered membership is unchanged and filteredFiles$ must NOT
+    // re-emit; the array reference is reused.
+    emitModelFiles([
+      makeModelFile({ name: "a", remote_size: 200, local_size: 120, state: ModelFileState.DOWNLOADING }),
+      makeModelFile({ name: "b", remote_size: 200, local_size: 0, state: ModelFileState.DEFAULT }),
+    ]);
+
+    expect(emissions).toBe(baselineEmissions);
+    expect(lastFiltered).toBe(filteredBefore);
+    expect(lastFiltered.map((f) => f.name)).toEqual(["b"]);
+  });
+
+  it("should re-emit the filtered list when membership changes", () => {
+    const criteria: ViewFileFilterCriteria = {
+      meetsCriteria: (vf) => vf.status === ViewFileStatus.DOWNLOADING,
+    };
+    service.setFilterCriteria(criteria);
+    emitModelFiles([
+      makeModelFile({ name: "a", remote_size: 200, local_size: 50, state: ModelFileState.DEFAULT }),
+    ]);
+    expect(latestFilteredFiles().length).toBe(0);
+
+    // "a" enters the filtered set.
+    emitModelFiles([
+      makeModelFile({ name: "a", remote_size: 200, local_size: 50, state: ModelFileState.DOWNLOADING }),
+    ]);
+    expect(latestFilteredFiles().map((f) => f.name)).toEqual(["a"]);
+  });
+});
+
+// --- SSE fan-out coalescing (issue #521 #1) ---
+// Uses a non-zero coalesce window so multiple model emissions within one window
+// collapse into a single view rebuild + emission, instead of the synchronous
+// pass-through used by the rest of the suite (coalesceMs = 0). auditTime uses the
+// default asyncScheduler (setTimeout), which vitest fake timers drive — the same
+// pattern as option.component.spec.ts.
+describe("ViewFileService coalescing", () => {
+  const COALESCE_MS = 100;
+  let service: ViewFileService;
+  let modelFilesSubject: BehaviorSubject<Map<string, ModelFile>>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    modelFilesSubject = new BehaviorSubject<Map<string, ModelFile>>(new Map());
+    const pairsSubject = new BehaviorSubject<PathPair[]>([]);
+    TestBed.configureTestingModule({
+      providers: [
+        ViewFileService,
+        { provide: VIEW_FILE_COALESCE_MS, useValue: COALESCE_MS },
+        { provide: ModelFileService, useValue: { files$: modelFilesSubject.asObservable() } },
+        { provide: PathPairsService, useValue: { pairs$: pairsSubject.asObservable() } },
+        {
+          provide: LoggerService,
+          useValue: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+        },
+      ],
+    });
+    service = TestBed.inject(ViewFileService);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function emit(files: ModelFile[]): void {
+    const map = new Map<string, ModelFile>();
+    for (const f of files) {
+      map.set(fileKey(f.pair_id, f.name), f);
+    }
+    modelFilesSubject.next(map);
+  }
+
+  it("should collapse a burst of model emissions into one view emission per window", () => {
+    let emissions = 0;
+    let lastFiles: ViewFile[] = [];
+    service.files$.subscribe((f) => {
+      emissions += 1;
+      lastFiles = f;
+    });
+    const baseline = emissions; // initial BehaviorSubject([]) emission
+
+    // Three rapid per-file ticks within one coalescing window (the realistic
+    // SSE fan-out: one event per changed file every controller cycle).
+    emit([makeModelFile({ name: "a", remote_size: 200, local_size: 10, state: ModelFileState.DOWNLOADING })]);
+    emit([makeModelFile({ name: "a", remote_size: 200, local_size: 20, state: ModelFileState.DOWNLOADING })]);
+    emit([makeModelFile({ name: "a", remote_size: 200, local_size: 30, state: ModelFileState.DOWNLOADING })]);
+
+    // Nothing rebuilt yet — the window has not elapsed.
+    expect(emissions).toBe(baseline);
+
+    vi.advanceTimersByTime(COALESCE_MS);
+
+    // Exactly one rebuild for the whole burst, reflecting the LAST state.
+    expect(emissions).toBe(baseline + 1);
+    expect(lastFiles.length).toBe(1);
+    expect(lastFiles[0].percentDownloaded).toBe(15);
+  });
+
+  it("should reflect the final coalesced state across add/update/remove in a window", () => {
+    let lastFiles: ViewFile[] = [];
+    service.files$.subscribe((f) => (lastFiles = f));
+
+    emit([
+      makeModelFile({ name: "a", remote_size: 100 }),
+      makeModelFile({ name: "b", remote_size: 100 }),
+    ]);
+    emit([
+      makeModelFile({ name: "a", remote_size: 100 }),
+      makeModelFile({ name: "c", remote_size: 100 }),
+    ]); // b removed, c added vs prev — but only final state matters
+
+    vi.advanceTimersByTime(COALESCE_MS);
+
+    expect(lastFiles.map((f) => f.name).sort()).toEqual(["a", "c"]);
   });
 });

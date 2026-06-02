@@ -1,6 +1,6 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, InjectionToken, inject } from '@angular/core';
 import { BehaviorSubject, Observable, of, from } from 'rxjs';
-import { mergeMap, toArray } from 'rxjs/operators';
+import { auditTime, mergeMap, toArray } from 'rxjs/operators';
 
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
@@ -9,6 +9,21 @@ import { WebReaction } from '../utils/rest.service';
 import { ModelFile, ModelFileState } from '../../models/model-file';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
 import { fileKey } from './file-key';
+
+/**
+ * Coalescing window (ms) for batching incremental SSE model-file emissions before
+ * rebuilding the view. The backend controller loop emits one SSE event per changed
+ * file every ~0.5s; without coalescing, N concurrently-downloading files trigger N
+ * full view rebuilds + 2N subject emissions per cycle (issue #521).
+ *
+ * Defaults to 0 (synchronous pass-through) so unit tests — which read the view
+ * synchronously right after emitting — stay deterministic without extra setup.
+ * Production overrides this in app.config.ts.
+ */
+export const VIEW_FILE_COALESCE_MS = new InjectionToken<number>('VIEW_FILE_COALESCE_MS', {
+  providedIn: 'root',
+  factory: () => 0,
+});
 
 function viewFileKey(vf: ViewFile): string {
   return fileKey(vf.pairId, vf.name);
@@ -25,6 +40,7 @@ export class ViewFileService {
   private readonly logger = inject(LoggerService);
   private readonly modelFileService = inject(ModelFileService);
   private readonly pathPairsService = inject(PathPairsService);
+  private readonly coalesceMs = inject(VIEW_FILE_COALESCE_MS);
 
   private pairNameMap = new Map<string, string>();
   private files: ViewFile[] = [];
@@ -51,17 +67,37 @@ export class ViewFileService {
       for (const pair of pairs) {
         this.pairNameMap.set(pair.id, pair.name);
       }
-      // Rebuild pairName on existing view files immediately
+      // Rebuild pairName on existing view files immediately. Only re-spread rows
+      // whose resolved pairName actually changed so unchanged rows keep identity.
       if (this.files.length > 0) {
-        this.files = this.files.map(f => ({
-          ...f,
-          pairName: f.pairId ? (this.pairNameMap.get(f.pairId) ?? null) : null,
-        }));
-        this.pushViewFiles();
+        let changed = false;
+        const nextFiles = this.files.map(f => {
+          const pairName = f.pairId ? (this.pairNameMap.get(f.pairId) ?? null) : null;
+          if (pairName === f.pairName) {
+            return f;
+          }
+          changed = true;
+          return { ...f, pairName };
+        });
+        if (changed) {
+          this.files = nextFiles;
+          this.pushViewFiles();
+        }
       }
     });
 
-    this.modelFileService.files$.subscribe({
+    // Coalesce the per-file SSE fan-out: the backend emits one model event per
+    // changed file every ~0.5s, so N active files would otherwise drive N full
+    // view rebuilds per tick. auditTime collapses a burst into a single rebuild
+    // on the trailing edge (the last Map already reflects the cumulative state,
+    // since each event is an idempotent set/delete on the shared key space).
+    // coalesceMs === 0 (the unit-test default) keeps the pass-through synchronous.
+    const modelFiles$ =
+      this.coalesceMs > 0
+        ? this.modelFileService.files$.pipe(auditTime(this.coalesceMs))
+        : this.modelFileService.files$;
+
+    modelFiles$.subscribe({
       next: (modelFiles) => {
         const t0 = performance.now();
         this.buildViewFromModelFiles(modelFiles);
@@ -182,10 +218,21 @@ export class ViewFileService {
   }
 
   private updateCheckedState(): void {
-    this.files = this.files.map(f => ({
-      ...f,
-      isChecked: this.checkedSet.has(viewFileKey(f))
-    }));
+    // Only replace rows whose derived isChecked actually flips, preserving object
+    // identity for unchanged rows so OnPush/ngOnChanges can skip them. isChecked
+    // stays strictly derived from checkedSet.
+    let changed = false;
+    const nextFiles = this.files.map(f => {
+      const isChecked = this.checkedSet.has(viewFileKey(f));
+      if (isChecked === f.isChecked) {
+        return f;
+      }
+      changed = true;
+      return { ...f, isChecked };
+    });
+    if (changed) {
+      this.files = nextFiles;
+    }
     this.checkedSubject.next(new Set(this.checkedSet));
     this.pushViewFiles();
   }
@@ -244,7 +291,7 @@ export class ViewFileService {
   private buildViewFromModelFiles(modelFiles: Map<string, ModelFile>): void {
     this.logger.debug('Received next model files');
 
-    const newViewFiles = [...this.files];
+    let newViewFiles = [...this.files];
 
     const addedKeys: string[] = [];
     const removedKeys: string[] = [];
@@ -292,16 +339,19 @@ export class ViewFileService {
       this.indices.set(viewFileKey(viewFile), newViewFiles.length - 1);
     }
 
-    // Do the removes (no re-sort required)
+    // Do the removes (no re-sort required). Filter out every removed key in a
+    // single O(n) pass instead of findIndex+splice per key (O(n*m)). filter is
+    // stable, so the surviving order is identical to the splice-loop result.
     let checkedChanged = false;
-    for (const key of removedKeys) {
+    if (removedKeys.length > 0) {
       updateIndices = true;
-      if (this.checkedSet.delete(key)) {
-        checkedChanged = true;
+      const removed = new Set(removedKeys);
+      for (const key of removedKeys) {
+        if (this.checkedSet.delete(key)) {
+          checkedChanged = true;
+        }
       }
-      const index = newViewFiles.findIndex((v) => viewFileKey(v) === key);
-      newViewFiles.splice(index, 1);
-      this.indices.delete(key);
+      newViewFiles = newViewFiles.filter((v) => !removed.has(viewFileKey(v)));
     }
     if (checkedChanged) {
       this.checkedSubject.next(new Set(this.checkedSet));
@@ -358,8 +408,28 @@ export class ViewFileService {
     if (this.filterCriteria != null) {
       filteredFiles = this.files.filter((f) => this.filterCriteria!.meetsCriteria(f));
     }
+
+    // Skip re-emitting the filtered list when its membership/order is unchanged
+    // (element-wise reference-identical to the last emission). The rendered DOM is
+    // identical either way; this lets OnPush consumers skip a needless CD pass.
+    const prevFiltered = this.filteredFilesSubject.getValue();
+    if (filteredFiles !== prevFiltered && arraysReferenceEqual(filteredFiles, prevFiltered)) {
+      return;
+    }
     this.filteredFilesSubject.next(filteredFiles);
   }
+}
+
+function arraysReferenceEqual(a: readonly ViewFile[], b: readonly ViewFile[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function modelFilesEqual(a: ModelFile, b: ModelFile): boolean {
