@@ -391,15 +391,31 @@ class CommandPipeline:
             if move_process.is_alive():
                 still_active_moves.append(move_process)
             else:
-                try:
-                    move_process.propagate_exception()
-                except Exception:
-                    self._logger.warning("Move process failed: %s", move_process.name, exc_info=True)
-                    move_key = persist_key(move_process.pair_id, move_process.file_name)
-                    self.moved_file_keys.discard(move_key)
-                for pc in self._pair_contexts:
-                    pc.local_scan_process.force_scan()
+                self._finalize_move_process(move_process)
         self.active_move_processes = still_active_moves
+
+    def _finalize_move_process(self, move_process: MoveProcess) -> None:
+        """Finalize a completed move: surface failures, discard key on failure, rescan.
+
+        A move can fail two ways: by raising (propagate_exception) or by
+        reporting a MoveFailedResult on its failed queue (silent return paths
+        such as a vanished source or a size mismatch). In both cases the moved
+        key is discarded so the next force_scan re-spawns the move (retry).
+        """
+        failed = False
+        try:
+            move_process.propagate_exception()
+        except Exception:
+            self._logger.warning("Move process failed: %s", move_process.name, exc_info=True)
+            failed = True
+        for result in move_process.pop_failed():
+            self._logger.error(f"Move failed for '{result.name}': {result.error_message}")
+            failed = True
+        if failed:
+            move_key = persist_key(move_process.pair_id, move_process.file_name)
+            self.moved_file_keys.discard(move_key)
+        for pc in self._pair_contexts:
+            pc.local_scan_process.force_scan()
 
     def propagate_exceptions(self):
         """

@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from controller.command_pipeline import CommandPipeline
+from controller.persist_keys import persist_key
 from model import ModelFile
 
 
@@ -132,3 +133,90 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         self.assertFalse(pipeline.command_queue.empty())
         self.assertIs(command, pipeline.command_queue.get())
+
+    # --- cleanup: move process failure handling (#510) ---
+
+    def _make_move_process(self, pair_id, file_name, *, failed_results=None):
+        """Create a fake finished MoveProcess for cleanup tests."""
+        move_process = MagicMock()
+        move_process.is_alive.return_value = False
+        move_process.pair_id = pair_id
+        move_process.file_name = file_name
+        move_process.name = "MoveProcess"
+        # No raised exception by default
+        move_process.propagate_exception.return_value = None
+        move_process.pop_failed.return_value = failed_results or []
+        return move_process
+
+    def test_cleanup_discards_key_when_move_reports_failure(self):
+        """A move that reports a failure via pop_failed must discard its moved key
+        and force a rescan so the move is retried."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+
+        move_key = persist_key("pair-1", "file.txt")
+        pipeline.moved_file_keys.add(move_key)
+
+        failure = MagicMock()
+        failure.name = "file.txt"
+        failure.error_message = "source does not exist"
+        move_process = self._make_move_process("pair-1", "file.txt", failed_results=[failure])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        # Key discarded -> next force_scan re-spawns the move (retry)
+        self.assertNotIn(move_key, pipeline.moved_file_keys)
+        pc.local_scan_process.force_scan.assert_called_once()
+        # Finished process removed from the active list
+        self.assertEqual([], pipeline.active_move_processes)
+
+    def test_cleanup_keeps_key_when_move_succeeds(self):
+        """A move that reports no failure must keep its moved key (no retry)."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+
+        move_key = persist_key("pair-1", "file.txt")
+        pipeline.moved_file_keys.add(move_key)
+
+        move_process = self._make_move_process("pair-1", "file.txt", failed_results=[])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        # Successful move keeps the key so it isn't re-spawned
+        self.assertIn(move_key, pipeline.moved_file_keys)
+        # A rescan still happens to pick up the moved file
+        pc.local_scan_process.force_scan.assert_called_once()
+        self.assertEqual([], pipeline.active_move_processes)
+
+    def test_cleanup_discards_key_when_move_raises(self):
+        """A move that raises (propagate_exception) must also discard its key."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+
+        move_key = persist_key("pair-1", "file.txt")
+        pipeline.moved_file_keys.add(move_key)
+
+        move_process = self._make_move_process("pair-1", "file.txt")
+        move_process.propagate_exception.side_effect = RuntimeError("boom")
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        self.assertNotIn(move_key, pipeline.moved_file_keys)
+        pc.local_scan_process.force_scan.assert_called_once()
+
+    def test_cleanup_keeps_alive_move_process(self):
+        """A still-running move process must remain in the active list untouched."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+
+        move_process = MagicMock()
+        move_process.is_alive.return_value = True
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        self.assertIn(move_process, pipeline.active_move_processes)
+        move_process.pop_failed.assert_not_called()
