@@ -397,6 +397,50 @@ class TestPersistResilience(unittest.TestCase):
         with self.assertRaises(SystemExit):
             s._persist_periodic()
 
+    def test_final_persist_failure_is_swallowed_and_logged(self):
+        """AC3: a write failure during the shutdown persist must not propagate,
+        or it would mask the original in-flight exception run() re-raises."""
+        s = self._make_bare_seedsync()
+        s.persist = MagicMock(side_effect=OSError("ENOSPC"))
+
+        s._final_persist()  # must NOT raise
+
+        s.persist.assert_called_once()
+        s.context.logger.exception.assert_called_once()
+
+    def test_final_persist_success_no_error_log(self):
+        s = self._make_bare_seedsync()
+        s.persist = MagicMock()
+
+        s._final_persist()
+
+        s.persist.assert_called_once()
+        s.context.logger.exception.assert_not_called()
+
+    def test_shutdown_cause_intentional_exit_logged_at_info(self):
+        """AC2: an intentional ServiceExit/ServiceRestart is logged at INFO, not
+        surfaced as an error."""
+        for exc in (ServiceExit(), ServiceRestart()):
+            with self.subTest(exc=type(exc).__name__):
+                s = self._make_bare_seedsync()
+                try:
+                    raise exc
+                except (ServiceExit, ServiceRestart) as e:
+                    s._log_shutdown_cause(e)
+                s.context.logger.info.assert_called_once()
+                s.context.logger.exception.assert_not_called()
+
+    def test_shutdown_cause_unexpected_error_logged_at_exception(self):
+        """AC2: a genuine crash is surfaced at ERROR/exception with a traceback,
+        not the friendly INFO line — so an abnormal shutdown is visible."""
+        s = self._make_bare_seedsync()
+        try:
+            raise RuntimeError("child thread blew up")
+        except RuntimeError as e:
+            s._log_shutdown_cause(e)
+        s.context.logger.exception.assert_called_once()
+        s.context.logger.info.assert_not_called()
+
     def test_service_exit_and_restart_are_app_errors_caught_by_shutdown_handler(self):
         """ServiceExit/ServiceRestart subclass Exception, so run()'s `except Exception`
         still catches them and the bare `raise` re-propagates them to the outer loop.
