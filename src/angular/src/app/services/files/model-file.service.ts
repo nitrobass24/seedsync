@@ -95,56 +95,64 @@ export class ModelFileService implements StreamEventHandler {
       return;
     }
 
-    if (name === this.EVENT_INIT) {
-      const init = parsed as ModelFileJson[];
-      const t0 = performance.now();
-      const newMap = new Map<string, ModelFile>();
-      for (const file of init) {
-        const modelFile = modelFileFromJson(file);
-        newMap.set(fileKey(modelFile.pair_id, modelFile.name), modelFile);
-      }
-      const t1 = performance.now();
-      this.logger.debug('ModelFile map creation took', (t1 - t0).toFixed(0), 'ms');
+    // The payload parsed, but a valid-JSON-but-wrong-shape event (e.g. model-init
+    // not an array, or model-added missing new_file) would throw in the mapping
+    // below; guard the dispatch too so one bad event is logged and skipped, not
+    // fatal to the listener.
+    try {
+      if (name === this.EVENT_INIT) {
+        const init = parsed as ModelFileJson[];
+        const t0 = performance.now();
+        const newMap = new Map<string, ModelFile>();
+        for (const file of init) {
+          const modelFile = modelFileFromJson(file);
+          newMap.set(fileKey(modelFile.pair_id, modelFile.name), modelFile);
+        }
+        const t1 = performance.now();
+        this.logger.debug('ModelFile map creation took', (t1 - t0).toFixed(0), 'ms');
 
-      this.filesSubject.next(newMap);
-    } else if (name === this.EVENT_ADDED) {
-      const added = parsed as { new_file: ModelFileJson };
-      const file = modelFileFromJson(added.new_file);
-      const key = fileKey(file.pair_id, file.name);
-      if (currentFiles.has(key)) {
-        this.logger.error('ModelFile named ' + key + ' already exists');
+        this.filesSubject.next(newMap);
+      } else if (name === this.EVENT_ADDED) {
+        const added = parsed as { new_file: ModelFileJson };
+        const file = modelFileFromJson(added.new_file);
+        const key = fileKey(file.pair_id, file.name);
+        if (currentFiles.has(key)) {
+          this.logger.error('ModelFile named ' + key + ' already exists');
+        } else {
+          const updated = new Map(currentFiles);
+          updated.set(key, file);
+          this.filesSubject.next(updated);
+          this.logger.debug('Added file: %O', file);
+        }
+      } else if (name === this.EVENT_REMOVED) {
+        const removed = parsed as { old_file: ModelFileJson };
+        const file = modelFileFromJson(removed.old_file);
+        const key = fileKey(file.pair_id, file.name);
+        if (currentFiles.has(key)) {
+          const updated = new Map(currentFiles);
+          updated.delete(key);
+          this.filesSubject.next(updated);
+          this.logger.debug('Removed file: %O', file);
+        } else {
+          this.logger.error('Failed to find ModelFile named ' + key);
+        }
+      } else if (name === this.EVENT_UPDATED) {
+        const updatedFile = parsed as { new_file: ModelFileJson };
+        const file = modelFileFromJson(updatedFile.new_file);
+        const key = fileKey(file.pair_id, file.name);
+        if (currentFiles.has(key)) {
+          const updated = new Map(currentFiles);
+          updated.set(key, file);
+          this.filesSubject.next(updated);
+          this.logger.debug('Updated file: %O', file);
+        } else {
+          this.logger.error('Failed to find ModelFile named ' + key);
+        }
       } else {
-        const updated = new Map(currentFiles);
-        updated.set(key, file);
-        this.filesSubject.next(updated);
-        this.logger.debug('Added file: %O', file);
+        this.logger.error('Unrecognized event:', name);
       }
-    } else if (name === this.EVENT_REMOVED) {
-      const removed = parsed as { old_file: ModelFileJson };
-      const file = modelFileFromJson(removed.old_file);
-      const key = fileKey(file.pair_id, file.name);
-      if (currentFiles.has(key)) {
-        const updated = new Map(currentFiles);
-        updated.delete(key);
-        this.filesSubject.next(updated);
-        this.logger.debug('Removed file: %O', file);
-      } else {
-        this.logger.error('Failed to find ModelFile named ' + key);
-      }
-    } else if (name === this.EVENT_UPDATED) {
-      const updatedFile = parsed as { new_file: ModelFileJson };
-      const file = modelFileFromJson(updatedFile.new_file);
-      const key = fileKey(file.pair_id, file.name);
-      if (currentFiles.has(key)) {
-        const updated = new Map(currentFiles);
-        updated.set(key, file);
-        this.filesSubject.next(updated);
-        this.logger.debug('Updated file: %O', file);
-      } else {
-        this.logger.error('Failed to find ModelFile named ' + key);
-      }
-    } else {
-      this.logger.error('Unrecognized event:', name);
+    } catch (e) {
+      this.logger.error('Failed to handle %s event (unexpected shape): %O', name, e);
     }
   }
 }

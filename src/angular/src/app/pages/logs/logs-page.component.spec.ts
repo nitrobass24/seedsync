@@ -1,11 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { Subject, of } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 
 import { LogsPageComponent } from './logs-page.component';
 import { LogService } from '../../services/logs/log.service';
 import { DomService } from '../../services/utils/dom.service';
+import { LoggerService } from '../../services/utils/logger.service';
 import { LogRecord, LogLevel } from '../../models/log-record';
+
+function loggerMock() {
+  return { error: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn() };
+}
 
 /**
  * Covers #516: a log-history fetch failure must render a distinct "failed to
@@ -26,6 +31,7 @@ describe('LogsPageComponent history failure state (#516)', () => {
           useValue: { logs$: new Subject(), fetchHistory: vi.fn().mockReturnValue(of([])) },
         },
         { provide: DomService, useValue: { headerHeight$: of(0) } },
+        { provide: LoggerService, useValue: loggerMock() },
       ],
     });
     fixture = TestBed.createComponent(LogsPageComponent);
@@ -64,8 +70,8 @@ describe('LogsPageComponent history failure state (#516)', () => {
 /**
  * Covers #522: the live-log buffer was unbounded and re-rendered the full list
  * per incoming SSE record. The buffer is now capped (ring-buffer front-trim of
- * the oldest) and the lists use a stable trackBy. These tests drive the live
- * subscription via a Subject-backed LogService mock.
+ * the oldest) and the lists use a stable, collision-free trackBy. These tests
+ * drive the live subscription via a Subject-backed LogService mock.
  */
 describe('LogsPageComponent live-log buffer cap (#522)', () => {
   let fixture: ComponentFixture<LogsPageComponent>;
@@ -92,6 +98,7 @@ describe('LogsPageComponent live-log buffer cap (#522)', () => {
           useValue: { logs$, fetchHistory: vi.fn().mockReturnValue(of([])) },
         },
         { provide: DomService, useValue: { headerHeight$: of(0) } },
+        { provide: LoggerService, useValue: loggerMock() },
       ],
     });
     fixture = TestBed.createComponent(LogsPageComponent);
@@ -183,5 +190,47 @@ describe('LogsPageComponent live-log buffer cap (#522)', () => {
 
     const dup = { ...entry };
     expect(component.trackHistory(0, dup)).not.toBe(key);
+  });
+});
+
+/**
+ * Exercises the real debounced search pipe so the test fails if catchError stops
+ * setting the failure flag (not just the rendered template). Uses fake timers to
+ * flush the 300ms debounce deterministically.
+ */
+describe('LogsPageComponent history fetch failure (real pipe, #516)', () => {
+  let fixture: ComponentFixture<LogsPageComponent>;
+  let component: LogsPageComponent;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    TestBed.configureTestingModule({
+      imports: [LogsPageComponent],
+      providers: [
+        {
+          provide: LogService,
+          useValue: { logs$: new Subject(), fetchHistory: vi.fn().mockReturnValue(throwError(() => new Error('boom'))) },
+        },
+        { provide: DomService, useValue: { headerHeight$: of(0) } },
+        { provide: LoggerService, useValue: loggerMock() },
+      ],
+    });
+    fixture = TestBed.createComponent(LogsPageComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges(); // ngOnInit -> initial searchChange$.next() schedules the debounce
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('flips into the failure state when fetchHistory errors', () => {
+    vi.advanceTimersByTime(300); // flush debounce -> fetchHistory errors -> catchError
+    fixture.detectChanges();
+
+    expect(component.historyLoadFailed).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Failed to load log history');
   });
 });
