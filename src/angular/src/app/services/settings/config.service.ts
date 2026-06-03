@@ -101,7 +101,7 @@ export class ConfigService {
       next: (reaction) => {
         if (reaction.success) {
           try {
-            const configJson: Config = JSON.parse(reaction.data!);
+            const configJson: Config = this.preserveRealApiKey(JSON.parse(reaction.data!));
             this.configSubject.next(configJson);
             this.syncStreamApiKey(configJson);
           } catch (e) {
@@ -122,6 +122,25 @@ export class ConfigService {
    * which would fail auth and clobber a good persisted key, so a redacted
    * value is treated as "no change" and never overwrites the stream's key.
    */
+  /**
+   * /server/config/get redacts web.api_key to the sentinel. A refresh must not
+   * clobber a real key the user entered this session — the apiKeyInterceptor
+   * reads configSnapshot.web.api_key for REST auth, so overwriting it with the
+   * sentinel would break authenticated REST calls until the next set(). Keep the
+   * existing real key when the incoming value is redacted.
+   */
+  private preserveRealApiKey(incoming: Config): Config {
+    const currentKey = this.configSubject.getValue()?.web?.api_key;
+    if (
+      incoming.web?.api_key === REDACTED_SENTINEL &&
+      currentKey &&
+      currentKey !== REDACTED_SENTINEL
+    ) {
+      return { ...incoming, web: { ...incoming.web, api_key: currentKey } };
+    }
+    return incoming;
+  }
+
   private syncStreamApiKey(config: Config | null): void {
     const apiKey = config?.web?.api_key || null;
     if (apiKey === REDACTED_SENTINEL) {

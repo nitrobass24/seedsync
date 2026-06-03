@@ -300,5 +300,28 @@ describe("ModelFileService", () => {
       expect(result!.has("file1")).toBe(true);
       expect(result!.has("file2")).toBe(true);
     });
+
+    // Valid JSON, wrong shape: parses fine but the mapping below would throw.
+    // The dispatch (not just JSON.parse) must be guarded — log and skip.
+    it("should not throw on a valid-JSON-but-wrong-shape model-init (not an array)", () => {
+      expect(() => service.onEvent("model-init", "{}")).not.toThrow();
+      expect(mockLogger.error).toHaveBeenCalled();
+
+      let result: Map<string, ModelFile> | undefined;
+      service.files$.subscribe((f) => (result = f));
+      expect(result!.size).toBe(0);
+    });
+
+    it("should not throw on a wrong-shape model-added (missing new_file)", () => {
+      service.onEvent("model-init", JSON.stringify([makeFileJson("file1")]));
+
+      expect(() => service.onEvent("model-added", "{}")).not.toThrow();
+      expect(mockLogger.error).toHaveBeenCalled();
+
+      let result: Map<string, ModelFile> | undefined;
+      service.files$.subscribe((f) => (result = f));
+      expect(result!.size).toBe(1);
+      expect(result!.has("file1")).toBe(true);
+    });
   });
 });

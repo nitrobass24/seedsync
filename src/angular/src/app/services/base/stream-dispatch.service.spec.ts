@@ -270,13 +270,14 @@ describe("StreamDispatchService", () => {
 
   it("should add jitter to the backoff delay", () => {
     vi.useFakeTimers();
-    vi.spyOn(Math, "random").mockReturnValue(1); // max jitter (1000ms)
+    // Math.random() returns [0, 1); use a value just below 1 (impossible: exactly 1).
+    vi.spyOn(Math, "random").mockReturnValue(0.999); // jitter ~999ms
     service.start();
 
     latestEventSource().simulateError();
 
-    // base (1000) + jitter (1000) = 2000ms; base alone is not enough.
-    vi.advanceTimersByTime(1999);
+    // base (1000) + jitter (~999) = ~1999ms; base alone is not enough.
+    vi.advanceTimersByTime(1998);
     expect(MockEventSource.instances.length).toBe(1);
     vi.advanceTimersByTime(1);
     expect(MockEventSource.instances.length).toBe(2);

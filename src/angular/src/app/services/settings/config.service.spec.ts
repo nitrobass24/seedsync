@@ -8,7 +8,7 @@ import { ConnectedService } from "../utils/connected.service";
 import { LoggerService } from "../utils/logger.service";
 import { RestService, WebReaction } from "../utils/rest.service";
 import { StreamDispatchService } from "../base/stream-dispatch.service";
-import { Config } from "../../models/config";
+import { Config, REDACTED_SENTINEL } from "../../models/config";
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -201,16 +201,38 @@ describe("ConfigService", () => {
   });
 
   it("should NOT push the redacted sentinel from /server/config/get to the stream", () => {
-    const config = makeConfig({ web: { port: 8080, api_key: "********" } });
+    const config = makeConfig({ web: { port: 8080, api_key: REDACTED_SENTINEL } });
     mockRestService.sendRequest.mockReturnValue(
       of({ success: true, data: JSON.stringify(config), errorMessage: null }),
     );
 
     createService();
 
-    // The redacted '********' returned by the auth-exempt config endpoint must
+    // The redacted sentinel returned by the auth-exempt config endpoint must
     // never be pushed to the stream as a credential.
-    expect(mockStreamDispatch.setApiKey).not.toHaveBeenCalledWith("********");
+    expect(mockStreamDispatch.setApiKey).not.toHaveBeenCalledWith(REDACTED_SENTINEL);
+  });
+
+  it("preserves the real api_key in the snapshot when a refresh returns the redacted sentinel", () => {
+    // Init with a web section so set() has an existing option to update.
+    mockRestService.sendRequest.mockReturnValue(
+      of({ success: true, data: JSON.stringify(makeConfig({ web: { port: 8080, api_key: "" } })), errorMessage: null }),
+    );
+    createService();
+
+    // The user enters the real key in Settings.
+    mockRestService.sendRequest.mockReturnValueOnce(of({ success: true, data: null, errorMessage: null }));
+    service.set("web", "api_key", "new-key");
+    expect(service.configSnapshot?.web?.api_key).toBe("new-key");
+
+    // A later config refresh returns the redacted sentinel. It must NOT clobber
+    // the real key the apiKeyInterceptor relies on for REST auth this session.
+    mockRestService.sendRequest.mockReturnValue(
+      of({ success: true, data: JSON.stringify(makeConfig({ web: { port: 8080, api_key: REDACTED_SENTINEL } })), errorMessage: null }),
+    );
+    connectedSubject.next(true);
+
+    expect(service.configSnapshot?.web?.api_key).toBe("new-key");
   });
 
   // --- Disconnect ---
