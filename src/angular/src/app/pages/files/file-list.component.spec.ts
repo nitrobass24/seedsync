@@ -1,15 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { BehaviorSubject, Observable, of, EMPTY } from 'rxjs';
+import { BehaviorSubject, Observable, of, EMPTY, throwError } from 'rxjs';
 import { ScrollingModule } from '@angular/cdk/scrolling';
 
 import { FileListComponent } from './file-list.component';
 import { ViewFileService } from '../../services/files/view-file.service';
 import { ViewFileOptionsService } from '../../services/files/view-file-options.service';
 import { LoggerService } from '../../services/utils/logger.service';
+import { NotificationService } from '../../services/utils/notification.service';
+import { NotificationLevel } from '../../models/notification';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
 import { ViewFileOptions, SortMethod } from '../../models/view-file-options';
 import { fileKey } from '../../services/files/file-key';
+import { FileActionEvent } from './file.component';
 
 interface MockViewFileService {
   filteredFiles$: Observable<ViewFile[]>;
@@ -30,6 +33,15 @@ interface MockViewFileService {
   bulkStop: ReturnType<typeof vi.fn>;
   bulkDeleteLocal: ReturnType<typeof vi.fn>;
   bulkDeleteRemote: ReturnType<typeof vi.fn>;
+}
+
+interface MockNotificationService {
+  show: ReturnType<typeof vi.fn>;
+  hide: ReturnType<typeof vi.fn>;
+}
+
+function makeActionEvent(file: ViewFile): FileActionEvent {
+  return { file, clearActiveAction: vi.fn() };
 }
 
 function makeViewFile(overrides: Partial<ViewFile> = {}): ViewFile {
@@ -71,6 +83,7 @@ describe('FileListComponent', () => {
   let checkedSubject: BehaviorSubject<Set<string>>;
   let optionsSubject: BehaviorSubject<ViewFileOptions>;
   let mockViewFileService: MockViewFileService;
+  let mockNotifService: MockNotificationService;
 
   beforeEach(async () => {
     filteredFilesSubject = new BehaviorSubject<ViewFile[]>([]);
@@ -104,12 +117,15 @@ describe('FileListComponent', () => {
       bulkDeleteRemote: vi.fn().mockReturnValue(EMPTY),
     };
 
+    mockNotifService = { show: vi.fn(), hide: vi.fn() };
+
     await TestBed.configureTestingModule({
       imports: [FileListComponent, ScrollingModule],
       providers: [
         { provide: ViewFileService, useValue: mockViewFileService },
         { provide: ViewFileOptionsService, useValue: { options$: optionsSubject.asObservable() } },
         { provide: LoggerService, useValue: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } },
+        { provide: NotificationService, useValue: mockNotifService },
       ],
     }).compileComponents();
 
@@ -269,7 +285,7 @@ describe('FileListComponent', () => {
     const file = makeViewFile({ name: 'queue-me.txt' });
     mockViewFileService.queue.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
 
-    component.onQueue(file);
+    component.onQueue(makeActionEvent(file));
 
     expect(mockViewFileService.queue).toHaveBeenCalledWith(file);
   });
@@ -278,7 +294,7 @@ describe('FileListComponent', () => {
     const file = makeViewFile({ name: 'stop-me.txt' });
     mockViewFileService.stop.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
 
-    component.onStop(file);
+    component.onStop(makeActionEvent(file));
 
     expect(mockViewFileService.stop).toHaveBeenCalledWith(file);
   });
@@ -287,7 +303,7 @@ describe('FileListComponent', () => {
     const file = makeViewFile({ name: 'extract-me.txt' });
     mockViewFileService.extract.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
 
-    component.onExtract(file);
+    component.onExtract(makeActionEvent(file));
 
     expect(mockViewFileService.extract).toHaveBeenCalledWith(file);
   });
@@ -296,7 +312,7 @@ describe('FileListComponent', () => {
     const file = makeViewFile({ name: 'validate-me.txt' });
     mockViewFileService.validate.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
 
-    component.onValidate(file);
+    component.onValidate(makeActionEvent(file));
 
     expect(mockViewFileService.validate).toHaveBeenCalledWith(file);
   });
@@ -305,7 +321,7 @@ describe('FileListComponent', () => {
     const file = makeViewFile({ name: 'del-local.txt' });
     mockViewFileService.deleteLocal.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
 
-    component.onDeleteLocal(file);
+    component.onDeleteLocal(makeActionEvent(file));
 
     expect(mockViewFileService.deleteLocal).toHaveBeenCalledWith(file);
   });
@@ -314,9 +330,67 @@ describe('FileListComponent', () => {
     const file = makeViewFile({ name: 'del-remote.txt' });
     mockViewFileService.deleteRemote.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
 
-    component.onDeleteRemote(file);
+    component.onDeleteRemote(makeActionEvent(file));
 
     expect(mockViewFileService.deleteRemote).toHaveBeenCalledWith(file);
+  });
+
+  // --- Single-file action error surfacing (#513) ---
+
+  it('shows a DANGER banner and clears activeAction when an action fails', () => {
+    const file = makeViewFile({ name: 'fail-me.txt' });
+    const event = makeActionEvent(file);
+    mockViewFileService.queue.mockReturnValue(
+      of({ success: false, data: null, errorMessage: 'Boom' }),
+    );
+
+    component.onQueue(event);
+
+    expect(mockNotifService.show).toHaveBeenCalledTimes(1);
+    const notif = mockNotifService.show.mock.calls[0][0];
+    expect(notif.level).toBe(NotificationLevel.DANGER);
+    expect(notif.text).toContain('Boom');
+    expect(event.clearActiveAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to a generic message when a failed reaction has no errorMessage', () => {
+    const event = makeActionEvent(makeViewFile());
+    mockViewFileService.stop.mockReturnValue(
+      of({ success: false, data: null, errorMessage: null }),
+    );
+
+    component.onStop(event);
+
+    expect(mockNotifService.show).toHaveBeenCalledTimes(1);
+    expect(mockNotifService.show.mock.calls[0][0].text).toBe('Action failed');
+    expect(event.clearActiveAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not show a banner or clear activeAction on a successful action', () => {
+    const logger = TestBed.inject(LoggerService);
+    const event = makeActionEvent(makeViewFile());
+    mockViewFileService.validate.mockReturnValue(
+      of({ success: true, data: 'ok', errorMessage: null }),
+    );
+
+    component.onValidate(event);
+
+    expect(mockNotifService.show).not.toHaveBeenCalled();
+    expect(event.clearActiveAction).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith('ok');
+  });
+
+  it('shows a DANGER banner and clears activeAction when the action stream errors', () => {
+    const event = makeActionEvent(makeViewFile());
+    mockViewFileService.deleteRemote.mockReturnValue(
+      throwError(() => new Error('net')),
+    );
+
+    component.onDeleteRemote(event);
+
+    expect(mockNotifService.show).toHaveBeenCalledTimes(1);
+    expect(mockNotifService.show.mock.calls[0][0].level).toBe(NotificationLevel.DANGER);
+    expect(event.clearActiveAction).toHaveBeenCalledTimes(1);
   });
 
   // --- Bulk actions ---
@@ -367,7 +441,7 @@ describe('FileListComponent', () => {
 
   // --- Bulk response handling ---
 
-  it('should log failures from bulk action responses', () => {
+  it('should log failures and show a DANGER banner from bulk action responses', () => {
     const logger = TestBed.inject(LoggerService);
     mockViewFileService.bulkQueue.mockReturnValue(of([
       { success: true, data: 'ok', errorMessage: null },
@@ -378,6 +452,21 @@ describe('FileListComponent', () => {
 
     expect(logger.error).toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalled();
+    expect(mockNotifService.show).toHaveBeenCalledTimes(1);
+    const notif = mockNotifService.show.mock.calls[0][0];
+    expect(notif.level).toBe(NotificationLevel.DANGER);
+    expect(notif.text).toBe('1 of 2 items failed');
+  });
+
+  it('should not show a banner when all bulk items succeed', () => {
+    mockViewFileService.bulkDeleteLocal.mockReturnValue(of([
+      { success: true, data: 'ok', errorMessage: null },
+      { success: true, data: 'ok2', errorMessage: null },
+    ]));
+
+    component.onBulkDeleteLocal();
+
+    expect(mockNotifService.show).not.toHaveBeenCalled();
   });
 
   it('should log info for successful bulk items', () => {

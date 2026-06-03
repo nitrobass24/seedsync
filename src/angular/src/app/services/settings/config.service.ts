@@ -5,7 +5,7 @@ import { ConnectedService } from '../utils/connected.service';
 import { LoggerService } from '../utils/logger.service';
 import { RestService, WebReaction } from '../utils/rest.service';
 import { StreamDispatchService } from '../base/stream-dispatch.service';
-import { Config } from '../../models/config';
+import { Config, REDACTED_SENTINEL } from '../../models/config';
 
 /** Value a config field may take (matches OptionComponent's value shape). */
 export type ConfigValue = string | number | boolean | null;
@@ -15,6 +15,11 @@ type ConfigRecord = Record<string, Record<string, ConfigValue>>;
 
 /** Sentinel value sent to the backend when the user clears a text field. */
 export const EMPTY_VALUE_SENTINEL = '__empty__';
+
+// REDACTED_SENTINEL (imported from models/config) is the value the backend
+// substitutes for web.api_key in /server/config/get responses. It must never be
+// treated as a real key — pushing it to the stream would fail auth and could
+// clobber a good persisted key.
 
 @Injectable({ providedIn: 'root' })
 export class ConfigService {
@@ -36,12 +41,18 @@ export class ConfigService {
   }
 
   constructor() {
+    // Fetch config at init independent of the stream connection.
+    // /server/config/get is auth-exempt, so config$ can populate for the UI
+    // even before (and without) an authenticated stream connection. This
+    // breaks the init-ordering deadlock where the config fetch was gated
+    // behind a stream that could never connect without the key. The key itself
+    // is NOT persisted client-side; after a reload on an auth-enabled instance
+    // the user re-enters it in Settings (which re-pushes it to the stream).
+    this.getConfig();
+
     this.connectedService.connected$.subscribe((connected) => {
       if (connected) {
         this.getConfig();
-      } else {
-        this.configSubject.next(null);
-        this.syncStreamApiKey(null);
       }
     });
   }
@@ -71,9 +82,11 @@ export class ConfigService {
             const configRecord = config as unknown as ConfigRecord;
             const newConfig = { ...config, [section]: { ...configRecord[section], [option]: value } };
             this.configSubject.next(newConfig);
-            // Propagate API key changes to the SSE stream immediately
+            // Propagate API key changes to the SSE stream immediately. set() is
+            // the only place the real (un-redacted) key is available client-side.
             if (section === 'web' && option === 'api_key') {
-              this.syncStreamApiKey(newConfig);
+              const realKey = String(value ?? '') || null;
+              this.setStreamApiKey(realKey);
             }
           }
         }
@@ -88,25 +101,55 @@ export class ConfigService {
       next: (reaction) => {
         if (reaction.success) {
           try {
-            const configJson: Config = JSON.parse(reaction.data!);
+            const configJson: Config = this.preserveRealApiKey(JSON.parse(reaction.data!));
             this.configSubject.next(configJson);
             this.syncStreamApiKey(configJson);
           } catch (e) {
             this.logger.error('Failed to parse config: %O', e);
             this.configSubject.next(null);
-            this.syncStreamApiKey(null);
           }
         } else {
           this.logger.error('Failed to get config: %s', reaction.errorMessage);
           this.configSubject.next(null);
-          this.syncStreamApiKey(null);
         }
       },
     });
   }
 
+  /**
+   * Push an API key from a fetched config to the stream, guarding against the
+   * redacted sentinel. /server/config/get redacts web.api_key to '********',
+   * which would fail auth and clobber a good persisted key, so a redacted
+   * value is treated as "no change" and never overwrites the stream's key.
+   */
+  /**
+   * /server/config/get redacts web.api_key to the sentinel. A refresh must not
+   * clobber a real key the user entered this session — the apiKeyInterceptor
+   * reads configSnapshot.web.api_key for REST auth, so overwriting it with the
+   * sentinel would break authenticated REST calls until the next set(). Keep the
+   * existing real key when the incoming value is redacted.
+   */
+  private preserveRealApiKey(incoming: Config): Config {
+    const currentKey = this.configSubject.getValue()?.web?.api_key;
+    if (
+      incoming.web?.api_key === REDACTED_SENTINEL &&
+      currentKey &&
+      currentKey !== REDACTED_SENTINEL
+    ) {
+      return { ...incoming, web: { ...incoming.web, api_key: currentKey } };
+    }
+    return incoming;
+  }
+
   private syncStreamApiKey(config: Config | null): void {
     const apiKey = config?.web?.api_key || null;
+    if (apiKey === REDACTED_SENTINEL) {
+      return;
+    }
+    this.setStreamApiKey(apiKey);
+  }
+
+  private setStreamApiKey(apiKey: string | null): void {
     // Use injector.get() to break circular dependency:
     // StreamDispatchService -> ConnectedService -> ConfigService
     const streamDispatch = this.injector.get(StreamDispatchService);

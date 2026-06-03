@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { Observable, of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 
 import { PathPair } from '../../models/path-pair';
 import { ArrInstance } from '../../models/arr-instance';
@@ -8,6 +8,7 @@ interface PathPairsServiceLike {
   create(pair: Omit<PathPair, 'id'>): Observable<PathPair | null>;
   update(pair: PathPair): Observable<PathPair | null>;
   remove(pairId: string): Observable<boolean>;
+  refresh(): void;
 }
 
 function makePair(overrides: Partial<PathPair> = {}): PathPair {
@@ -47,6 +48,7 @@ class PathPairsLogic {
   addForm: Omit<PathPair, 'id'> = this.emptyForm();
   confirmingDeleteId: string | null = null;
   arrPickerPairId: string | null = null;
+  errorMessage: string | null = null;
   private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private service: PathPairsServiceLike) {}
@@ -110,11 +112,27 @@ class PathPairsLogic {
   }
 
   onToggleEnabled(pair: PathPair, enabled: boolean): void {
-    this.service.update({ ...pair, enabled }).subscribe();
+    this.applyToggle({ ...pair, enabled });
   }
 
   onToggleAutoQueue(pair: PathPair, autoQueue: boolean): void {
-    this.service.update({ ...pair, auto_queue: autoQueue }).subscribe();
+    this.applyToggle({ ...pair, auto_queue: autoQueue });
+  }
+
+  private applyToggle(updated: PathPair): void {
+    this.errorMessage = null;
+    this.service.update(updated).subscribe({
+      next: (result) => {
+        if (!result) {
+          this.errorMessage = 'Failed to update path pair. Please try again.';
+          this.service.refresh();
+        }
+      },
+      error: () => {
+        this.errorMessage = 'Failed to update path pair. Please try again.';
+        this.service.refresh();
+      },
+    });
   }
 
   // --- Arr targets ---
@@ -200,6 +218,7 @@ describe('PathPairsComponent logic', () => {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     remove: ReturnType<typeof vi.fn>;
+    refresh: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -207,6 +226,7 @@ describe('PathPairsComponent logic', () => {
       create: vi.fn().mockReturnValue(of(makePair({ id: '2', name: 'New' }))),
       update: vi.fn().mockReturnValue(of(makePair({ enabled: false }))),
       remove: vi.fn().mockReturnValue(of(true)),
+      refresh: vi.fn(),
     };
     component = new PathPairsLogic(mockService as unknown as PathPairsServiceLike);
   });
@@ -286,6 +306,36 @@ describe('PathPairsComponent logic', () => {
     component.onSaveEdit();
     expect(mockService.update).toHaveBeenCalled();
     expect(component.editingId).toBe('p1');
+  });
+
+  describe('toggle enable / auto-queue (#516)', () => {
+    it('clears the error and does not refresh on a successful toggle', () => {
+      mockService.update.mockReturnValue(of(makePair({ enabled: false })));
+
+      component.onToggleEnabled(makePair(), false);
+
+      expect(mockService.update).toHaveBeenCalled();
+      expect(component.errorMessage).toBeNull();
+      expect(mockService.refresh).not.toHaveBeenCalled();
+    });
+
+    it('sets an error and refreshes to reconcile when a toggle returns null', () => {
+      mockService.update.mockReturnValue(of(null));
+
+      component.onToggleAutoQueue(makePair(), true);
+
+      expect(component.errorMessage).toBe('Failed to update path pair. Please try again.');
+      expect(mockService.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('sets an error and refreshes when a toggle errors (e.g. network failure)', () => {
+      mockService.update.mockReturnValue(throwError(() => new Error('network')));
+
+      component.onToggleEnabled(makePair(), true);
+
+      expect(component.errorMessage).toBe('Failed to update path pair. Please try again.');
+      expect(mockService.refresh).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('arr target attachment', () => {

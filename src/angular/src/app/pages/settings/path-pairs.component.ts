@@ -154,15 +154,34 @@ export class PathPairsComponent implements OnDestroy {
   // --- Toggle fields ---
 
   onToggleEnabled(pair: PathPair, enabled: boolean): void {
-    this.pathPairsService.update({ ...pair, enabled }).pipe(
-      takeUntilDestroyed(this.destroyRef),
-    ).subscribe();
+    this.applyToggle({ ...pair, enabled });
   }
 
   onToggleAutoQueue(pair: PathPair, autoQueue: boolean): void {
-    this.pathPairsService.update({ ...pair, auto_queue: autoQueue }).pipe(
+    this.applyToggle({ ...pair, auto_queue: autoQueue });
+  }
+
+  private applyToggle(updated: PathPair): void {
+    // The checkbox is bound one-way ([checked]="pair.enabled") with a (change)
+    // handler, so a failed update leaves it visually flipped vs the server.
+    // Surface an error and refresh() to reconcile the UI on any failure.
+    this.errorMessage = null;
+    this.pathPairsService.update(updated).pipe(
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe();
+    ).subscribe({
+      next: (result) => {
+        if (!result) {
+          this.errorMessage = 'Failed to update path pair. Please try again.';
+          this.pathPairsService.refresh();
+        }
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.errorMessage = 'Failed to update path pair. Please try again.';
+        this.pathPairsService.refresh();
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   // --- Arr targets ---

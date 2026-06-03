@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { BulkActionBarComponent } from './bulk-action-bar.component';
 
@@ -65,24 +65,32 @@ describe('BulkActionBarComponent', () => {
     expect(emitted).toBe(true);
   });
 
-  it('should emit deleteLocalEvent when Delete Local button is clicked', () => {
-    let emitted = false;
-    component.deleteLocalEvent.subscribe(() => (emitted = true));
+  it('should emit deleteLocalEvent only on the second Delete Local click', () => {
+    let emitCount = 0;
+    component.deleteLocalEvent.subscribe(() => (emitCount += 1));
 
-    const btn = findButtonByText('Delete Local');
-    btn.click();
+    // First click arms the confirm, does NOT emit
+    findButtonByText('Delete Local').click();
+    expect(emitCount).toBe(0);
 
-    expect(emitted).toBe(true);
+    // Second click emits
+    fixture.detectChanges();
+    findButtonByText('Confirm?').click();
+    expect(emitCount).toBe(1);
   });
 
-  it('should emit deleteRemoteEvent when Delete Remote button is clicked', () => {
-    let emitted = false;
-    component.deleteRemoteEvent.subscribe(() => (emitted = true));
+  it('should emit deleteRemoteEvent only on the second Delete Remote click', () => {
+    let emitCount = 0;
+    component.deleteRemoteEvent.subscribe(() => (emitCount += 1));
 
-    const btn = findButtonByText('Delete Remote');
-    btn.click();
+    // First click arms the confirm, does NOT emit
+    findButtonByText('Delete Remote').click();
+    expect(emitCount).toBe(0);
 
-    expect(emitted).toBe(true);
+    // Second click emits
+    fixture.detectChanges();
+    findButtonByText('Confirm?').click();
+    expect(emitCount).toBe(1);
   });
 
   it('should emit clearEvent when Clear button is clicked', () => {
@@ -98,5 +106,113 @@ describe('BulkActionBarComponent', () => {
   it('should render exactly five buttons', () => {
     const buttons = fixture.nativeElement.querySelectorAll('button');
     expect(buttons.length).toBe(5);
+  });
+});
+
+describe('BulkActionBarComponent inline bulk delete confirmation', () => {
+  let fixture: ComponentFixture<BulkActionBarComponent>;
+  let component: BulkActionBarComponent;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+
+    await TestBed.configureTestingModule({
+      imports: [BulkActionBarComponent],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(BulkActionBarComponent);
+    fixture.componentRef.setInput('count', 3);
+    fixture.detectChanges();
+    component = fixture.componentInstance;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function findButtonByText(text: string): HTMLButtonElement {
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
+    const btn = buttons.find((el) => el.textContent?.includes(text));
+    expect(btn).toBeTruthy();
+    return btn!;
+  }
+
+  it('first click on Delete Local sets confirming state and does not emit', () => {
+    const spy = vi.spyOn(component.deleteLocalEvent, 'emit');
+
+    component.onDeleteLocal();
+
+    expect(component.confirmingDelete).toBe('local');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('second click on Delete Local emits event and clears state', () => {
+    const spy = vi.spyOn(component.deleteLocalEvent, 'emit');
+
+    component.onDeleteLocal();
+    expect(component.confirmingDelete).toBe('local');
+
+    component.onDeleteLocal();
+    expect(component.confirmingDelete).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('first click on Delete Remote sets confirming state and does not emit', () => {
+    const spy = vi.spyOn(component.deleteRemoteEvent, 'emit');
+
+    component.onDeleteRemote();
+
+    expect(component.confirmingDelete).toBe('remote');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('second click on Delete Remote emits event and clears state', () => {
+    const spy = vi.spyOn(component.deleteRemoteEvent, 'emit');
+
+    component.onDeleteRemote();
+    expect(component.confirmingDelete).toBe('remote');
+
+    component.onDeleteRemote();
+    expect(component.confirmingDelete).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirming state auto-resets after 3 seconds', () => {
+    component.onDeleteLocal();
+    expect(component.confirmingDelete).toBe('local');
+
+    vi.advanceTimersByTime(3000);
+    expect(component.confirmingDelete).toBeNull();
+  });
+
+  it('clicking Delete Local while confirming remote switches to local', () => {
+    component.onDeleteRemote();
+    expect(component.confirmingDelete).toBe('remote');
+
+    component.onDeleteLocal();
+    expect(component.confirmingDelete).toBe('local');
+  });
+
+  it("button label switches to 'Confirm?' after first Delete Local click", () => {
+    // Drive through a real DOM click so OnPush marks the view dirty.
+    findButtonByText('Delete Local').click();
+    fixture.detectChanges();
+
+    expect(component.confirmingDelete).toBe('local');
+    const btn = findButtonByText('Confirm?');
+    expect(btn.textContent).toContain('Confirm?');
+  });
+
+  it('ngOnDestroy clears the confirm timer so no reset fires', () => {
+    component.onDeleteLocal();
+    expect(component.confirmingDelete).toBe('local');
+
+    component.ngOnDestroy();
+    vi.advanceTimersByTime(5000);
+
+    // State stays as-is (timer was cleared, no reset happened)
+    expect(component.confirmingDelete).toBe('local');
   });
 });

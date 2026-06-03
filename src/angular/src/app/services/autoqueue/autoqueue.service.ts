@@ -105,11 +105,18 @@ export class AutoQueueService {
     this.logger.debug('Getting autoqueue patterns...');
     this.restService.sendRequest(this.AUTOQUEUE_GET_URL).subscribe({
       next: (reaction) => {
-        if (reaction.success) {
+        if (!reaction.success) {
+          this.patternsSubject.next([]);
+          return;
+        }
+        try {
           const parsed: AutoQueuePatternJson[] = JSON.parse(reaction.data!);
           const newPatterns: AutoQueuePattern[] = parsed.map((p) => ({ pattern: p.pattern }));
           this.patternsSubject.next(newPatterns);
-        } else {
+        } catch (e) {
+          // Malformed response must not throw inside the subscribe callback;
+          // log and fall back to an empty list (mirrors the SSE-handler guards).
+          this.logger.error('Failed to parse autoqueue patterns: %O', e);
           this.patternsSubject.next([]);
         }
       },

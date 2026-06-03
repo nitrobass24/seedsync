@@ -175,7 +175,7 @@ describe('FileComponent inline delete confirmation', () => {
     component.onDeleteLocal(file);
     expect(component.confirmingDelete).toBeNull();
     expect(component.activeAction).toBe(FileAction.DELETE_LOCAL);
-    expect(spy).toHaveBeenCalledWith(file);
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ file }));
   });
 
   it('first click on delete remote sets confirming state', () => {
@@ -193,7 +193,7 @@ describe('FileComponent inline delete confirmation', () => {
 
     expect(component.confirmingDelete).toBeNull();
     expect(component.activeAction).toBe(FileAction.DELETE_REMOTE);
-    expect(spy).toHaveBeenCalledWith(file);
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ file }));
   });
 
   it('confirming state auto-resets after 3 seconds', () => {
@@ -254,5 +254,68 @@ describe('FileComponent inline delete confirmation', () => {
     vi.advanceTimersByTime(5000);
     // State stays as-is (timer was cleared, no reset happened)
     expect(component.confirmingDelete).toBe('local');
+  });
+});
+
+describe('FileComponent action events', () => {
+  let fixture: ComponentFixture<FileComponent>;
+  let component: FileComponent;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [FileComponent],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(FileComponent);
+    fixture.componentRef.setInput('file', makeViewFile());
+    fixture.componentRef.setInput('options', of({ nameFilter: '', statusFilter: '' }));
+    fixture.detectChanges();
+    component = fixture.componentInstance;
+  });
+
+  it('clearActiveAction resets activeAction to null', () => {
+    component.activeAction = FileAction.QUEUE;
+    component.clearActiveAction();
+    expect(component.activeAction).toBeNull();
+  });
+
+  it.each([
+    ['onQueue', 'queueEvent'],
+    ['onStop', 'stopEvent'],
+    ['onExtract', 'extractEvent'],
+    ['onValidate', 'validateEvent'],
+  ] as const)(
+    '%s emits an event carrying the file and a clearActiveAction callback',
+    (method, eventName) => {
+      const file = makeViewFile();
+      const spy = vi.spyOn(component[eventName], 'emit');
+
+      component[method](file);
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      const payload = spy.mock.calls[0][0];
+      expect(payload.file).toBe(file);
+      expect(typeof payload.clearActiveAction).toBe('function');
+
+      // Action is active until the callback fires.
+      expect(component.activeAction).not.toBeNull();
+      payload.clearActiveAction();
+      expect(component.activeAction).toBeNull();
+    },
+  );
+
+  it('delete emits a clearActiveAction callback that resets activeAction', () => {
+    const file = makeViewFile();
+    const spy = vi.spyOn(component.deleteLocalEvent, 'emit');
+
+    // Double-click to confirm and emit.
+    component.onDeleteLocal(file);
+    component.onDeleteLocal(file);
+
+    expect(component.activeAction).toBe(FileAction.DELETE_LOCAL);
+    const payload = spy.mock.calls[0][0];
+    expect(payload.file).toBe(file);
+    payload.clearActiveAction();
+    expect(component.activeAction).toBeNull();
   });
 });

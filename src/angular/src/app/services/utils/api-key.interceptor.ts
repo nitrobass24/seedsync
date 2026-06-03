@@ -2,6 +2,7 @@ import { HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 
 import { ConfigService } from '../settings/config.service';
+import { REDACTED_SENTINEL } from '../../models/config';
 
 export const apiKeyInterceptor: HttpInterceptorFn = (req, next) => {
   // Only attach the API key to internal backend /server/* requests
@@ -11,8 +12,12 @@ export const apiKeyInterceptor: HttpInterceptorFn = (req, next) => {
   }
 
   const configService = inject(ConfigService);
-  const config = configService.configSnapshot;
-  const apiKey = config?.web?.api_key;
+  const snapshotKey = configService.configSnapshot?.web?.api_key;
+
+  // /server/config/get redacts web.api_key to '********'; never send the
+  // redacted sentinel as a credential. The real key is only present in the
+  // snapshot during the session in which the user entered it in Settings.
+  const apiKey = snapshotKey === REDACTED_SENTINEL ? null : snapshotKey;
 
   if (apiKey) {
     const authReq = req.clone({

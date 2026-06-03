@@ -23,7 +23,13 @@
     </select>
   </div>
 
-  @if (historyLoaded && historyRecords.length > 0) {
+  @if (historyLoaded && historyLoadFailed) {
+    <div class="history-section">
+      <div class="history-header">Log History</div>
+      <p class="history-load-error" role="alert">Failed to load log history. Check the connection and try again.</p>
+    </div>
+    <hr class="log-divider" />
+  } @else if (historyLoaded && historyRecords.length > 0) {
     <div class="history-section">
       <div class="history-header">Log History</div>
       @for (entry of historyRecords; track $index) {

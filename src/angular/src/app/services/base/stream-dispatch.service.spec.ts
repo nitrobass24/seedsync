@@ -82,6 +82,7 @@ describe("StreamDispatchService", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     (globalThis as unknown as { EventSource: typeof EventSource }).EventSource = originalEventSource;
   });
 
@@ -186,27 +187,100 @@ describe("StreamDispatchService", () => {
 
   // --- Reconnection ---
 
-  it("should reconnect after error with retry delay", () => {
+  it("should reconnect after error with the base backoff delay", () => {
     vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0); // no jitter
     service.start();
     expect(MockEventSource.instances.length).toBe(1);
 
     latestEventSource().simulateError();
     expect(MockEventSource.instances.length).toBe(1);
 
-    vi.advanceTimersByTime(3000);
+    vi.advanceTimersByTime(1000);
     expect(MockEventSource.instances.length).toBe(2);
-
   });
 
-  it("should not reconnect before retry interval", () => {
+  it("should not reconnect before the base backoff interval", () => {
     vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0); // no jitter
     service.start();
     latestEventSource().simulateError();
 
-    vi.advanceTimersByTime(2999);
+    vi.advanceTimersByTime(999);
     expect(MockEventSource.instances.length).toBe(1);
+  });
 
+  it("should use exponential backoff across successive errors", () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0); // no jitter
+    service.start();
+
+    // First error -> reconnect after ~base (1000ms)
+    latestEventSource().simulateError();
+    vi.advanceTimersByTime(1000);
+    expect(MockEventSource.instances.length).toBe(2);
+
+    // Second error -> backoff doubles to ~2*base (2000ms)
+    latestEventSource().simulateError();
+    vi.advanceTimersByTime(1000);
+    // base alone is not enough to reconnect now
+    expect(MockEventSource.instances.length).toBe(2);
+    vi.advanceTimersByTime(1000);
+    expect(MockEventSource.instances.length).toBe(3);
+  });
+
+  it("should cap the backoff at the maximum interval", () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0); // no jitter
+    service.start();
+
+    // Fail many times so the exponential term would far exceed the cap.
+    for (let i = 0; i < 10; i++) {
+      latestEventSource().simulateError();
+      vi.advanceTimersByTime(30000); // advance by the max each time
+    }
+    const countAfterCapping = MockEventSource.instances.length;
+
+    // One more error: even advancing only by the max must reconnect (capped).
+    latestEventSource().simulateError();
+    vi.advanceTimersByTime(30000);
+    expect(MockEventSource.instances.length).toBe(countAfterCapping + 1);
+  });
+
+  it("should reset backoff to base after a successful open", () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0); // no jitter
+    service.start();
+
+    // Fail a few times to grow the backoff.
+    latestEventSource().simulateError();
+    vi.advanceTimersByTime(1000); // attempt 1: base
+    latestEventSource().simulateError();
+    vi.advanceTimersByTime(2000); // attempt 2: 2*base
+    expect(MockEventSource.instances.length).toBe(3);
+
+    // A successful open resets the backoff counter.
+    latestEventSource().simulateOpen();
+
+    // A fresh error should now reconnect after ~base again.
+    latestEventSource().simulateError();
+    vi.advanceTimersByTime(1000);
+    expect(MockEventSource.instances.length).toBe(4);
+  });
+
+  it("should add jitter to the backoff delay", () => {
+    vi.useFakeTimers();
+    // Math.random() returns [0, 1); use a value just below 1 (impossible: exactly 1).
+    vi.spyOn(Math, "random").mockReturnValue(0.999); // jitter ~999ms
+    service.start();
+
+    latestEventSource().simulateError();
+
+    // base (1000) + jitter (~999) = ~1999ms; base alone is not enough.
+    vi.advanceTimersByTime(1998);
+    expect(MockEventSource.instances.length).toBe(1);
+    vi.advanceTimersByTime(1);
+    expect(MockEventSource.instances.length).toBe(2);
   });
 
   // --- API key ---

@@ -21,6 +21,7 @@ import { of } from 'rxjs';
 import { LogService, LogHistoryEntry } from '../../services/logs/log.service';
 import { LogRecord, LogLevel } from '../../models/log-record';
 import { DomService } from '../../services/utils/dom.service';
+import { LoggerService } from '../../services/utils/logger.service';
 
 @Component({
   selector: 'app-logs-page',
@@ -38,6 +39,7 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   private readonly logService = inject(LogService);
   private readonly domService = inject(DomService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly logger = inject(LoggerService);
 
   readonly headerHeight$ = this.domService.headerHeight$;
 
@@ -46,6 +48,7 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   searchQuery = '';
   levelFilter = '';
   historyLoaded = false;
+  historyLoadFailed = false;
 
   showScrollToTopButton = false;
   showScrollToBottomButton = false;
@@ -78,13 +81,23 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
 
     this.searchChange$.pipe(
       debounceTime(300),
-      switchMap(() => this.logService.fetchHistory({
-        search: this.searchQuery || undefined,
-        level: this.levelFilter || undefined,
-        limit: 500,
-      }).pipe(
-        catchError(() => of([] as LogHistoryEntry[]))
-      )),
+      switchMap(() => {
+        // Reset the failure flag per search; catchError sets it on a real fetch
+        // failure so the template can distinguish "failed to load" from "no
+        // matching history" (both otherwise yield an empty list).
+        this.historyLoadFailed = false;
+        return this.logService.fetchHistory({
+          search: this.searchQuery || undefined,
+          level: this.levelFilter || undefined,
+          limit: 500,
+        }).pipe(
+          catchError((err) => {
+            this.logger.error('Failed to load log history: %O', err);
+            this.historyLoadFailed = true;
+            return of([] as LogHistoryEntry[]);
+          })
+        );
+      }),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((entries) => {
       this.historyRecords = entries;
