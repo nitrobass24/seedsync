@@ -3,13 +3,24 @@
  * Note: Naming convention matches that used in the JSON.
  */
 
-export interface General {
+/**
+ * The value any single config field may hold. Every section field is one of
+ * these, which lets a section be read as a string-keyed record for the
+ * dynamic section/option access used by ConfigService.set without an
+ * `as unknown as` cast.
+ */
+export type ConfigValue = string | number | boolean | null;
+
+/** Common shape of every config section: a string-keyed bag of ConfigValues. */
+export type ConfigSection = Record<string, ConfigValue>;
+
+export interface General extends ConfigSection {
   log_level: string | null;
   verbose: boolean | null;
   exclude_patterns: string | null;
 }
 
-export interface Lftp {
+export interface Lftp extends ConfigSection {
   remote_address: string | null;
   remote_username: string | null;
   remote_password: string | null;
@@ -34,7 +45,7 @@ export interface Lftp {
   net_reconnect_interval_multiplier: number | null;
 }
 
-export interface Controller {
+export interface Controller extends ConfigSection {
   interval_ms_remote_scan: number | null;
   interval_ms_local_scan: number | null;
   interval_ms_downloading_scan: number | null;
@@ -44,23 +55,23 @@ export interface Controller {
   use_staging: boolean | null;
 }
 
-export interface Web {
+export interface Web extends ConfigSection {
   port: number | null;
   api_key: string | null;
 }
 
-export interface AutoQueue {
+export interface AutoQueue extends ConfigSection {
   enabled: boolean | null;
   patterns_only: boolean | null;
   auto_extract: boolean | null;
   auto_delete_remote: boolean | null;
 }
 
-export interface Logging {
+export interface Logging extends ConfigSection {
   log_format: string | null;
 }
 
-export interface Notifications {
+export interface Notifications extends ConfigSection {
   webhook_url: string | null;
   notify_on_download_start: boolean | null;
   notify_on_download_complete: boolean | null;
@@ -72,7 +83,7 @@ export interface Notifications {
   telegram_chat_id: string | null;
 }
 
-export interface Validate {
+export interface Validate extends ConfigSection {
   enabled: boolean | null;
   algorithm: string | null;
   auto_validate: boolean | null;
@@ -82,7 +93,10 @@ export interface Validate {
 /** Sentinel value the backend uses to mask sensitive fields in API responses. */
 export const REDACTED_SENTINEL = '********';
 
-export interface Config {
+// Index signature lets a Config be read as a record of sections keyed by a
+// runtime string (used by ConfigService.set), without an `as unknown as` cast.
+// Each section already satisfies ConfigSection, so this is type-accurate.
+export interface Config extends Record<string, ConfigSection> {
   general: General;
   lftp: Lftp;
   controller: Controller;

@@ -4,19 +4,14 @@ from __future__ import annotations
 
 import os
 import threading
-from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
-from enum import Enum
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    pass
-
-from common import AppOneShotProcess, AppProcess, Constants, Context, MultiprocessingLogger
+from common import AppProcess, Constants, Context, MultiprocessingLogger
 from lftp import Lftp
 from model import IModelListener, Model, ModelFile
 
 from .command_pipeline import CommandPipeline
+from .commands import MAX_CONCURRENT_COMMAND_PROCESSES, Command, CommandProcessWrapper
 from .controller_persist import ControllerPersist
 
 # my libs
@@ -25,6 +20,7 @@ from .model_builder import ModelBuilder
 from .model_registry import ModelRegistry
 from .model_updater import ModelUpdater
 from .pair_context import ControllerError, PairContext, configure_lftp, validate_config
+from .persist_sync import PersistSync
 from .scan import ActiveScanner, LocalScanner, RemoteScanner, ScannerProcess
 from .validate import ValidateProcess
 
@@ -34,54 +30,12 @@ class Controller:
     Top-level class that controls the behaviour of the app
     """
 
-    class Command:
-        """
-        Class by which clients of Controller can request Actions to be executed
-        Supports callbacks by which clients can be notified of action success/failure
-        Note: callbacks will be executed in Controller thread, so any heavy computation
-              should be moved out of the callback
-        """
-
-        class Action(Enum):
-            QUEUE = 0
-            STOP = 1
-            EXTRACT = 2
-            DELETE_LOCAL = 3
-            DELETE_REMOTE = 4
-            VALIDATE = 5
-
-        class ICallback(ABC):
-            """Command callback interface"""
-
-            @abstractmethod
-            def on_success(self):
-                """Called on successful completion of action"""
-                pass
-
-            @abstractmethod
-            def on_failure(self, error: str):
-                """Called on action failure"""
-                pass
-
-        def __init__(self, action: Action, filename: str, pair_id: str | None = None):
-            self.action = action
-            self.filename = filename
-            self.pair_id = pair_id
-            self.callbacks: list[Controller.Command.ICallback] = []
-
-        def add_callback(self, callback: ICallback):
-            self.callbacks.append(callback)
-
-    class CommandProcessWrapper:
-        """
-        Wraps any one-shot command processes launched by the controller
-        """
-
-        def __init__(self, process: AppOneShotProcess, post_callback: Callable[[], None]):
-            self.process = process
-            self.post_callback = post_callback
-
-    MAX_CONCURRENT_COMMAND_PROCESSES = 8
+    # Re-exported from .commands so existing Controller.Command,
+    # Controller.CommandProcessWrapper, and Controller.MAX_CONCURRENT_COMMAND_PROCESSES
+    # references resolve to the same objects shared with CommandPipeline.
+    Command = Command
+    CommandProcessWrapper = CommandProcessWrapper
+    MAX_CONCURRENT_COMMAND_PROCESSES = MAX_CONCURRENT_COMMAND_PROCESSES
 
     def __init__(self, context: Context, persist: ControllerPersist):
         self.__context = context
@@ -113,9 +67,11 @@ class Controller:
         self.__validate_process = ValidateProcess()
         self.__validate_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
+        # Persist sync is a standalone collaborator so the pipeline and updater
+        # share the exact same instance with no construction-order placeholder.
+        self.__persist_sync = PersistSync(self.__pair_contexts, self.__persist)
+
         # Command pipeline owns the queue, active processes, and move state.
-        # Use a lambda placeholder for sync_persist_callback; it will be
-        # replaced once the ModelUpdater is created (chicken-and-egg).
         self.__pipeline = CommandPipeline(
             pair_contexts=self.__pair_contexts,
             registry=self.__registry,
@@ -126,7 +82,7 @@ class Controller:
             extract_process=self.__extract_process,
             validate_process=self.__validate_process,
             logger=self.logger,
-            sync_persist_callback=lambda: None,
+            sync_persist_callback=self.__persist_sync.sync,
         )
 
         # Model updater owns the per-cycle update loop
@@ -140,12 +96,11 @@ class Controller:
             context=self.__context,
             password=self.__password,
             logger=self.logger,
+            persist_sync=self.__persist_sync,
         )
-        # Now wire the real callback into the pipeline
-        self.__pipeline.sync_persist_callback = self.__updater.sync_persist_to_all_builders
 
         # Seed each builder with filtered persist state
-        self.__updater.sync_persist_to_all_builders()
+        self.__persist_sync.sync()
 
         # Flag for hot-reloading LFTP tuning settings (set from REST thread)
         self.__needs_lftp_reconfigure = threading.Event()

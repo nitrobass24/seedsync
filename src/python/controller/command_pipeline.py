@@ -13,15 +13,12 @@ import logging
 import os
 from collections.abc import Callable
 from queue import Queue
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .controller import Controller
 
 from common import AppError, AppProcess, Context, MultiprocessingLogger
 from lftp import LftpError
 from model import ModelError, ModelFile
 
+from .commands import MAX_CONCURRENT_COMMAND_PROCESSES, Command, CommandProcessWrapper
 from .controller_persist import ControllerPersist
 from .delete import DeleteLocalProcess, DeleteRemoteProcess
 from .exclude_patterns import parse_exclude_patterns
@@ -65,10 +62,10 @@ class CommandPipeline:
         self.sync_persist_callback = sync_persist_callback
 
         # The command queue
-        self.command_queue: Queue[Controller.Command] = Queue()
+        self.command_queue: Queue[Command] = Queue()
 
         # Keep track of active command processes (shared)
-        self.active_command_processes: list[Controller.CommandProcessWrapper] = []
+        self.active_command_processes: list[CommandProcessWrapper] = []
 
         # Keep track of active move processes (staging -> final, shared)
         self.active_move_processes: list[MoveProcess] = []
@@ -82,25 +79,19 @@ class CommandPipeline:
         # validate worker is surfaced once at ERROR rather than every cycle.
         self.__reported_dead_workers: set[int] = set()
 
-    def queue(self, command: Controller.Command) -> None:
+    def queue(self, command: Command) -> None:
         """Put a command on the queue for processing."""
         self.command_queue.put(command)
 
     def step(self):
-        """Process commands from queue.
+        """Process commands from queue."""
 
-        References Controller.Command, Controller.Command.Action,
-        Controller.MAX_CONCURRENT_COMMAND_PROCESSES, and
-        Controller.CommandProcessWrapper which remain in Controller.
-        """
-        from .controller import Controller
-
-        def _notify_failure(_command: Controller.Command, _msg: str):
+        def _notify_failure(_command: Command, _msg: str):
             self._logger.warning(f"Command failed. {_msg}")
             for _callback in _command.callbacks:
                 _callback.on_failure(_msg)
 
-        deferred: list[Controller.Command] = []
+        deferred: list[Command] = []
 
         while not self.command_queue.empty():
             command = self.command_queue.get()
@@ -117,7 +108,7 @@ class CommandPipeline:
                 _notify_failure(command, f"File '{command.filename}' not found")
                 continue
 
-            success = self._dispatch_command(command, file, pc, deferred, _notify_failure, Controller)
+            success = self._dispatch_command(command, file, pc, deferred, _notify_failure)
 
             if not success:
                 continue
@@ -130,25 +121,20 @@ class CommandPipeline:
 
     def _dispatch_command(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        deferred: list[Controller.Command],
-        _notify_failure: Callable[[Controller.Command, str], None],
-        controller_cls: type[Controller],
+        deferred: list[Command],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Dispatch a command to the appropriate handler. Returns True on success."""
-        Action = controller_cls.Command.Action
+        Action = Command.Action
         handlers = {
             Action.QUEUE: lambda: self._handle_queue(command, file, pc, _notify_failure),
             Action.STOP: lambda: self._handle_stop(command, file, pc, _notify_failure),
             Action.EXTRACT: lambda: self._handle_extract(command, file, pc, _notify_failure),
-            Action.DELETE_LOCAL: lambda: self._handle_delete_local(
-                command, file, pc, deferred, _notify_failure, controller_cls
-            ),
-            Action.DELETE_REMOTE: lambda: self._handle_delete_remote(
-                command, file, pc, deferred, _notify_failure, controller_cls
-            ),
+            Action.DELETE_LOCAL: lambda: self._handle_delete_local(command, file, pc, deferred, _notify_failure),
+            Action.DELETE_REMOTE: lambda: self._handle_delete_remote(command, file, pc, deferred, _notify_failure),
             Action.VALIDATE: lambda: self._handle_validate(command, file, pc, _notify_failure),
         }
         handler = handlers.get(command.action)
@@ -158,10 +144,10 @@ class CommandPipeline:
 
     def _handle_queue(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        _notify_failure: Callable[[Controller.Command, str], None],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the QUEUE action. Returns True on success, False on failure."""
         if file.remote_size is None:
@@ -177,10 +163,10 @@ class CommandPipeline:
 
     def _handle_stop(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        _notify_failure: Callable[[Controller.Command, str], None],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the STOP action. Returns True on success, False on failure."""
         if file.state not in (ModelFile.State.DOWNLOADING, ModelFile.State.QUEUED):
@@ -195,10 +181,10 @@ class CommandPipeline:
 
     def _handle_extract(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        _notify_failure: Callable[[Controller.Command, str], None],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the EXTRACT action. Returns True on success, False on failure."""
         if file.state not in (
@@ -223,15 +209,14 @@ class CommandPipeline:
 
     def _handle_delete_local(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        deferred: list[Controller.Command],
-        _notify_failure: Callable[[Controller.Command, str], None],
-        controller_cls: type[Controller],
+        deferred: list[Command],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the DELETE_LOCAL action. Returns True on success, False on failure/deferred."""
-        if len(self.active_command_processes) >= controller_cls.MAX_CONCURRENT_COMMAND_PROCESSES:
+        if len(self.active_command_processes) >= MAX_CONCURRENT_COMMAND_PROCESSES:
             self._logger.debug(
                 "Deferring %s for '%s': %d active processes at cap",
                 command.action,
@@ -270,22 +255,21 @@ class CommandPipeline:
             if delete_path != _pc.local_path:
                 _pc.active_scan_process.force_scan()
 
-        command_wrapper = controller_cls.CommandProcessWrapper(process=process, post_callback=post_callback)
+        command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback)
         self.active_command_processes.append(command_wrapper)
         command_wrapper.process.start()
         return True
 
     def _handle_delete_remote(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        deferred: list[Controller.Command],
-        _notify_failure: Callable[[Controller.Command, str], None],
-        controller_cls: type[Controller],
+        deferred: list[Command],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the DELETE_REMOTE action. Returns True on success, False on failure/deferred."""
-        if len(self.active_command_processes) >= controller_cls.MAX_CONCURRENT_COMMAND_PROCESSES:
+        if len(self.active_command_processes) >= MAX_CONCURRENT_COMMAND_PROCESSES:
             self._logger.debug(
                 "Deferring %s for '%s': %d active processes at cap",
                 command.action,
@@ -320,7 +304,7 @@ class CommandPipeline:
             file_name=file.name,
         )
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
-        command_wrapper = controller_cls.CommandProcessWrapper(
+        command_wrapper = CommandProcessWrapper(
             process=process, post_callback=pc.remote_scan_process.force_scan
         )
         self.active_command_processes.append(command_wrapper)
@@ -329,10 +313,10 @@ class CommandPipeline:
 
     def _handle_validate(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        _notify_failure: Callable[[Controller.Command, str], None],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the VALIDATE action. Returns True on success, False on failure."""
         if not self._context.config.validate.enabled:
@@ -378,7 +362,7 @@ class CommandPipeline:
         Cleanup the list of active commands and do any callbacks
         :return:
         """
-        still_active_processes: list[Controller.CommandProcessWrapper] = []
+        still_active_processes: list[CommandProcessWrapper] = []
         for command_process in self.active_command_processes:
             if command_process.process.is_alive():
                 still_active_processes.append(command_process)
@@ -539,7 +523,7 @@ class CommandPipeline:
         self.active_move_processes.append(process)
         self._logger.info(f"Spawned move process for {file_name} (staging -> local)")
 
-    def _get_pair_context_for_command(self, command: Controller.Command) -> PairContext | None:
+    def _get_pair_context_for_command(self, command: Command) -> PairContext | None:
         """Find the pair context for a command based on pair_id."""
         return self.find_pair_by_id(command.pair_id)
 

@@ -1,13 +1,46 @@
-import { OptionType } from './option.component';
+import { Config } from '../../models/config';
+import { OptionType, OptionValue } from './option.component';
+
+/**
+ * A [section, option] path into the Config model. The union over Config's
+ * sections keeps each tuple's second element constrained to keys of that
+ * section, so a typo or a renamed field is a compile error rather than a
+ * silently-broken magic string.
+ */
+export type ConfigValuePath = {
+  [S in keyof Config]: [S, keyof Config[S]];
+}[keyof Config];
+
+/**
+ * Conditions under which an option is rendered disabled. The component maps
+ * each flag to a runtime predicate; co-locating the condition with the option
+ * definition keeps the disable rules next to the options they affect.
+ */
+export type OptionDisabledWhen = 'pairsEnabled' | 'validateDisabled';
 
 export interface IOption {
   type: OptionType;
   label: string;
-  valuePath: [string, string];
+  valuePath: ConfigValuePath;
   description: string | null;
   disabled?: boolean;
   choices?: string[];
   requiresRestart?: boolean;
+  /** When set, the option is disabled while the named condition holds. */
+  disabledWhen?: OptionDisabledWhen;
+  /** Description shown in place of the default while disabledWhen is active. */
+  overrideNote?: string;
+}
+
+/** Note shown on options that Path Pairs overrides once any pair is enabled. */
+export const OVERRIDE_NOTE = 'Overridden by Path Pairs when any pair is enabled';
+
+/** Read a config value by its typed [section, option] path. */
+export function getConfigValue(config: Config, path: ConfigValuePath): OptionValue {
+  const [section, option] = path;
+  const sectionObj = config[section];
+  if (!sectionObj) return null;
+  return sectionObj[option as string] ?? null;
 }
 
 export interface IOptionsContext {
@@ -54,6 +87,8 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
       valuePath: ['lftp', 'remote_path'],
       description: 'Path to your files on the remote server',
       requiresRestart: true,
+      disabledWhen: 'pairsEnabled',
+      overrideNote: OVERRIDE_NOTE,
     },
     {
       type: OptionType.Text,
@@ -61,6 +96,8 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
       valuePath: ['lftp', 'local_path'],
       description: 'Downloaded files are placed here',
       requiresRestart: true,
+      disabledWhen: 'pairsEnabled',
+      overrideNote: OVERRIDE_NOTE,
     },
     {
       type: OptionType.Text,
@@ -215,6 +252,8 @@ export const OPTIONS_CONTEXT_AUTOQUEUE: IOptionsContext = {
       valuePath: ['autoqueue', 'enabled'],
       description: null,
       requiresRestart: true,
+      disabledWhen: 'pairsEnabled',
+      overrideNote: OVERRIDE_NOTE,
     },
     {
       type: OptionType.Checkbox,
@@ -441,6 +480,7 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
       label: 'Auto-validate after download',
       valuePath: ['validate', 'auto_validate'],
       description: 'Automatically validate files when download completes. Requires post-download validation above.',
+      disabledWhen: 'validateDisabled',
     },
     {
       type: OptionType.Select,
@@ -448,6 +488,7 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
       valuePath: ['validate', 'algorithm'],
       description: 'Checksum algorithm used for both inline transfer verification and post-download validation',
       choices: ['md5', 'sha1', 'sha256'],
+      disabledWhen: 'validateDisabled',
     },
   ],
 };
