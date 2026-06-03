@@ -304,9 +304,7 @@ class CommandPipeline:
             file_name=file.name,
         )
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
-        command_wrapper = CommandProcessWrapper(
-            process=process, post_callback=pc.remote_scan_process.force_scan
-        )
+        command_wrapper = CommandProcessWrapper(process=process, post_callback=pc.remote_scan_process.force_scan)
         self.active_command_processes.append(command_wrapper)
         command_wrapper.process.start()
         return True
