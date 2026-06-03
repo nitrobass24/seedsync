@@ -235,6 +235,27 @@ describe("ConfigService", () => {
     expect(service.configSnapshot?.web?.api_key).toBe("new-key");
   });
 
+  it("preserves a cleared (empty) api_key across a redacted refresh (#540)", () => {
+    mockRestService.sendRequest.mockReturnValue(
+      of({ success: true, data: JSON.stringify(makeConfig({ web: { port: 8080, api_key: "old-key" } })), errorMessage: null }),
+    );
+    createService();
+
+    // The user clears the key.
+    mockRestService.sendRequest.mockReturnValueOnce(of({ success: true, data: null, errorMessage: null }));
+    service.set("web", "api_key", "");
+    expect(service.configSnapshot?.web?.api_key).toBe("");
+
+    // The backend redacts even an empty key to the sentinel on refresh; the
+    // cleared state must survive, not be turned back into a phantom secret.
+    mockRestService.sendRequest.mockReturnValue(
+      of({ success: true, data: JSON.stringify(makeConfig({ web: { port: 8080, api_key: REDACTED_SENTINEL } })), errorMessage: null }),
+    );
+    connectedSubject.next(true);
+
+    expect(service.configSnapshot?.web?.api_key).toBe("");
+  });
+
   // --- Disconnect ---
 
   it("should retain config on disconnect so the UI keeps working", () => {

@@ -13,6 +13,7 @@ import { ModelFileService } from './services/files/model-file.service';
 import { LogService } from './services/logs/log.service';
 import { ViewFileFilterService } from './services/files/view-file-filter.service';
 import { ViewFileSortService } from './services/files/view-file-sort.service';
+import { VIEW_FILE_COALESCE_MS } from './services/files/view-file.service';
 import { ThemeService } from './services/utils/theme.service';
 import { ConfigService } from './services/settings/config.service';
 import { AutoQueueService } from './services/autoqueue/autoqueue.service';
@@ -46,6 +47,10 @@ export const appConfig: ApplicationConfig = {
     provideRouter(ROUTES),
     provideHttpClient(withInterceptors([apiKeyInterceptor])),
     { provide: RouteReuseStrategy, useClass: CachedReuseStrategy },
+    // Coalesce the per-file SSE fan-out into one view rebuild per ~100ms window
+    // (issue #521). The backend controller loop ticks every ~0.5s, so this batches
+    // a burst of per-file model events without any user-perceivable delay.
+    { provide: VIEW_FILE_COALESCE_MS, useValue: 100 },
     {
       provide: APP_INITIALIZER,
       useFactory: initializeStreaming,

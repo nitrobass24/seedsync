@@ -34,6 +34,16 @@ import { LoggerService } from '../../services/utils/logger.service';
 export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   readonly LogLevel = LogLevel;
 
+  /**
+   * Cap on the live-log buffer (#522). During DEBUG logging on an active sync
+   * the SSE stream is unbounded; without a cap `records` grows forever, causing
+   * unbounded memory, an O(n) array copy per event, and a DOM paragraph per
+   * record. We keep a ring-buffer tail of the newest records and drop the
+   * oldest on overflow. Full history remains server-queryable via fetchHistory,
+   * so no log data is truly lost — only the live tail is bounded.
+   */
+  static readonly MAX_LIVE_RECORDS = 2000;
+
   private readonly elementRef = inject(ElementRef);
   private readonly changeDetector = inject(ChangeDetectorRef);
   private readonly logService = inject(LogService);
@@ -59,6 +69,13 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   private pendingScrollToBottom = false;
   private readonly searchChange$ = new Subject<void>();
 
+  // Per-object monotonic trackBy keys (#522) — unique even for identical log
+  // lines, since each record/entry is a distinct object.
+  private liveSeq = 0;
+  private historySeq = 0;
+  private readonly recordKey = new WeakMap<LogRecord, number>();
+  private readonly historyKey = new WeakMap<LogHistoryEntry, number>();
+
   ngOnInit(): void {
     this.logService.logs$.pipe(
       takeUntilDestroyed(this.destroyRef),
@@ -69,7 +86,12 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.logTail &&
           LogsPageComponent.isElementInViewport(this.logTail.nativeElement);
 
-        this.records = [...this.records, record];
+        const next = [...this.records, record];
+        // Front-trim the oldest on overflow so the newest record is never
+        // dropped (#522). Below the cap this slice is a no-op.
+        this.records = next.length > LogsPageComponent.MAX_LIVE_RECORDS
+          ? next.slice(next.length - LogsPageComponent.MAX_LIVE_RECORDS)
+          : next;
         this.changeDetector.detectChanges();
 
         if (shouldScroll) {
@@ -140,6 +162,34 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   onLevelChange(): void {
     this.searchChange$.next();
+  }
+
+  /**
+   * Stable, collision-free trackBy for the live-log list (#522). A monotonic
+   * sequence id is assigned per record *object* (via a WeakMap), so identical
+   * repeated log lines (same logger+message in the same millisecond — common
+   * under high-throughput DEBUG sync) still get distinct keys. Content-derived
+   * keys would collide there and trip Angular's duplicate-key reconcile
+   * (NG0955), dropping/mis-associating rows. Keying by object identity lets
+   * Angular reuse DOM nodes when the buffer is front-trimmed.
+   */
+  trackRecord(_index: number, record: LogRecord): number {
+    let key = this.recordKey.get(record);
+    if (key === undefined) {
+      key = this.liveSeq++;
+      this.recordKey.set(record, key);
+    }
+    return key;
+  }
+
+  /** Stable, collision-free trackBy for the history list (#522); see trackRecord. */
+  trackHistory(_index: number, entry: LogHistoryEntry): number {
+    let key = this.historyKey.get(entry);
+    if (key === undefined) {
+      key = this.historySeq++;
+      this.historyKey.set(entry, key);
+    }
+    return key;
   }
 
   private refreshScrollButtonVisibility(): void {

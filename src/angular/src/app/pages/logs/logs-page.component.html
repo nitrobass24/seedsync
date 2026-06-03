@@ -32,7 +32,7 @@
   } @else if (historyLoaded && historyRecords.length > 0) {
     <div class="history-section">
       <div class="history-header">Log History</div>
-      @for (entry of historyRecords; track $index) {
+      @for (entry of historyRecords; track trackHistory($index, entry)) {
         <p
           class="record"
           [class.debug]="entry.level === LogLevel.DEBUG"
@@ -61,7 +61,7 @@
 
   <div #logHead class="log-marker"></div>
 
-  @for (record of records; track $index) {
+  @for (record of records; track trackRecord($index, record)) {
     <p
       class="record"
       [class.debug]="record.level === LogLevel.DEBUG"

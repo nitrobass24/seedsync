@@ -142,13 +142,27 @@ export class FileComponent implements OnChanges, OnDestroy {
   // Cleared by the parent when an action's backend request fails or errors.
   // Runs inside the parent's async subscribe callback, so OnPush needs an
   // explicit markForCheck to re-enable the buttons and stop the spinner.
-  clearActiveAction(): void {
+  // <app-file> is recycled by *cdkVirtualFor, so a late failure callback may
+  // target an instance now bound to a different file/action; only clear when
+  // this instance still represents the same file and the same in-flight action.
+  clearActiveAction(forFile?: ViewFile, forAction?: FileAction | null): void {
+    if (forFile !== undefined) {
+      const current = this.file();
+      if (
+        current.pairId !== forFile.pairId ||
+        current.name !== forFile.name ||
+        this.activeAction !== forAction
+      ) {
+        return;
+      }
+    }
     this.activeAction = null;
     this.cdr.markForCheck();
   }
 
   private actionEvent(file: ViewFile): FileActionEvent {
-    return { file, clearActiveAction: () => this.clearActiveAction() };
+    const action = this.activeAction;
+    return { file, clearActiveAction: () => this.clearActiveAction(file, action) };
   }
 
   onQueue(file: ViewFile): void {

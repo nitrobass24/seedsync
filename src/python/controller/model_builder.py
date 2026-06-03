@@ -3,6 +3,7 @@
 import logging
 import math
 import os
+from collections import deque
 
 from lftp import LftpJobStatus
 from model import Model, ModelError, ModelFile
@@ -236,11 +237,11 @@ class ModelBuilder:
         # for the pair
         # Note: in this case the frontier contains nodes that have already been process, it is
         #       merely used for traversing children
-        frontier: list[tuple[SystemFile | None, SystemFile | None, LftpJobStatus | None, ModelFile]] = []
+        frontier: deque[tuple[SystemFile | None, SystemFile | None, LftpJobStatus | None, ModelFile]] = deque()
         if remote or local:
             frontier.append((remote, local, status, root_model_file))
         while frontier:
-            _remote, _local, _status, _model_file = frontier.pop(0)
+            _remote, _local, _status, _model_file = frontier.popleft()
             _remote_children: dict[str, SystemFile] = {sf.name: sf for sf in _remote.children} if _remote else {}
             _local_children: dict[str, SystemFile] = {sf.name: sf for sf in _local.children} if _local else {}
             _all_children_names: set[str] = set[str]().union(_remote_children.keys(), _local_children.keys())
@@ -426,10 +427,10 @@ class ModelBuilder:
                 # root is a directory that also exists remotely
                 # check all the children
                 all_downloaded = True
-                frontier_check: list[ModelFile] = []
-                frontier_check += model_file.get_children()
+                frontier_check: deque[ModelFile] = deque()
+                frontier_check.extend(model_file.iter_children())
                 while frontier_check:
-                    _child_file = frontier_check.pop(0)
+                    _child_file = frontier_check.popleft()
                     if (
                         not _child_file.is_dir
                         and _child_file.remote_size is not None
@@ -437,7 +438,7 @@ class ModelBuilder:
                     ):
                         all_downloaded = False
                         break
-                    frontier_check += _child_file.get_children()
+                    frontier_check.extend(_child_file.iter_children())
                 if all_downloaded:
                     model_file.state = ModelFile.State.DOWNLOADED
                 else:

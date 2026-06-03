@@ -2,6 +2,7 @@
 
 import copy
 import os
+from collections.abc import Iterator
 from datetime import datetime
 from enum import Enum
 from typing import Optional
@@ -260,6 +261,12 @@ class ModelFile:
 
     def get_children(self) -> list["ModelFile"]:
         return copy.copy(self.__children)
+
+    def iter_children(self) -> Iterator["ModelFile"]:
+        # Read-only iterator over the live child list, avoiding the defensive
+        # copy that get_children() makes. Callers MUST NOT mutate the child
+        # list while iterating. Use get_children() if a snapshot is needed.
+        return iter(self.__children)
 
     @property
     def parent(self) -> Optional["ModelFile"]:
