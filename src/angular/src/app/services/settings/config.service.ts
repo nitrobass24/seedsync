@@ -123,20 +123,22 @@ export class ConfigService {
    * value is treated as "no change" and never overwrites the stream's key.
    */
   /**
-   * /server/config/get redacts web.api_key to the sentinel. A refresh must not
-   * clobber a real key the user entered this session — the apiKeyInterceptor
-   * reads configSnapshot.web.api_key for REST auth, so overwriting it with the
-   * sentinel would break authenticated REST calls until the next set(). Keep the
-   * existing real key when the incoming value is redacted.
+   * /server/config/get redacts web.api_key to the sentinel *unconditionally*
+   * (even when the stored value is empty). A refresh must not clobber whatever
+   * the user-set snapshot holds — the apiKeyInterceptor reads it for REST auth,
+   * so overwriting it with the sentinel would break authenticated REST calls
+   * until the next set(). Preserve the existing value (including a cleared empty
+   * key, which must not look like a phantom secret) whenever the snapshot's
+   * value is not itself the sentinel.
    */
   private preserveRealApiKey(incoming: Config): Config {
-    const currentKey = this.configSubject.getValue()?.web?.api_key;
+    const currentWeb = this.configSubject.getValue()?.web;
     if (
       incoming.web?.api_key === REDACTED_SENTINEL &&
-      currentKey &&
-      currentKey !== REDACTED_SENTINEL
+      currentWeb !== undefined &&
+      currentWeb.api_key !== REDACTED_SENTINEL
     ) {
-      return { ...incoming, web: { ...incoming.web, api_key: currentKey } };
+      return { ...incoming, web: { ...incoming.web, api_key: currentWeb.api_key } };
     }
     return incoming;
   }

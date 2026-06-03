@@ -319,3 +319,47 @@ describe('FileComponent action events', () => {
     expect(component.activeAction).toBeNull();
   });
 });
+
+describe('FileComponent.clearActiveAction recycle guard (#540)', () => {
+  let fixture: ComponentFixture<FileComponent>;
+  let component: FileComponent;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({ imports: [FileComponent] }).compileComponents();
+    fixture = TestBed.createComponent(FileComponent);
+    fixture.componentRef.setInput('options', of({ nameFilter: '', statusFilter: '' }));
+    component = fixture.componentInstance;
+  });
+
+  it('clears when the instance still represents the same file and action', () => {
+    const fileA = makeViewFile({ name: 'a.txt' });
+    fixture.componentRef.setInput('file', fileA);
+    fixture.detectChanges();
+    component.activeAction = FileAction.QUEUE;
+
+    component.clearActiveAction(fileA, FileAction.QUEUE);
+    expect(component.activeAction).toBeNull();
+  });
+
+  it('does NOT clear when recycled to a different file (stale failure callback)', () => {
+    const fileA = makeViewFile({ name: 'a.txt' });
+    const fileB = makeViewFile({ name: 'b.txt' });
+    fixture.componentRef.setInput('file', fileB); // instance recycled to file B
+    fixture.detectChanges();
+    component.activeAction = FileAction.DELETE_LOCAL; // B started its own action
+
+    // A late failure callback captured for file A must not clear B's action.
+    component.clearActiveAction(fileA, FileAction.QUEUE);
+    expect(component.activeAction).toBe(FileAction.DELETE_LOCAL);
+  });
+
+  it('does NOT clear when the same file started a different action since', () => {
+    const fileA = makeViewFile({ name: 'a.txt' });
+    fixture.componentRef.setInput('file', fileA);
+    fixture.detectChanges();
+    component.activeAction = FileAction.VALIDATE;
+
+    component.clearActiveAction(fileA, FileAction.QUEUE); // stale callback for an older QUEUE
+    expect(component.activeAction).toBe(FileAction.VALIDATE);
+  });
+});

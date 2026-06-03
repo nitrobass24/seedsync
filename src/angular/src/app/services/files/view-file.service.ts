@@ -80,6 +80,12 @@ export class ViewFileService {
           return { ...f, pairName };
         });
         if (changed) {
+          // pairName changed for some rows; if the active sort keys on pairName
+          // the order is now stale (pushViewFiles does not re-sort), so reapply
+          // the comparator before pushing.
+          if (this.sortComparator != null) {
+            nextFiles.sort(this.sortComparator);
+          }
           this.files = nextFiles;
           this.pushViewFiles();
         }

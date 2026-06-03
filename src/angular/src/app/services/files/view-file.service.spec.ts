@@ -801,6 +801,29 @@ describe("ViewFileService", () => {
     expect(after.find((f) => f.name === "y")!).toBe(before.find((f) => f.name === "y")!);
   });
 
+  it("re-sorts when a pairName change affects the active pairName sort (#540)", () => {
+    pairsSubject.next([
+      { id: "pair-a", name: "Zeta", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false, arr_target_ids: [] },
+      { id: "pair-b", name: "Alpha", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false, arr_target_ids: [] },
+    ]);
+    emitModelFiles([
+      makeModelFile({ name: "x", pair_id: "pair-a", remote_size: 100 }),
+      makeModelFile({ name: "y", pair_id: "pair-b", remote_size: 100 }),
+    ]);
+    // Sort ascending by pairName: Alpha(y) before Zeta(x).
+    service.setComparator((a, b) => (a.pairName ?? "").localeCompare(b.pairName ?? ""));
+    expect(latestFiles().map((f) => f.name)).toEqual(["y", "x"]);
+
+    // Rename pair-a "Zeta" -> "Aaa": file x should now sort first.
+    pairsSubject.next([
+      { id: "pair-a", name: "Aaa", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false, arr_target_ids: [] },
+      { id: "pair-b", name: "Alpha", remote_path: "/r", local_path: "/l", enabled: true, auto_queue: false, arr_target_ids: [] },
+    ]);
+
+    // The pairName update must reapply the comparator, not leave the order stale.
+    expect(latestFiles().map((f) => f.name)).toEqual(["x", "y"]);
+  });
+
   // --- Bulk remove single-pass (issue #521 #3) ---
 
   it("should correctly remove an interleaved set of files in a single pass", () => {
