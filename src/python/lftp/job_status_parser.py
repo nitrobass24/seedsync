@@ -283,7 +283,11 @@ class LftpJobStatusParser:
         )
 
     @staticmethod
-    def _build_chunk_transfer_state(result_at, result_at2, result_got) -> "LftpJobStatus.TransferState":
+    def _build_chunk_transfer_state(
+        result_at: "re.Match[str] | None",
+        result_at2: "re.Match[str] | None",
+        result_got: "re.Match[str] | None",
+    ) -> "LftpJobStatus.TransferState":
         """Build a TransferState from whichever of the three chunk-data regex
         matches is present. Caller is responsible for the name-mismatch checks
         (which differ between the pget header and the filename chunk)."""
@@ -297,7 +301,8 @@ class LftpJobStatusParser:
             return LftpJobStatus.TransferState(None, None, None, speed, eta)
         if result_at2:
             return LftpJobStatus.TransferState(None, None, None, None, None)
-        # result_got
+        # result_got (one of the three is guaranteed non-None by the caller)
+        assert result_got is not None
         size_local = int(result_got.group("szlocal"))
         size_remote = int(result_got.group("szremote"))
         percent_local = int(result_got.group("pctlocal"))
@@ -309,7 +314,7 @@ class LftpJobStatusParser:
             eta = LftpJobStatusParser._eta_to_seconds(result_got.group("eta"))
         return LftpJobStatus.TransferState(size_local, size_remote, percent_local, speed, eta)
 
-    def _parse_pget_header_block(self, result, lines: list[str]) -> LftpJobStatus:
+    def _parse_pget_header_block(self, result: "re.Match[str]", lines: list[str]) -> LftpJobStatus:
         """Parse a pget header line (already matched) plus its mandatory 'sftp'
         line and optional data line into a RUNNING pget LftpJobStatus."""
         # Next line must be the sftp line
@@ -358,7 +363,7 @@ class LftpJobStatusParser:
         return status
 
     @staticmethod
-    def _parse_mirror_header(result) -> LftpJobStatus:
+    def _parse_mirror_header(result: "re.Match[str]") -> LftpJobStatus:
         """Parse a downloading mirror header line (already matched) into a
         RUNNING mirror LftpJobStatus with size/speed totals."""
         id_ = int(result.group("id"))
@@ -383,7 +388,7 @@ class LftpJobStatusParser:
         return status
 
     @staticmethod
-    def _parse_mirror_fl_header(result, lines: list[str]) -> LftpJobStatus:
+    def _parse_mirror_fl_header(result: "re.Match[str]", lines: list[str]) -> LftpJobStatus:
         """Parse a connecting / receiving-file-list mirror header (already
         matched) into a RUNNING mirror LftpJobStatus, popping the optional
         'Getting file list'/'cd ' follow-up line."""
@@ -397,7 +402,9 @@ class LftpJobStatusParser:
             job_id=id_, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.RUNNING, name=name, flags=flags
         )
 
-    def _parse_filename_chunk(self, result, lines: list[str], prev_job: "LftpJobStatus | None") -> None:
+    def _parse_filename_chunk(
+        self, result: "re.Match[str]", lines: list[str], prev_job: "LftpJobStatus | None"
+    ) -> None:
         """Parse a '\\transfer `name'' line (already matched) plus its
         following chunk-data line, registering the active file transfer state
         on ``prev_job``."""
