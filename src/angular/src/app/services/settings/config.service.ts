@@ -64,7 +64,9 @@ export class ConfigService {
   set(section: string, option: string, value: ConfigValue): Observable<WebReaction> {
     const valueStr = String(value ?? '');
     const currentConfig = this.configSubject.getValue();
-    const configRecord: ConfigRecord | null = currentConfig;
+    // Dynamic section/option access by runtime string: localize the record cast
+    // here (the typed Config keeps its specific keys for static callers).
+    const configRecord = currentConfig as unknown as ConfigRecord | null;
     if (!currentConfig || !configRecord || !(section in currentConfig) || !(option in configRecord[section])) {
       return of({
         success: false,
@@ -83,7 +85,7 @@ export class ConfigService {
         if (reaction.success) {
           const config = this.configSubject.getValue();
           if (config) {
-            const configRecord: ConfigRecord = config;
+            const configRecord = config as unknown as ConfigRecord;
             const newConfig = { ...config, [section]: { ...configRecord[section], [option]: value } };
             this.configSubject.next(newConfig);
             // Propagate API key changes to the SSE stream immediately. set() is

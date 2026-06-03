@@ -3,24 +3,24 @@
  * Note: Naming convention matches that used in the JSON.
  */
 
-/**
- * The value any single config field may hold. Every section field is one of
- * these, which lets a section be read as a string-keyed record for the
- * dynamic section/option access used by ConfigService.set without an
- * `as unknown as` cast.
- */
+/** The value any single config field may hold. */
 export type ConfigValue = string | number | boolean | null;
 
-/** Common shape of every config section: a string-keyed bag of ConfigValues. */
+/**
+ * A config section read as a string-keyed bag of ConfigValues. Sections do NOT
+ * `extends` this (that would collapse `keyof Section` to `string` and defeat the
+ * typo-catching ConfigValuePath in options-list.ts); it is only used as an
+ * explicit, localized cast target at the few dynamic section/option access sites.
+ */
 export type ConfigSection = Record<string, ConfigValue>;
 
-export interface General extends ConfigSection {
+export interface General {
   log_level: string | null;
   verbose: boolean | null;
   exclude_patterns: string | null;
 }
 
-export interface Lftp extends ConfigSection {
+export interface Lftp {
   remote_address: string | null;
   remote_username: string | null;
   remote_password: string | null;
@@ -28,6 +28,7 @@ export interface Lftp extends ConfigSection {
   remote_path: string | null;
   local_path: string | null;
   remote_path_to_scan_script: string | null;
+  remote_python_path: string | null;
   use_ssh_key: boolean | null;
   num_max_parallel_downloads: number | null;
   num_max_parallel_files_per_download: number | null;
@@ -45,7 +46,7 @@ export interface Lftp extends ConfigSection {
   net_reconnect_interval_multiplier: number | null;
 }
 
-export interface Controller extends ConfigSection {
+export interface Controller {
   interval_ms_remote_scan: number | null;
   interval_ms_local_scan: number | null;
   interval_ms_downloading_scan: number | null;
@@ -55,23 +56,23 @@ export interface Controller extends ConfigSection {
   use_staging: boolean | null;
 }
 
-export interface Web extends ConfigSection {
+export interface Web {
   port: number | null;
   api_key: string | null;
 }
 
-export interface AutoQueue extends ConfigSection {
+export interface AutoQueue {
   enabled: boolean | null;
   patterns_only: boolean | null;
   auto_extract: boolean | null;
   auto_delete_remote: boolean | null;
 }
 
-export interface Logging extends ConfigSection {
+export interface Logging {
   log_format: string | null;
 }
 
-export interface Notifications extends ConfigSection {
+export interface Notifications {
   webhook_url: string | null;
   notify_on_download_start: boolean | null;
   notify_on_download_complete: boolean | null;
@@ -83,7 +84,7 @@ export interface Notifications extends ConfigSection {
   telegram_chat_id: string | null;
 }
 
-export interface Validate extends ConfigSection {
+export interface Validate {
   enabled: boolean | null;
   algorithm: string | null;
   auto_validate: boolean | null;
@@ -93,10 +94,7 @@ export interface Validate extends ConfigSection {
 /** Sentinel value the backend uses to mask sensitive fields in API responses. */
 export const REDACTED_SENTINEL = '********';
 
-// Index signature lets a Config be read as a record of sections keyed by a
-// runtime string (used by ConfigService.set), without an `as unknown as` cast.
-// Each section already satisfies ConfigSection, so this is type-accurate.
-export interface Config extends Record<string, ConfigSection> {
+export interface Config {
   general: General;
   lftp: Lftp;
   controller: Controller;
@@ -121,6 +119,7 @@ export const DEFAULT_LFTP: Lftp = {
   remote_path: null,
   local_path: null,
   remote_path_to_scan_script: null,
+  remote_python_path: null,
   use_ssh_key: null,
   num_max_parallel_downloads: null,
   num_max_parallel_files_per_download: null,

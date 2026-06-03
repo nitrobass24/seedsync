@@ -1,4 +1,4 @@
-import { Config } from '../../models/config';
+import { Config, ConfigSection } from '../../models/config';
 import { OptionType, OptionValue } from './option.component';
 
 /**
@@ -38,7 +38,9 @@ export const OVERRIDE_NOTE = 'Overridden by Path Pairs when any pair is enabled'
 /** Read a config value by its typed [section, option] path. */
 export function getConfigValue(config: Config, path: ConfigValuePath): OptionValue {
   const [section, option] = path;
-  const sectionObj = config[section];
+  // path is a typo-checked ConfigValuePath; the read itself is dynamic, so the
+  // string-indexed section access is localized here through ConfigSection.
+  const sectionObj = config[section] as unknown as ConfigSection;
   if (!sectionObj) return null;
   return sectionObj[option as string] ?? null;
 }
