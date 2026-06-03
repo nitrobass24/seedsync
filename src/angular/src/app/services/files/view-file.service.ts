@@ -6,9 +6,11 @@ import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
 import { PathPairsService } from '../settings/path-pairs.service';
 import { WebReaction } from '../utils/rest.service';
-import { ModelFile, ModelFileState } from '../../models/model-file';
-import { ViewFile, ViewFileStatus } from '../../models/view-file';
+import { ModelFile } from '../../models/model-file';
+import { ViewFile } from '../../models/view-file';
 import { fileKey } from './file-key';
+import { mapState, deriveCapabilities } from './view-file-capabilities';
+import { ViewFileSelectionService } from './view-file-selection.service';
 
 /**
  * Coalescing window (ms) for batching incremental SSE model-file emissions before
@@ -41,6 +43,7 @@ export class ViewFileService {
   private readonly modelFileService = inject(ModelFileService);
   private readonly pathPairsService = inject(PathPairsService);
   private readonly coalesceMs = inject(VIEW_FILE_COALESCE_MS);
+  private readonly selection = inject(ViewFileSelectionService);
 
   private pairNameMap = new Map<string, string>();
   private files: ViewFile[] = [];
@@ -53,13 +56,9 @@ export class ViewFileService {
   private filterCriteria: ViewFileFilterCriteria | null = null;
   private sortComparator: ViewFileComparator | null = null;
 
-  private checkedSet = new Set<string>();
-  private readonly checkedSubject = new BehaviorSubject<Set<string>>(new Set());
-  private lastCheckedKey: string | null = null;
-
   readonly files$: Observable<ViewFile[]> = this.filesSubject.asObservable();
   readonly filteredFiles$: Observable<ViewFile[]> = this.filteredFilesSubject.asObservable();
-  readonly checked$ = this.checkedSubject.asObservable();
+  readonly checked$ = this.selection.checked$;
 
   constructor() {
     this.pathPairsService.pairs$.subscribe((pairs) => {
@@ -178,58 +177,36 @@ export class ViewFileService {
   }
 
   toggleCheck(file: ViewFile): void {
-    const key = viewFileKey(file);
-    if (this.checkedSet.has(key)) {
-      this.checkedSet.delete(key);
-    } else {
-      this.checkedSet.add(key);
-    }
-    this.lastCheckedKey = key;
+    this.selection.toggle(viewFileKey(file));
     this.updateCheckedState();
   }
 
   shiftCheck(file: ViewFile): void {
-    if (this.lastCheckedKey == null) {
-      this.toggleCheck(file);
-      return;
-    }
-    const filtered = this.filteredFilesSubject.getValue();
-    const lastIdx = filtered.findIndex(f => viewFileKey(f) === this.lastCheckedKey);
-    const currIdx = filtered.findIndex(f => viewFileKey(f) === viewFileKey(file));
-    if (lastIdx < 0 || currIdx < 0) {
-      this.toggleCheck(file);
-      return;
-    }
-    const start = Math.min(lastIdx, currIdx);
-    const end = Math.max(lastIdx, currIdx);
-    for (let i = start; i <= end; i++) {
-      this.checkedSet.add(viewFileKey(filtered[i]));
-    }
-    this.lastCheckedKey = viewFileKey(file);
+    const filteredKeys = this.filteredFilesSubject.getValue().map(viewFileKey);
+    this.selection.shiftRange(viewFileKey(file), filteredKeys);
     this.updateCheckedState();
   }
 
   checkAll(): void {
-    const filtered = this.filteredFilesSubject.getValue();
-    for (const f of filtered) {
-      this.checkedSet.add(viewFileKey(f));
-    }
+    const filteredKeys = this.filteredFilesSubject.getValue().map(viewFileKey);
+    this.selection.checkAll(filteredKeys);
     this.updateCheckedState();
   }
 
   uncheckAll(): void {
-    this.checkedSet.clear();
-    this.lastCheckedKey = null;
+    this.selection.uncheckAll();
     this.updateCheckedState();
   }
 
+  // Re-spread only the rows whose derived isChecked flips, preserving object
+  // identity for unchanged rows so OnPush/ngOnChanges can skip them. isChecked
+  // stays strictly derived from the selection service's checked set. The
+  // checked$ emission itself is owned by ViewFileSelectionService — this method
+  // only reconciles the diffing-owned `this.files` array and re-pushes the view.
   private updateCheckedState(): void {
-    // Only replace rows whose derived isChecked actually flips, preserving object
-    // identity for unchanged rows so OnPush/ngOnChanges can skip them. isChecked
-    // stays strictly derived from checkedSet.
     let changed = false;
     const nextFiles = this.files.map(f => {
-      const isChecked = this.checkedSet.has(viewFileKey(f));
+      const isChecked = this.selection.isChecked(viewFileKey(f));
       if (isChecked === f.isChecked) {
         return f;
       }
@@ -239,7 +216,6 @@ export class ViewFileService {
     if (changed) {
       this.files = nextFiles;
     }
-    this.checkedSubject.next(new Set(this.checkedSet));
     this.pushViewFiles();
   }
 
@@ -264,7 +240,7 @@ export class ViewFileService {
     action: (f: ViewFile) => Observable<WebReaction>,
     concurrency = Infinity
   ): Observable<WebReaction[]> {
-    const checked = this.files.filter(f => this.checkedSet.has(viewFileKey(f)) && filter(f));
+    const checked = this.files.filter(f => this.selection.isChecked(viewFileKey(f)) && filter(f));
     if (checked.length === 0) {
       return of([]);
     }
@@ -331,7 +307,7 @@ export class ViewFileService {
       const index = this.indices.get(key)!;
       const oldViewFile = newViewFiles[index];
       const newViewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap, oldViewFile.isSelected);
-      newViewFiles[index] = { ...newViewFile, isChecked: this.checkedSet.has(key) };
+      newViewFiles[index] = { ...newViewFile, isChecked: this.selection.isChecked(key) };
       if (this.sortComparator != null && this.sortComparator(oldViewFile, newViewFile) !== 0) {
         reSort = true;
       }
@@ -341,26 +317,20 @@ export class ViewFileService {
     for (const key of addedKeys) {
       reSort = true;
       const viewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap);
-      newViewFiles.push({ ...viewFile, isChecked: this.checkedSet.has(key) });
+      newViewFiles.push({ ...viewFile, isChecked: this.selection.isChecked(key) });
       this.indices.set(viewFileKey(viewFile), newViewFiles.length - 1);
     }
 
     // Do the removes (no re-sort required). Filter out every removed key in a
     // single O(n) pass instead of findIndex+splice per key (O(n*m)). filter is
     // stable, so the surviving order is identical to the splice-loop result.
-    let checkedChanged = false;
     if (removedKeys.length > 0) {
       updateIndices = true;
       const removed = new Set(removedKeys);
-      for (const key of removedKeys) {
-        if (this.checkedSet.delete(key)) {
-          checkedChanged = true;
-        }
-      }
+      // Drop any checked entries for removed files; the selection service
+      // re-emits checked$ iff at least one was actually present.
+      this.selection.pruneRemoved(removedKeys);
       newViewFiles = newViewFiles.filter((v) => !removed.has(viewFileKey(v)));
-    }
-    if (checkedChanged) {
-      this.checkedSubject.next(new Set(this.checkedSet));
     }
 
     if (reSort && this.sortComparator != null) {
@@ -463,98 +433,14 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     percentDownloaded = 100;
   }
 
-  let status: ViewFileStatus;
-  switch (modelFile.state) {
-    case ModelFileState.DEFAULT:
-      if (localSize > 0 && remoteSize > 0) {
-        status = ViewFileStatus.STOPPED;
-      } else {
-        status = ViewFileStatus.DEFAULT;
-      }
-      break;
-    case ModelFileState.QUEUED:
-      status = ViewFileStatus.QUEUED;
-      break;
-    case ModelFileState.DOWNLOADING:
-      status = ViewFileStatus.DOWNLOADING;
-      break;
-    case ModelFileState.DOWNLOADED:
-      status = ViewFileStatus.DOWNLOADED;
-      break;
-    case ModelFileState.DELETED:
-      status = ViewFileStatus.DELETED;
-      break;
-    case ModelFileState.EXTRACTING:
-      status = ViewFileStatus.EXTRACTING;
-      break;
-    case ModelFileState.EXTRACTED:
-      status = ViewFileStatus.EXTRACTED;
-      break;
-    case ModelFileState.EXTRACT_FAILED:
-      status = ViewFileStatus.EXTRACT_FAILED;
-      break;
-    case ModelFileState.VALIDATING:
-      status = ViewFileStatus.VALIDATING;
-      break;
-    case ModelFileState.VALIDATED:
-      status = ViewFileStatus.VALIDATED;
-      break;
-    case ModelFileState.CORRUPT:
-      status = ViewFileStatus.CORRUPT;
-      break;
-    default:
-      status = ViewFileStatus.DEFAULT;
-  }
-
-  const isQueueable =
-    ([ViewFileStatus.DEFAULT, ViewFileStatus.STOPPED, ViewFileStatus.DELETED].includes(status) && remoteSize > 0) ||
-    status === ViewFileStatus.CORRUPT;
-  const isStoppable = [ViewFileStatus.QUEUED, ViewFileStatus.DOWNLOADING].includes(status);
-  const isExtractable =
-    [
-      ViewFileStatus.DEFAULT,
-      ViewFileStatus.STOPPED,
-      ViewFileStatus.DOWNLOADED,
-      ViewFileStatus.EXTRACTED,
-      ViewFileStatus.EXTRACT_FAILED,
-      ViewFileStatus.VALIDATED,
-      ViewFileStatus.CORRUPT,
-    ].includes(status) && localSize > 0;
-  const isLocallyDeletable =
-    [
-      ViewFileStatus.DEFAULT,
-      ViewFileStatus.STOPPED,
-      ViewFileStatus.DOWNLOADED,
-      ViewFileStatus.EXTRACTED,
-      ViewFileStatus.EXTRACT_FAILED,
-      ViewFileStatus.VALIDATED,
-      ViewFileStatus.CORRUPT,
-    ].includes(status) && localSize > 0;
-  const isRemotelyDeletable =
-    [
-      ViewFileStatus.DEFAULT,
-      ViewFileStatus.STOPPED,
-      ViewFileStatus.DOWNLOADED,
-      ViewFileStatus.EXTRACTED,
-      ViewFileStatus.EXTRACT_FAILED,
-      ViewFileStatus.VALIDATED,
-      ViewFileStatus.CORRUPT,
-      ViewFileStatus.DELETED,
-    ].includes(status) && remoteSize > 0;
-  const validatableStatuses = [
-    ViewFileStatus.DOWNLOADED,
-    ViewFileStatus.EXTRACTED,
-    ViewFileStatus.EXTRACT_FAILED,
-    ViewFileStatus.VALIDATED,
-    ViewFileStatus.CORRUPT,
-  ];
-  const isValidatable =
-    validatableStatuses.includes(status) && modelFile.local_size != null && modelFile.remote_size != null;
-
-  let validateTooltip: string | null = null;
-  if (!isValidatable && validatableStatuses.includes(status) && modelFile.remote_size == null) {
-    validateTooltip = 'Remote file not available for checksum comparison';
-  }
+  const status = mapState(modelFile.state, localSize, remoteSize);
+  const capabilities = deriveCapabilities(
+    status,
+    localSize,
+    remoteSize,
+    modelFile.local_size,
+    modelFile.remote_size,
+  );
 
   return {
     name: modelFile.name,
@@ -571,13 +457,7 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     isArchive: modelFile.is_extractable,
     isSelected,
     isChecked: false,
-    isQueueable,
-    isStoppable,
-    isExtractable,
-    isLocallyDeletable,
-    isRemotelyDeletable,
-    isValidatable,
-    validateTooltip,
+    ...capabilities,
     localCreatedTimestamp: modelFile.local_created_timestamp,
     localModifiedTimestamp: modelFile.local_modified_timestamp,
     remoteCreatedTimestamp: modelFile.remote_created_timestamp,
