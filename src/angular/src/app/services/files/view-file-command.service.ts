@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, of, from } from 'rxjs';
-import { mergeMap, toArray } from 'rxjs/operators';
+import { mergeMap, toArray, tap, catchError } from 'rxjs/operators';
 
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
@@ -107,27 +107,22 @@ export class ViewFileCommandService {
     resolve: ModelFileResolver,
     action: (file: ModelFile) => Observable<WebReaction>,
   ): Observable<WebReaction> {
-    return new Observable((observer) => {
-      const key = viewFileKey(file);
-      const modelFile = resolve(key);
-      if (modelFile === undefined) {
-        this.logger.error('File to queue not found: ' + key);
-        observer.next({ success: false, data: null, errorMessage: `File '${file.name}' not found` });
-        observer.complete();
-      } else {
-        action(modelFile).subscribe({
-          next: (reaction) => {
-            this.logger.debug('Received model reaction: %O', reaction);
-            observer.next(reaction);
-            observer.complete();
-          },
-          error: (err) => {
-            this.logger.error('Action failed for file: ' + key, err);
-            observer.next({ success: false, data: null, errorMessage: String(err?.message ?? err) });
-            observer.complete();
-          },
-        });
-      }
-    });
+    const key = viewFileKey(file);
+    const modelFile = resolve(key);
+    if (modelFile === undefined) {
+      this.logger.error('File to queue not found: ' + key);
+      return of<WebReaction>({ success: false, data: null, errorMessage: `File '${file.name}' not found` });
+    }
+    // Return the inner observable's pipeline directly (no manual subscribe) so
+    // the caller's subscription drives the request and unsubscribing cancels the
+    // in-flight HTTP call. Errors are recovered in-pipeline into a failure
+    // WebReaction so the returned observable never errors.
+    return action(modelFile).pipe(
+      tap((reaction) => this.logger.debug('Received model reaction: %O', reaction)),
+      catchError((err) => {
+        this.logger.error('Action failed for file: ' + key, err);
+        return of<WebReaction>({ success: false, data: null, errorMessage: String(err?.message ?? err) });
+      }),
+    );
   }
 }
