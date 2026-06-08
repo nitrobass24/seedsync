@@ -57,6 +57,7 @@ describe('modelFileFromJson', () => {
       ['deleted', ModelFileState.DELETED],
       ['extracting', ModelFileState.EXTRACTING],
       ['extracted', ModelFileState.EXTRACTED],
+      ['move_failed', ModelFileState.MOVE_FAILED],
       ['DOWNLOADING', ModelFileState.DOWNLOADING],
       ['Queued', ModelFileState.QUEUED],
     ];

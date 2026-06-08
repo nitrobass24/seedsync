@@ -354,6 +354,7 @@
         img.validating   { filter: $tint-blue; }
         img.validated    { filter: $tint-green; }
         img.corrupt      { filter: $tint-red; }
+        img.move-failed  { filter: $tint-red; }
     }
 
     // ── Dim 0% progress rows ──

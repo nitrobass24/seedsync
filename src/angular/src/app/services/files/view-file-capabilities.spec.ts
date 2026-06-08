@@ -27,6 +27,7 @@ describe('view-file-capabilities', () => {
       [ModelFileState.VALIDATING, ViewFileStatus.VALIDATING],
       [ModelFileState.VALIDATED, ViewFileStatus.VALIDATED],
       [ModelFileState.CORRUPT, ViewFileStatus.CORRUPT],
+      [ModelFileState.MOVE_FAILED, ViewFileStatus.MOVE_FAILED],
     ];
 
     for (const [state, expected] of directCases) {
@@ -164,6 +165,19 @@ describe('view-file-capabilities', () => {
     it('does not show a tooltip for a non-validatable status with null remote', () => {
       const caps = deriveCapabilities(ViewFileStatus.QUEUED, 100, 0, 100, null);
       expect(caps.validateTooltip).toBeNull();
+    });
+
+    it('exposes no actions for MOVE_FAILED (surfaced state only; backend auto-retries the move)', () => {
+      const caps = deriveCapabilities(ViewFileStatus.MOVE_FAILED, 100, 100, 100, 100);
+      expect(caps).toEqual({
+        isQueueable: false,
+        isStoppable: false,
+        isExtractable: false,
+        isLocallyDeletable: false,
+        isRemotelyDeletable: false,
+        isValidatable: false,
+        validateTooltip: null,
+      });
     });
   });
 

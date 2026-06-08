@@ -47,6 +47,9 @@
             @if (file().status === ViewFileStatus.CORRUPT) {
                 <img src="assets/icons/corrupt.svg" class="corrupt" alt="" aria-hidden="true" />
             }
+            @if (file().status === ViewFileStatus.MOVE_FAILED) {
+                <img src="assets/icons/downloaded.svg" class="move-failed" alt="" aria-hidden="true" />
+            }
             <!-- don't show text for default status -->
             @if (file().status !== ViewFileStatus.DEFAULT) {
                 <span class="text">{{file().status | capitalize}}</span>

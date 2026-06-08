@@ -32,6 +32,7 @@ export enum ModelFileState {
   VALIDATING      = 'validating',
   VALIDATED       = 'validated',
   CORRUPT         = 'corrupt',
+  MOVE_FAILED     = 'move_failed',
 }
 
 const STATE_LOOKUP: Record<string, ModelFileState> = {
@@ -46,6 +47,7 @@ const STATE_LOOKUP: Record<string, ModelFileState> = {
   VALIDATING:     ModelFileState.VALIDATING,
   VALIDATED:      ModelFileState.VALIDATED,
   CORRUPT:        ModelFileState.CORRUPT,
+  MOVE_FAILED:    ModelFileState.MOVE_FAILED,
 };
 
 /**
