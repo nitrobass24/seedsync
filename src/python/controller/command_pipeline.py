@@ -14,7 +14,7 @@ import os
 from collections.abc import Callable
 from queue import Queue
 
-from common import AppError, AppProcess, Context, MultiprocessingLogger
+from common import AppError, Context, MultiprocessingLogger
 from lftp import LftpError
 from model import ModelError, ModelFile
 
@@ -28,6 +28,7 @@ from .move import MoveProcess
 from .pair_context import PairContext
 from .persist_keys import persist_key
 from .validate import ValidateProcess, ValidateRequest
+from .worker_supervisor import WorkerSupervisor
 
 
 class CommandPipeline:
@@ -45,8 +46,8 @@ class CommandPipeline:
         context: Context,
         password: str | None,
         mp_logger: MultiprocessingLogger,
-        extract_process: ExtractProcess,
-        validate_process: ValidateProcess,
+        extract_process: WorkerSupervisor[ExtractProcess],
+        validate_process: WorkerSupervisor[ValidateProcess],
         logger: logging.Logger,
         sync_persist_callback: Callable[[], None],
     ):
@@ -392,7 +393,9 @@ class CommandPipeline:
         A move can fail two ways: by raising (propagate_exception) or by
         reporting a MoveFailedResult on its failed queue (silent return paths
         such as a vanished source or a size mismatch). In both cases the moved
-        key is discarded so the next force_scan re-spawns the move (retry).
+        key is discarded so the next model-update cycle re-spawns the move
+        (in-session retry, #536) and the file is surfaced as MOVE_FAILED so it is
+        not silently shown as done. A successful move clears any prior MOVE_FAILED.
         """
         failed = False
         try:
@@ -403,9 +406,18 @@ class CommandPipeline:
         for result in move_process.pop_failed():
             self._logger.error(f"Move failed for '{result.name}': {result.error_message}")
             failed = True
+        move_key = persist_key(move_process.pair_id, move_process.file_name)
         if failed:
-            move_key = persist_key(move_process.pair_id, move_process.file_name)
+            # Discard the moved key so the next cycle re-spawns the move (retry),
+            # and surface the failure as a visible MOVE_FAILED model state.
             self.moved_file_keys.discard(move_key)
+            self._persist.move_failed_file_names.add(move_key)
+            self.sync_persist_callback()
+        else:
+            # Move succeeded -- clear any prior failure so the file proceeds normally.
+            if move_key in self._persist.move_failed_file_names:
+                self._persist.move_failed_file_names.discard(move_key)
+                self.sync_persist_callback()
         # The move only changed the owning pair's local_path, so rescan just that
         # pair; fall back to all pairs only if the owner can't be located.
         owner = next((pc for pc in self._pair_contexts if pc.pair_id == move_process.pair_id), None)
@@ -438,9 +450,6 @@ class CommandPipeline:
         # must degrade that feature only, not kill the whole controller.
         # Isolate each worker so one dead worker doesn't stop the other or
         # halt all downloads.
-        # NOTE: this only ISOLATES the fault — the dead worker is not yet
-        # recreated, so extract/validate stays disabled until the service is
-        # restarted. Automatic worker recreation is tracked in #511's follow-up.
         try:
             self._extract_process.propagate_exception()
         except Exception:
@@ -449,14 +458,24 @@ class CommandPipeline:
             self._validate_process.propagate_exception()
         except Exception:
             self._logger.warning("Validate worker process failed: %s", self._validate_process.name, exc_info=True)
-        # propagate_exception() consumes the queued fault once, so without this a
-        # permanently-dead worker would go silent after the first cycle. Surface
-        # the dead state once at ERROR so the degradation stays visible.
+        # propagate_exception() consumes the queued fault once, so report the dead
+        # state once at ERROR (per supervisor) to keep the degradation visible,
+        # then recreate the worker so extract/validate resumes without a full
+        # service restart (#535). The supervisor swaps in the fresh worker so the
+        # pipeline and updater (which share the same supervisor) both see it.
         self.__report_if_worker_dead(self._extract_process, "Extract")
         self.__report_if_worker_dead(self._validate_process, "Validate")
+        self._extract_process.recreate_if_dead()
+        self._validate_process.recreate_if_dead()
 
-    def __report_if_worker_dead(self, worker: AppProcess, feature: str) -> None:
-        worker_id = id(worker)
+    def __report_if_worker_dead(
+        self, worker: WorkerSupervisor[ExtractProcess] | WorkerSupervisor[ValidateProcess], feature: str
+    ) -> None:
+        # Dedupe on the live worker instance, not the supervisor: the supervisor's
+        # id is stable across recreate_if_dead(), so keying on it would suppress the
+        # ERROR for every death after the first. A recreated worker is a new
+        # instance (new id), so its later death is reported again (#535 follow-up).
+        worker_id = id(worker.worker)
         if worker_id in self.__reported_dead_workers:
             return
         try:
@@ -467,7 +486,7 @@ class CommandPipeline:
         if not alive:
             self.__reported_dead_workers.add(worker_id)
             self._logger.error(
-                "%s worker process %s has died; %s is disabled until the service is restarted.",
+                "%s worker process %s has died and will be restarted; %s will resume automatically.",
                 feature,
                 worker.name,
                 feature.lower(),
@@ -487,28 +506,32 @@ class CommandPipeline:
             return
         self.spawn_move_process(file_name, pc)
 
-    def spawn_move_process(self, file_name: str, pc: PairContext):
-        """
-        Spawn a MoveProcess to move a file from staging to the final local_path
+    def spawn_move_process(self, file_name: str, pc: PairContext) -> bool:
+        """Spawn a MoveProcess to move a file from staging to the final local_path.
+
+        Returns True if a move process was actually spawned, False if the call was
+        a no-op (already moved / in flight, staging disabled, or nothing left in
+        staging). A retry of a failed move uses this to tell a real retry from a
+        resolved no-op so it can clear a stale MOVE_FAILED state (#536 follow-up).
         """
         pair_id = pc.pair_id
         move_key = persist_key(pair_id, file_name)
         if move_key in self.moved_file_keys:
             self._logger.debug(f"Skipping move for {file_name} - already moved")
-            return
+            return False
 
         dest_path = pc.local_path
         staging_source = self._pair_staging_dir(pc)
         if staging_source is None:
             self._logger.debug(f"Skipping move for {file_name} - staging is not enabled")
-            return
+            return False
 
         # Skip if the file doesn't exist in staging (e.g. already moved in a prior session)
         staging_file = os.path.join(staging_source, file_name)
         if not os.path.exists(staging_file):
             self._logger.debug(f"Skipping move for {file_name} - not found in staging")
             self.moved_file_keys.add(move_key)
-            return
+            return False
 
         process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name, pair_id=pair_id)
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
@@ -520,6 +543,7 @@ class CommandPipeline:
         self.moved_file_keys.add(move_key)
         self.active_move_processes.append(process)
         self._logger.info(f"Spawned move process for {file_name} (staging -> local)")
+        return True
 
     def _get_pair_context_for_command(self, command: Command) -> PairContext | None:
         """Find the pair context for a command based on pair_id."""

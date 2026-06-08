@@ -123,10 +123,12 @@ class TestSerializeModel(unittest.TestCase):
         i.state = ModelFile.State.VALIDATED
         j = ModelFile("j", False)
         j.state = ModelFile.State.CORRUPT
-        files = [a, b, c, d, e, f, g, h, i, j]
+        k = ModelFile("k", False)
+        k.state = ModelFile.State.MOVE_FAILED
+        files = [a, b, c, d, e, f, g, h, i, j, k]
         out = parse_stream(serialize.model(files))
         data = json.loads(out["data"])
-        self.assertEqual(10, len(data))
+        self.assertEqual(11, len(data))
         self.assertEqual("default", data[0]["state"])
         self.assertEqual("downloading", data[1]["state"])
         self.assertEqual("queued", data[2]["state"])
@@ -137,6 +139,7 @@ class TestSerializeModel(unittest.TestCase):
         self.assertEqual("validating", data[7]["state"])
         self.assertEqual("validated", data[8]["state"])
         self.assertEqual("corrupt", data[9]["state"])
+        self.assertEqual("move_failed", data[10]["state"])
 
     def test_remote_size(self):
         serialize = SerializeModel()

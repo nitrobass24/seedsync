@@ -953,6 +953,39 @@ class TestLftpJobStatusParser(unittest.TestCase):
         statuses_jobs = [j for j in statuses if j.state == LftpJobStatus.State.RUNNING]
         self.assertEqual(golden_jobs, statuses_jobs)
 
+    def test_pget_no_data_line_followed_by_job_header(self):
+        """Regression for #555: a pget header with no data line (just connected,
+        nothing transferred yet) immediately followed by another job's header
+        must NOT consume that successor header.
+
+        Before the fix '_parse_pget_header_block' unconditionally popped the line
+        after 'sftp' as the data line, so the next job's '[2] mirror ...' header
+        was silently dropped and only one job was parsed.
+        """
+        output = """
+        [0] queue (sftp://someone:@localhost)
+        sftp://someone:@localhost/home/someone
+        Now executing: [1] pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/
+        -[2] mirror -c /tmp/test_lftp/remote/a /tmp/test_lftp/local/
+        [1] pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/
+        sftp://someone:@localhost/home/someone
+        [2] mirror -c /tmp/test_lftp/remote/a /tmp/test_lftp/local/
+        cd `/tmp/test_lftp/remote/a' [Connecting...]
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        golden_job1 = LftpJobStatus(
+            job_id=1, job_type=LftpJobStatus.Type.PGET, state=LftpJobStatus.State.RUNNING, name="c", flags="-c"
+        )
+        golden_job1.total_transfer_state = LftpJobStatus.TransferState(None, None, None, None, None)
+        golden_job2 = LftpJobStatus(
+            job_id=2, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.RUNNING, name="a", flags="-c"
+        )
+        golden_jobs = [golden_job1, golden_job2]
+        self.assertEqual(len(golden_jobs), len(statuses))
+        statuses_jobs = [j for j in statuses if j.state == LftpJobStatus.State.RUNNING]
+        self.assertEqual(golden_jobs, statuses_jobs)
+
     def test_raises_error_on_bad_status(self):
         output = """
         [0] queue (sftp://someone:@localhost) 

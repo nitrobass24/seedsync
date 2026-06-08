@@ -283,6 +283,14 @@ class LftpJobStatusParser:
         )
 
     @staticmethod
+    def _is_chunk_data_line(line: str) -> bool:
+        """True if ``line`` is a chunk-data line (matches one of the three
+        chunk-data regexes). Used to peek before popping so a non-data line
+        (e.g. the next job's header when a pget emitted no data line) is left
+        in place for the dispatch loop rather than silently consumed."""
+        return bool(_RE_CHUNK_AT.search(line) or _RE_CHUNK_AT2.search(line) or _RE_CHUNK_GOT.search(line))
+
+    @staticmethod
     def _build_chunk_transfer_state(
         result_at: "re.Match[str] | None",
         result_at2: "re.Match[str] | None",
@@ -322,11 +330,14 @@ class LftpJobStatusParser:
             raise ValueError(f"Missing the 'sftp' line for pget header '{result.string}'")
         lines.pop(0)  # pop the 'sftp' line
 
-        # Data line may not exist
+        # Data line may not exist. Peek before popping: only consume the next
+        # line if it is actually a chunk-data line. Otherwise it belongs to the
+        # following job (its header), so leave it for the dispatch loop instead
+        # of silently dropping that job.
         result_at = None
         result_at2 = None
         result_got = None
-        if lines:
+        if lines and LftpJobStatusParser._is_chunk_data_line(lines[0]):
             line = lines.pop(0)  # data line
             result_at = _RE_CHUNK_AT.search(line)
             result_at2 = _RE_CHUNK_AT2.search(line)
@@ -411,6 +422,13 @@ class LftpJobStatusParser:
         name = result.group("name")
         if not lines:
             raise ValueError(f"Missing chunk data for filename '{name}'")
+        # Peek before popping: only consume the next line if it is actually a
+        # chunk-data line. If it is not (e.g. the following job's header when
+        # this transfer emitted no data line), leave it for the dispatch loop
+        # rather than consuming it and dropping that job — and do not register
+        # a transfer state from a non-data line.
+        if not LftpJobStatusParser._is_chunk_data_line(lines[0]):
+            return
         line = lines.pop(0)
         result_at = _RE_CHUNK_AT.search(line)
         result_at2 = _RE_CHUNK_AT2.search(line)
@@ -433,8 +451,6 @@ class LftpJobStatusParser:
                 raise ValueError(
                     "Mismatch: filename '{}' but chunk data for '{}'".format(name, result_got.group("name"))
                 )
-        else:
-            raise ValueError(f"Missing chunk data for filename '{name}'")
         file_status = LftpJobStatusParser._build_chunk_transfer_state(result_at, result_at2, result_got)
         assert prev_job is not None
         prev_job.add_active_file_transfer_state(name, file_status)

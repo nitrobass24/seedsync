@@ -30,6 +30,7 @@ class ModelFile:
         VALIDATING = 8
         VALIDATED = 9
         CORRUPT = 10
+        MOVE_FAILED = 11
 
     def __init__(self, name: str, is_dir: bool, pair_id: str | None = None):
         self.__name = name  # file or folder name

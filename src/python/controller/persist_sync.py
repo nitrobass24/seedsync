@@ -45,6 +45,9 @@ class PersistSync:
             pc.model_builder.set_corrupt_files(
                 self._filter_keys_for_pair(self._persist.corrupt_file_names, pc.pair_id, namespaced_prefixes)
             )
+            pc.model_builder.set_move_failed_files(
+                self._filter_keys_for_pair(self._persist.move_failed_file_names, pc.pair_id, namespaced_prefixes)
+            )
 
     @staticmethod
     def _filter_keys_for_pair(keys: set[str], pair_id: str | None, namespaced_prefixes: tuple[str, ...]) -> set[str]:
