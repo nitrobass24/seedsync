@@ -10,6 +10,7 @@
 
 ### Changed
 
+- **Angular 22 upgrade** — Upgraded the frontend from Angular 21 to 22 (all `@angular/*` packages, `@angular/cli`, `@angular/build`, `@angular/cdk`, and `angular-eslint` to 22.0.0), bumping TypeScript to 6.0. Migrated the deprecated `APP_INITIALIZER` token to the functional `provideAppInitializer()` and made the implicit zoneless contract explicit with `provideZonelessChangeDetection()`. Supersedes the closed Dependabot PRs #550 (TypeScript 6 ERESOLVE) and #551 (`@angular/cli` 22 ERESOLVE) by performing the lockstep major bump atomically. (#556)
 - **Performance — backend model build** — Replaced the O(n²) per-cycle model build with O(1) BFS frontiers and a skipped child-list copy in `model_builder`. (#520)
 - **Performance — frontend file list** — Coalesced SSE-driven view rebuilds, memoized the filter, and made bulk-remove a single pass to eliminate file-list rebuild thrash. (#521)
 - **Performance — logs page** — Capped the live-log buffer (ring buffer + stable collision-free `trackBy`), then rendered it with CDK virtual scroll and batched change detection to ~one update per animation frame. (#522, #539)
