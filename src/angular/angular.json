@@ -94,7 +94,10 @@
           "defaultConfiguration": "development"
         },
         "test": {
-          "builder": "@angular/build:unit-test"
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "runner": "vitest"
+          }
         },
         "lint": {
           "builder": "@angular-eslint/builder:lint",

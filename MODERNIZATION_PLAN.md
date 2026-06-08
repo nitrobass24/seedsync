@@ -41,11 +41,12 @@ The fork at [github.com/nitrobass24/seedsync](https://github.com/nitrobass24/see
 
 ### Phase 4: Angular Modernization
 
-Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v0.10.0 attempt).
+Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v0.10.0 attempt). Angular 22 upgrade completed (#556) — TypeScript 6.0 + explicit zoneless change detection.
 
 | Task | Status |
 |------|--------|
 | Upgrade Angular 4 to 21 | Done |
+| Upgrade Angular 21 to 22 (TypeScript 6.0) | Done |
 | Standalone components (no NgModules) | Done |
 | Bootstrap 4 to 5.3 with JS bundle | Done |
 | Replace Immutable.js with native TypeScript | Done |
@@ -155,7 +156,7 @@ Angular 21 migration completed in v0.11.0 (fresh rewrite, not based on earlier v
 |                    (45 MB Alpine)                                 |
 |                                                                   |
 |  +-------------+       +-------------+                            |
-|  | Python 3.12 |       | Angular 21  |                            |
+|  | Python 3.12 |       | Angular 22  |                            |
 |  |   Bottle    |<------|   Web UI    |                            |
 |  |  REST API   |       |             |                            |
 |  +------+------+       +-------------+                            |
