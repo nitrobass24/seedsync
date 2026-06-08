@@ -64,18 +64,11 @@ Example:
 - **Bug name** - Description of fix
 ```
 
-### 2. Update MODERNIZATION_PLAN.md
-
-If the change relates to modernization tasks:
-- Update task status (🔄 IN PROGRESS → ✅)
-- Update version references
-- Update architecture diagram if needed
-
-### 3. Update package.json Version
+### 2. Update package.json Version
 
 Update the version in `src/angular/package.json` to match the release version. This is displayed on the About page.
 
-### 4. Create Release
+### 3. Create Release
 
 Releases use a `release/vX.Y.Z` branch off `develop`, a PR into `master`, and a tag on the resulting merge commit. Never commit the release directly to `develop` or `master`.
 
@@ -84,8 +77,8 @@ Releases use a `release/vX.Y.Z` branch off `develop`, a PR into `master`, and a 
 git checkout develop && git pull origin develop
 git checkout -b release/vX.Y.Z
 
-# Stage the release commit (CHANGELOG / MODERNIZATION_PLAN / package.json)
-git add CHANGELOG.md MODERNIZATION_PLAN.md src/angular/package.json
+# Stage the release commit (CHANGELOG / package.json)
+git add CHANGELOG.md src/angular/package.json
 git commit -m "Release vX.Y.Z - Brief description"
 git push -u origin release/vX.Y.Z
 
@@ -105,7 +98,7 @@ The CI workflow will automatically:
 - Push to ghcr.io
 - Create GitHub release with auto-generated notes
 
-### 5. Update GitHub Release Notes
+### 4. Update GitHub Release Notes
 
 After CI creates the release, update the release notes with detailed changelog:
 
@@ -139,7 +132,7 @@ Format should match CHANGELOG.md entries with:
 - Issue references where applicable
 - Always include a "Docker Pull" section with the `docker pull` command for the release version
 
-### 6. Verify Release
+### 5. Verify Release
 
 - Check GitHub Actions completed successfully
 - Verify image is available: `docker pull ghcr.io/nitrobass24/seedsync:X.Y.Z`
@@ -156,7 +149,6 @@ Format should match CHANGELOG.md entries with:
 | File | Purpose |
 |------|---------|
 | `CHANGELOG.md` | Release history and notes |
-| `MODERNIZATION_PLAN.md` | Project modernization status |
 | `src/docker/build/docker-image/Dockerfile` | Multi-stage Docker build |
 | `.github/workflows/ci.yml` | CI/CD pipeline |
 | `.github/workflows/docs-pages.yml` | Documentation deployment |
