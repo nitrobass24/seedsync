@@ -174,21 +174,23 @@ class TestControllerPersist(unittest.TestCase):
         )
 
     def test_validated_and_corrupt_round_trip(self):
-        """Validated and corrupt keys should survive serialization round-trip."""
+        """Validated, corrupt, and move-failed keys should survive serialization round-trip."""
         persist = ControllerPersist()
         persist.downloaded_file_names.add("a")
         persist.extracted_file_names.add("b")
         persist.validated_file_names.add("c")
         persist.corrupt_file_names.add("d")
+        persist.move_failed_file_names.add("e")
 
         persist_actual = ControllerPersist.from_str(persist.to_str())
         self.assertEqual({"a"}, persist_actual.downloaded_file_names)
         self.assertEqual({"b"}, persist_actual.extracted_file_names)
         self.assertEqual({"c"}, persist_actual.validated_file_names)
         self.assertEqual({"d"}, persist_actual.corrupt_file_names)
+        self.assertEqual({"e"}, persist_actual.move_failed_file_names)
 
     def test_validated_and_corrupt_missing_keys_default_empty(self):
-        """Old persist files without validated/corrupt keys should load with empty sets."""
+        """Old persist files without validated/corrupt/move_failed keys load empty sets."""
         content = json.dumps(
             {
                 "downloaded": ["a"],
@@ -198,6 +200,24 @@ class TestControllerPersist(unittest.TestCase):
         persist = ControllerPersist.from_str(content)
         self.assertEqual(set(), persist.validated_file_names)
         self.assertEqual(set(), persist.corrupt_file_names)
+        self.assertEqual(set(), persist.move_failed_file_names)
+
+    def test_move_failed_legacy_keys_migrated(self):
+        """Legacy colon-separated keys in move_failed should be migrated (#536)."""
+        uuid1 = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        content = json.dumps(
+            {
+                "downloaded": [],
+                "extracted": [],
+                "move_failed": [f"{uuid1}:stuck.mkv"],
+            }
+        )
+        persist = ControllerPersist.from_str(content)
+        sep = "\x1f"
+        self.assertEqual(
+            {f"{uuid1}{sep}stuck.mkv"},
+            persist.move_failed_file_names,
+        )
 
     def test_validated_corrupt_legacy_keys_migrated(self):
         """Legacy colon-separated keys in validated/corrupt should be migrated."""

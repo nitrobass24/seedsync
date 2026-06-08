@@ -192,6 +192,49 @@ class TestCommandPipelineHelpers(unittest.TestCase):
         pc.local_scan_process.force_scan.assert_called_once()
         self.assertEqual([], pipeline.active_move_processes)
 
+    def test_cleanup_surfaces_move_failure_as_persist_state(self):
+        """A failed move must add its key to move_failed_file_names and sync so the
+        file renders as MOVE_FAILED instead of silently DOWNLOADED (#536)."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+        pipeline._persist.move_failed_file_names = set()
+
+        move_key = persist_key("pair-1", "file.txt")
+        pipeline.moved_file_keys.add(move_key)
+
+        failure = MagicMock()
+        failure.name = "file.txt"
+        failure.error_message = "size verification failed"
+        move_process = self._make_move_process("pair-1", "file.txt", failed_results=[failure])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        # Key discarded (so a retry can re-spawn) AND surfaced as failed state
+        self.assertNotIn(move_key, pipeline.moved_file_keys)
+        self.assertIn(move_key, pipeline._persist.move_failed_file_names)
+        pipeline.sync_persist_callback.assert_called()
+
+    def test_cleanup_clears_move_failed_state_on_success(self):
+        """A move that succeeds after a prior failure must clear move_failed_file_names
+        for that key so the file proceeds normally (#536)."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+
+        move_key = persist_key("pair-1", "file.txt")
+        pipeline._persist.move_failed_file_names = {move_key}
+        pipeline.moved_file_keys.add(move_key)
+
+        move_process = self._make_move_process("pair-1", "file.txt", failed_results=[])
+        pipeline.active_move_processes.append(move_process)
+
+        pipeline.cleanup()
+
+        self.assertNotIn(move_key, pipeline._persist.move_failed_file_names)
+        pipeline.sync_persist_callback.assert_called()
+        # Successful move keeps its moved key (no retry)
+        self.assertIn(move_key, pipeline.moved_file_keys)
+
     def test_cleanup_discards_key_when_move_raises(self):
         """A move that raises (propagate_exception) must also discard its key."""
         pc = self._make_pair_context("pair-1")
@@ -343,6 +386,24 @@ class TestCommandPipelineHelpers(unittest.TestCase):
         self.assertIn("restarted", dead_reports[0])
         # The live validate worker is never reported dead.
         self.assertFalse(any("Validate worker" in m for m in error_messages))
+
+    def test_propagate_exceptions_reports_dead_worker_again_after_recreation(self):
+        """The dead-worker ERROR dedupe keys on the live worker instance, not the
+        supervisor (whose id is stable across recreate_if_dead). So once a worker
+        is recreated, a later death of the fresh instance is reported again rather
+        than silently suppressed (#535 follow-up)."""
+        pipeline = self._make_pipeline([])
+        pipeline._extract_process.is_alive.return_value = False
+        pipeline._validate_process.is_alive.return_value = True
+
+        pipeline.propagate_exceptions()
+        # Simulate recreate_if_dead() swapping in a fresh worker instance.
+        pipeline._extract_process.worker = MagicMock()
+        pipeline.propagate_exceptions()
+
+        error_messages = [c.args[0] % c.args[1:] for c in pipeline._logger.error.call_args_list]
+        dead_reports = [m for m in error_messages if "has died" in m]
+        self.assertEqual(2, len(dead_reports), error_messages)
 
     def test_propagate_exceptions_reraises_permanent_lftp_error(self):
         """A permanent lftp credential failure must still raise AppError so the

@@ -23,6 +23,11 @@ from .pair_context import ControllerError, PairContext, configure_lftp, validate
 from .persist_sync import PersistSync
 from .scan import ActiveScanner, LocalScanner, RemoteScanner, ScannerProcess
 from .validate import ValidateProcess
+from .worker_supervisor import WorkerSupervisor
+
+# Anything torn down in Controller.exit(): a raw worker AppProcess or a WorkerSupervisor
+# wrapping one (both expose terminate/join/is_alive/close_queues/name).
+_TerminableWorker = AppProcess | WorkerSupervisor[ExtractProcess] | WorkerSupervisor[ValidateProcess]
 
 
 class Controller:
@@ -59,12 +64,19 @@ class Controller:
         # Build pair contexts (persist state is seeded after updater creation below)
         self.__pair_contexts: list[PairContext] = self._build_pair_contexts()
 
-        # Setup extract process (global -- extraction is local-only)
-        self.__extract_process = ExtractProcess()
+        # Setup extract process (global -- extraction is local-only).
+        # The supervisor holds the live worker plus a factory so a dead worker
+        # can be recreated in place (#535); the pipeline and updater share this
+        # same supervisor, so a swap re-wires all three readers at once.
+        self.__extract_process: WorkerSupervisor[ExtractProcess] = WorkerSupervisor(
+            factory=ExtractProcess, logger=self.logger, feature="Extract"
+        )
         self.__extract_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
         # Setup validate process (global -- validation uses SSH to remote)
-        self.__validate_process = ValidateProcess()
+        self.__validate_process: WorkerSupervisor[ValidateProcess] = WorkerSupervisor(
+            factory=ValidateProcess, logger=self.logger, feature="Validate"
+        )
         self.__validate_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
         # Persist sync is a standalone collaborator so the pipeline and updater
@@ -235,6 +247,7 @@ class Controller:
         model_builder.set_extract_failed_files(set())
         model_builder.set_validated_files(set())
         model_builder.set_corrupt_files(set())
+        model_builder.set_move_failed_files(set())
         model_builder.set_auto_delete_remote(bool(self.__context.config.autoqueue.auto_delete_remote))  # type: ignore[arg-type]
 
         return PairContext(
@@ -316,7 +329,7 @@ class Controller:
                     getattr(pc, "pair_id", None),
                 )
 
-    def __iter_worker_processes(self) -> Iterator[AppProcess]:
+    def __iter_worker_processes(self) -> Iterator[_TerminableWorker]:
         """All terminable worker processes, in teardown order."""
         for pc in self.__pair_contexts:
             yield pc.active_scan_process
@@ -344,7 +357,7 @@ class Controller:
         except Exception:
             self.logger.exception("Error during controller teardown: %s", description)
 
-    def __bounded_join(self, p: AppProcess) -> None:
+    def __bounded_join(self, p: _TerminableWorker) -> None:
         self.__safe_teardown("join", lambda: p.join(self.__JOIN_TIMEOUT_IN_SECS))
         try:
             still_alive = p.is_alive()

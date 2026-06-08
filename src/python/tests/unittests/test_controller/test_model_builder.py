@@ -1903,6 +1903,77 @@ class TestModelBuilder(unittest.TestCase):
         self.model_builder.set_corrupt_files({"a", "c"})
         self.assertTrue(self.model_builder.has_changes())
 
+    def test_build_state_move_failed(self):
+        # Downloaded + move-failed -> MOVE_FAILED (#536)
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.MOVE_FAILED, model.get_file("a").state)
+
+        # Extracted + move-failed -> MOVE_FAILED
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_extracted_files({"a"})
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.MOVE_FAILED, model.get_file("a").state)
+
+        # Validated + move-failed -> MOVE_FAILED
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_validated_files({"a"})
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.MOVE_FAILED, model.get_file("a").state)
+
+        # Local-only + move-failed -> DEFAULT (move-failed requires a post-download base)
+        self.model_builder.clear()
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DEFAULT, model.get_file("a").state)
+
+        # Downloading + move-failed -> DOWNLOADING (active download overrides)
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 50, False)])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")]
+        )
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DOWNLOADING, model.get_file("a").state)
+
+    def test_build_state_move_failed_overrides_corrupt(self):
+        # Both corrupt + move-failed -> MOVE_FAILED (move-failed checked last)
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_corrupt_files({"a"})
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.MOVE_FAILED, model.get_file("a").state)
+
+    def test_rebuild_on_move_failed_files(self):
+        self.assertTrue(self.model_builder.has_changes())
+
+        # Initial set
+        self.model_builder.set_move_failed_files({"a", "b"})
+        self.model_builder.build_model()
+        self.assertFalse(self.model_builder.has_changes())
+
+        # Does not invalidate on same
+        self.model_builder.set_move_failed_files({"a", "b"})
+        self.assertFalse(self.model_builder.has_changes())
+
+        # Invalidate on different
+        self.model_builder.set_move_failed_files({"a", "c"})
+        self.assertTrue(self.model_builder.has_changes())
+
 
 class TestSharedLocalDeduplication(unittest.TestCase):
     """

@@ -31,6 +31,7 @@ from .validate import (
     ValidateRequest,
     ValidateStatusResult,
 )
+from .worker_supervisor import WorkerSupervisor
 
 
 class ModelUpdater:
@@ -40,14 +41,18 @@ class ModelUpdater:
     counterparts — this is a structural extraction, not a refactor.
     """
 
+    # Bound the in-session staging->final move retry so a permanently-failing
+    # move does not re-spawn on every cycle forever (#536).
+    MAX_MOVE_RETRIES = 3
+
     def __init__(
         self,
         pair_contexts: list[PairContext],
         persist: ControllerPersist,
         pipeline: CommandPipeline,
         registry: ModelRegistry,
-        extract_process: ExtractProcess,
-        validate_process: ValidateProcess,
+        extract_process: WorkerSupervisor[ExtractProcess],
+        validate_process: WorkerSupervisor[ValidateProcess],
         context: Context,
         password: str | None,
         logger: logging.Logger,
@@ -66,17 +71,22 @@ class ModelUpdater:
         # is injected; otherwise build one over the same pair_contexts/persist so
         # standalone use (and unit tests) behaves identically.
         self._persist_sync = persist_sync or PersistSync(pair_contexts, persist)
+        # In-memory per-file budget for the in-session staging->final move retry
+        # (#536). Keyed by persist key; bounded by MAX_MOVE_RETRIES so a
+        # permanently-failing move (e.g. a full disk) does not re-spawn forever.
+        # Held in memory only, so a restart grants a fresh budget.
+        self._move_retry_counts: dict[str, int] = {}
 
     def update(self) -> None:
         # Grab the latest extract results (shared)
-        latest_extract_statuses = self._extract_process.pop_latest_statuses()
-        latest_extracted_results = self._extract_process.pop_completed()
-        latest_failed_extractions = self._extract_process.pop_failed()
+        latest_extract_statuses = self._extract_process.worker.pop_latest_statuses()
+        latest_extracted_results = self._extract_process.worker.pop_completed()
+        latest_failed_extractions = self._extract_process.worker.pop_failed()
 
         # Grab the latest validate results (shared)
-        latest_validate_statuses = self._validate_process.pop_latest_statuses()
-        latest_validated_results = self._validate_process.pop_completed()
-        latest_failed_validations = self._validate_process.pop_failed()
+        latest_validate_statuses = self._validate_process.worker.pop_latest_statuses()
+        latest_validated_results = self._validate_process.worker.pop_completed()
+        latest_failed_validations = self._validate_process.worker.pop_failed()
 
         # Process each pair context's scan results and LFTP status
         for pc in self._pair_contexts:
@@ -92,6 +102,7 @@ class ModelUpdater:
         self._prune_stale_persist()
         self._process_extraction_failures(latest_failed_extractions)
         self._process_validation_results(latest_validated_results, latest_failed_validations)
+        self._retry_failed_moves()
         self._update_controller_status()
 
     def _process_extraction_completions(self, latest_extracted_results: list[ExtractCompletedResult]) -> None:
@@ -175,6 +186,8 @@ class ModelUpdater:
             self._persist.extract_failed_file_names.discard(pkey)
             self._persist.validated_file_names.discard(pkey)
             self._persist.corrupt_file_names.discard(pkey)
+            self._persist.move_failed_file_names.discard(pkey)
+            self._move_retry_counts.pop(pkey, None)
             self.sync_persist_to_all_builders()
 
     def _handle_downloaded_file(self, diff: ModelDiff, pc: PairContext | None) -> None:
@@ -299,6 +312,9 @@ class ModelUpdater:
             self._persist.extract_failed_file_names.difference_update(absent_keys)
             self._persist.validated_file_names.difference_update(absent_keys)
             self._persist.corrupt_file_names.difference_update(absent_keys)
+            self._persist.move_failed_file_names.difference_update(absent_keys)
+            for key in absent_keys:
+                self._move_retry_counts.pop(key, None)
             self.sync_persist_to_all_builders()
 
     def _process_extraction_failures(self, latest_failed_extractions: list[ExtractFailedResult]) -> None:
@@ -344,6 +360,55 @@ class ModelUpdater:
                 )
             # Spawn deferred move regardless of failure type -- validation is done
             self._pipeline.spawn_deferred_move(result.pair_id, result.name)
+
+    def _retry_failed_moves(self) -> None:
+        """Re-spawn staging->final moves that previously failed, within the session.
+
+        A failed move leaves the file DOWNLOADED-in-staging with its moved key
+        discarded (no completed move), so a bare force_scan produces no new
+        DOWNLOADED transition and the move would otherwise only retry on restart.
+        Each cycle we re-spawn the move for any file still in
+        move_failed_file_names that is not already moving, bounded by a per-file
+        budget so a permanently-failing move does not re-spawn forever (#536).
+        """
+        cfg = self._context.config.controller
+        if not (cfg.use_staging and cfg.staging_path):
+            return
+        if not self._persist.move_failed_file_names:
+            return
+        for fail_key in list(self._persist.move_failed_file_names):
+            # Skip files whose move is already in flight (its key is re-added to
+            # moved_file_keys by spawn_move_process); we only retry idle ones.
+            if fail_key in self._pipeline.moved_file_keys:
+                continue
+            if self._move_retry_counts.get(fail_key, 0) >= self.MAX_MOVE_RETRIES:
+                continue
+            self._respawn_failed_move(fail_key)
+
+    def _respawn_failed_move(self, fail_key: str) -> None:
+        """Resolve the owning pair for a failed-move key and re-spawn its move."""
+        for pc in self._pair_contexts:
+            bare_name = strip_persist_key(fail_key, pc.pair_id)
+            # strip_persist_key returns the key unchanged when the prefix doesn't
+            # match; for the default pair (pair_id None) it always matches, so
+            # only treat it as this pair's file when the key is actually scoped to
+            # this pair (changed) or this is the default pair.
+            if bare_name == fail_key and pc.pair_id is not None:
+                continue
+            if self._pipeline.spawn_move_process(bare_name, pc):
+                self._move_retry_counts[fail_key] = self._move_retry_counts.get(fail_key, 0) + 1
+                self._logger.info(
+                    f"Retrying failed move for '{bare_name}' (attempt {self._move_retry_counts[fail_key]})"
+                )
+            elif fail_key in self._persist.move_failed_file_names:
+                # Nothing left to move in staging (the move already completed in a
+                # prior session, or the staging copy vanished): no real MoveProcess
+                # will ever complete to clear this, so resolve it now instead of
+                # leaving the file stuck in MOVE_FAILED forever (#536 follow-up).
+                self._persist.move_failed_file_names.discard(fail_key)
+                self.sync_persist_to_all_builders()
+                self._logger.info(f"Cleared MOVE_FAILED for '{bare_name}': nothing to move in staging")
+            return
 
     def _update_controller_status(self) -> None:
         """Update the controller status (use most recent across all pairs).

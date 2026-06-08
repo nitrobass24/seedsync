@@ -53,6 +53,7 @@ class SerializeModel(Serialize):
         ModelFile.State.VALIDATING: "validating",
         ModelFile.State.VALIDATED: "validated",
         ModelFile.State.CORRUPT: "corrupt",
+        ModelFile.State.MOVE_FAILED: "move_failed",
     }
     __KEY_FILE_REMOTE_SIZE = "remote_size"
     __KEY_FILE_LOCAL_SIZE = "local_size"

@@ -16,13 +16,16 @@ class TestPersistSync(unittest.TestCase):
         pc.pair_id = pair_id
         return pc
 
-    def _make_persist(self, downloaded=None, extracted=None, extract_failed=None, validated=None, corrupt=None):
+    def _make_persist(
+        self, downloaded=None, extracted=None, extract_failed=None, validated=None, corrupt=None, move_failed=None
+    ):
         persist = MagicMock()
         persist.downloaded_file_names = downloaded or set()
         persist.extracted_file_names = extracted or set()
         persist.extract_failed_file_names = extract_failed or set()
         persist.validated_file_names = validated or set()
         persist.corrupt_file_names = corrupt or set()
+        persist.move_failed_file_names = move_failed or set()
         return persist
 
     def test_filters_keys_by_pair_id_prefix(self):
@@ -76,6 +79,7 @@ class TestPersistSync(unittest.TestCase):
             extract_failed={f"abc{KEY_SEP}bad.zip"},
             validated={f"abc{KEY_SEP}good.mkv"},
             corrupt={f"abc{KEY_SEP}corrupt.mkv"},
+            move_failed={f"abc{KEY_SEP}stuck.mkv"},
         )
 
         PersistSync([pc_abc], persist).sync()
@@ -85,6 +89,7 @@ class TestPersistSync(unittest.TestCase):
         pc_abc.model_builder.set_extract_failed_files.assert_called_once_with({"bad.zip"})
         pc_abc.model_builder.set_validated_files.assert_called_once_with({"good.mkv"})
         pc_abc.model_builder.set_corrupt_files.assert_called_once_with({"corrupt.mkv"})
+        pc_abc.model_builder.set_move_failed_files.assert_called_once_with({"stuck.mkv"})
 
     def test_filter_keys_for_pair_static(self):
         result = PersistSync._filter_keys_for_pair(
