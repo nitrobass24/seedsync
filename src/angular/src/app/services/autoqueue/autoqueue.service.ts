@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, Observable, of } from 'rxjs';
+import { tap } from 'rxjs/operators';
 
 import { ConnectedService } from '../utils/connected.service';
 import { LoggerService } from '../utils/logger.service';
@@ -55,16 +56,18 @@ export class AutoQueueService {
     // Double-encode the value
     const patternEncoded = encodeURIComponent(encodeURIComponent(pattern));
     const url = this.AUTOQUEUE_ADD_URL(patternEncoded);
-    const obs = this.restService.sendRequest(url);
-    obs.subscribe({
-      next: (reaction) => {
+    // Update the subject inside the returned pipeline (tap) per the mutating-
+    // service contract: the store updates exactly when the caller subscribes,
+    // with no second internal subscribe. sendRequest already recovers HTTP
+    // errors into a failure WebReaction, so no extra catchError is needed.
+    return this.restService.sendRequest(url).pipe(
+      tap((reaction) => {
         if (reaction.success) {
           const patterns = this.patternsSubject.getValue();
           this.patternsSubject.next([...patterns, { pattern }]);
         }
-      },
-    });
-    return obs;
+      }),
+    );
   }
 
   remove(pattern: string): Observable<WebReaction> {
@@ -83,9 +86,12 @@ export class AutoQueueService {
     // Double-encode the value
     const patternEncoded = encodeURIComponent(encodeURIComponent(pattern));
     const url = this.AUTOQUEUE_REMOVE_URL(patternEncoded);
-    const obs = this.restService.sendRequest(url);
-    obs.subscribe({
-      next: (reaction) => {
+    // Update the subject inside the returned pipeline (tap) per the mutating-
+    // service contract: the store updates exactly when the caller subscribes,
+    // with no second internal subscribe. sendRequest already recovers HTTP
+    // errors into a failure WebReaction, so no extra catchError is needed.
+    return this.restService.sendRequest(url).pipe(
+      tap((reaction) => {
         if (reaction.success) {
           const patterns = this.patternsSubject.getValue();
           const finalIndex = patterns.findIndex((pat) => pat.pattern === pattern);
@@ -96,9 +102,8 @@ export class AutoQueueService {
             ]);
           }
         }
-      },
-    });
-    return obs;
+      }),
+    );
   }
 
   private getPatterns(): void {

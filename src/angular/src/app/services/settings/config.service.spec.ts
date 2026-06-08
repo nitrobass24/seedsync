@@ -221,9 +221,10 @@ describe("ConfigService", () => {
     );
     createService();
 
-    // The user enters the real key in Settings.
+    // The user enters the real key in Settings. The mutating-service contract
+    // defers the subject update to caller subscription, so subscribe here.
     mockRestService.sendRequest.mockReturnValueOnce(of({ success: true, data: null, errorMessage: null }));
-    service.set("web", "api_key", "new-key");
+    service.set("web", "api_key", "new-key").subscribe();
     expect(service.configSnapshot?.web?.api_key).toBe("new-key");
 
     // A later config refresh returns the redacted sentinel. It must NOT clobber
@@ -242,9 +243,9 @@ describe("ConfigService", () => {
     );
     createService();
 
-    // The user clears the key.
+    // The user clears the key. Subscribe so the tap-based mutation fires.
     mockRestService.sendRequest.mockReturnValueOnce(of({ success: true, data: null, errorMessage: null }));
-    service.set("web", "api_key", "");
+    service.set("web", "api_key", "").subscribe();
     expect(service.configSnapshot?.web?.api_key).toBe("");
 
     // The backend redacts even an empty key to the sentinel on refresh; the
@@ -380,7 +381,7 @@ describe("ConfigService", () => {
     createService();
     connectedSubject.next(true);
 
-    service.set("web", "api_key", "my/key");
+    service.set("web", "api_key", "my/key").subscribe();
 
     const encoded = encodeURIComponent(encodeURIComponent("my/key"));
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
@@ -403,7 +404,7 @@ describe("ConfigService", () => {
     createService();
     connectedSubject.next(true);
 
-    service.set("web", "api_key", "");
+    service.set("web", "api_key", "").subscribe();
 
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
       `/server/config/set/web/api_key/${EMPTY_VALUE_SENTINEL}`,
@@ -427,7 +428,7 @@ describe("ConfigService", () => {
     createService();
     connectedSubject.next(true);
 
-    service.set("web", "api_key", "new-key");
+    service.set("web", "api_key", "new-key").subscribe();
 
     // set() is the only place the real key is available client-side; it is
     // pushed to the stream (but not persisted anywhere).
@@ -449,9 +450,40 @@ describe("ConfigService", () => {
     createService();
     connectedSubject.next(true);
 
-    service.set("web", "api_key", "new-key");
+    // The tap-based contract defers the mutation to caller subscription.
+    let result: WebReaction | undefined;
+    service.set("web", "api_key", "new-key").subscribe((r) => (result = r));
 
+    expect(result!.success).toBe(true);
     expect(service.configSnapshot!.web.api_key).toBe("new-key");
+  });
+
+  it("should update the config subject exactly once per caller subscription", () => {
+    const config = makeConfig({ web: { port: 8080, api_key: "old" } });
+    mockRestService.sendRequest
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
+        of({ success: true, data: JSON.stringify(config), errorMessage: null }),
+      )
+      .mockReturnValueOnce(
+        of({ success: true, data: null, errorMessage: null }),
+      );
+    createService();
+    connectedSubject.next(true);
+
+    // Count config$ emissions caused by the set(). The subject already holds the
+    // init config, so subscribing first records the baseline emission.
+    const emitted: (Config | null)[] = [];
+    service.config$.subscribe((c) => emitted.push(c));
+    const baseline = emitted.length;
+
+    service.set("web", "api_key", "new-key").subscribe();
+
+    // No second internal subscribe means the subject mutates exactly once.
+    expect(emitted.length - baseline).toBe(1);
+    expect(emitted[emitted.length - 1]!.web.api_key).toBe("new-key");
   });
 
   it("should not update BehaviorSubject when set request fails", () => {
@@ -469,8 +501,10 @@ describe("ConfigService", () => {
     createService();
     connectedSubject.next(true);
 
-    service.set("web", "api_key", "new-key");
+    let result: WebReaction | undefined;
+    service.set("web", "api_key", "new-key").subscribe((r) => (result = r));
 
+    expect(result!.success).toBe(false);
     expect(service.configSnapshot!.web.api_key).toBe("old");
   });
 
@@ -490,7 +524,7 @@ describe("ConfigService", () => {
     connectedSubject.next(true);
     mockStreamDispatch.setApiKey.mockClear();
 
-    service.set("web", "api_key", "new-key");
+    service.set("web", "api_key", "new-key").subscribe();
 
     expect(mockStreamDispatch.setApiKey).toHaveBeenCalledWith("new-key");
   });
@@ -510,7 +544,7 @@ describe("ConfigService", () => {
     createService();
     connectedSubject.next(true);
 
-    service.set("autoqueue", "enabled", true);
+    service.set("autoqueue", "enabled", true).subscribe();
 
     const encoded = encodeURIComponent(encodeURIComponent("true"));
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
@@ -534,7 +568,7 @@ describe("ConfigService", () => {
     createService();
     connectedSubject.next(true);
 
-    service.set("autoqueue", "enabled", false);
+    service.set("autoqueue", "enabled", false).subscribe();
 
     const encoded = encodeURIComponent(encodeURIComponent("false"));
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
@@ -558,7 +592,7 @@ describe("ConfigService", () => {
     createService();
     connectedSubject.next(true);
 
-    service.set("lftp", "net_limit_rate", null);
+    service.set("lftp", "net_limit_rate", null).subscribe();
 
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
       `/server/config/set/lftp/net_limit_rate/${EMPTY_VALUE_SENTINEL}`,
@@ -581,7 +615,7 @@ describe("ConfigService", () => {
     connectedSubject.next(true);
     mockStreamDispatch.setApiKey.mockClear();
 
-    service.set("web", "port", "9090");
+    service.set("web", "port", "9090").subscribe();
 
     expect(mockStreamDispatch.setApiKey).not.toHaveBeenCalled();
   });
