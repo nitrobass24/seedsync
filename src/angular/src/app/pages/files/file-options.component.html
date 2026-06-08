@@ -5,7 +5,7 @@
         <img src="assets/icons/search.svg" alt="" aria-hidden="true" />
         <div class="input-group">
             <input class="form-control" placeholder="Filter by name..." type="search"
-                   [ngModel]="$safeNavigationMigration((options | async)?.nameFilter)"
+                   [ngModel]="(options | async)?.nameFilter"
                    (ngModelChange)="onFilterByName($event)">
         </div>
     </div>
@@ -19,7 +19,7 @@
             </div>
             <div class="selection">
                 <!-- these divs only show the selected option -->
-                @if ($safeNavigationMigration((options | async)?.selectedStatusFilter) === null || $safeNavigationMigration((options | async)?.selectedStatusFilter) === undefined) {
+                @if ((options | async)?.selectedStatusFilter === null || (options | async)?.selectedStatusFilter === undefined) {
                     <div class="sel-item" id="sel-item-all">
                         <div class="icon"></div>
                         <span class="text">All</span>
@@ -65,7 +65,7 @@
         </button>
         <div class="dropdown-menu">
             <button type="button" class="dropdown-item"
-                 [class.active]="$safeNavigationMigration((options | async)?.selectedStatusFilter) === null || $safeNavigationMigration((options | async)?.selectedStatusFilter) === undefined"
+                 [class.active]="(options | async)?.selectedStatusFilter === null || (options | async)?.selectedStatusFilter === undefined"
                  (click)="onFilterByStatus(null)">
                 <div class="icon"></div>
                 <span class="text">All</span>
