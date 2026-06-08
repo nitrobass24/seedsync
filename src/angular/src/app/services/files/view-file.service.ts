@@ -1,6 +1,6 @@
 import { Injectable, InjectionToken, inject } from '@angular/core';
-import { BehaviorSubject, Observable, of, from } from 'rxjs';
-import { auditTime, mergeMap, toArray } from 'rxjs/operators';
+import { BehaviorSubject, Observable } from 'rxjs';
+import { auditTime } from 'rxjs/operators';
 
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
@@ -11,6 +11,7 @@ import { ViewFile } from '../../models/view-file';
 import { fileKey } from './file-key';
 import { mapState, deriveCapabilities } from './view-file-capabilities';
 import { ViewFileSelectionService } from './view-file-selection.service';
+import { ViewFileCommandService } from './view-file-command.service';
 
 /**
  * Coalescing window (ms) for batching incremental SSE model-file emissions before
@@ -44,6 +45,7 @@ export class ViewFileService {
   private readonly pathPairsService = inject(PathPairsService);
   private readonly coalesceMs = inject(VIEW_FILE_COALESCE_MS);
   private readonly selection = inject(ViewFileSelectionService);
+  private readonly commands = inject(ViewFileCommandService);
 
   private pairNameMap = new Map<string, string>();
   private files: ViewFile[] = [];
@@ -52,6 +54,11 @@ export class ViewFileService {
   private indices = new Map<string, number>();
 
   private prevModelFiles = new Map<string, ModelFile>();
+
+  // Resolve a view-file key to its backing ModelFile from the diffing-owned
+  // snapshot. Threaded into ViewFileCommandService so command dispatch keeps the
+  // exact resolution semantics this service has always used (`prevModelFiles`).
+  private readonly resolveModelFile = (key: string): ModelFile | undefined => this.prevModelFiles.get(key);
 
   private filterCriteria: ViewFileFilterCriteria | null = null;
   private sortComparator: ViewFileComparator | null = null;
@@ -146,34 +153,32 @@ export class ViewFileService {
     }
   }
 
+  // Thin facades over ViewFileCommandService — kept so existing consumers (and
+  // the existing spec) target a single service. Command dispatch lives in
+  // ViewFileCommandService (issue #541); this service threads in the
+  // diffing-owned ModelFile resolver.
   queue(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Queue view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.queue(f));
+    return this.commands.queue(file, this.resolveModelFile);
   }
 
   stop(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Stop view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.stop(f));
+    return this.commands.stop(file, this.resolveModelFile);
   }
 
   extract(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Extract view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.extract(f));
+    return this.commands.extract(file, this.resolveModelFile);
   }
 
   deleteLocal(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Locally delete view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.deleteLocal(f));
+    return this.commands.deleteLocal(file, this.resolveModelFile);
   }
 
   deleteRemote(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Remotely delete view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.deleteRemote(f));
+    return this.commands.deleteRemote(file, this.resolveModelFile);
   }
 
   validate(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Validate view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.validate(f));
+    return this.commands.validate(file, this.resolveModelFile);
   }
 
   toggleCheck(file: ViewFile): void {
@@ -219,35 +224,22 @@ export class ViewFileService {
     this.pushViewFiles();
   }
 
+  // Thin facades over ViewFileCommandService — thread in the current display
+  // list so the command service can apply its checked + capability filter.
   bulkQueue(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isQueueable, f => this.queue(f));
+    return this.commands.bulkQueue(this.files, this.resolveModelFile);
   }
 
   bulkStop(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isStoppable, f => this.stop(f));
+    return this.commands.bulkStop(this.files, this.resolveModelFile);
   }
 
   bulkDeleteLocal(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isLocallyDeletable, f => this.deleteLocal(f), 4);
+    return this.commands.bulkDeleteLocal(this.files, this.resolveModelFile);
   }
 
   bulkDeleteRemote(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isRemotelyDeletable, f => this.deleteRemote(f), 4);
-  }
-
-  private bulkAction(
-    filter: (f: ViewFile) => boolean,
-    action: (f: ViewFile) => Observable<WebReaction>,
-    concurrency = Infinity
-  ): Observable<WebReaction[]> {
-    const checked = this.files.filter(f => this.selection.isChecked(viewFileKey(f)) && filter(f));
-    if (checked.length === 0) {
-      return of([]);
-    }
-    return from(checked).pipe(
-      mergeMap(f => action(f), concurrency),
-      toArray()
-    );
+    return this.commands.bulkDeleteRemote(this.files, this.resolveModelFile);
   }
 
   setFilterCriteria(criteria: ViewFileFilterCriteria | null): void {
@@ -347,34 +339,6 @@ export class ViewFileService {
     this.pushViewFiles();
     this.prevModelFiles = modelFiles;
     this.logger.debug('New view model: %O', this.files);
-  }
-
-  private createAction(
-    file: ViewFile,
-    action: (file: ModelFile) => Observable<WebReaction>,
-  ): Observable<WebReaction> {
-    return new Observable((observer) => {
-      const key = viewFileKey(file);
-      if (!this.prevModelFiles.has(key)) {
-        this.logger.error('File to queue not found: ' + key);
-        observer.next({ success: false, data: null, errorMessage: `File '${file.name}' not found` });
-        observer.complete();
-      } else {
-        const modelFile = this.prevModelFiles.get(key)!;
-        action(modelFile).subscribe({
-          next: (reaction) => {
-            this.logger.debug('Received model reaction: %O', reaction);
-            observer.next(reaction);
-            observer.complete();
-          },
-          error: (err) => {
-            this.logger.error('Action failed for file: ' + key, err);
-            observer.next({ success: false, data: null, errorMessage: String(err?.message ?? err) });
-            observer.complete();
-          },
-        });
-      }
-    });
   }
 
   private pushViewFiles(): void {
