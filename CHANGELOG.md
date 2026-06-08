@@ -5,12 +5,45 @@
 ### Added
 
 - **Notify on download start** — New `notify_on_download_start` option (disabled by default) emits a `download_start` event when a file enters the `DOWNLOADING` state. Fires through the existing webhook, Discord, and Telegram channels, with a yellow Discord embed color and "Download Started" label. (#486)
+- **Automatic extract/validate worker recovery** — A crashed extract or validate worker subprocess is now detected (`is_alive()`/`exitcode`) and recreated automatically via a shared `WorkerSupervisor`, so extraction/validation resumes after a transient fault without restarting the container. (#535)
+- **Failed-move surfacing + in-session retry** — A failed staging→final move is now shown as a distinct `MOVE_FAILED` state (with a "Move failed" badge in the UI) instead of silently appearing done, and is retried within the session up to a bounded per-file budget. (#536)
+
+### Changed
+
+- **Performance — backend model build** — Replaced the O(n²) per-cycle model build with O(1) BFS frontiers and a skipped child-list copy in `model_builder`. (#520)
+- **Performance — frontend file list** — Coalesced SSE-driven view rebuilds, memoized the filter, and made bulk-remove a single pass to eliminate file-list rebuild thrash. (#521)
+- **Performance — logs page** — Capped the live-log buffer (ring buffer + stable collision-free `trackBy`), then rendered it with CDK virtual scroll and batched change detection to ~one update per animation frame. (#522, #539)
+- **Refactor — lftp parser** — Decomposed the 412-line, complexity-48 `LftpJobStatusParser.__parse_jobs` into focused, strictly-typed helpers. (#523)
+- **Refactor — ViewFileService** — Split the god service into a capabilities module, a selection service, and a command service (`ViewFileCommandService`), with a single source of truth for the status→capability state machine. (#524, #541)
+- **Refactor — backend coupling & service conventions** — Decoupled `Controller`/`CommandPipeline`/persist-sync, made config option types typo-safe, and migrated `ConfigService.set` / `AutoQueueService` to the documented tap-based mutating-service contract. (#525, #542)
+- **Repo & CI hygiene** — `.gitignore` cleanup, pinned GitHub Actions, per-job timeouts, removal of dead scripts, and re-enabled the mock-based lftp/ssh/scanner unit tests in CI. (#527, #529)
+- **Dependency updates** — Angular, React 19.2.x, typescript-eslint, eslint, vitest, hono, qs, postcss, webpack-dev-server, webob, and `astral-sh/setup-uv`, among others. (#488–#506, #545–#554)
 
 ### Fixed
 
 - **Config handler persistence atomicity** — `/server/config/set` now captures the pre-mutation value, attempts the disk write, and on `OSError` rolls back the in-memory state and returns a structured HTTP 500 instead of letting the exception bubble up as a stack trace. The LFTP hot-reload callback only fires after a successful write, preventing the runtime from being reconfigured to a value that never made it to disk. (#469)
 - **Integration delete persistence ordering** — `/server/integrations/<id>` DELETE now writes `path_pairs.json` before `integrations.json`. A crash between the two writes previously left a dangling `arr_target_id` (instance gone from integrations but still referenced from a path pair), which is rejected by cross-validation on next load. The new order downgrades the worst-case crash outcome to a harmless orphaned instance. (#496)
 - **Auto-queue and path-pairs handlers wrap persistence in try/except** — `/server/autoqueue/{add,remove}` and `/server/pathpairs/{create,update,delete}` now return a controlled HTTP 500 with a structured body when the underlying `to_file` raises `OSError`, instead of leaking a stack trace. The in-memory mutation still happens (and may diverge from disk in the failure case); the change converts an unhandled exception into a recoverable client error. (#497)
+- **Config values containing `%` crashed persistence** — ConfigParser interpolation on `%` is now handled, and a failed write rolls back the in-memory state cleanly. (#507)
+- **`Controller.exit()` leaked worker subprocesses and queue FDs** when lftp shutdown errored — teardown is now best-effort and each worker join is bounded. (#508)
+- **Auto-queue thread-safety** — Cross-thread set/list races in `AutoQueue`/`AutoQueuePersist` are now lock-guarded. (#509)
+- **Move pipeline silent data loss** — Failed staging→final moves were reported as success; failures now propagate via a result queue. (#510)
+- **Worker crash took down the whole download engine** — A Validate/Extract subprocess crash is now isolated from the controller loop. (#511)
+- **Failed periodic `persist()` misclassified as a clean shutdown** — now surfaced at ERROR instead of only INFO. (#512)
+- **lftp job-status parser robustness** — Fixed three edge-case parsing bugs (#517) and a pget header with no data line that consumed the following job's header (#555).
+- **Auto-queue add/remove applied its side effect even when persistence failed** — now rolls back and returns a structured 500. (#518)
+- **Directory validation broke on tilde/relative remote paths** — fixed tilde expansion in the remote find/hash commands. (#519)
+- **Web command handlers could block the request thread indefinitely** — now bounded with a 504 timeout. (#526)
+- **File-action failures were silently swallowed in the UI** — single-file action errors now surface and stuck rows recover. (#513)
+- **UI locked out after reload when `web.api_key` was set** — fixed the SSE 401 deadlock by bootstrapping config off the stream. (#514)
+- **Bulk Delete Local/Remote had no confirmation** — now requires a two-click confirm to guard against accidental data loss. (#515)
+- **Unguarded `JSON.parse` in SSE/logs/auto-queue handlers** — wrapped with try/catch and surfaced fetch errors. (#516)
+
+### Security
+
+- **Hardened Docker runtime baseline** — The container now runs with `no-new-privileges` and a reduced Linux capability set. (#528)
+- **Web API key no longer persisted client-side** — kept out of browser storage. (#514)
+- **Security-critical path test coverage** — Added tests for extraction zip-slip, SSH command quoting, persist races, config special characters, scanner symlinks, and webhook URL-scheme validation. (#530)
 
 ## [0.18.1] - 2026-05-16
 
