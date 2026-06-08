@@ -59,27 +59,36 @@
     Scroll To Top
   </button>
 
-  <div #logHead class="log-marker"></div>
-
-  @for (record of records; track trackRecord($index, record)) {
+  <cdk-virtual-scroll-viewport [itemSize]="rowHeight" class="log-viewport">
     <p
+      *cdkVirtualFor="let record of records; trackBy: trackRecord"
       class="record"
       [class.debug]="record.level === LogLevel.DEBUG"
       [class.info]="record.level === LogLevel.INFO"
       [class.warning]="record.level === LogLevel.WARNING"
       [class.error]="record.level === LogLevel.ERROR"
-      [class.critical]="record.level === LogLevel.CRITICAL">
-      {{ record.time | date: 'yyyy/MM/dd HH:mm:ss' }} -
-      {{ record.level }} -
-      {{ record.loggerName }} -
-      {{ record.message }}
+      [class.critical]="record.level === LogLevel.CRITICAL"
+      [title]="record.message">
+      <span class="line">
+        {{ record.time | date: 'yyyy/MM/dd HH:mm:ss' }} -
+        {{ record.level }} -
+        {{ record.loggerName }} -
+        {{ record.message }}
+      </span>
       @if (record.exceptionTraceback) {
-        <span class="traceback">{{ record.exceptionTraceback }}</span>
+        <button
+          type="button"
+          class="traceback-toggle"
+          [attr.aria-expanded]="expandedTraceback === record"
+          (click)="toggleTraceback(record)">
+          {{ expandedTraceback === record ? 'Hide trace' : 'Show trace' }}
+        </button>
+        @if (expandedTraceback === record) {
+          <span class="traceback">{{ record.exceptionTraceback }}</span>
+        }
       }
     </p>
-  }
-
-  <div #logTail class="log-marker"></div>
+  </cdk-virtual-scroll-viewport>
 
   <button
     id="btn-scroll-bottom"
