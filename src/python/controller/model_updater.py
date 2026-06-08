@@ -22,7 +22,8 @@ from .exclude_patterns import filter_excluded_files
 from .extract import ExtractCompletedResult, ExtractFailedResult, ExtractProcess, ExtractStatus, ExtractStatusResult
 from .model_registry import ModelRegistry
 from .pair_context import PairContext
-from .persist_keys import KEY_SEP, persist_key, strip_persist_key
+from .persist_keys import persist_key, strip_persist_key
+from .persist_sync import PersistSync
 from .validate import (
     ValidateCompletedResult,
     ValidateFailedResult,
@@ -50,6 +51,7 @@ class ModelUpdater:
         context: Context,
         password: str | None,
         logger: logging.Logger,
+        persist_sync: PersistSync | None = None,
     ):
         self._pair_contexts = pair_contexts
         self._persist = persist
@@ -60,6 +62,10 @@ class ModelUpdater:
         self._context = context
         self._password = password
         self._logger = logger
+        # Share the same PersistSync instance with the CommandPipeline when one
+        # is injected; otherwise build one over the same pair_contexts/persist so
+        # standalone use (and unit tests) behaves identically.
+        self._persist_sync = persist_sync or PersistSync(pair_contexts, persist)
 
     def update(self) -> None:
         # Grab the latest extract results (shared)
@@ -437,45 +443,4 @@ class ModelUpdater:
 
     def sync_persist_to_all_builders(self):
         """Push current persist state to all pair model builders, filtered by pair_id."""
-        namespaced_prefixes = tuple(
-            f"{other_pc.pair_id}{sep}" for other_pc in self._pair_contexts if other_pc.pair_id for sep in (KEY_SEP, ":")
-        )
-        for pc in self._pair_contexts:
-            pc.model_builder.set_downloaded_files(
-                self._filter_keys_for_pair(self._persist.downloaded_file_names, pc.pair_id, namespaced_prefixes)
-            )
-            pc.model_builder.set_extracted_files(
-                self._filter_keys_for_pair(self._persist.extracted_file_names, pc.pair_id, namespaced_prefixes)
-            )
-            pc.model_builder.set_extract_failed_files(
-                self._filter_keys_for_pair(self._persist.extract_failed_file_names, pc.pair_id, namespaced_prefixes)
-            )
-            pc.model_builder.set_validated_files(
-                self._filter_keys_for_pair(self._persist.validated_file_names, pc.pair_id, namespaced_prefixes)
-            )
-            pc.model_builder.set_corrupt_files(
-                self._filter_keys_for_pair(self._persist.corrupt_file_names, pc.pair_id, namespaced_prefixes)
-            )
-
-    @staticmethod
-    def _filter_keys_for_pair(keys: set[str], pair_id: str | None, namespaced_prefixes: tuple[str, ...]) -> set[str]:
-        """Filter and strip persist keys that belong to a specific pair.
-
-        For pairs with a pair_id, matches keys with the current separator or
-        legacy colon prefix. For the default pair (pair_id=None), matches keys
-        that don't start with any other pair's prefix.
-        """
-        result: set[str] = set()
-        if pair_id:
-            prefix = f"{pair_id}{KEY_SEP}"
-            legacy_prefix = f"{pair_id}:"
-            for key in keys:
-                if key.startswith(prefix):
-                    result.add(key[len(prefix) :])
-                elif key.startswith(legacy_prefix):
-                    result.add(key[len(legacy_prefix) :])
-        else:
-            for key in keys:
-                if not key.startswith(namespaced_prefixes):
-                    result.add(key)
-        return result
+        self._persist_sync.sync()

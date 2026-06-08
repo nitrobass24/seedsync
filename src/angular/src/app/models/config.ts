@@ -3,6 +3,17 @@
  * Note: Naming convention matches that used in the JSON.
  */
 
+/** The value any single config field may hold. */
+export type ConfigValue = string | number | boolean | null;
+
+/**
+ * A config section read as a string-keyed bag of ConfigValues. Sections do NOT
+ * `extends` this (that would collapse `keyof Section` to `string` and defeat the
+ * typo-catching ConfigValuePath in options-list.ts); it is only used as an
+ * explicit, localized cast target at the few dynamic section/option access sites.
+ */
+export type ConfigSection = Record<string, ConfigValue>;
+
 export interface General {
   log_level: string | null;
   verbose: boolean | null;
@@ -17,6 +28,7 @@ export interface Lftp {
   remote_path: string | null;
   local_path: string | null;
   remote_path_to_scan_script: string | null;
+  remote_python_path: string | null;
   use_ssh_key: boolean | null;
   num_max_parallel_downloads: number | null;
   num_max_parallel_files_per_download: number | null;
@@ -107,6 +119,7 @@ export const DEFAULT_LFTP: Lftp = {
   remote_path: null,
   local_path: null,
   remote_path_to_scan_script: null,
+  remote_python_path: null,
   use_ssh_key: null,
   num_max_parallel_downloads: null,
   num_max_parallel_files_per_download: null,

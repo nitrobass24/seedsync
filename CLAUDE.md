@@ -276,6 +276,17 @@ When you see these, open an issue for the extraction rather than working around 
 - **Mechanical checks** (Python): ruff's `C901` (cyclomatic complexity) with `max-complexity = 12`. Enforced in CI; existing outliers are annotated with `# noqa: C901`. Test files (`tests/**`) are excluded via `per-file-ignores` in `pyproject.toml`.
 - **Ratchet pattern**: when a bound exists but the codebase has outliers, set the threshold just above the worst and drop it over time (same pattern we use for `--max-warnings` in `ng lint`).
 
+### Angular mutating-service contract
+
+Services that mutate a `BehaviorSubject` from a REST/HTTP call should follow **one** documented contract so callers can reason about side effects:
+
+- **Update the subject inside the returned observable's pipeline (`tap`/`map`), not via a second internal `.subscribe()`.** A second internal subscribe fires the side effect independently of the caller, runs the request a second time when the source is cold, and makes "when does the store update?" caller-independent and surprising. Folding the mutation into the returned pipeline means the store updates exactly when (and as many times as) the caller subscribes.
+- **Return a typed result and recover errors with `catchError`** so the caller always gets a value (or a typed failure) rather than an error notification. Map HTTP responses to a small typed result/`WebReaction`.
+
+`IntegrationsService` (`src/angular/src/app/services/settings/integrations.service.ts`) is the reference implementation: `create`/`update`/`remove`/`test` use `tap`/`map` to update `instancesSubject` and `catchError` to map failures to a typed result, with no second subscribe.
+
+**Known deviation (tracked):** `ConfigService.set` and `AutoQueueService.add/remove` still use the legacy `const obs = sendRequest(url); obs.subscribe({next: ...mutate...}); return obs;` pattern (a second internal subscribe). Migrating them to `tap` is **deferred**: their unit specs call `set()`/`add()`/`remove()` *without* subscribing and assert the `BehaviorSubject` mutated, which the current caller-independent subscribe makes pass. Because `RestService.sendRequest` uses `shareReplay(1)`, switching to `tap` defers the mutation to caller subscription and is **not** behavior-preserving against those unchanged tests. The migration must ship in its own PR that also updates those specs to subscribe.
+
 ## GitHub Repository
 
 - **Repo**: github.com/nitrobass24/seedsync

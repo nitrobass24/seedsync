@@ -21,6 +21,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
       remote_path: "/remote",
       local_path: "/local",
       remote_path_to_scan_script: null,
+      remote_python_path: null,
       use_ssh_key: false,
       num_max_parallel_downloads: 1,
       num_max_parallel_files_per_download: 1,

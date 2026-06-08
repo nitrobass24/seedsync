@@ -5,13 +5,17 @@ import { ConnectedService } from '../utils/connected.service';
 import { LoggerService } from '../utils/logger.service';
 import { RestService, WebReaction } from '../utils/rest.service';
 import { StreamDispatchService } from '../base/stream-dispatch.service';
-import { Config, REDACTED_SENTINEL } from '../../models/config';
+import { Config, ConfigSection, ConfigValue, REDACTED_SENTINEL } from '../../models/config';
 
-/** Value a config field may take (matches OptionComponent's value shape). */
-export type ConfigValue = string | number | boolean | null;
+// ConfigValue is re-exported for callers that import it from this service.
+export type { ConfigValue };
 
-/** Config treated as a string-keyed record for dynamic section/option access. */
-type ConfigRecord = Record<string, Record<string, ConfigValue>>;
+/**
+ * Config viewed as a record of string-keyed sections, for dynamic
+ * section/option access by runtime strings. Config carries a matching index
+ * signature, so it is assignable to this with no cast.
+ */
+type ConfigRecord = Record<string, ConfigSection>;
 
 /** Sentinel value sent to the backend when the user clears a text field. */
 export const EMPTY_VALUE_SENTINEL = '__empty__';
@@ -60,8 +64,10 @@ export class ConfigService {
   set(section: string, option: string, value: ConfigValue): Observable<WebReaction> {
     const valueStr = String(value ?? '');
     const currentConfig = this.configSubject.getValue();
-    const configRecord = currentConfig as unknown as ConfigRecord;
-    if (!currentConfig || !(section in currentConfig) || !(option in configRecord[section])) {
+    // Dynamic section/option access by runtime string: localize the record cast
+    // here (the typed Config keeps its specific keys for static callers).
+    const configRecord = currentConfig as unknown as ConfigRecord | null;
+    if (!currentConfig || !configRecord || !(section in currentConfig) || !(option in configRecord[section])) {
       return of({
         success: false,
         data: null,
