@@ -112,6 +112,8 @@ export function mapState(state: ModelFileState, localSize: number, remoteSize: n
       return ViewFileStatus.VALIDATED;
     case ModelFileState.CORRUPT:
       return ViewFileStatus.CORRUPT;
+    case ModelFileState.MOVE_FAILED:
+      return ViewFileStatus.MOVE_FAILED;
     default:
       return ViewFileStatus.DEFAULT;
   }

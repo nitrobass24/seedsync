@@ -285,7 +285,7 @@ Services that mutate a `BehaviorSubject` from a REST/HTTP call should follow **o
 
 `IntegrationsService` (`src/angular/src/app/services/settings/integrations.service.ts`) is the reference implementation: `create`/`update`/`remove`/`test` use `tap`/`map` to update `instancesSubject` and `catchError` to map failures to a typed result, with no second subscribe.
 
-**Known deviation (tracked):** `ConfigService.set` and `AutoQueueService.add/remove` still use the legacy `const obs = sendRequest(url); obs.subscribe({next: ...mutate...}); return obs;` pattern (a second internal subscribe). Migrating them to `tap` is **deferred**: their unit specs call `set()`/`add()`/`remove()` *without* subscribing and assert the `BehaviorSubject` mutated, which the current caller-independent subscribe makes pass. Because `RestService.sendRequest` uses `shareReplay(1)`, switching to `tap` defers the mutation to caller subscription and is **not** behavior-preserving against those unchanged tests. The migration must ship in its own PR that also updates those specs to subscribe.
+`ConfigService.set` and `AutoQueueService.add/remove` were migrated to this contract (#542): they now fold their `BehaviorSubject` mutation into the returned pipeline via `tap` (no second internal subscribe) and return the typed `WebReaction` (`RestService.sendRequest` already recovers HTTP errors into a failure `WebReaction`, so no extra `catchError` is needed). Their specs subscribe to the returned observable before asserting the subject mutated, since the mutation now defers to caller subscription. No remaining services use the legacy second-subscribe pattern.
 
 ## GitHub Repository
 

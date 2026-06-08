@@ -1,11 +1,9 @@
 import {
-  AfterViewChecked,
+  AfterViewInit,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   DestroyRef,
-  ElementRef,
-  HostListener,
   OnInit,
   OnDestroy,
   ViewChild,
@@ -14,8 +12,13 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import {
+  CdkFixedSizeVirtualScroll,
+  CdkVirtualForOf,
+  CdkVirtualScrollViewport,
+} from '@angular/cdk/scrolling';
 import { Subject } from 'rxjs';
-import { debounceTime, switchMap, catchError } from 'rxjs/operators';
+import { auditTime, debounceTime, switchMap, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 import { LogService, LogHistoryEntry } from '../../services/logs/log.service';
@@ -26,12 +29,18 @@ import { LoggerService } from '../../services/utils/logger.service';
 @Component({
   selector: 'app-logs-page',
   standalone: true,
-  imports: [DatePipe, FormsModule],
+  imports: [
+    DatePipe,
+    FormsModule,
+    CdkVirtualScrollViewport,
+    CdkFixedSizeVirtualScroll,
+    CdkVirtualForOf,
+  ],
   templateUrl: './logs-page.component.html',
   styleUrls: ['./logs-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
+export class LogsPageComponent implements OnInit, OnDestroy, AfterViewInit {
   readonly LogLevel = LogLevel;
 
   /**
@@ -44,7 +53,26 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
    */
   static readonly MAX_LIVE_RECORDS = 2000;
 
-  private readonly elementRef = inject(ElementRef);
+  /**
+   * Fixed row height (px) for the CDK virtual-scroll viewport (#539). The live
+   * list is virtualized with `CdkFixedSizeVirtualScroll`, so every row MUST be
+   * exactly this tall or the viewport's scroll math drifts (rows clip/overlap).
+   * To keep rows uniform: the message is rendered single-line (truncated with
+   * ellipsis, full text in `title`) and an exception traceback is shown in an
+   * absolutely-positioned popover (see toggleTraceback) rather than expanding
+   * the row inline. Keep this in sync with `p.record` height in the SCSS.
+   */
+  static readonly ROW_HEIGHT = 22;
+
+  /**
+   * Window (ms) over which incoming SSE records are batched before a single
+   * change-detection pass (#539). Under high-throughput DEBUG sync the stream
+   * emits many records per frame; running `detectChanges()` per record pegs the
+   * main thread. `auditTime` coalesces a burst into one render. ~16ms ≈ one
+   * frame at 60fps.
+   */
+  static readonly BATCH_WINDOW_MS = 16;
+
   private readonly changeDetector = inject(ChangeDetectorRef);
   private readonly logService = inject(LogService);
   private readonly domService = inject(DomService);
@@ -52,6 +80,10 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   private readonly logger = inject(LoggerService);
 
   readonly headerHeight$ = this.domService.headerHeight$;
+
+  // Template-accessible alias of the static fixed row height (Angular templates
+  // cannot read static class members).
+  readonly rowHeight = LogsPageComponent.ROW_HEIGHT;
 
   records: LogRecord[] = [];
   historyRecords: LogHistoryEntry[] = [];
@@ -63,10 +95,15 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
   showScrollToTopButton = false;
   showScrollToBottomButton = false;
 
-  @ViewChild('logHead') logHead!: ElementRef<HTMLElement>;
-  @ViewChild('logTail') logTail!: ElementRef<HTMLElement>;
+  /** Record whose traceback popover is currently open (object identity), or null. */
+  expandedTraceback: LogRecord | null = null;
 
-  private pendingScrollToBottom = false;
+  @ViewChild(CdkVirtualScrollViewport) viewport?: CdkVirtualScrollViewport;
+
+  // Records arriving since the last flushed change-detection window (#539). The
+  // batch pipe drains this into `records` once per BATCH_WINDOW_MS.
+  private pendingRecords: LogRecord[] = [];
+  private readonly recordBatch$ = new Subject<void>();
   private readonly searchChange$ = new Subject<void>();
 
   // Per-object monotonic trackBy keys (#522) — unique even for identical log
@@ -81,25 +118,21 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
       takeUntilDestroyed(this.destroyRef),
     ).subscribe({
       next: (record) => {
-        const shouldScroll =
-          this.elementRef.nativeElement.offsetParent != null &&
-          this.logTail &&
-          LogsPageComponent.isElementInViewport(this.logTail.nativeElement);
-
-        const next = [...this.records, record];
-        // Front-trim the oldest on overflow so the newest record is never
-        // dropped (#522). Below the cap this slice is a no-op.
-        this.records = next.length > LogsPageComponent.MAX_LIVE_RECORDS
-          ? next.slice(next.length - LogsPageComponent.MAX_LIVE_RECORDS)
-          : next;
-        this.changeDetector.detectChanges();
-
-        if (shouldScroll) {
-          this.pendingScrollToBottom = true;
-        }
-        this.refreshScrollButtonVisibility();
+        // Buffer the record and signal the batch pipe; the actual list mutation
+        // and change detection happen once per window (#539), not per record.
+        this.pendingRecords.push(record);
+        this.recordBatch$.next();
       },
     });
+
+    // Batch incoming records: at most one change-detection pass per window even
+    // under a flood of SSE events (#539). auditTime emits on the trailing edge,
+    // so the first record schedules a flush and any records arriving within the
+    // window ride along on that same flush.
+    this.recordBatch$.pipe(
+      auditTime(LogsPageComponent.BATCH_WINDOW_MS),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(() => this.flushPendingRecords());
 
     this.searchChange$.pipe(
       debounceTime(300),
@@ -131,29 +164,34 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.searchChange$.next();
   }
 
+  ngAfterViewInit(): void {
+    // The viewport scroll position (not the window) now drives scroll-button
+    // visibility (#539). Subscribe outside the SSE batch so manual user scrolls
+    // also keep the buttons in sync.
+    const viewport = this.viewport;
+    if (!viewport) return;
+    viewport.elementScrolled().pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(() => {
+      this.refreshScrollButtonVisibility();
+      this.changeDetector.markForCheck();
+    });
+    this.refreshScrollButtonVisibility();
+    this.changeDetector.markForCheck();
+  }
+
   ngOnDestroy(): void {
+    this.recordBatch$.complete();
     this.searchChange$.complete();
   }
 
-  ngAfterViewChecked(): void {
-    if (this.pendingScrollToBottom) {
-      this.pendingScrollToBottom = false;
-      this.scrollToBottom();
-    }
-    this.refreshScrollButtonVisibility();
-  }
-
   scrollToTop(): void {
-    window.scrollTo(0, 0);
+    this.viewport?.scrollToIndex(0, 'smooth');
   }
 
   scrollToBottom(): void {
-    window.scrollTo(0, document.body.scrollHeight);
-  }
-
-  @HostListener('window:scroll')
-  checkScroll(): void {
-    this.refreshScrollButtonVisibility();
+    const lastIndex = Math.max(0, this.records.length - 1);
+    this.viewport?.scrollToIndex(lastIndex, 'smooth');
   }
 
   onSearchChange(): void {
@@ -164,6 +202,12 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.searchChange$.next();
   }
 
+  /** Toggle the absolutely-positioned traceback popover for a record (#539). */
+  toggleTraceback(record: LogRecord): void {
+    this.expandedTraceback = this.expandedTraceback === record ? null : record;
+    this.changeDetector.markForCheck();
+  }
+
   /**
    * Stable, collision-free trackBy for the live-log list (#522). A monotonic
    * sequence id is assigned per record *object* (via a WeakMap), so identical
@@ -172,15 +216,19 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
    * keys would collide there and trip Angular's duplicate-key reconcile
    * (NG0955), dropping/mis-associating rows. Keying by object identity lets
    * Angular reuse DOM nodes when the buffer is front-trimmed.
+   *
+   * Defined as an arrow field so `this` stays bound when passed by reference to
+   * `*cdkVirtualFor`'s `trackBy` (#539) — CDK invokes the TrackByFunction
+   * without the component as receiver.
    */
-  trackRecord(_index: number, record: LogRecord): number {
+  readonly trackRecord = (_index: number, record: LogRecord): number => {
     let key = this.recordKey.get(record);
     if (key === undefined) {
       key = this.liveSeq++;
       this.recordKey.set(record, key);
     }
     return key;
-  }
+  };
 
   /** Stable, collision-free trackBy for the history list (#522); see trackRecord. */
   trackHistory(_index: number, entry: LogHistoryEntry): number {
@@ -192,23 +240,61 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewChecked {
     return key;
   }
 
-  private refreshScrollButtonVisibility(): void {
-    if (!this.logHead || !this.logTail) return;
-    this.showScrollToTopButton = !LogsPageComponent.isElementInViewport(
-      this.logHead.nativeElement,
-    );
-    this.showScrollToBottomButton = !LogsPageComponent.isElementInViewport(
-      this.logTail.nativeElement,
-    );
+  /**
+   * Drain the pending SSE records into the live buffer in a single pass (#539).
+   * Auto-scroll-to-bottom is preserved by sampling "was the viewport pinned to
+   * the bottom?" BEFORE applying the batch, then re-pinning afterward only if it
+   * was. OnPush: this runs inside an async (auditTime) callback, so we must
+   * explicitly run change detection.
+   */
+  private flushPendingRecords(): void {
+    if (this.pendingRecords.length === 0) return;
+
+    const wasAtBottom = this.isViewportAtBottom();
+
+    const next = [...this.records, ...this.pendingRecords];
+    this.pendingRecords = [];
+    // Front-trim the oldest on overflow so the newest record is never dropped
+    // (#522). Below the cap this slice is a no-op.
+    this.records = next.length > LogsPageComponent.MAX_LIVE_RECORDS
+      ? next.slice(next.length - LogsPageComponent.MAX_LIVE_RECORDS)
+      : next;
+
+    // Synchronous CD so the viewport's data length is up to date before we ask
+    // it to scroll to the new last index.
+    this.changeDetector.detectChanges();
+
+    if (wasAtBottom) {
+      this.viewport?.scrollToIndex(Math.max(0, this.records.length - 1));
+    }
+    this.refreshScrollButtonVisibility();
   }
 
-  private static isElementInViewport(el: HTMLElement): boolean {
-    const rect = el.getBoundingClientRect();
-    return (
-      rect.top >= 0 &&
-      rect.left >= 0 &&
-      rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-      rect.right <= (window.innerWidth || document.documentElement.clientWidth)
-    );
+  /**
+   * True when the viewport is scrolled to (or near) the bottom. Uses the CDK
+   * viewport's own scroll metrics rather than window/getBoundingClientRect
+   * (#539). A small slack absorbs sub-pixel rounding so auto-scroll stays
+   * sticky once the user is at the tail.
+   */
+  private isViewportAtBottom(): boolean {
+    const viewport = this.viewport;
+    if (!viewport) return true; // no viewport yet -> default to pinned
+    // measureScrollOffset('bottom') is the distance from the scrolled content's
+    // bottom to the viewport's bottom edge; 0 means fully scrolled down.
+    return viewport.measureScrollOffset('bottom') <= LogsPageComponent.ROW_HEIGHT;
+  }
+
+  private refreshScrollButtonVisibility(): void {
+    const viewport = this.viewport;
+    if (!viewport) {
+      this.showScrollToTopButton = false;
+      this.showScrollToBottomButton = false;
+      return;
+    }
+    const hasOverflow = viewport.measureScrollOffset('top') +
+      viewport.measureScrollOffset('bottom') > 0;
+    this.showScrollToTopButton = hasOverflow && viewport.measureScrollOffset('top') > 0;
+    this.showScrollToBottomButton =
+      hasOverflow && viewport.measureScrollOffset('bottom') > 0;
   }
 }

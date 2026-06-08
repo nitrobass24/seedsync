@@ -7,7 +7,7 @@
 
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
 
     .log-filters {
         display: flex;
@@ -49,9 +49,15 @@
         margin: 10px 0;
     }
 
-    .log-marker {
+    /* CDK virtual-scroll viewport for the live log tail (#539). It scrolls
+       internally (not the window), so its height must be bounded. The 220px
+       fallback leaves room for the filters + a short history section; dvh
+       adapts to the visible viewport, vh is the older-browser fallback. */
+    .log-viewport {
         width: 100%;
-        height: 2px;
+        height: calc(100vh - 220px);
+        height: calc(100dvh - 220px);
+        min-height: 200px;
     }
 
     .btn-scroll {
@@ -98,15 +104,63 @@
             background-color: var(--ss-log-error-bg);
             border-color: var(--ss-log-error-border);
         }
+    }
 
+    /* Live-log rows are virtualized with a FIXED itemSize (#539), so each row
+       must be exactly --log-row-height tall regardless of message length or a
+       traceback. The message line is kept single-line (ellipsis + title tooltip)
+       and the traceback opens in an absolutely-positioned popover that does NOT
+       grow the row, preserving the fixed-size scroll math. Keep this height in
+       sync with LogsPageComponent.ROW_HEIGHT. */
+    .log-viewport p.record {
+        --log-row-height: 22px;
+        position: relative;
+        height: var(--log-row-height);
+        line-height: var(--log-row-height);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 4px;
+
+        .line {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .traceback-toggle {
+            flex: 0 0 auto;
+            background: none;
+            border: none;
+            padding: 0;
+            font: inherit;
+            text-decoration: underline;
+            cursor: pointer;
+            color: inherit;
+        }
+
+        /* Popover: full traceback overlaid below the row without changing the
+           row's fixed height, so the virtual-scroll itemSize stays accurate. */
         span.traceback {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 5;
             display: block;
-            white-space: pre-line;
-            margin-inline-start: 30px;
+            max-height: 240px;
+            overflow: auto;
+            white-space: pre-wrap;
+            line-height: 1.3;
+            padding: 6px 10px;
+            background-color: var(--ss-log-divider-bg, #161A21);
+            border: 1px solid var(--ss-border);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 
             /* break up long text */
-            overflow-wrap: normal;
-            hyphens: auto;
+            overflow-wrap: anywhere;
             word-break: break-all;
         }
     }

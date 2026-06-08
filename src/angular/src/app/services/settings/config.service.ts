@@ -1,5 +1,6 @@
 import { Injectable, Injector, inject } from '@angular/core';
 import { BehaviorSubject, Observable, of } from 'rxjs';
+import { tap } from 'rxjs/operators';
 
 import { ConnectedService } from '../utils/connected.service';
 import { LoggerService } from '../utils/logger.service';
@@ -79,14 +80,17 @@ export class ConfigService {
     const valueEncoded =
       valueStr.length === 0 ? EMPTY_VALUE_SENTINEL : encodeURIComponent(encodeURIComponent(valueStr));
     const url = this.CONFIG_SET_URL(section, option, valueEncoded);
-    const obs = this.restService.sendRequest(url);
-    obs.subscribe({
-      next: (reaction) => {
+    // Update the subject inside the returned pipeline (tap) per the mutating-
+    // service contract: the store updates exactly when the caller subscribes,
+    // with no second internal subscribe. sendRequest already recovers HTTP
+    // errors into a failure WebReaction, so no extra catchError is needed.
+    return this.restService.sendRequest(url).pipe(
+      tap((reaction) => {
         if (reaction.success) {
           const config = this.configSubject.getValue();
           if (config) {
-            const configRecord = config as unknown as ConfigRecord;
-            const newConfig = { ...config, [section]: { ...configRecord[section], [option]: value } };
+            const updatedRecord = config as unknown as ConfigRecord;
+            const newConfig = { ...config, [section]: { ...updatedRecord[section], [option]: value } };
             this.configSubject.next(newConfig);
             // Propagate API key changes to the SSE stream immediately. set() is
             // the only place the real (un-redacted) key is available client-side.
@@ -96,9 +100,8 @@ export class ConfigService {
             }
           }
         }
-      },
-    });
-    return obs;
+      }),
+    );
   }
 
   private getConfig(): void {
