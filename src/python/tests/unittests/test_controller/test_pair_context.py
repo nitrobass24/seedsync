@@ -313,14 +313,18 @@ class TestConfigureLftp(unittest.TestCase):
         self.assertEqual(lftp.num_connections_per_dir_file, 20)
         self.assertEqual(lftp.num_max_total_connections, 0)
 
-    def test_ftps_profile_overrides_persisted_sftp_tuning(self):
-        """Under ftps, the validated FTPS profile (§11.3) is applied regardless of
-        the persisted SFTP-tuned values: parallel-files=4, use-pget-n=1,
-        pget:default-n=4, connection-limit=8."""
+    def test_ftps_passes_persisted_values_through(self):
+        """Under ftps, persisted Connections values pass through unchanged.
+
+        The former fixed FTPS profile (parallel-files=4, dir-pget=1, root-pget=4,
+        connection-limit=8) silently overrode the user's Connections settings; it
+        has been removed. The persisted values below are deliberately all distinct
+        from that old profile, so asserting they reach lftp proves the override is
+        gone.
+        """
         lftp = MagicMock()
         config = Config()
         config.lftp.protocol = "ftps"
-        # Persisted SFTP-tuned values that should be overridden under ftps
         config.lftp.num_max_parallel_downloads = 2
         config.lftp.num_max_parallel_files_per_download = 3
         config.lftp.num_max_connections_per_root_file = 20
@@ -332,8 +336,8 @@ class TestConfigureLftp(unittest.TestCase):
 
         # num_parallel_jobs is protocol-agnostic (queue parallelism)
         self.assertEqual(lftp.num_parallel_jobs, 2)
-        # FTPS profile overrides
-        self.assertEqual(lftp.num_parallel_files, 4)
-        self.assertEqual(lftp.num_connections_per_dir_file, 1)
-        self.assertEqual(lftp.num_connections_per_root_file, 4)
-        self.assertEqual(lftp.num_max_total_connections, 8)
+        # Persisted Connections values reach lftp unchanged under ftps
+        self.assertEqual(lftp.num_parallel_files, 3)
+        self.assertEqual(lftp.num_connections_per_root_file, 20)
+        self.assertEqual(lftp.num_connections_per_dir_file, 20)
+        self.assertEqual(lftp.num_max_total_connections, 0)
