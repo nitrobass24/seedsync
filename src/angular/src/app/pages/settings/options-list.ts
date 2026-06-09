@@ -16,7 +16,7 @@ export type ConfigValuePath = {
  * each flag to a runtime predicate; co-locating the condition with the option
  * definition keeps the disable rules next to the options they affect.
  */
-export type OptionDisabledWhen = 'pairsEnabled' | 'validateDisabled';
+export type OptionDisabledWhen = 'pairsEnabled' | 'validateDisabled' | 'protocolSftp';
 
 export interface IOption {
   type: OptionType;
@@ -34,6 +34,9 @@ export interface IOption {
 
 /** Note shown on options that Path Pairs overrides once any pair is enabled. */
 export const OVERRIDE_NOTE = 'Overridden by Path Pairs when any pair is enabled';
+
+/** Note shown on FTPS-only options while the transfer protocol is SFTP. */
+export const FTPS_ONLY_NOTE = 'Enabled only when Transfer Protocol is set to FTPS';
 
 /** Read a config value by its typed [section, option] path. */
 export function getConfigValue(config: Config, path: ConfigValuePath): OptionValue {
@@ -140,6 +143,8 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
       valuePath: ['lftp', 'remote_ftp_port'],
       description: 'FTPS port on the remote server. Used only when the transfer protocol is FTPS.',
       requiresRestart: true,
+      disabledWhen: 'protocolSftp',
+      overrideNote: FTPS_ONLY_NOTE,
     },
     {
       type: OptionType.Checkbox,
@@ -150,6 +155,8 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
         'Off by default because many seedboxes use self-signed or mismatched certificates; ' +
         'leaving it off means the connection is encrypted but not authenticated.',
       requiresRestart: true,
+      disabledWhen: 'protocolSftp',
+      overrideNote: FTPS_ONLY_NOTE,
     },
   ],
 };

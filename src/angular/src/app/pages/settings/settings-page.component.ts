@@ -54,6 +54,14 @@ export class SettingsPageComponent implements OnInit {
   serverContext: IOptionsContext = OPTIONS_CONTEXT_SERVER;
   autoqueueContext: IOptionsContext = OPTIONS_CONTEXT_AUTOQUEUE;
   validateContext: IOptionsContext = OPTIONS_CONTEXT_VALIDATE;
+
+  // Latest inputs to the server-context disable rules. The server options are
+  // greyed by two independent streams — Path Pairs (hasEnabledPairs) and the
+  // transfer protocol (protocolIsSftp) — so both are tracked here and the
+  // context is rebuilt whenever either changes. Defaults match a fresh load
+  // (no enabled pairs; sftp).
+  private hasEnabledPairs = false;
+  private protocolIsSftp = true;
   readonly OPTIONS_CONTEXT_DISCOVERY = OPTIONS_CONTEXT_DISCOVERY;
   readonly OPTIONS_CONTEXT_CONNECTIONS = OPTIONS_CONTEXT_CONNECTIONS;
   readonly OPTIONS_CONTEXT_OTHER = OPTIONS_CONTEXT_OTHER;
@@ -111,17 +119,25 @@ export class SettingsPageComponent implements OnInit {
       distinctUntilChanged(),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((hasEnabledPairs) => {
-      this.serverContext = SettingsPageComponent.buildServerContext(hasEnabledPairs);
+      this.hasEnabledPairs = hasEnabledPairs;
+      this.serverContext = SettingsPageComponent.buildServerContext(hasEnabledPairs, this.protocolIsSftp);
       this.autoqueueContext = SettingsPageComponent.buildAutoqueueContext(hasEnabledPairs);
       this.cdr.markForCheck();
     });
 
     this.configService.config$.pipe(
-      map((config) => config?.validate?.enabled ?? false),
-      distinctUntilChanged(),
+      map((config) => ({
+        validateEnabled: config?.validate?.enabled ?? false,
+        protocolIsSftp: (config?.lftp?.protocol ?? 'sftp') !== 'ftps',
+      })),
+      distinctUntilChanged(
+        (a, b) => a.validateEnabled === b.validateEnabled && a.protocolIsSftp === b.protocolIsSftp,
+      ),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe((validateEnabled) => {
+    ).subscribe(({ validateEnabled, protocolIsSftp }) => {
+      this.protocolIsSftp = protocolIsSftp;
       this.validateContext = SettingsPageComponent.buildValidateContext(validateEnabled);
+      this.serverContext = SettingsPageComponent.buildServerContext(this.hasEnabledPairs, protocolIsSftp);
       this.cdr.markForCheck();
     });
   }
@@ -135,7 +151,7 @@ export class SettingsPageComponent implements OnInit {
    */
   private static applyDisableRules(
     context: IOptionsContext,
-    active: { pairsEnabled: boolean; validateDisabled: boolean },
+    active: { pairsEnabled: boolean; validateDisabled: boolean; protocolSftp: boolean },
   ): IOptionsContext {
     return {
       ...context,
@@ -150,10 +166,11 @@ export class SettingsPageComponent implements OnInit {
     };
   }
 
-  private static buildServerContext(hasEnabledPairs: boolean): IOptionsContext {
+  private static buildServerContext(hasEnabledPairs: boolean, protocolIsSftp: boolean): IOptionsContext {
     return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_SERVER, {
       pairsEnabled: hasEnabledPairs,
       validateDisabled: false,
+      protocolSftp: protocolIsSftp,
     });
   }
 
@@ -161,6 +178,7 @@ export class SettingsPageComponent implements OnInit {
     return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_AUTOQUEUE, {
       pairsEnabled: hasEnabledPairs,
       validateDisabled: false,
+      protocolSftp: false,
     });
   }
 
@@ -168,6 +186,7 @@ export class SettingsPageComponent implements OnInit {
     return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_VALIDATE, {
       pairsEnabled: false,
       validateDisabled: !validateEnabled,
+      protocolSftp: false,
     });
   }
 
