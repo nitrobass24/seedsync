@@ -275,7 +275,7 @@ class LftpJobStatusParser:
             statuses += self.__parse_queue(lines)
             statuses += self.__parse_jobs(lines)
         except ValueError as e:
-            self.logger.error(f"LftpJobStateParser error: {e!s}")
+            self.logger.error(f"LftpJobStateParser error: {redact_credentials(str(e))}")
             self.logger.error(f"Status:\n{redact_credentials(output)}")
             raise LftpJobStatusParserError("Error parsing lftp job status") from e
         return statuses

@@ -90,6 +90,12 @@ class Lftp:
         # Transfer protocol. ``sftp`` (default) keeps the existing SSH-based
         # behavior; ``ftps`` switches the bulk transfer to FTP-over-TLS
         # (explicit AUTH TLS). The lftp URL scheme is ``ftp`` for FTPS.
+        # Validate before deriving scheme/port so a typo fails fast instead of
+        # silently downgrading (e.g. "ftp" -> sftp). The config layer's
+        # protocol_allowed checker is the primary gate; this guards direct use.
+        protocol = protocol.lower()
+        if protocol not in ("sftp", "ftps"):
+            raise ValueError(f"Invalid lftp protocol '{protocol}': must be 'sftp' or 'ftps'")
         self.__protocol = protocol
         self.__scheme = "ftp" if protocol == "ftps" else "sftp"
         self.__ssl_verify_certificate = ssl_verify_certificate
@@ -317,7 +323,7 @@ class Lftp:
                 self.__process.expect(self.__expect_pattern, timeout=self.__timeout)
             except pexpect.exceptions.TIMEOUT:
                 self.logger.warning("Lftp timeout while consuming error output")
-                self.__pending_error = error_out
+                self.__pending_error = redact_credentials(error_out)
                 return ""
             before = self.__process.before
             assert isinstance(before, bytes)
@@ -332,8 +338,8 @@ class Lftp:
                     after = ""
                 self.logger.debug(f"retry after: {after}")
             self.logger.error(f"Lftp detected error: {redact_credentials(error_out)}")
-            # save pending error
-            self.__pending_error = error_out
+            # save pending error (redacted — raise_pending_error re-raises this text)
+            self.__pending_error = redact_credentials(error_out)
         return out
 
     @staticmethod

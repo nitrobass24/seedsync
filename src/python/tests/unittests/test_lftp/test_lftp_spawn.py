@@ -222,6 +222,15 @@ class TestLftpSpawn(unittest.TestCase):
             "SFTP setup must not read back ftp:ssl-force",
         )
 
+    def test_lftp_invalid_protocol_raises(self):
+        """A bogus protocol fails fast with ValueError instead of silently
+        downgrading to sftp; case is normalized."""
+        with self.assertRaises(ValueError):
+            make_lftp(address="host", port=22, user="u", password=None, protocol="ftp")
+        # Uppercase is normalized (FTPS -> ftps), not rejected.
+        _lftp, fake = make_lftp(address="host", port=22, user="u", password=None, protocol="FTPS", remote_ftp_port=21)
+        self.assertIn("ftp://host", fake.args)
+
     def test_lftp_ftps_restart_reverifies_ssl_force(self):
         """A restart re-runs the FTPS fail-closed check: if the restarted
         process can no longer force TLS, the operation raises (carrying the
