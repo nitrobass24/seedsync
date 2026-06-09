@@ -131,6 +131,11 @@ class TestSeedsync(unittest.TestCase):
             for key in inner_config:
                 self.assertIsNotNone(inner_config[key], msg=f"{section}.{key} is uninitialized")
 
+        # FTPS keys default to the sftp-safe baseline (must match Lftp.__init__)
+        self.assertEqual("sftp", config.lftp.protocol)
+        self.assertEqual(21, config.lftp.remote_ftp_port)
+        self.assertEqual(False, config.lftp.ftp_ssl_verify_certificate)
+
         # Test that default config is a valid config
         config_dict = config.as_dict()
         config2 = Config.from_dict(config_dict)

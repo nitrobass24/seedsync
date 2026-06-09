@@ -124,6 +124,33 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
         'Set this if your seedbox has a custom Python install (e.g. "~/python3/bin/python3").',
       requiresRestart: true,
     },
+    {
+      type: OptionType.Select,
+      label: 'Transfer Protocol',
+      valuePath: ['lftp', 'protocol'],
+      description:
+        'Protocol used for bulk file transfers. File discovery always uses SSH, ' +
+        'so SSH access is required even when FTPS is selected.',
+      choices: ['sftp', 'ftps'],
+      requiresRestart: true,
+    },
+    {
+      type: OptionType.Text,
+      label: 'Remote FTP Port',
+      valuePath: ['lftp', 'remote_ftp_port'],
+      description: 'FTPS port on the remote server. Used only when the transfer protocol is FTPS.',
+      requiresRestart: true,
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Verify FTPS certificate',
+      valuePath: ['lftp', 'ftp_ssl_verify_certificate'],
+      description:
+        'Validate the remote server\'s TLS certificate when using FTPS. ' +
+        'Off by default because many seedboxes use self-signed or mismatched certificates; ' +
+        'leaving it off means the connection is encrypted but not authenticated.',
+      requiresRestart: true,
+    },
   ],
 };
 

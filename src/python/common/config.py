@@ -103,6 +103,18 @@ class Checkers:
         return normalized
 
     @staticmethod
+    def protocol_allowed(cls: T, name: str, value: str) -> str:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
+        allowed = {"sftp", "ftps"}
+        normalized = value.strip().lower() if value else ""
+        if normalized not in allowed:
+            raise ConfigError(
+                "Bad config: {}.{} ({}) must be one of: {}".format(
+                    cls.__name__, name, value, ", ".join(sorted(allowed))
+                )
+            )
+        return normalized
+
+    @staticmethod
     def log_level_allowed(cls: T, name: str, value: str) -> str:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
         normalized = value.strip().upper() if value else ""
@@ -289,6 +301,9 @@ class Config(Persist):
         net_reconnect_interval_multiplier = PROP(
             "net_reconnect_interval_multiplier", Checkers.int_non_negative, Converters.int
         )
+        protocol = PROP("protocol", Checkers.protocol_allowed, Converters.null)
+        remote_ftp_port = PROP("remote_ftp_port", Checkers.int_positive, Converters.int)
+        ftp_ssl_verify_certificate = PROP("ftp_ssl_verify_certificate", Checkers.null, Converters.bool)
 
         def __init__(self):
             super().__init__()
@@ -315,6 +330,9 @@ class Config(Persist):
             self.net_max_retries = None
             self.net_reconnect_interval_base = None
             self.net_reconnect_interval_multiplier = None
+            self.protocol = "sftp"
+            self.remote_ftp_port = 21
+            self.ftp_ssl_verify_certificate = False
 
     class Controller(IC):
         interval_ms_remote_scan = PROP("interval_ms_remote_scan", Checkers.int_positive, Converters.int)

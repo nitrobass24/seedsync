@@ -167,6 +167,78 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertEqual(7, self.context.config.lftp.num_max_parallel_downloads)
         self.controller.request_lftp_reconfigure.assert_called_once()
 
+    def test_set_protocol_ftps_persists_without_lftp_callback(self):
+        """protocol is a connection-level key: it persists but does NOT fire the
+        LFTP hot-reload callback (it is not in _LFTP_TUNING_KEYS).
+        """
+        self.assertEqual("sftp", self.context.config.lftp.protocol)
+        resp = self.test_app.get("/server/config/set/lftp/protocol/ftps")
+        self.assertEqual(200, resp.status_int)
+        self.assertEqual("ftps", self.context.config.lftp.protocol)
+        # Connection-level change requires a restart, so the hot-reload callback
+        # must not fire.
+        self.controller.request_lftp_reconfigure.assert_not_called()
+        # Confirm the on-disk round trip.
+        with open(self.context.config_path) as f:
+            reloaded = Config.from_str(f.read())
+        self.assertEqual("ftps", reloaded.lftp.protocol)
+
+    def test_set_remote_ftp_port_persists_without_lftp_callback(self):
+        """remote_ftp_port is connection-level: persists but does NOT fire the
+        LFTP hot-reload callback.
+        """
+        self.assertEqual(21, self.context.config.lftp.remote_ftp_port)
+        resp = self.test_app.get("/server/config/set/lftp/remote_ftp_port/21")
+        self.assertEqual(200, resp.status_int)
+        self.assertEqual(21, self.context.config.lftp.remote_ftp_port)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+        with open(self.context.config_path) as f:
+            reloaded = Config.from_str(f.read())
+        self.assertEqual(21, reloaded.lftp.remote_ftp_port)
+
+    def test_set_connection_key_no_callback_contrast_with_tuning_key(self):
+        """Contrast: a connection-level key does NOT fire the callback, while a
+        known tuning key (same handler, same request shape) DOES.
+        """
+        # Connection-level key: no callback.
+        resp = self.test_app.get("/server/config/set/lftp/protocol/ftps")
+        self.assertEqual(200, resp.status_int)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
+        # Known tuning key: callback fires.
+        resp = self.test_app.get("/server/config/set/lftp/num_max_parallel_downloads/7")
+        self.assertEqual(200, resp.status_int)
+        self.controller.request_lftp_reconfigure.assert_called_once()
+
+    def test_set_protocol_invalid_value_rejected(self):
+        """An invalid protocol (e.g. scp) is rejected with a 400 and the
+        'must be one of' message; the value is left unchanged.
+        """
+        self.assertEqual("sftp", self.context.config.lftp.protocol)
+        resp = self.test_app.get("/server/config/set/lftp/protocol/scp", expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+        self.assertIn("Bad config: Lftp.protocol (scp) must be one of:", str(resp.html))
+        self.assertEqual("sftp", self.context.config.lftp.protocol)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
+    def test_get_surfaces_ftps_fields_unredacted(self):
+        """/server/config/get surfaces protocol/remote_ftp_port/
+        ftp_ssl_verify_certificate; none are sensitive, so none are redacted.
+        """
+        self.context.config.lftp.protocol = "ftps"
+        self.context.config.lftp.remote_ftp_port = 990
+        self.context.config.lftp.ftp_ssl_verify_certificate = True
+        resp = self.test_app.get("/server/config/get")
+        self.assertEqual(200, resp.status_int)
+        json_dict = json.loads(str(resp.html))
+        self.assertEqual("ftps", json_dict["lftp"]["protocol"])
+        self.assertEqual(990, json_dict["lftp"]["remote_ftp_port"])
+        self.assertEqual(True, json_dict["lftp"]["ftp_ssl_verify_certificate"])
+        # None of the new fields are sensitive, so none are redacted.
+        self.assertNotEqual(Config.REDACTED_SENTINEL, json_dict["lftp"]["protocol"])
+        self.assertNotEqual(Config.REDACTED_SENTINEL, json_dict["lftp"]["remote_ftp_port"])
+        self.assertNotEqual(Config.REDACTED_SENTINEL, json_dict["lftp"]["ftp_ssl_verify_certificate"])
+
     def test_set_serializes_concurrent_writers(self):
         """The handler's __write_lock must serialize concurrent set_config calls.
 

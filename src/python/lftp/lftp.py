@@ -14,7 +14,12 @@ import pexpect
 # my libs
 from common import AppError
 
-from .job_status_parser import LftpJobStatus, LftpJobStatusParser, LftpJobStatusParserError
+from .job_status_parser import (
+    LftpJobStatus,
+    LftpJobStatusParser,
+    LftpJobStatusParserError,
+    redact_credentials,
+)
 
 # How many consecutive status parse errors before error propagates out.
 # Set high enough to ride out persistent lftp output quirks (e.g. Unraid
@@ -61,12 +66,39 @@ class Lftp:
     __SET_NET_RECONNECT_INTERVAL_MULTIPLIER = "net:reconnect-interval-multiplier"
     __SET_XFER_VERIFY = "xfer:verify"
     __SET_XFER_VERIFY_COMMAND = "xfer:verify-command"
+    # FTPS (explicit AUTH TLS over the ``ftp`` scheme) settings. lftp expresses
+    # FTPS as the ``ftp`` scheme plus these toggles, not an ``ftps://`` URL.
+    __SET_FTP_SSL_FORCE = "ftp:ssl-force"
+    __SET_FTP_SSL_PROTECT_DATA = "ftp:ssl-protect-data"
+    __SET_SSL_VERIFY_CERTIFICATE = "ssl:verify-certificate"
+    __SET_FTP_SSL_AUTH = "ftp:ssl-auth"
+    __SET_FTP_PASSIVE_MODE = "ftp:passive-mode"
 
-    def __init__(self, address: str, port: int, user: str, password: str | None):
+    def __init__(
+        self,
+        address: str,
+        port: int,
+        user: str,
+        password: str | None,
+        protocol: str = "sftp",
+        remote_ftp_port: int | None = None,
+        ssl_verify_certificate: bool = False,
+    ):
         self.__user = user
         self.__password = password
         self.__address = address
-        self.__port = port
+        # Transfer protocol. ``sftp`` (default) keeps the existing SSH-based
+        # behavior; ``ftps`` switches the bulk transfer to FTP-over-TLS
+        # (explicit AUTH TLS). The lftp URL scheme is ``ftp`` for FTPS.
+        self.__protocol = protocol
+        self.__scheme = "ftp" if protocol == "ftps" else "sftp"
+        self.__ssl_verify_certificate = ssl_verify_certificate
+        # FTPS uses a dedicated transfer port (the SSH port is still used by the
+        # scanner); fall back to the existing port when FTPS but no port given.
+        if protocol == "ftps":
+            self.__transfer_port = remote_ftp_port if remote_ftp_port is not None else port
+        else:
+            self.__transfer_port = port
         self.__base_remote_dir_path = ""
         self.__base_local_dir_path = ""
         self.logger = logging.getLogger("Lftp")
@@ -92,10 +124,10 @@ class Lftp:
         """
         args = [
             "-p",
-            str(self.__port),
+            str(self.__transfer_port),
             "-u",
             "{},{}".format(self.__user, self.__password if self.__password else ""),
-            f"sftp://{self.__address}",
+            f"{self.__scheme}://{self.__address}",
         ]
         # Force a wide terminal so LFTP never wraps 'jobs -v' output.
         # Belt-and-suspenders: set COLUMNS in the environment (which LFTP
@@ -133,12 +165,68 @@ class Lftp:
         """
         # Set to kill on exit to prevent a zombie process
         self.__set(Lftp.__SET_COMMAND_AT_EXIT, '"kill all"')
+        if self.__protocol == "ftps":
+            self.__setup_ftps()
+        else:
+            self.__setup_sftp()
+
+    def __setup_sftp(self):
+        """SFTP-specific runtime settings (the historical default behavior)."""
         # Auto-add server to known host file
         self.sftp_auto_confirm = True
         # Do not copy remote file permissions — let the local umask determine
         # the permissions of downloaded files instead of preserving the seedbox's
         # permission bits (e.g. 664 → remote) which would override our umask setting
         self.__set(Lftp.__SET_SFTP_SET_PERMISSIONS, "false")
+
+    def __setup_ftps(self):
+        """FTPS-specific runtime settings (FTP-over-TLS, explicit AUTH TLS).
+
+        The control channel and the data channel are both TLS-encrypted
+        (``ssl-force`` + ``ssl-protect-data`` are hardcoded ON — this is FTPS,
+        never cleartext FTP). Certificate verification is configurable and
+        defaults OFF; when it is off we emit a WARNING so the downgrade (TLS
+        encryption without authentication → MITM risk) is never silent.
+
+        After issuing the settings we fail-closed: read ``ftp:ssl-force`` back
+        and raise if it is not ``true`` so we never silently fall back to
+        cleartext.
+        """
+        # Force TLS on the control connection (the FTPS handshake) and encrypt
+        # the data channel. Both are hardcoded ON.
+        self.__set(Lftp.__SET_FTP_SSL_FORCE, "true")
+        self.__set(Lftp.__SET_FTP_SSL_PROTECT_DATA, "true")
+        # Certificate verification (configurable; default OFF for seedboxes
+        # with self-signed / mismatched certs).
+        self.__set(Lftp.__SET_SSL_VERIFY_CERTIFICATE, "true" if self.__ssl_verify_certificate else "false")
+        if not self.__ssl_verify_certificate:
+            self.logger.warning(
+                "FTPS TLS certificate verification is DISABLED "
+                "(ssl:verify-certificate off) — the connection is encrypted but "
+                "NOT authenticated, exposing it to man-in-the-middle attacks. "
+                "Enable ftp_ssl_verify_certificate once your seedbox has a "
+                "properly-issued certificate."
+            )
+        # Explicit FTPS: AUTH TLS before login.
+        self.__set(Lftp.__SET_FTP_SSL_AUTH, "TLS")
+        # Passive mode (firewall/NAT friendly; the data connection is opened
+        # from the client out to the server).
+        self.__set(Lftp.__SET_FTP_PASSIVE_MODE, "true")
+        # Fail-closed: confirm TLS really is forced before any transfer runs.
+        self.__verify_ftps_ssl_forced()
+
+    def __verify_ftps_ssl_forced(self):
+        """Read ``ftp:ssl-force`` back from the live lftp and raise LftpError if
+        it is not enabled, so we never silently fall back to cleartext FTP."""
+        try:
+            ssl_force = Lftp.__to_bool(self.__get(Lftp.__SET_FTP_SSL_FORCE))
+        except LftpError as e:
+            raise LftpError(f"FTPS fail-closed check could not read ftp:ssl-force: {e}") from e
+        if not ssl_force:
+            raise LftpError(
+                "FTPS fail-closed check failed: ftp:ssl-force is not enabled — "
+                "refusing to transfer over cleartext FTP"
+            )
 
     def with_check_process(method: Callable[..., Any]) -> Callable[..., Any]:  # type: ignore[override]
         """
@@ -153,8 +241,11 @@ class Lftp:
             if inst.__process is None or not inst.__process.isalive():
                 try:
                     inst.__restart_process()
-                except Exception:
-                    raise LftpError("lftp process is not running and restart failed") from None
+                except Exception as e:
+                    # Preserve the underlying reason — e.g. the FTPS fail-closed
+                    # "ftp:ssl-force is not enabled" raised during the restart's
+                    # __setup — instead of swallowing it.
+                    raise LftpError(f"lftp process is not running and restart failed: {e}") from e
             return method(inst, *args, **kwargs)
 
         return wrapper
@@ -210,7 +301,7 @@ class Lftp:
         out = out.strip()  # remove any CRs
 
         if self.__log_command_output:
-            self.logger.debug(f"out ({len(out)} bytes):\n {out}")
+            self.logger.debug(f"out ({len(out)} bytes):\n {redact_credentials(out)}")
             after_val = self.__process.after
             if isinstance(after_val, bytes):
                 after = after_val.decode("utf8", "replace").strip()
@@ -234,14 +325,14 @@ class Lftp:
             out = before.decode("utf8", "replace")
             out = out.strip()  # remove any CRs
             if self.__log_command_output:
-                self.logger.debug(f"retry out ({len(out)} bytes):\n {out}")
+                self.logger.debug(f"retry out ({len(out)} bytes):\n {redact_credentials(out)}")
                 after_val = self.__process.after
                 if isinstance(after_val, bytes):
                     after = after_val.decode("utf8", "replace").strip()
                 else:
                     after = ""
                 self.logger.debug(f"retry after: {after}")
-            self.logger.error(f"Lftp detected error: {error_out}")
+            self.logger.error(f"Lftp detected error: {redact_credentials(error_out)}")
             # save pending error
             self.__pending_error = error_out
         return out
@@ -252,7 +343,19 @@ class Lftp:
             "pget: Access failed",
             "pget-chunk: Access failed",
             "mirror: Access failed",
-            "Login failed: Login incorrect",
+            # Protocol-agnostic: matches the SFTP-synthesized "Login failed: Login
+            # incorrect" and every FTP-530 variant ("Login failed: 530 ...").
+            "Login failed:",
+            # FTPS / TLS failures (control or data channel)
+            "Fatal error: gnutls_handshake",
+            "Fatal error: SSL_connect",
+            "TLS/SSL connection error",
+            "Certificate verification",
+            "certificate verification",
+            "AUTH TLS failed",
+            "Make data connection: error",
+            "data connection: timeout",
+            "PASV: timeout",
         ]
         return any(error in out for error in errors)
 
