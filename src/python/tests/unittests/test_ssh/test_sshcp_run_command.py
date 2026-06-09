@@ -15,7 +15,8 @@ class TestSshcpRunCommand(unittest.TestCase):
     SSH server by patching pexpect.spawn. These guard two fixes:
       * the password-prompt wait must use the full __TIMEOUT_SECS, not
         pexpect's silent 30s default;
-      * GSSAPI auth is disabled to avoid slow auth-prompt delays.
+      * the ``-o GSSAPIAuthentication=no`` flag must NOT be set — the Alpine
+        openssh-client lacks GSSAPI and rejects it as an unsupported option.
     """
 
     __TIMEOUT = Sshcp._Sshcp__TIMEOUT_SECS
@@ -61,11 +62,14 @@ class TestSshcpRunCommand(unittest.TestCase):
         self.assertEqual(1, len(expect_calls))
         self.assertEqual(self.__TIMEOUT, expect_calls[0].kwargs.get("timeout"))
 
-    def test_gssapi_auth_disabled(self):
+    def test_gssapi_option_not_set(self):
+        # The Alpine openssh-client in the runtime image is built without GSSAPI,
+        # so passing ``-o GSSAPIAuthentication=no`` is rejected as an unsupported
+        # option and breaks shell detection (#562 regression). It must NOT appear.
         for password in ("secret", None):
             with self.subTest(password=password):
                 command, _ = self._run(password=password)
-                self.assertIn("GSSAPIAuthentication=no", command)
+                self.assertNotIn("GSSAPIAuthentication", command)
 
     def test_password_auth_disables_pubkey(self):
         command, _ = self._run(password="secret")

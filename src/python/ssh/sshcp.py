@@ -260,12 +260,14 @@ class Sshcp:
             "ServerAliveInterval=15",
             "-o",
             "ServerAliveCountMax=3",
-            # Skip GSSAPI/Kerberos negotiation. Some servers (especially those
-            # doing reverse-DNS lookups on connect) delay the auth prompt by
-            # tens of seconds while GSSAPI is attempted; we never use it.
-            "-o",
-            "GSSAPIAuthentication=no",
         ]
+        # NOTE: do NOT add ``-o GSSAPIAuthentication=no`` here. The runtime
+        # image's Alpine openssh-client is built without GSSAPI, so ssh rejects
+        # the option ("command-line line 0: Unsupported option
+        # gssapiauthentication") and that text pollutes the captured error,
+        # which the classifier then surfaces as a failure. GSSAPI is never
+        # negotiated on that build, so there is nothing to disable. (Reverts the
+        # flag added in #562 — it broke shell detection on the Alpine image.)
 
         if self.__password is None:
             command_args += ["-o", "PasswordAuthentication=no"]
