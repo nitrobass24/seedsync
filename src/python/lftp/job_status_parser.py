@@ -13,6 +13,19 @@ class LftpJobStatusParserError(AppError):
     pass
 
 
+_CREDENTIAL_URL_REGEX = re.compile(r"(\w+://[^:/@\s]+):[^@/\s]+@")
+
+
+def redact_credentials(text: str) -> str:
+    """Replace the password in any ``scheme://user:password@host`` URL with
+    ``***`` before the text is logged. lftp echoes the credentialed connection
+    URL in ``jobs -v`` output — notably ``ftp://user:pass@host`` under FTPS,
+    where a password is always present — so raw output must be scrubbed before
+    it reaches any error/debug log. URLs with an empty password (e.g. key-based
+    SFTP, ``sftp://user:@host``) are left untouched."""
+    return _CREDENTIAL_URL_REGEX.sub(r"\1:***@", text)
+
+
 # Shared regex fragments.
 #
 # These live at module scope (rather than as ``__``-mangled class attributes)
@@ -262,8 +275,8 @@ class LftpJobStatusParser:
             statuses += self.__parse_queue(lines)
             statuses += self.__parse_jobs(lines)
         except ValueError as e:
-            self.logger.error(f"LftpJobStateParser error: {e!s}")
-            self.logger.error(f"Status:\n{output}")
+            self.logger.error(f"LftpJobStateParser error: {redact_credentials(str(e))}")
+            self.logger.error(f"Status:\n{redact_credentials(output)}")
             raise LftpJobStatusParserError("Error parsing lftp job status") from e
         return statuses
 
@@ -323,12 +336,15 @@ class LftpJobStatusParser:
         return LftpJobStatus.TransferState(size_local, size_remote, percent_local, speed, eta)
 
     def _parse_pget_header_block(self, result: "re.Match[str]", lines: list[str]) -> LftpJobStatus:
-        """Parse a pget header line (already matched) plus its mandatory 'sftp'
-        line and optional data line into a RUNNING pget LftpJobStatus."""
-        # Next line must be the sftp line
-        if len(lines) < 1 or "sftp" not in lines[0]:
-            raise ValueError(f"Missing the 'sftp' line for pget header '{result.string}'")
-        lines.pop(0)  # pop the 'sftp' line
+        """Parse a pget header line (already matched) plus its mandatory
+        connection-URL line (``sftp://`` or ``ftp://`` — FTPS prints ``ftp://``)
+        and optional data line into a RUNNING pget LftpJobStatus."""
+        # Next line must be the connection-URL line. Both SFTP and FTPS print a
+        # scheme-prefixed URL here ('sftp://...' / 'ftp://...'); match on the
+        # '://' separator so either protocol is accepted.
+        if len(lines) < 1 or "://" not in lines[0]:
+            raise ValueError(f"Missing the connection-URL line for pget header '{result.string}'")
+        lines.pop(0)  # pop the connection-URL line
 
         # Data line may not exist. Peek before popping: only consume the next
         # line if it is actually a chunk-data line. Otherwise it belongs to the
@@ -528,7 +544,7 @@ class LftpJobStatusParser:
         # partial speed/eta strings like "eta:4m [Receiving data]" or
         # "ta:4m [Receiving data]") that no fixed regex can anticipate.
         if prev_job is not None:
-            self.logger.warning("Skipping unrecognized line inside job context: '%s'", line)
+            self.logger.warning("Skipping unrecognized line inside job context: '%s'", redact_credentials(line))
             return True
 
         # Outside a job context, check for known orphan progress lines
@@ -617,8 +633,8 @@ class LftpJobStatusParser:
             if len(lines) < 2:
                 # Not enough lines for a valid queue header - return empty queue
                 return queue
-            header1_pattern = rf"^\[\d+\] queue \(sftp://.*@.*\)(?:\s+--\s+(?:\d+\.\d+|\d+)\s({LftpJobStatusParser.__SIZE_UNITS_REGEX})\/s)?$"
-            header2_pattern = "^sftp://.*@.*$"
+            header1_pattern = rf"^\[\d+\] queue \((?:sftp|ftp)://.*@.*\)(?:\s+--\s+(?:\d+\.\d+|\d+)\s({LftpJobStatusParser.__SIZE_UNITS_REGEX})\/s)?$"
+            header2_pattern = "^(?:sftp|ftp)://.*@.*$"
             line = lines.pop(0)
             if not re.match(header1_pattern, line):
                 # First line doesn't match queue header - no active queue, return empty

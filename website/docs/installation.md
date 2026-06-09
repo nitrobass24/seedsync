@@ -20,6 +20,14 @@ Multi-arch image supporting both `linux/amd64` and `linux/arm64`.
 - SSH access (password or key-based)
 - Python 3.8+ (`python3` must be available on the remote `$PATH`)
 
+:::note Optional FTPS transfers
+SeedSync can optionally transfer files over FTPS (FTP over TLS) instead of SFTP — see [Transfer Protocol (FTPS)](./configuration.md#transfer-protocol-ftps). FTPS still requires SSH (scanning always uses SSH), so the SSH requirements above remain. In addition, the remote server must offer an FTPS service (commonly on port `21`).
+:::
+
+### Network egress (FTPS only)
+
+SFTP transfers ride entirely over the single outbound SSH connection, so no extra firewall rules are needed. **FTPS is different:** it uses **passive mode**, where the client opens **additional outbound data connections to ephemeral (high-numbered) ports** chosen by the server. If you run SeedSync behind a restrictive egress firewall, allow outbound TCP to the seedbox on the FTPS control port (typically `21`) **and** on the passive-mode port range your provider uses. Because the container only makes *outbound* connections (it never listens for incoming data connections), it works behind NAT without inbound port-forwarding.
+
 ### Local machine
 
 - Docker (Desktop or Engine)

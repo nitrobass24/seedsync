@@ -44,6 +44,9 @@ export interface Lftp {
   net_max_retries: number | null;
   net_reconnect_interval_base: number | null;
   net_reconnect_interval_multiplier: number | null;
+  protocol: string | null;
+  remote_ftp_port: number | null;
+  ftp_ssl_verify_certificate: boolean | null;
 }
 
 export interface Controller {
@@ -135,6 +138,9 @@ export const DEFAULT_LFTP: Lftp = {
   net_max_retries: null,
   net_reconnect_interval_base: null,
   net_reconnect_interval_multiplier: null,
+  protocol: 'sftp',
+  remote_ftp_port: 21,
+  ftp_ssl_verify_certificate: false,
 };
 
 export const DEFAULT_CONTROLLER: Controller = {

@@ -37,6 +37,9 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
       net_max_retries: null,
       net_reconnect_interval_base: null,
       net_reconnect_interval_multiplier: null,
+      protocol: "sftp",
+      remote_ftp_port: 21,
+      ftp_ssl_verify_certificate: false,
     },
     controller: {
       interval_ms_remote_scan: 30000,

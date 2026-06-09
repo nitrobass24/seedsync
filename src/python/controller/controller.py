@@ -188,12 +188,19 @@ class Controller:
         else:
             effective_local_path = local_path
 
-        # LFTP instance
+        # LFTP instance. Transfer port: SSH/SFTP control port for sftp, the
+        # dedicated FTPS port for ftps (the Lftp class falls back to ``port``
+        # when remote_ftp_port is None under ftps).
+        lftp_cfg = self.__context.config.lftp
+        transfer_port = lftp_cfg.remote_ftp_port if lftp_cfg.protocol == "ftps" else lftp_cfg.remote_port
         lftp = Lftp(
-            address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
-            port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
-            user=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
+            address=lftp_cfg.remote_address,  # type: ignore[arg-type]
+            port=transfer_port,  # type: ignore[arg-type]
+            user=lftp_cfg.remote_username,  # type: ignore[arg-type]
             password=self.__password,
+            protocol=lftp_cfg.protocol,  # type: ignore[arg-type]
+            remote_ftp_port=lftp_cfg.remote_ftp_port,  # type: ignore[arg-type]
+            ssl_verify_certificate=lftp_cfg.ftp_ssl_verify_certificate,  # type: ignore[arg-type]
         )
         lftp.set_base_logger(pair_logger)
         lftp.set_base_remote_dir_path(remote_path)

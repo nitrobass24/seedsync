@@ -403,6 +403,9 @@ class Seedsync:
         config.lftp.num_max_connections_per_dir_file = 20
         config.lftp.num_max_total_connections = 0
         config.lftp.use_temp_file = False
+        config.lftp.protocol = "sftp"
+        config.lftp.remote_ftp_port = 21
+        config.lftp.ftp_ssl_verify_certificate = False
 
         config.controller.interval_ms_remote_scan = 30000
         config.controller.interval_ms_local_scan = 10000
