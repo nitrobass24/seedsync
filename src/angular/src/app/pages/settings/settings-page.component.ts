@@ -23,6 +23,7 @@ import {
   OVERRIDE_NOTE,
   getConfigValue,
   OPTIONS_CONTEXT_SERVER,
+  OPTIONS_CONTEXT_FTPS,
   OPTIONS_CONTEXT_DISCOVERY,
   OPTIONS_CONTEXT_CONNECTIONS,
   OPTIONS_CONTEXT_OTHER,
@@ -52,16 +53,9 @@ import {
 })
 export class SettingsPageComponent implements OnInit {
   serverContext: IOptionsContext = OPTIONS_CONTEXT_SERVER;
+  ftpsContext: IOptionsContext = OPTIONS_CONTEXT_FTPS;
   autoqueueContext: IOptionsContext = OPTIONS_CONTEXT_AUTOQUEUE;
   validateContext: IOptionsContext = OPTIONS_CONTEXT_VALIDATE;
-
-  // Latest inputs to the server-context disable rules. The server options are
-  // greyed by two independent streams — Path Pairs (hasEnabledPairs) and the
-  // transfer protocol (protocolIsSftp) — so both are tracked here and the
-  // context is rebuilt whenever either changes. Defaults match a fresh load
-  // (no enabled pairs; sftp).
-  private hasEnabledPairs = false;
-  private protocolIsSftp = true;
   readonly OPTIONS_CONTEXT_DISCOVERY = OPTIONS_CONTEXT_DISCOVERY;
   readonly OPTIONS_CONTEXT_CONNECTIONS = OPTIONS_CONTEXT_CONNECTIONS;
   readonly OPTIONS_CONTEXT_OTHER = OPTIONS_CONTEXT_OTHER;
@@ -119,8 +113,7 @@ export class SettingsPageComponent implements OnInit {
       distinctUntilChanged(),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((hasEnabledPairs) => {
-      this.hasEnabledPairs = hasEnabledPairs;
-      this.serverContext = SettingsPageComponent.buildServerContext(hasEnabledPairs, this.protocolIsSftp);
+      this.serverContext = SettingsPageComponent.buildServerContext(hasEnabledPairs);
       this.autoqueueContext = SettingsPageComponent.buildAutoqueueContext(hasEnabledPairs);
       this.cdr.markForCheck();
     });
@@ -135,9 +128,8 @@ export class SettingsPageComponent implements OnInit {
       ),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(({ validateEnabled, protocolIsSftp }) => {
-      this.protocolIsSftp = protocolIsSftp;
       this.validateContext = SettingsPageComponent.buildValidateContext(validateEnabled);
-      this.serverContext = SettingsPageComponent.buildServerContext(this.hasEnabledPairs, protocolIsSftp);
+      this.ftpsContext = SettingsPageComponent.buildFtpsContext(protocolIsSftp);
       this.cdr.markForCheck();
     });
   }
@@ -166,9 +158,17 @@ export class SettingsPageComponent implements OnInit {
     };
   }
 
-  private static buildServerContext(hasEnabledPairs: boolean, protocolIsSftp: boolean): IOptionsContext {
+  private static buildServerContext(hasEnabledPairs: boolean): IOptionsContext {
     return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_SERVER, {
       pairsEnabled: hasEnabledPairs,
+      validateDisabled: false,
+      protocolSftp: false,
+    });
+  }
+
+  private static buildFtpsContext(protocolIsSftp: boolean): IOptionsContext {
+    return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_FTPS, {
+      pairsEnabled: false,
       validateDisabled: false,
       protocolSftp: protocolIsSftp,
     });

@@ -127,13 +127,26 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
         'Set this if your seedbox has a custom Python install (e.g. "~/python3/bin/python3").',
       requiresRestart: true,
     },
+  ],
+};
+
+/**
+ * Dedicated FTPS section (rendered top-right, above Connections) so the
+ * transfer-protocol choice and its FTPS-only options are discoverable instead
+ * of being buried among the SSH server fields.
+ */
+export const OPTIONS_CONTEXT_FTPS: IOptionsContext = {
+  header: 'FTPS',
+  id: 'ftps',
+  options: [
     {
       type: OptionType.Select,
       label: 'Transfer Protocol',
       valuePath: ['lftp', 'protocol'],
       description:
-        'Protocol used for bulk file transfers. File discovery always uses SSH, ' +
-        'so SSH access is required even when FTPS is selected.',
+        'SFTP (default) or FTPS for bulk file transfers. FTPS can be substantially faster ' +
+        'on high-latency links. File discovery always uses SSH, so SSH access is required ' +
+        'even when FTPS is selected.',
       choices: ['sftp', 'ftps'],
       requiresRestart: true,
     },

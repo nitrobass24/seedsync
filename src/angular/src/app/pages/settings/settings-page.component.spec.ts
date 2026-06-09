@@ -4,15 +4,16 @@ import { SettingsPageComponent } from './settings-page.component';
 import { FTPS_ONLY_NOTE, IOptionsContext } from './options-list';
 
 interface SettingsPageStatics {
-  buildServerContext(hasEnabledPairs: boolean, protocolIsSftp: boolean): IOptionsContext;
+  buildServerContext(hasEnabledPairs: boolean): IOptionsContext;
+  buildFtpsContext(protocolIsSftp: boolean): IOptionsContext;
   buildAutoqueueContext(hasEnabledPairs: boolean): IOptionsContext;
   OVERRIDE_NOTE: string;
 }
 const settingsStatics = SettingsPageComponent as unknown as SettingsPageStatics;
-// protocolIsSftp defaults to false (ftps) so the pre-existing pairs-greying
-// tests below see the FTP-only options enabled and unaffected.
-const buildServerContext = (hasEnabledPairs: boolean, protocolIsSftp = false): IOptionsContext =>
-  settingsStatics.buildServerContext(hasEnabledPairs, protocolIsSftp);
+const buildServerContext = (hasEnabledPairs: boolean): IOptionsContext =>
+  settingsStatics.buildServerContext(hasEnabledPairs);
+const buildFtpsContext = (protocolIsSftp: boolean): IOptionsContext =>
+  settingsStatics.buildFtpsContext(protocolIsSftp);
 const buildAutoqueueContext = (hasEnabledPairs: boolean): IOptionsContext =>
   settingsStatics.buildAutoqueueContext(hasEnabledPairs);
 const OVERRIDE_NOTE = settingsStatics.OVERRIDE_NOTE;
@@ -50,11 +51,11 @@ describe('SettingsPageComponent.buildServerContext', () => {
   });
 });
 
-describe('SettingsPageComponent.buildServerContext FTPS greying', () => {
+describe('SettingsPageComponent.buildFtpsContext', () => {
   const ftpOnlyPaths = ['remote_ftp_port', 'ftp_ssl_verify_certificate'];
 
   it('disables the FTP-only options when the protocol is sftp', () => {
-    const ctx = buildServerContext(false, true);
+    const ctx = buildFtpsContext(true);
     for (const path of ftpOnlyPaths) {
       const option = ctx.options.find((o) => o.valuePath[1] === path)!;
       expect(option.disabled).toBe(true);
@@ -63,7 +64,7 @@ describe('SettingsPageComponent.buildServerContext FTPS greying', () => {
   });
 
   it('enables the FTP-only options when the protocol is ftps', () => {
-    const ctx = buildServerContext(false, false);
+    const ctx = buildFtpsContext(false);
     for (const path of ftpOnlyPaths) {
       const option = ctx.options.find((o) => o.valuePath[1] === path)!;
       expect(option.disabled).toBeFalsy();
@@ -71,7 +72,7 @@ describe('SettingsPageComponent.buildServerContext FTPS greying', () => {
   });
 
   it('never disables the protocol selector itself', () => {
-    const protocol = buildServerContext(false, true).options.find((o) => o.valuePath[1] === 'protocol')!;
+    const protocol = buildFtpsContext(true).options.find((o) => o.valuePath[1] === 'protocol')!;
     expect(protocol.disabled).toBeFalsy();
   });
 });
