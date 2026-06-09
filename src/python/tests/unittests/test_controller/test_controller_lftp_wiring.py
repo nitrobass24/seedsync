@@ -74,9 +74,7 @@ class TestControllerLftpWiring(unittest.TestCase):
             patch("controller.controller.ModelBuilder"),
             patch("controller.controller.configure_lftp"),
         ):
-            controller._create_pair_context(
-                pair_id="p1", name="pair", remote_path="/remote", local_path="/local"
-            )
+            controller._create_pair_context(pair_id="p1", name="pair", remote_path="/remote", local_path="/local")
         return mock_lftp, mock_remote_scanner
 
     def test_sftp_uses_remote_port_and_sftp_protocol(self):

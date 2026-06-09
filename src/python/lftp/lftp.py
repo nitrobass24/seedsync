@@ -224,8 +224,7 @@ class Lftp:
             raise LftpError(f"FTPS fail-closed check could not read ftp:ssl-force: {e}") from e
         if not ssl_force:
             raise LftpError(
-                "FTPS fail-closed check failed: ftp:ssl-force is not enabled — "
-                "refusing to transfer over cleartext FTP"
+                "FTPS fail-closed check failed: ftp:ssl-force is not enabled — refusing to transfer over cleartext FTP"
             )
 
     def with_check_process(method: Callable[..., Any]) -> Callable[..., Any]:  # type: ignore[override]

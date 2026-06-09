@@ -101,9 +101,7 @@ class TestLftpSpawn(unittest.TestCase):
     def test_lftp_spawn_sftp(self):
         """Regression: the default (sftp) protocol uses sftp:// + -p port and
         issues the two sftp:* settings."""
-        lftp, fake = make_lftp(
-            address="host.example.com", port=22, user="bob", password=None
-        )
+        lftp, fake = make_lftp(address="host.example.com", port=22, user="bob", password=None)
 
         # Connection command: -p 22 and sftp://host
         self.assertIn("-p", fake.args)
@@ -196,9 +194,7 @@ class TestLftpSpawn(unittest.TestCase):
 
     def test_lftp_spawn_ftps_default_port_falls_back(self):
         """FTPS with no remote_ftp_port falls back to the given port."""
-        lftp, fake = make_lftp(
-            address="host", port=2121, user="u", password=None, protocol="ftps"
-        )
+        lftp, fake = make_lftp(address="host", port=2121, user="u", password=None, protocol="ftps")
         self.assertEqual("2121", fake.args[fake.args.index("-p") + 1])
         self.assertIn("ftp://host", fake.args)
 
@@ -242,8 +238,12 @@ class TestLftpSpawn(unittest.TestCase):
 
         with patch.object(lftp_mod.pexpect, "spawn", side_effect=fake_spawn):
             lftp = Lftp(
-                address="host", port=22, user="u", password=None,
-                protocol="ftps", remote_ftp_port=21,
+                address="host",
+                port=22,
+                user="u",
+                password=None,
+                protocol="ftps",
+                remote_ftp_port=21,
             )
             self.assertEqual(1, len(created))  # construction succeeded (ssl-force=true)
             created[-1].close()  # kill the process so the next command restarts it
@@ -261,10 +261,7 @@ class TestLftpFtpsErrorDetection(unittest.TestCase):
         return Lftp._Lftp__detect_errors_from_output(out)
 
     def test_lftp_ftps_ssl_error_detected(self):
-        cert_error = (
-            "mirror: Certificate verification: certificate common name "
-            "doesn't match requested host name"
-        )
+        cert_error = "mirror: Certificate verification: certificate common name doesn't match requested host name"
         self.assertTrue(self._detect(cert_error))
 
     def test_tls_handshake_error_detected(self):
