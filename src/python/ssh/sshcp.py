@@ -260,6 +260,11 @@ class Sshcp:
             "ServerAliveInterval=15",
             "-o",
             "ServerAliveCountMax=3",
+            # Skip GSSAPI/Kerberos negotiation. Some servers (especially those
+            # doing reverse-DNS lookups on connect) delay the auth prompt by
+            # tens of seconds while GSSAPI is attempted; we never use it.
+            "-o",
+            "GSSAPIAuthentication=no",
         ]
 
         if self.__password is None:
@@ -277,6 +282,10 @@ class Sshcp:
             sp = pexpect.spawn(command)
         try:
             if self.__password is not None:
+                # Wait for the password prompt with the full command timeout.
+                # Without an explicit timeout this falls back to pexpect's 30s
+                # default, so a server slow to present the prompt times out long
+                # before __TIMEOUT_SECS — the bug this branch previously had.
                 i = sp.expect(
                     [
                         "password: ",
@@ -284,7 +293,8 @@ class Sshcp:
                         "lost connection",
                         "Could not resolve hostname",
                         "Connection refused",
-                    ]
+                    ],
+                    timeout=self.__TIMEOUT_SECS,
                 )
                 self._classify_expect_result(sp, i, eof_error="Unknown error", password_error=None)
                 sp.sendline(self.__password)
