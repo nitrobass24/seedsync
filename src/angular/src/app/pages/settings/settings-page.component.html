@@ -31,6 +31,10 @@
     </div>
     <div id="right">
       <ng-container
+        *ngTemplateOutlet="optionsList; context: ftpsContext">
+      </ng-container>
+
+      <ng-container
         *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_CONNECTIONS">
       </ng-container>
 

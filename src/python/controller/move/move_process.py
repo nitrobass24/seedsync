@@ -9,7 +9,7 @@ import os
 import queue
 import shutil
 
-from common import AppOneShotProcess, overrides
+from common import AppOneShotProcess, Constants, overrides
 
 
 class MoveFailedResult:
@@ -84,6 +84,19 @@ class MoveProcess(AppOneShotProcess):
                     total += os.path.getsize(dst_file)
         return total
 
+    @staticmethod
+    def _has_lftp_temp_files(src: str) -> bool:
+        """True if the source tree still contains lftp temp files (``*.lftp``).
+
+        lftp writes each download to ``<name>.lftp`` and renames it to the final
+        name on completion. A staging tree that still holds temp files has not
+        been finalized — moving it would race lftp's in-flight rename.
+        """
+        suffix = Constants.LFTP_TEMP_FILE_SUFFIX
+        if os.path.isfile(src):
+            return src.endswith(suffix)
+        return any(any(f.endswith(suffix) for f in filenames) for _root, _dirs, filenames in os.walk(src))
+
     def _report_failure(self, message: str) -> None:
         """Log and publish a move failure so the controller can surface it."""
         self.logger.error(message)
@@ -102,6 +115,19 @@ class MoveProcess(AppOneShotProcess):
 
         if not os.path.exists(src):
             self._report_failure(f"Move failed: source does not exist: {src}")
+            return
+
+        # Defer while lftp is still finalizing the staging tree. lftp renames
+        # "<name>.lftp" -> "<name>" on completion; copying (or renaming the
+        # whole tree) while a rename is in flight races — copytree lists the
+        # ".lftp" entry, lftp renames it, and the copy then fails with ENOENT
+        # (which used to crash this process). A tree that still has temp files is
+        # not ready, so report a recoverable failure and retry once lftp finishes.
+        if self._has_lftp_temp_files(src):
+            self._report_failure(
+                f"Move deferred for {self.__file_name}: download not finalized "
+                "(lftp temp files still present in staging). Will retry."
+            )
             return
 
         self.logger.info(f"Moving {src} -> {dst}")
@@ -127,10 +153,18 @@ class MoveProcess(AppOneShotProcess):
         # Cross-device fallback: copy, verify size, then remove source
         source_size = self._get_total_size(src)
 
-        if os.path.isfile(src):
-            shutil.copy2(src, dst)
-        else:
-            shutil.copytree(src, dst, dirs_exist_ok=True)
+        try:
+            if os.path.isfile(src):
+                shutil.copy2(src, dst)
+            else:
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+        except (shutil.Error, OSError) as e:
+            # A *.lftp temp file can still be renamed by lftp during the copy (a
+            # narrow window the pre-check above doesn't fully close). Report a
+            # recoverable failure and keep the source intact so the move is
+            # retried — never crash the controller.
+            self._report_failure(f"Move copy failed for {self.__file_name}: {e}. Source NOT deleted.")
+            return
 
         # Verify only the copied subtree (ignore pre-existing files under dst)
         copied_size = self._get_copied_size(src, dst)

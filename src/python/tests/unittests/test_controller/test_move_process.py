@@ -258,6 +258,55 @@ class TestMoveProcess(unittest.TestCase):
             with self.assertRaises(OSError):
                 self._run_process(process)
 
+    def test_move_defers_when_lftp_temp_files_present(self):
+        """A staging tree still holding *.lftp temp files is not finalized: the
+        move must defer (recoverable failure) without copying or deleting, so it
+        is retried once lftp finishes renaming."""
+        src_subdir = os.path.join(self.src_dir, "mydir")
+        os.makedirs(src_subdir)
+        with open(os.path.join(src_subdir, "done.mkv"), "w") as f:
+            f.write("finished")
+        # An in-flight lftp temp file makes the tree non-quiescent.
+        with open(os.path.join(src_subdir, "inprogress.mkv.lftp"), "w") as f:
+            f.write("partial")
+
+        process = self._make_process(
+            source_path=self.src_dir, dest_path=self.dst_dir, file_name="mydir", pair_id="pair-3"
+        )
+        self._run_process(process)
+
+        failures = process.pop_failed()
+        self.assertEqual(1, len(failures))
+        self.assertIn("not finalized", failures[0].error_message)
+        # Nothing copied or deleted: source intact, dest not created.
+        self.assertTrue(os.path.exists(src_subdir))
+        self.assertFalse(os.path.exists(os.path.join(self.dst_dir, "mydir")))
+
+    def test_move_copy_error_reports_failure_and_keeps_source(self):
+        """A copy error (e.g. an lftp temp file renamed mid-copy) must be reported
+        as a recoverable failure with the source kept — never raised/crashing the
+        controller."""
+        src_subdir = os.path.join(self.src_dir, "mydir")
+        os.makedirs(src_subdir)
+        with open(os.path.join(src_subdir, "a.txt"), "w") as f:
+            f.write("payload")
+
+        process = self._make_process(
+            source_path=self.src_dir, dest_path=self.dst_dir, file_name="mydir", pair_id="pair-4"
+        )
+        with (
+            mock.patch("controller.move.move_process.os.rename", side_effect=OSError(errno.EXDEV, "cross-device")),
+            mock.patch("controller.move.move_process.shutil.copytree", side_effect=shutil.Error("boom")),
+        ):
+            # Must not raise.
+            self._run_process(process)
+
+        failures = process.pop_failed()
+        self.assertEqual(1, len(failures))
+        self.assertIn("copy failed", failures[0].error_message)
+        # Source must remain intact.
+        self.assertTrue(os.path.exists(src_subdir))
+
     def test_get_copied_size_ignores_preexisting_dest_files(self):
         """_get_copied_size sums only files that exist in the source subtree"""
         src_subdir = os.path.join(self.src_dir, "mydir")
