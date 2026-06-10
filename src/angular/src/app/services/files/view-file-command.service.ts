@@ -110,7 +110,7 @@ export class ViewFileCommandService {
     const key = viewFileKey(file);
     const modelFile = resolve(key);
     if (modelFile === undefined) {
-      this.logger.error('File to queue not found: ' + key);
+      this.logger.error('File not found: ' + key);
       return of<WebReaction>({ success: false, data: null, errorMessage: `File '${file.name}' not found` });
     }
     // Return the inner observable's pipeline directly (no manual subscribe) so
