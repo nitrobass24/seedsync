@@ -138,27 +138,18 @@ def validate_config(context: Context) -> None:
 def configure_lftp(lftp: Lftp, config: Config) -> None:
     """Apply shared LFTP configuration settings.
 
-    The parallelism profile is protocol-aware: under ``ftps`` the validated
-    FTPS profile (file-level parallelism with pget-n low) is derived from the
-    protocol at apply-time, overriding the persisted SFTP-tuned values. This
-    closes the migration gap for upgraders and hand-edited configs that switch
-    to FTPS without retuning. Under ``sftp`` the persisted values pass through
-    unchanged (today's behavior).
+    Parallelism comes from the persisted Connections settings for both
+    protocols. FTPS previously overrode these with a fixed profile derived at
+    apply-time, which silently ignored the user's Connections settings (the
+    Settings UI showed values that were never applied); that override has been
+    removed so what the UI shows is what lftp runs.
     """
     cfg = config.lftp
     lftp.num_parallel_jobs = cfg.num_max_parallel_downloads  # type: ignore[assignment]
-    if cfg.protocol == "ftps":
-        # Validated FTPS profile (design §11.3): mirror:parallel-transfer-count=4,
-        # mirror:use-pget-n=1, pget:default-n=4, net:connection-limit=8.
-        lftp.num_parallel_files = 4
-        lftp.num_connections_per_dir_file = 1
-        lftp.num_connections_per_root_file = 4
-        lftp.num_max_total_connections = 8
-    else:
-        lftp.num_parallel_files = cfg.num_max_parallel_files_per_download  # type: ignore[assignment]
-        lftp.num_connections_per_root_file = cfg.num_max_connections_per_root_file  # type: ignore[assignment]
-        lftp.num_connections_per_dir_file = cfg.num_max_connections_per_dir_file  # type: ignore[assignment]
-        lftp.num_max_total_connections = cfg.num_max_total_connections  # type: ignore[assignment]
+    lftp.num_parallel_files = cfg.num_max_parallel_files_per_download  # type: ignore[assignment]
+    lftp.num_connections_per_root_file = cfg.num_max_connections_per_root_file  # type: ignore[assignment]
+    lftp.num_connections_per_dir_file = cfg.num_max_connections_per_dir_file  # type: ignore[assignment]
+    lftp.num_max_total_connections = cfg.num_max_total_connections  # type: ignore[assignment]
     lftp.use_temp_file = cfg.use_temp_file  # type: ignore[assignment]
     lftp.temp_file_name = "*" + Constants.LFTP_TEMP_FILE_SUFFIX
     if cfg.net_limit_rate:
