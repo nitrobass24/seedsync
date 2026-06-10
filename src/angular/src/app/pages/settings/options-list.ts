@@ -131,12 +131,12 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
 };
 
 /**
- * Dedicated FTPS section (rendered top-right, above Connections) so the
- * transfer-protocol choice and its FTPS-only options are discoverable instead
- * of being buried among the SSH server fields.
+ * Dedicated Transfer Protocol section (rendered top-right, above Connections)
+ * so the transfer-protocol choice and its FTPS-only options are discoverable
+ * instead of being buried among the SSH server fields.
  */
 export const OPTIONS_CONTEXT_FTPS: IOptionsContext = {
-  header: 'FTPS',
+  header: 'Transfer Protocol',
   id: 'ftps',
   options: [
     {
