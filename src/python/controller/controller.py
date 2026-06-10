@@ -4,19 +4,14 @@ from __future__ import annotations
 
 import os
 import threading
-from abc import ABC, abstractmethod
-from collections.abc import Callable
-from enum import Enum
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterator
 
-if TYPE_CHECKING:
-    pass
-
-from common import AppOneShotProcess, Constants, Context, MultiprocessingLogger
+from common import AppProcess, Constants, Context, MultiprocessingLogger
 from lftp import Lftp
 from model import IModelListener, Model, ModelFile
 
 from .command_pipeline import CommandPipeline
+from .commands import MAX_CONCURRENT_COMMAND_PROCESSES, Command, CommandProcessWrapper
 from .controller_persist import ControllerPersist
 
 # my libs
@@ -25,8 +20,14 @@ from .model_builder import ModelBuilder
 from .model_registry import ModelRegistry
 from .model_updater import ModelUpdater
 from .pair_context import ControllerError, PairContext, configure_lftp, validate_config
+from .persist_sync import PersistSync
 from .scan import ActiveScanner, LocalScanner, RemoteScanner, ScannerProcess
 from .validate import ValidateProcess
+from .worker_supervisor import WorkerSupervisor
+
+# Anything torn down in Controller.exit(): a raw worker AppProcess or a WorkerSupervisor
+# wrapping one (both expose terminate/join/is_alive/close_queues/name).
+_TerminableWorker = AppProcess | WorkerSupervisor[ExtractProcess] | WorkerSupervisor[ValidateProcess]
 
 
 class Controller:
@@ -34,54 +35,12 @@ class Controller:
     Top-level class that controls the behaviour of the app
     """
 
-    class Command:
-        """
-        Class by which clients of Controller can request Actions to be executed
-        Supports callbacks by which clients can be notified of action success/failure
-        Note: callbacks will be executed in Controller thread, so any heavy computation
-              should be moved out of the callback
-        """
-
-        class Action(Enum):
-            QUEUE = 0
-            STOP = 1
-            EXTRACT = 2
-            DELETE_LOCAL = 3
-            DELETE_REMOTE = 4
-            VALIDATE = 5
-
-        class ICallback(ABC):
-            """Command callback interface"""
-
-            @abstractmethod
-            def on_success(self):
-                """Called on successful completion of action"""
-                pass
-
-            @abstractmethod
-            def on_failure(self, error: str):
-                """Called on action failure"""
-                pass
-
-        def __init__(self, action: Action, filename: str, pair_id: str | None = None):
-            self.action = action
-            self.filename = filename
-            self.pair_id = pair_id
-            self.callbacks: list[Controller.Command.ICallback] = []
-
-        def add_callback(self, callback: ICallback):
-            self.callbacks.append(callback)
-
-    class CommandProcessWrapper:
-        """
-        Wraps any one-shot command processes launched by the controller
-        """
-
-        def __init__(self, process: AppOneShotProcess, post_callback: Callable[[], None]):
-            self.process = process
-            self.post_callback = post_callback
-
-    MAX_CONCURRENT_COMMAND_PROCESSES = 8
+    # Re-exported from .commands so existing Controller.Command,
+    # Controller.CommandProcessWrapper, and Controller.MAX_CONCURRENT_COMMAND_PROCESSES
+    # references resolve to the same objects shared with CommandPipeline.
+    Command = Command
+    CommandProcessWrapper = CommandProcessWrapper
+    MAX_CONCURRENT_COMMAND_PROCESSES = MAX_CONCURRENT_COMMAND_PROCESSES
 
     def __init__(self, context: Context, persist: ControllerPersist):
         self.__context = context
@@ -105,17 +64,26 @@ class Controller:
         # Build pair contexts (persist state is seeded after updater creation below)
         self.__pair_contexts: list[PairContext] = self._build_pair_contexts()
 
-        # Setup extract process (global -- extraction is local-only)
-        self.__extract_process = ExtractProcess()
+        # Setup extract process (global -- extraction is local-only).
+        # The supervisor holds the live worker plus a factory so a dead worker
+        # can be recreated in place (#535); the pipeline and updater share this
+        # same supervisor, so a swap re-wires all three readers at once.
+        self.__extract_process: WorkerSupervisor[ExtractProcess] = WorkerSupervisor(
+            factory=ExtractProcess, logger=self.logger, feature="Extract"
+        )
         self.__extract_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
         # Setup validate process (global -- validation uses SSH to remote)
-        self.__validate_process = ValidateProcess()
+        self.__validate_process: WorkerSupervisor[ValidateProcess] = WorkerSupervisor(
+            factory=ValidateProcess, logger=self.logger, feature="Validate"
+        )
         self.__validate_process.set_mp_log_queue(self.__mp_logger.queue, self.__mp_logger.log_level)
 
+        # Persist sync is a standalone collaborator so the pipeline and updater
+        # share the exact same instance with no construction-order placeholder.
+        self.__persist_sync = PersistSync(self.__pair_contexts, self.__persist)
+
         # Command pipeline owns the queue, active processes, and move state.
-        # Use a lambda placeholder for sync_persist_callback; it will be
-        # replaced once the ModelUpdater is created (chicken-and-egg).
         self.__pipeline = CommandPipeline(
             pair_contexts=self.__pair_contexts,
             registry=self.__registry,
@@ -126,7 +94,7 @@ class Controller:
             extract_process=self.__extract_process,
             validate_process=self.__validate_process,
             logger=self.logger,
-            sync_persist_callback=lambda: None,
+            sync_persist_callback=self.__persist_sync.sync,
         )
 
         # Model updater owns the per-cycle update loop
@@ -140,12 +108,11 @@ class Controller:
             context=self.__context,
             password=self.__password,
             logger=self.logger,
+            persist_sync=self.__persist_sync,
         )
-        # Now wire the real callback into the pipeline
-        self.__pipeline.sync_persist_callback = self.__updater.sync_persist_to_all_builders
 
         # Seed each builder with filtered persist state
-        self.__updater.sync_persist_to_all_builders()
+        self.__persist_sync.sync()
 
         # Flag for hot-reloading LFTP tuning settings (set from REST thread)
         self.__needs_lftp_reconfigure = threading.Event()
@@ -221,12 +188,19 @@ class Controller:
         else:
             effective_local_path = local_path
 
-        # LFTP instance
+        # LFTP instance. Transfer port: SSH/SFTP control port for sftp, the
+        # dedicated FTPS port for ftps (the Lftp class falls back to ``port``
+        # when remote_ftp_port is None under ftps).
+        lftp_cfg = self.__context.config.lftp
+        transfer_port = lftp_cfg.remote_ftp_port if lftp_cfg.protocol == "ftps" else lftp_cfg.remote_port
         lftp = Lftp(
-            address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
-            port=self.__context.config.lftp.remote_port,  # type: ignore[arg-type]
-            user=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
+            address=lftp_cfg.remote_address,  # type: ignore[arg-type]
+            port=transfer_port,  # type: ignore[arg-type]
+            user=lftp_cfg.remote_username,  # type: ignore[arg-type]
             password=self.__password,
+            protocol=lftp_cfg.protocol,  # type: ignore[arg-type]
+            remote_ftp_port=lftp_cfg.remote_ftp_port,  # type: ignore[arg-type]
+            ssl_verify_certificate=lftp_cfg.ftp_ssl_verify_certificate,  # type: ignore[arg-type]
         )
         lftp.set_base_logger(pair_logger)
         lftp.set_base_remote_dir_path(remote_path)
@@ -280,6 +254,7 @@ class Controller:
         model_builder.set_extract_failed_files(set())
         model_builder.set_validated_files(set())
         model_builder.set_corrupt_files(set())
+        model_builder.set_move_failed_files(set())
         model_builder.set_auto_delete_remote(bool(self.__context.config.autoqueue.auto_delete_remote))  # type: ignore[arg-type]
 
         return PairContext(
@@ -309,6 +284,11 @@ class Controller:
         :return:
         """
         self.logger.debug("Starting controller")
+        # Mark started before launching children so that a partial failure here
+        # still lets exit() tear down whatever did start (exit() is best-effort).
+        # Otherwise exit() would early-return on __started=False and leak the
+        # already-started processes and their queue FDs.
+        self.__started = True
         for pc in self.__pair_contexts:
             pc.active_scan_process.start()
             pc.local_scan_process.start()
@@ -316,7 +296,6 @@ class Controller:
         self.__extract_process.start()
         self.__validate_process.start()
         self.__mp_logger.start()
-        self.__started = True
 
     def request_lftp_reconfigure(self) -> None:
         """Signal that LFTP tuning settings have changed and should be reapplied.
@@ -343,51 +322,85 @@ class Controller:
         self.__pipeline.step()
         self.__updater.update()
 
+    def __shutdown_lftp_best_effort(self):
+        # A hung/dead lftp PTY can raise here; guard each call so one failure
+        # does not abort teardown of the remaining pairs or the worker
+        # terminate/join/close_queues phases in exit() (otherwise orphaned
+        # processes leak FDs on every restart).
+        for pc in self.__pair_contexts:
+            try:
+                pc.lftp.exit()
+            except Exception:
+                self.logger.exception(
+                    "Error shutting down lftp for pair %s; continuing teardown",
+                    getattr(pc, "pair_id", None),
+                )
+
+    def __iter_worker_processes(self) -> Iterator[_TerminableWorker]:
+        """All terminable worker processes, in teardown order."""
+        for pc in self.__pair_contexts:
+            yield pc.active_scan_process
+            yield pc.local_scan_process
+            yield pc.remote_scan_process
+        yield self.__extract_process
+        yield self.__validate_process
+        for cp in self.__pipeline.active_command_processes:
+            yield cp.process
+        yield from self.__pipeline.active_move_processes
+
+    # Bound each worker join during teardown: a worker stuck in uninterruptible
+    # I/O (e.g. a dead NAS mount that ignores the SIGTERM from terminate()) would
+    # otherwise hang join() — and thus exit() — forever, wedging ServiceRestart.
+    __JOIN_TIMEOUT_IN_SECS = 2
+
+    def __safe_teardown(self, description: str, action: Callable[[], object]) -> None:
+        # Teardown is best-effort: a raise from any single terminate/join/
+        # close_queues call (a hung or already-closed worker) must not skip the
+        # remaining reaping or the FD-releasing close_queues phase, nor propagate
+        # out of exit(). Otherwise each restart leaks queue FDs until the OS
+        # limit (OSError: [Errno 24] No file descriptors available) is hit.
+        try:
+            action()
+        except Exception:
+            self.logger.exception("Error during controller teardown: %s", description)
+
+    def __bounded_join(self, p: _TerminableWorker) -> None:
+        self.__safe_teardown("join", lambda: p.join(self.__JOIN_TIMEOUT_IN_SECS))
+        try:
+            still_alive = p.is_alive()
+        except (ValueError, AssertionError):
+            still_alive = False
+        if still_alive:
+            self.logger.warning(
+                "Worker %s did not exit within %ss; continuing teardown",
+                getattr(p, "name", "?"),
+                self.__JOIN_TIMEOUT_IN_SECS,
+            )
+
     def exit(self):
         self.logger.debug("Exiting controller")
-        if self.__started:
-            for pc in self.__pair_contexts:
-                pc.lftp.exit()
-                pc.active_scan_process.terminate()
-                pc.local_scan_process.terminate()
-                pc.remote_scan_process.terminate()
-            self.__extract_process.terminate()
-            self.__validate_process.terminate()
-            for cp in self.__pipeline.active_command_processes:
-                cp.process.terminate()
-            for mp in self.__pipeline.active_move_processes:
-                mp.terminate()
-            for pc in self.__pair_contexts:
-                pc.active_scan_process.join()
-                pc.local_scan_process.join()
-                pc.remote_scan_process.join()
-            self.__extract_process.join()
-            self.__validate_process.join()
-            for cp in self.__pipeline.active_command_processes:
-                cp.process.join()
-            for mp in self.__pipeline.active_move_processes:
-                mp.join()
-            self.__mp_logger.stop()
+        if not self.__started:
+            return
 
-            # Close multiprocessing queues to release file descriptors.
-            # Without this, each restart cycle leaks FDs until the OS limit
-            # is exhausted (OSError: [Errno 24] No file descriptors available).
-            for pc in self.__pair_contexts:
-                pc.active_scan_process.close_queues()
-                pc.local_scan_process.close_queues()
-                pc.remote_scan_process.close_queues()
-                pc.active_scanner.close()
-            self.__extract_process.close_queues()
-            self.__validate_process.close_queues()
-            for cp in self.__pipeline.active_command_processes:
-                cp.process.close_queues()
-            for mp in self.__pipeline.active_move_processes:
-                mp.close_queues()
-            self.__pipeline.active_command_processes.clear()
-            self.__pipeline.active_move_processes.clear()
+        self.__shutdown_lftp_best_effort()
+        processes = list(self.__iter_worker_processes())
+        for p in processes:
+            self.__safe_teardown("terminate", p.terminate)
+        for p in processes:
+            self.__bounded_join(p)
+        self.__safe_teardown("stop mp_logger", self.__mp_logger.stop)
 
-            self.__started = False
-            self.logger.info("Exited controller")
+        # Close multiprocessing queues to release file descriptors; this must run
+        # even if a terminate()/join() above failed, or each restart cycle leaks
+        # FDs until the OS limit is exhausted.
+        for p in processes:
+            self.__safe_teardown("close_queues", p.close_queues)
+        for pc in self.__pair_contexts:
+            self.__safe_teardown("close active_scanner", pc.active_scanner.close)
+        self.__pipeline.active_command_processes.clear()
+        self.__pipeline.active_move_processes.clear()
+        self.__started = False
+        self.logger.info("Exited controller")
 
     def get_model_files(self) -> list[ModelFile]:
         return self.__registry.get_files()

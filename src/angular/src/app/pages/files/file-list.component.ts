@@ -20,8 +20,10 @@ import { ViewFile } from '../../models/view-file';
 import { ViewFileOptions } from '../../models/view-file-options';
 import { ViewFileOptionsService } from '../../services/files/view-file-options.service';
 import { LoggerService } from '../../services/utils/logger.service';
+import { NotificationService } from '../../services/utils/notification.service';
+import { NotificationLevel, createNotification } from '../../models/notification';
 import { fileKey } from '../../services/files/file-key';
-import { FileComponent } from './file.component';
+import { FileComponent, FileActionEvent } from './file.component';
 import { BulkActionBarComponent } from './bulk-action-bar.component';
 
 @Component({
@@ -38,6 +40,7 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   private readonly logger = inject(LoggerService);
   private readonly viewFileService = inject(ViewFileService);
   private readonly viewFileOptionsService = inject(ViewFileOptionsService);
+  private readonly notifService = inject(NotificationService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly elRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly zone = inject(NgZone);
@@ -121,52 +124,80 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  onQueue(file: ViewFile): void {
-    this.viewFileService.queue(file).pipe(
+  onQueue(event: FileActionEvent): void {
+    this.viewFileService.queue(event.file).pipe(
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(data => {
-      this.logger.info(data);
+    ).subscribe({
+      next: (data) => this.handleActionResponse(data, event),
+      error: (err) => this.handleActionError(err, event),
     });
   }
 
-  onStop(file: ViewFile): void {
-    this.viewFileService.stop(file).pipe(
+  onStop(event: FileActionEvent): void {
+    this.viewFileService.stop(event.file).pipe(
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(data => {
-      this.logger.info(data);
+    ).subscribe({
+      next: (data) => this.handleActionResponse(data, event),
+      error: (err) => this.handleActionError(err, event),
     });
   }
 
-  onExtract(file: ViewFile): void {
-    this.viewFileService.extract(file).pipe(
+  onExtract(event: FileActionEvent): void {
+    this.viewFileService.extract(event.file).pipe(
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(data => {
-      this.logger.info(data);
+    ).subscribe({
+      next: (data) => this.handleActionResponse(data, event),
+      error: (err) => this.handleActionError(err, event),
     });
   }
 
-  onValidate(file: ViewFile): void {
-    this.viewFileService.validate(file).pipe(
+  onValidate(event: FileActionEvent): void {
+    this.viewFileService.validate(event.file).pipe(
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(data => {
-      this.logger.info(data);
+    ).subscribe({
+      next: (data) => this.handleActionResponse(data, event),
+      error: (err) => this.handleActionError(err, event),
     });
   }
 
-  onDeleteLocal(file: ViewFile): void {
-    this.viewFileService.deleteLocal(file).pipe(
+  onDeleteLocal(event: FileActionEvent): void {
+    this.viewFileService.deleteLocal(event.file).pipe(
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(data => {
-      this.logger.info(data);
+    ).subscribe({
+      next: (data) => this.handleActionResponse(data, event),
+      error: (err) => this.handleActionError(err, event),
     });
   }
 
-  onDeleteRemote(file: ViewFile): void {
-    this.viewFileService.deleteRemote(file).pipe(
+  onDeleteRemote(event: FileActionEvent): void {
+    this.viewFileService.deleteRemote(event.file).pipe(
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(data => {
-      this.logger.info(data);
+    ).subscribe({
+      next: (data) => this.handleActionResponse(data, event),
+      error: (err) => this.handleActionError(err, event),
     });
+  }
+
+  private handleActionResponse(reaction: WebReaction, event: FileActionEvent): void {
+    if (reaction.success) {
+      this.logger.info(reaction.data);
+    } else {
+      this.failAction(reaction.errorMessage ?? 'Action failed', event);
+    }
+  }
+
+  private handleActionError(err: unknown, event: FileActionEvent): void {
+    this.failAction('Action failed', event);
+    this.logger.error('Action failed:', err);
+  }
+
+  // A backend rejection leaves the file model unchanged, so the child's
+  // ngOnChanges can't recover the row. Surface the error and clear the child's
+  // activeAction so the buttons re-enable and the spinner stops without a reload.
+  private failAction(text: string, event: FileActionEvent): void {
+    this.notifService.show(createNotification(NotificationLevel.DANGER, text, true));
+    event.clearActiveAction();
+    this.logger.error(text);
   }
 
   onCheck(event: {file: ViewFile, shiftKey: boolean}): void {
@@ -206,6 +237,11 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
         });
         if (failures > 0) {
           this.logger.warn(`Bulk action: ${failures} of ${reactions.length} items failed`);
+          this.notifService.show(createNotification(
+            NotificationLevel.DANGER,
+            `${failures} of ${reactions.length} items failed`,
+            true,
+          ));
         }
       },
       error: (err) => this.logger.error('Bulk action failed:', err),

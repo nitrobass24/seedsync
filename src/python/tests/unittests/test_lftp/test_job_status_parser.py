@@ -2,6 +2,7 @@
 
 import unittest
 
+import lftp.job_status_parser as jsp
 from lftp import LftpJobStatus, LftpJobStatusParser, LftpJobStatusParserError
 
 
@@ -40,6 +41,14 @@ class TestLftpJobStatusParser(unittest.TestCase):
         self.assertEqual(1 * 24 * 60 * 60 + 1 * 60 * 60 + 1 * 60 + 1, LftpJobStatusParser._eta_to_seconds("1d1h1m1s"))
         self.assertEqual(1 * 60 * 60 + 1 * 60 + 1, LftpJobStatusParser._eta_to_seconds("1h1m1s"))
         self.assertEqual(1 * 60 + 1, LftpJobStatusParser._eta_to_seconds("1m1s"))
+
+    def test_eta_to_seconds_digitless(self):
+        """Digit-less ETA tokens (e.g. 'm', 'd') must yield 0 instead of raising ValueError."""
+        self.assertEqual(0, LftpJobStatusParser._eta_to_seconds("d"))
+        self.assertEqual(0, LftpJobStatusParser._eta_to_seconds("h"))
+        self.assertEqual(0, LftpJobStatusParser._eta_to_seconds("m"))
+        self.assertEqual(0, LftpJobStatusParser._eta_to_seconds("s"))
+        self.assertEqual(0, LftpJobStatusParser._eta_to_seconds(""))
 
     def test_empty_output_1(self):
         output = ""
@@ -918,6 +927,147 @@ class TestLftpJobStatusParser(unittest.TestCase):
         statuses_jobs = [j for j in statuses if j.state == LftpJobStatus.State.RUNNING]
         self.assertEqual(golden_jobs, statuses_jobs)
 
+    # --- FTPS fixtures --------------------------------------------------------
+    # Built from real lftp FTPS `jobs -v` output (see ftps-jobs-v-samples.md):
+    # lftp prints the `ftp://` scheme (not `ftps://`); the queue header is
+    # `[0] queue (ftp://user:pass@host:21) -- <rate>`; FTPS transfer status
+    # strings include `[Receiving data/TLS]` and `[Logging in...]`. These
+    # exercise the widened `(?:sftp|ftp)://` queue-header regexes and the
+    # `_parse_pget_header_block` `://` connection-line check (formerly
+    # `"sftp" not in lines[0]`). The pget flag is `-c` because that is what
+    # SeedSync's `queue()` always emits (the doc's `-n 4` was a manual capture).
+
+    def test_jobs_ftps_mirror_in_progress(self):
+        """FTPS mirror in progress: ftp:// queue header + parallel files with
+        the TLS-flavored status strings. Exercises the widened queue-header
+        regex and confirms the mirror path parses identically to SFTP."""
+        output = r"""
+        [0] queue (ftp://user:pass@buzz.seedhost.eu:21)  -- 2.71 MiB/s
+        ftp://user:pass@buzz.seedhost.eu:21/
+        Now executing: [1] mirror -c /downloads/ready_local/Slow.Horses /tmp/m -- 7.4M/22G (0%) 2.71 MiB/s
+        [1] mirror -c /downloads/ready_local/Slow.Horses /tmp/m  -- 7.4M/22G (0%) 2.71 MiB/s
+        \transfer `Slow.Horses.S03E01.mkv'
+        `Slow.Horses.S03E01.mkv' at 0 (0%) [Logging in...]
+        \transfer `Slow.Horses.S03E02.mkv'
+        `Slow.Horses.S03E02.mkv' at 1048576 (4%) 2.71M/s eta:2h [Receiving data/TLS]
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        golden_job1 = LftpJobStatus(
+            job_id=1,
+            job_type=LftpJobStatus.Type.MIRROR,
+            state=LftpJobStatus.State.RUNNING,
+            name="Slow.Horses",
+            flags="-c",
+        )
+        golden_job1.total_transfer_state = LftpJobStatus.TransferState(7759462, 23622320128, 0, 2841640, None)
+        golden_job1.add_active_file_transfer_state(
+            "Slow.Horses.S03E01.mkv", LftpJobStatus.TransferState(None, None, None, None, None)
+        )
+        golden_job1.add_active_file_transfer_state(
+            "Slow.Horses.S03E02.mkv", LftpJobStatus.TransferState(None, None, None, 2841640, 7200)
+        )
+        golden_jobs = [golden_job1]
+        self.assertEqual(len(golden_jobs), len(statuses))
+        statuses_jobs = [j for j in statuses if j.state == LftpJobStatus.State.RUNNING]
+        self.assertEqual(golden_jobs, statuses_jobs)
+
+    def test_jobs_ftps_pget_in_progress(self):
+        """FTPS single-file pget in progress (the high-value case): the bare
+        `ftp://...` connection line directly under the `[1] pget ...` header
+        must be accepted as the connection-URL line. Before widening
+        `_parse_pget_header_block`'s `"sftp" not in lines[0]` check to `"://"`,
+        this raised ValueError and the running download reported no progress."""
+        output = r"""
+        [0] queue (ftp://user:pass@buzz.seedhost.eu:21)  -- 7.99 MiB/s
+        ftp://user:pass@buzz.seedhost.eu:21/
+        Now executing: [1] pget -c /downloads/ready_local/Slow.Horses/Slow.Horses.S03E01.mkv -o /tmp/f.bin -- 7.99 MiB/s
+        [1] pget -c /downloads/ready_local/Slow.Horses/Slow.Horses.S03E01.mkv -o /tmp/f.bin  -- 7.99 MiB/s
+        ftp://user:pass@buzz.seedhost.eu:21/
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        golden_job1 = LftpJobStatus(
+            job_id=1,
+            job_type=LftpJobStatus.Type.PGET,
+            state=LftpJobStatus.State.RUNNING,
+            name="Slow.Horses.S03E01.mkv",
+            flags="-c",
+        )
+        golden_job1.total_transfer_state = LftpJobStatus.TransferState(None, None, None, None, None)
+        golden_jobs = [golden_job1]
+        self.assertEqual(len(golden_jobs), len(statuses))
+        statuses_jobs = [j for j in statuses if j.state == LftpJobStatus.State.RUNNING]
+        self.assertEqual(golden_jobs, statuses_jobs)
+
+    def test_jobs_ftps_pget_with_chunk_data(self):
+        """FTPS pget with a chunk-data line following the ftp:// connection
+        line (variant of the pget case with mid-flight progress)."""
+        output = r"""
+        [0] queue (ftp://user:pass@buzz.seedhost.eu:21)  -- 7.99 MiB/s
+        ftp://user:pass@buzz.seedhost.eu:21/
+        Now executing: [1] pget -c /downloads/Slow.Horses.S03E01.mkv -o /tmp/f.bin -- 7.99 MiB/s
+        [1] pget -c /downloads/Slow.Horses.S03E01.mkv -o /tmp/f.bin  -- 7.99 MiB/s
+        ftp://user:pass@buzz.seedhost.eu:21/
+        `/downloads/Slow.Horses.S03E01.mkv' at 8380416 (1%) 7.99M/s eta:3m [Receiving data/TLS]
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        golden_job1 = LftpJobStatus(
+            job_id=1,
+            job_type=LftpJobStatus.Type.PGET,
+            state=LftpJobStatus.State.RUNNING,
+            name="Slow.Horses.S03E01.mkv",
+            flags="-c",
+        )
+        golden_job1.total_transfer_state = LftpJobStatus.TransferState(None, None, None, 8378122, 180)
+        golden_jobs = [golden_job1]
+        self.assertEqual(len(golden_jobs), len(statuses))
+        statuses_jobs = [j for j in statuses if j.state == LftpJobStatus.State.RUNNING]
+        self.assertEqual(golden_jobs, statuses_jobs)
+
+    def test_jobs_ftps_queue_stopped(self):
+        """FTPS queue in the stopped state: the ftp:// queue header plus a
+        `Queue is stopped.` / `Commands queued:` block must parse to the queued
+        job. Exercises the widened queue-header regex on the stopped path."""
+        output = r"""
+        [0] queue (ftp://user:pass@buzz.seedhost.eu:21)
+        ftp://user:pass@buzz.seedhost.eu:21/
+        Queue is stopped.
+        Commands queued:
+         1. mirror -c /downloads/ready_local/Slow.Horses /tmp/m
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("Slow.Horses", statuses[0].name)
+        self.assertEqual(LftpJobStatus.State.QUEUED, statuses[0].state)
+        self.assertEqual(LftpJobStatus.Type.MIRROR, statuses[0].type)
+
+    def test_redact_credentials(self):
+        """Passwords in scheme://user:pass@host URLs are scrubbed before logging
+        (FTPS always embeds the password in jobs -v output); empty-password and
+        non-URL lines are left untouched."""
+        # FTPS and password-auth SFTP: password redacted, rest intact.
+        self.assertEqual(
+            "ftp://user:***@buzz.seedhost.eu:21/",
+            jsp.redact_credentials("ftp://user:hunter2@buzz.seedhost.eu:21/"),
+        )
+        self.assertEqual(
+            "sftp://user:***@host:22/home/user",
+            jsp.redact_credentials("sftp://user:s3cret@host:22/home/user"),
+        )
+        # Empty password (key-based SFTP) and non-URL lines: unchanged.
+        self.assertEqual("sftp://someone:@localhost", jsp.redact_credentials("sftp://someone:@localhost"))
+        self.assertEqual(
+            "`Slow.Horses.S03E01.mkv' at 0 (0%) [Receiving data/TLS]",
+            jsp.redact_credentials("`Slow.Horses.S03E01.mkv' at 0 (0%) [Receiving data/TLS]"),
+        )
+        # A full jobs -v block: no cleartext password survives, structure intact.
+        redacted = jsp.redact_credentials("[0] queue (ftp://user:pw@host:21)\n\tftp://user:pw@host:21/")
+        self.assertNotIn("pw@", redacted)
+        self.assertIn("ftp://user:***@host:21", redacted)
+
     def test_jobs_missing_pget_data_line(self):
         output = """
         [0] queue (sftp://seedsynctest:@localhost:22) 
@@ -939,6 +1089,39 @@ class TestLftpJobStatusParser(unittest.TestCase):
             job_id=4, job_type=LftpJobStatus.Type.PGET, state=LftpJobStatus.State.RUNNING, name="d -o d.txt", flags="-c"
         )
         golden_job2.total_transfer_state = LftpJobStatus.TransferState(None, None, None, None, None)
+        golden_jobs = [golden_job1, golden_job2]
+        self.assertEqual(len(golden_jobs), len(statuses))
+        statuses_jobs = [j for j in statuses if j.state == LftpJobStatus.State.RUNNING]
+        self.assertEqual(golden_jobs, statuses_jobs)
+
+    def test_pget_no_data_line_followed_by_job_header(self):
+        """Regression for #555: a pget header with no data line (just connected,
+        nothing transferred yet) immediately followed by another job's header
+        must NOT consume that successor header.
+
+        Before the fix '_parse_pget_header_block' unconditionally popped the line
+        after 'sftp' as the data line, so the next job's '[2] mirror ...' header
+        was silently dropped and only one job was parsed.
+        """
+        output = """
+        [0] queue (sftp://someone:@localhost)
+        sftp://someone:@localhost/home/someone
+        Now executing: [1] pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/
+        -[2] mirror -c /tmp/test_lftp/remote/a /tmp/test_lftp/local/
+        [1] pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/
+        sftp://someone:@localhost/home/someone
+        [2] mirror -c /tmp/test_lftp/remote/a /tmp/test_lftp/local/
+        cd `/tmp/test_lftp/remote/a' [Connecting...]
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        golden_job1 = LftpJobStatus(
+            job_id=1, job_type=LftpJobStatus.Type.PGET, state=LftpJobStatus.State.RUNNING, name="c", flags="-c"
+        )
+        golden_job1.total_transfer_state = LftpJobStatus.TransferState(None, None, None, None, None)
+        golden_job2 = LftpJobStatus(
+            job_id=2, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.RUNNING, name="a", flags="-c"
+        )
         golden_jobs = [golden_job1, golden_job2]
         self.assertEqual(len(golden_jobs), len(statuses))
         statuses_jobs = [j for j in statuses if j.state == LftpJobStatus.State.RUNNING]
@@ -1613,3 +1796,378 @@ class TestLftpJobStatusParser(unittest.TestCase):
         parser = LftpJobStatusParser()
         with self.assertRaises(LftpJobStatusParserError):
             parser.parse(output)
+
+    def test_filename_containing_jobs_v_literal(self):
+        """A filename containing the literal 'jobs -v' must not be corrupted by echo stripping.
+
+        Regression for #517 BUG 1: the unconditional global replace('jobs -v', '')
+        deleted every 'jobs -v' substring, so a queued mirror of 'My.jobs -v.Release'
+        parsed as 'My..Release' and never matched scanner entries.
+        """
+        output = (
+            "jobs -v\n"
+            "[0] queue (sftp://someone:@localhost)\n"
+            "sftp://someone:@localhost/home/someone\n"
+            "Queue is stopped.\n"
+            "Commands queued:\n"
+            " 1. mirror -c /tmp/test_lftp/remote/My.jobs -v.Release /tmp/test_lftp/local/\n"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("My.jobs -v.Release", statuses[0].name)
+        self.assertEqual(LftpJobStatus.State.QUEUED, statuses[0].state)
+
+    def test_eta_with_digitless_unit_does_not_raise(self):
+        """A malformed ETA unit (e.g. 'eta:m') must not abort the whole status parse.
+
+        Regression for #517 BUG 2: a digit-less ETA token previously raised
+        ValueError -> LftpJobStatusParserError, suppressing all status.
+        """
+        output = (
+            "jobs -v\n"
+            "[1] pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/\n"
+            "sftp://someone:@localhost/home/someone\n"
+            "`/tmp/test_lftp/remote/c' at 4585 (3%) 1.2K/s eta:m [Receiving data]\n"
+        )
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("c", statuses[0].name)
+
+    def test_queue_header_immediately_followed_by_commands_queued(self):
+        """'Commands queued:' directly after the second sftp header (no status line).
+
+        Regression for #517 BUG 3: the unconditional pop consumed the
+        'Commands queued:' line, the queued block was never parsed, and the
+        leftover numbered lines raised 'First line is not a matching header'.
+        """
+        output = """
+        [0] queue (sftp://someone:@localhost)
+        sftp://someone:@localhost/home/someone
+        Commands queued:
+         1. mirror -c /tmp/test_lftp/remote/a /tmp/test_lftp/local/
+         2. pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/
+        """
+        parser = LftpJobStatusParser()
+        statuses = parser.parse(output)
+        golden = [
+            LftpJobStatus(
+                job_id=1, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.QUEUED, name="a", flags="-c"
+            ),
+            LftpJobStatus(
+                job_id=2, job_type=LftpJobStatus.Type.PGET, state=LftpJobStatus.State.QUEUED, name="c", flags="-c"
+            ),
+        ]
+        self.assertEqual(len(golden), len(statuses))
+        self.assertEqual(golden, statuses)
+
+
+# noinspection PyPep8
+class TestLftpJobStatusParserHelpers(unittest.TestCase):
+    """Focused unit tests for the helpers extracted from __parse_jobs (#523).
+
+    These exercise each isolated lftp-format branch directly, without having to
+    drive the whole dispatch loop, which is the point of the decomposition.
+    """
+
+    def setUp(self):
+        self.maxDiff = None
+        self.parser = LftpJobStatusParser()
+
+    # --- module-level pre-compiled regex constants (compile once) -------------
+
+    def test_module_regexes_are_compiled_once(self):
+        """The hoisted _RE_* constants must be the same compiled object across
+        two parse() calls (regression for the per-call recompile smell)."""
+        import re as _re
+
+        re_names = [
+            "_RE_PGET_HEADER",
+            "_RE_MIRROR_HEADER",
+            "_RE_MIRROR_FL_HEADER",
+            "_RE_FILENAME",
+            "_RE_CHUNK_AT",
+            "_RE_CHUNK_AT2",
+            "_RE_CHUNK_GOT",
+            "_RE_CHUNK_HEADER",
+            "_RE_CHMOD_HEADER",
+            "_RE_CHMOD",
+            "_RE_MIRROR",
+            "_RE_MIRROR_EMPTY",
+            "_RE_QUEUE_DONE",
+            "_RE_ORPHAN_PROGRESS",
+            "_RE_PARTIAL_PROGRESS",
+            "_RE_CHUNK_WRAP",
+        ]
+        for name in re_names:
+            self.assertTrue(hasattr(jsp, name), f"missing module regex {name}")
+            self.assertIsInstance(getattr(jsp, name), _re.Pattern, name)
+
+        before = {name: id(getattr(jsp, name)) for name in re_names}
+        self.parser.parse("[0] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s")
+        self.parser.parse("3.0K/s eta:3m [Receiving data]")
+        after = {name: id(getattr(jsp, name)) for name in re_names}
+        self.assertEqual(before, after, "compiled regexes must not be re-created per parse()")
+
+    # --- _parse_mirror_header -------------------------------------------------
+
+    def test_parse_mirror_header(self):
+        line = "[1] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s"
+        result = jsp._RE_MIRROR_HEADER.search(line)
+        status = LftpJobStatusParser._parse_mirror_header(result)
+        self.assertEqual(1, status.id)
+        self.assertEqual("show", status.name)
+        self.assertEqual(LftpJobStatus.Type.MIRROR, status.type)
+        self.assertEqual(LftpJobStatus.State.RUNNING, status.state)
+        self.assertEqual(
+            LftpJobStatus.TransferState(500 * 1024 * 1024, 1024 * 1024 * 1024, 50, 10 * 1024 * 1024, None),
+            status.total_transfer_state,
+        )
+
+    def test_parse_mirror_header_no_speed(self):
+        line = "[2] mirror -c /remote/path/abc /local/path/ -- 0/1.1k (0%)"
+        result = jsp._RE_MIRROR_HEADER.search(line)
+        status = LftpJobStatusParser._parse_mirror_header(result)
+        self.assertEqual("abc", status.name)
+        self.assertEqual(LftpJobStatus.TransferState(0, 1126, 0, None, None), status.total_transfer_state)
+
+    # --- _parse_mirror_fl_header ----------------------------------------------
+
+    def test_parse_mirror_fl_header_pops_getting_file_list(self):
+        line = "[1] mirror -c /remote/path/show /local/path/"
+        lines = ["Getting file list (25) [Receiving data]", "next"]
+        result = jsp._RE_MIRROR_FL_HEADER.search(line)
+        status = LftpJobStatusParser._parse_mirror_fl_header(result, lines)
+        self.assertEqual("show", status.name)
+        self.assertEqual(LftpJobStatus.Type.MIRROR, status.type)
+        # The 'Getting file list' follow-up must be consumed
+        self.assertEqual(["next"], lines)
+
+    def test_parse_mirror_fl_header_pops_cd_line(self):
+        line = "[2] mirror -c /remote/path/a /local/path/"
+        lines = ["cd `/remote/path/a' [Connecting...]"]
+        result = jsp._RE_MIRROR_FL_HEADER.search(line)
+        LftpJobStatusParser._parse_mirror_fl_header(result, lines)
+        self.assertEqual([], lines)
+
+    def test_parse_mirror_fl_header_no_follow_up(self):
+        line = "[2] mirror -c /remote/path/a /local/path/"
+        lines = ["[3] mirror -c /remote/path/b /local/path/"]
+        result = jsp._RE_MIRROR_FL_HEADER.search(line)
+        LftpJobStatusParser._parse_mirror_fl_header(result, lines)
+        # Unrelated next header must NOT be popped
+        self.assertEqual(["[3] mirror -c /remote/path/b /local/path/"], lines)
+
+    # --- _parse_pget_header_block ---------------------------------------------
+
+    def test_parse_pget_header_block_with_at_line(self):
+        line = "[1] pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/"
+        lines = [
+            "sftp://someone:@localhost/home/someone",
+            "`/tmp/test_lftp/remote/c' at 4585 (3%) 1.2K/s eta:2m [Receiving data]",
+        ]
+        result = jsp._RE_PGET_HEADER.search(line)
+        status = self.parser._parse_pget_header_block(result, lines)
+        self.assertEqual("c", status.name)
+        self.assertEqual(LftpJobStatus.Type.PGET, status.type)
+        self.assertEqual(LftpJobStatus.TransferState(None, None, None, 1228, 120), status.total_transfer_state)
+        self.assertEqual([], lines)
+
+    def test_parse_pget_header_block_missing_connection_line_raises(self):
+        """The block raises only when the line carries no scheme separator at
+        all. The check is now ``"://" not in lines[0]`` (was ``"sftp" not
+        in``), so a line that lacks ``://`` (regardless of containing 'sftp')
+        is the failure case — 'sftp' is no longer the sole accepted token."""
+        line = "[1] pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/"
+        lines = ["this line lacks the connection separator"]
+        result = jsp._RE_PGET_HEADER.search(line)
+        with self.assertRaises(ValueError):
+            self.parser._parse_pget_header_block(result, lines)
+
+    def test_parse_pget_header_block_accepts_ftp_connection_line(self):
+        """FTPS prints an ``ftp://`` connection line under the pget header; it
+        must be accepted as the connection-URL line (not just ``sftp://``)."""
+        line = "[1] pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/"
+        lines = ["ftp://user:pass@host:21/home/user"]
+        result = jsp._RE_PGET_HEADER.search(line)
+        status = self.parser._parse_pget_header_block(result, lines)
+        self.assertEqual("c", status.name)
+        self.assertEqual(LftpJobStatus.TransferState(None, None, None, None, None), status.total_transfer_state)
+
+    def test_parse_pget_header_block_no_data_line(self):
+        line = "[4] pget -c /tmp/test_lftp/remote/d -o /tmp/test_lftp/local/"
+        lines = ["sftp://someone:@localhost/home/someone"]
+        result = jsp._RE_PGET_HEADER.search(line)
+        status = self.parser._parse_pget_header_block(result, lines)
+        self.assertEqual("d", status.name)
+        self.assertEqual(LftpJobStatus.TransferState(None, None, None, None, None), status.total_transfer_state)
+
+    def test_parse_pget_header_block_name_mismatch_raises(self):
+        line = "[1] pget -c /tmp/test_lftp/remote/c -o /tmp/test_lftp/local/"
+        lines = [
+            "sftp://someone:@localhost/home/someone",
+            "`/tmp/test_lftp/remote/WRONG' at 10 (0%) [Receiving data]",
+        ]
+        result = jsp._RE_PGET_HEADER.search(line)
+        with self.assertRaises(ValueError):
+            self.parser._parse_pget_header_block(result, lines)
+
+    # --- _parse_filename_chunk ------------------------------------------------
+
+    def test_parse_filename_chunk_registers_active_file(self):
+        prev_job = LftpJobStatus(
+            job_id=1, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.RUNNING, name="a", flags="-c"
+        )
+        line = "\\transfer `aa'"
+        lines = ["`aa' at 315 (1%) 90b/s eta:4m [Receiving data]"]
+        result = jsp._RE_FILENAME.search(line)
+        self.parser._parse_filename_chunk(result, lines, prev_job)
+        self.assertEqual(
+            [("aa", LftpJobStatus.TransferState(None, None, None, 90, 240))],
+            prev_job.get_active_file_transfer_states(),
+        )
+        self.assertEqual([], lines)
+
+    def test_parse_filename_chunk_missing_data_raises(self):
+        prev_job = LftpJobStatus(
+            job_id=1, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.RUNNING, name="a", flags="-c"
+        )
+        line = "\\transfer `aa'"
+        lines: list[str] = []
+        result = jsp._RE_FILENAME.search(line)
+        with self.assertRaises(ValueError):
+            self.parser._parse_filename_chunk(result, lines, prev_job)
+
+    def test_parse_filename_chunk_name_mismatch_raises(self):
+        prev_job = LftpJobStatus(
+            job_id=1, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.RUNNING, name="a", flags="-c"
+        )
+        line = "\\transfer `aa'"
+        lines = ["`bb' at 10 (0%) [Receiving data]"]
+        result = jsp._RE_FILENAME.search(line)
+        with self.assertRaises(ValueError):
+            self.parser._parse_filename_chunk(result, lines, prev_job)
+
+    # --- _build_chunk_transfer_state ------------------------------------------
+
+    def test_build_chunk_transfer_state_got(self):
+        result_got = jsp._RE_CHUNK_GOT.search("`ab', got 13733 of 25165824 (0%) 4.0K/s eta:1h45m")
+        state = LftpJobStatusParser._build_chunk_transfer_state(None, None, result_got)
+        self.assertEqual(LftpJobStatus.TransferState(13733, 25165824, 0, 4096, 6300), state)
+
+    def test_build_chunk_transfer_state_at2(self):
+        result_at2 = jsp._RE_CHUNK_AT2.search("`aa' at 59 (59%)")
+        state = LftpJobStatusParser._build_chunk_transfer_state(None, result_at2, None)
+        self.assertEqual(LftpJobStatus.TransferState(None, None, None, None, None), state)
+
+    # --- skip helpers ---------------------------------------------------------
+
+    def test_skip_chmod_block_two_liner(self):
+        line = "chmod Space.Trek.S08E04.sfv"
+        lines = ["file:/local/path/Space.Trek/Space.Trek.S08E04", "next"]
+        self.assertTrue(LftpJobStatusParser._skip_chmod_block(line, lines))
+        self.assertEqual(["next"], lines)
+
+    def test_skip_chmod_block_three_liner(self):
+        line = "chmod Space.Trek.S23E03.720p.r06"
+        lines = [
+            "file:/local/path/Space.Trek.S23E03.720p",
+            "`Space.Trek.S23E03.720p.r06' []",
+            "next",
+        ]
+        self.assertTrue(LftpJobStatusParser._skip_chmod_block(line, lines))
+        self.assertEqual(["next"], lines)
+
+    def test_skip_chmod_block_missing_file_line_raises(self):
+        line = "chmod something"
+        lines = ["not a file line"]
+        with self.assertRaises(ValueError):
+            LftpJobStatusParser._skip_chmod_block(line, lines)
+
+    def test_skip_chmod_block_not_a_chmod_line(self):
+        line = "\\transfer `aa'"
+        lines: list[str] = []
+        self.assertFalse(LftpJobStatusParser._skip_chmod_block(line, lines))
+
+    def test_skip_mirror_noise_empty_pops_follow_up(self):
+        line = "\\mirror `Sample'"
+        lines = ["Sample:", "next"]
+        self.assertTrue(LftpJobStatusParser._skip_mirror_noise(line, lines))
+        self.assertEqual(["next"], lines)
+
+    def test_skip_mirror_noise_downloading_no_follow_up(self):
+        line = "\\mirror `ba'  -- 23k/263k (8%) 6.9 KiB/s"
+        lines = ["\\transfer `ba/baa'"]
+        self.assertTrue(LftpJobStatusParser._skip_mirror_noise(line, lines))
+        self.assertEqual(["\\transfer `ba/baa'"], lines)
+
+    def test_skip_mirror_noise_not_a_mirror_line(self):
+        self.assertFalse(LftpJobStatusParser._skip_mirror_noise("chmod foo", []))
+
+    def test_skip_chunk_header_pops_backtick_line(self):
+        line = "\\chunk 0-6291456"
+        lines = ["`ab' at 4362 (0%) 1.1K/s eta:92m [Receiving data]", "next"]
+        self.assertTrue(LftpJobStatusParser._skip_chunk_header(line, lines))
+        self.assertEqual(["next"], lines)
+
+    def test_skip_chunk_header_no_data_line(self):
+        line = "\\chunk 5077"
+        lines: list[str] = []
+        self.assertTrue(LftpJobStatusParser._skip_chunk_header(line, lines))
+        self.assertEqual([], lines)
+
+    def test_skip_chunk_header_not_a_chunk_line(self):
+        self.assertFalse(LftpJobStatusParser._skip_chunk_header("chmod foo", []))
+
+    # --- _skip_noise_line -----------------------------------------------------
+
+    def test_skip_noise_line_done_last(self):
+        line = "[0] Done (queue (sftp://someone:@localhost))"
+        self.assertTrue(self.parser._skip_noise_line(line, [], None))
+
+    def test_skip_noise_line_done_not_last_raises(self):
+        line = "[0] Done (queue (sftp://someone:@localhost))"
+        with self.assertRaises(ValueError):
+            self.parser._skip_noise_line(line, ["leftover"], None)
+
+    def test_skip_noise_line_inside_job_skips_anything(self):
+        prev_job = LftpJobStatus(
+            job_id=1, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.RUNNING, name="a", flags="-c"
+        )
+        self.assertTrue(self.parser._skip_noise_line("completely unexpected garbage", [], prev_job))
+
+    def test_skip_noise_line_orphan_outside_job_skips(self):
+        self.assertTrue(self.parser._skip_noise_line("3.0K/s eta:3m [Receiving data]", [], None))
+
+    def test_skip_noise_line_unrecognized_outside_job_raises(self):
+        with self.assertRaises(ValueError):
+            self.parser._skip_noise_line("completely unexpected garbage", [], None)
+
+    # --- guard helpers --------------------------------------------------------
+
+    def test_is_valid_first_line_header(self):
+        self.assertTrue(
+            LftpJobStatusParser._is_valid_first_line(
+                "[1] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s", None
+            )
+        )
+
+    def test_is_valid_first_line_in_job_context(self):
+        prev_job = LftpJobStatus(
+            job_id=1, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.RUNNING, name="a", flags="-c"
+        )
+        self.assertTrue(LftpJobStatusParser._is_valid_first_line("anything goes now", prev_job))
+
+    def test_is_valid_first_line_bad_first_line(self):
+        self.assertFalse(LftpJobStatusParser._is_valid_first_line("garbage", None))
+
+    def test_is_orphan_progress_line(self):
+        self.assertTrue(LftpJobStatusParser._is_orphan_progress_line("3.0K/s eta:3m [Receiving data]"))
+        self.assertTrue(LftpJobStatusParser._is_orphan_progress_line("/s eta:25m [Receiving data]"))
+        self.assertTrue(
+            LftpJobStatusParser._is_orphan_progress_line(
+                "tmos.7.1.DV.HDR.H.265-TheFarm.mkv' at 22283455338 (0%) 427.6K/s eta:28m [Receiving data]"
+            )
+        )
+        self.assertFalse(LftpJobStatusParser._is_orphan_progress_line("garbage"))

@@ -3,6 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, Subject } from 'rxjs';
 
 import { StreamEventHandler, StreamDispatchService } from '../base/stream-dispatch.service';
+import { LoggerService } from '../utils/logger.service';
 import { LogRecord, logRecordFromJson } from '../../models/log-record';
 
 export interface LogHistoryParams {
@@ -25,6 +26,7 @@ export interface LogHistoryEntry {
 export class LogService implements StreamEventHandler {
     private readonly streamDispatch = inject(StreamDispatchService);
     private readonly http = inject(HttpClient);
+    private readonly logger = inject(LoggerService);
 
     private readonly logsSubject = new Subject<LogRecord>();
 
@@ -39,7 +41,14 @@ export class LogService implements StreamEventHandler {
     }
 
     onEvent(_eventName: string, data: string): void {
-        this.logsSubject.next(logRecordFromJson(JSON.parse(data)));
+        // Guard the parse of server-controlled SSE payloads: a malformed/truncated
+        // event must not throw inside the listener callback. Log and skip the bad
+        // record, emitting nothing (mirrors ConfigService.getConfig).
+        try {
+            this.logsSubject.next(logRecordFromJson(JSON.parse(data)));
+        } catch (e) {
+            this.logger.error('Failed to parse log-record event: %O', e);
+        }
     }
 
     onConnected(): void {

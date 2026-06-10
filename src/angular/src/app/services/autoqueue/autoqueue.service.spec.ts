@@ -53,6 +53,18 @@ describe('AutoQueueService', () => {
     expect(snapshot()).toEqual([{ pattern: '*.mkv' }]);
   });
 
+  it('should fall back to an empty list (and not throw) on malformed pattern JSON', () => {
+    mockRestService.sendRequest.mockReturnValue(
+      of(makeReaction({ success: true, data: 'not-json{' })),
+    );
+    const logger = TestBed.inject(LoggerService);
+
+    expect(() => connectedSubject.next(true)).not.toThrow();
+
+    expect(snapshot()).toEqual([]);
+    expect(vi.mocked(logger.error)).toHaveBeenCalled();
+  });
+
   it('should clear patterns when disconnected', () => {
     mockRestService.sendRequest.mockReturnValue(
       of(makeReaction({ success: true, data: JSON.stringify([{ pattern: '*.mkv' }]) })),
@@ -109,8 +121,35 @@ describe('AutoQueueService', () => {
       of(makeReaction({ success: true })),
     );
 
-    service.add('*.mkv');
+    // The tap-based contract defers the mutation to caller subscription.
+    let result: WebReaction | undefined;
+    service.add('*.mkv').subscribe(r => result = r);
+
+    expect(result!.success).toBe(true);
     expect(snapshot()).toEqual([{ pattern: '*.mkv' }]);
+  });
+
+  it('should append to the pattern list exactly once per caller subscription', () => {
+    mockRestService.sendRequest.mockReturnValueOnce(
+      of(makeReaction({ success: true, data: JSON.stringify([]) })),
+    );
+    connectedSubject.next(true);
+
+    mockRestService.sendRequest.mockReturnValue(
+      of(makeReaction({ success: true })),
+    );
+
+    // Count patterns$ emissions caused by add(). Subscribing first records the
+    // baseline (the current empty list).
+    const emitted: AutoQueuePattern[][] = [];
+    service.patterns$.subscribe(p => emitted.push(p));
+    const baseline = emitted.length;
+
+    service.add('*.mkv').subscribe();
+
+    // No second internal subscribe means the subject mutates exactly once.
+    expect(emitted.length - baseline).toBe(1);
+    expect(emitted[emitted.length - 1]).toEqual([{ pattern: '*.mkv' }]);
   });
 
   it('should send double-encoded URL for add', () => {
@@ -123,7 +162,7 @@ describe('AutoQueueService', () => {
       of(makeReaction({ success: true })),
     );
 
-    service.add('my pattern');
+    service.add('my pattern').subscribe();
 
     const encoded = encodeURIComponent(encodeURIComponent('my pattern'));
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(`/server/autoqueue/add/${encoded}`);
@@ -139,7 +178,10 @@ describe('AutoQueueService', () => {
       of(makeReaction({ success: false, errorMessage: 'Server error' })),
     );
 
-    service.add('*.mkv');
+    let result: WebReaction | undefined;
+    service.add('*.mkv').subscribe(r => result = r);
+
+    expect(result!.success).toBe(false);
     expect(snapshot()).toEqual([]);
   });
 
@@ -153,7 +195,7 @@ describe('AutoQueueService', () => {
       of(makeReaction({ success: true })),
     );
 
-    service.add('test/path&name');
+    service.add('test/path&name').subscribe();
 
     const encoded = encodeURIComponent(encodeURIComponent('test/path&name'));
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(`/server/autoqueue/add/${encoded}`);
@@ -172,7 +214,10 @@ describe('AutoQueueService', () => {
       of(makeReaction({ success: true })),
     );
 
-    service.remove('*.mkv');
+    let result: WebReaction | undefined;
+    service.remove('*.mkv').subscribe(r => result = r);
+
+    expect(result!.success).toBe(true);
     expect(snapshot()).toEqual([{ pattern: '*.avi' }]);
   });
 
@@ -186,7 +231,10 @@ describe('AutoQueueService', () => {
       of(makeReaction({ success: false, errorMessage: 'Server error' })),
     );
 
-    service.remove('*.mkv');
+    let result: WebReaction | undefined;
+    service.remove('*.mkv').subscribe(r => result = r);
+
+    expect(result!.success).toBe(false);
     expect(snapshot()).toEqual([{ pattern: '*.mkv' }]);
   });
 

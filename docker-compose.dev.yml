@@ -27,6 +27,24 @@ services:
       # Uncomment to use SSH key authentication
       # - ~/.ssh/id_rsa:/home/seedsync/.ssh/id_rsa:ro
     restart: unless-stopped
+    # --- Hardened runtime baseline (audit #528) ---
+    # entrypoint.sh briefly runs as root to create the PUID/PGID user and
+    # chown /config, then drops to that non-root user via setpriv. setpriv
+    # only *drops* privileges, so it stays compatible with no-new-privileges.
+    security_opt:
+      - no-new-privileges:true
+    # Drop all Linux capabilities, then add back only the ones the entrypoint
+    # needs at startup:
+    #   CHOWN, FOWNER, DAC_OVERRIDE - create & chown the user's dirs and /config
+    #   SETUID, SETGID              - create the user/group and setpriv into it
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
 
 # Uncomment below for a test remote server (for development only)
 #  test-remote:

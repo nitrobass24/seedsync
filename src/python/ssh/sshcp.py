@@ -261,6 +261,13 @@ class Sshcp:
             "-o",
             "ServerAliveCountMax=3",
         ]
+        # NOTE: do NOT add ``-o GSSAPIAuthentication=no`` here. The runtime
+        # image's Alpine openssh-client is built without GSSAPI, so ssh rejects
+        # the option ("command-line line 0: Unsupported option
+        # gssapiauthentication") and that text pollutes the captured error,
+        # which the classifier then surfaces as a failure. GSSAPI is never
+        # negotiated on that build, so there is nothing to disable. (Reverts the
+        # flag added in #562 — it broke shell detection on the Alpine image.)
 
         if self.__password is None:
             command_args += ["-o", "PasswordAuthentication=no"]
@@ -277,6 +284,10 @@ class Sshcp:
             sp = pexpect.spawn(command)
         try:
             if self.__password is not None:
+                # Wait for the password prompt with the full command timeout.
+                # Without an explicit timeout this falls back to pexpect's 30s
+                # default, so a server slow to present the prompt times out long
+                # before __TIMEOUT_SECS — the bug this branch previously had.
                 i = sp.expect(
                     [
                         "password: ",
@@ -284,7 +295,8 @@ class Sshcp:
                         "lost connection",
                         "Could not resolve hostname",
                         "Connection refused",
-                    ]
+                    ],
+                    timeout=self.__TIMEOUT_SECS,
                 )
                 self._classify_expect_result(sp, i, eof_error="Unknown error", password_error=None)
                 sp.sendline(self.__password)

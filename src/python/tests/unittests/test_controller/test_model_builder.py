@@ -980,6 +980,61 @@ class TestModelBuilder(unittest.TestCase):
         m_ab = m_a_ch["ab"]
         self.assertEqual(ModelFile.State.DOWNLOADED, m_ab.state)
 
+    @staticmethod
+    def __build_deep_wide_tree(name: str, depth: int, breadth: int, leaf_size: int) -> SystemFile:
+        """Build a balanced tree `depth` levels deep with `breadth` children per dir.
+
+        Leaves (depth == 0) are files of `leaf_size`; interior nodes are directories
+        whose size is the sum of their descendants. `leaf_size` may be a callable
+        taking the dotted leaf path to vary individual leaf sizes (used to simulate
+        an incomplete branch). Exercises the BFS in _check_root_downloaded over a
+        large tree (depth=4, breadth=4 -> 256 leaves).
+        """
+        if depth == 0:
+            size = leaf_size(name) if callable(leaf_size) else leaf_size
+            return SystemFile(name, size, False)
+        children = [
+            TestModelBuilder.__build_deep_wide_tree(f"{name}.{i}", depth - 1, breadth, leaf_size)
+            for i in range(breadth)
+        ]
+        sized = SystemFile(name, sum(c.size for c in children), True)
+        for child in children:
+            sized.add_child(child)
+        return sized
+
+    def test_build_state_deep_wide_tree_downloaded(self):
+        """_check_root_downloaded over a multi-level, multi-sibling tree resolves DOWNLOADED."""
+        # 4 levels deep, 4 children per directory -> 4^4 = 256 leaves
+        remote = TestModelBuilder.__build_deep_wide_tree("a", depth=4, breadth=4, leaf_size=10)
+        local = TestModelBuilder.__build_deep_wide_tree("a", depth=4, breadth=4, leaf_size=10)
+
+        self.model_builder.set_remote_files([remote])
+        self.model_builder.set_local_files([local])
+
+        model = self.model_builder.build_model()
+        m_a = model.get_file("a")
+        # every remote leaf is fully present locally -> root is DOWNLOADED
+        self.assertEqual(ModelFile.State.DOWNLOADED, m_a.state)
+
+    def test_build_state_deep_wide_tree_incomplete_leaf(self):
+        """A single under-sized deep leaf keeps the root DEFAULT (incomplete_children)."""
+        remote = TestModelBuilder.__build_deep_wide_tree("a", depth=4, breadth=4, leaf_size=10)
+        # One specific deep leaf is only partially present locally (1 < remote 10)
+        incomplete_leaf = "a.3.3.3.3"
+
+        def local_leaf_size(leaf_name: str) -> int:
+            return 1 if leaf_name == incomplete_leaf else 10
+
+        local = TestModelBuilder.__build_deep_wide_tree("a", depth=4, breadth=4, leaf_size=local_leaf_size)
+
+        self.model_builder.set_remote_files([remote])
+        self.model_builder.set_local_files([local])
+
+        model = self.model_builder.build_model()
+        m_a = model.get_file("a")
+        # one deep leaf is not downloaded -> root cannot be DOWNLOADED
+        self.assertEqual(ModelFile.State.DEFAULT, m_a.state)
+
     def test_build_children_state_downloaded_full_extra(self):
         """Fully downloaded but with an extra local-only file"""
         r_a = SystemFile("a", 300, True)
@@ -1846,6 +1901,77 @@ class TestModelBuilder(unittest.TestCase):
 
         # Invalidate on different
         self.model_builder.set_corrupt_files({"a", "c"})
+        self.assertTrue(self.model_builder.has_changes())
+
+    def test_build_state_move_failed(self):
+        # Downloaded + move-failed -> MOVE_FAILED (#536)
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.MOVE_FAILED, model.get_file("a").state)
+
+        # Extracted + move-failed -> MOVE_FAILED
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_extracted_files({"a"})
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.MOVE_FAILED, model.get_file("a").state)
+
+        # Validated + move-failed -> MOVE_FAILED
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_validated_files({"a"})
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.MOVE_FAILED, model.get_file("a").state)
+
+        # Local-only + move-failed -> DEFAULT (move-failed requires a post-download base)
+        self.model_builder.clear()
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DEFAULT, model.get_file("a").state)
+
+        # Downloading + move-failed -> DOWNLOADING (active download overrides)
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 50, False)])
+        self.model_builder.set_lftp_statuses(
+            [LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "a", "")]
+        )
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.DOWNLOADING, model.get_file("a").state)
+
+    def test_build_state_move_failed_overrides_corrupt(self):
+        # Both corrupt + move-failed -> MOVE_FAILED (move-failed checked last)
+        self.model_builder.clear()
+        self.model_builder.set_remote_files([SystemFile("a", 100, False)])
+        self.model_builder.set_local_files([SystemFile("a", 100, False)])
+        self.model_builder.set_corrupt_files({"a"})
+        self.model_builder.set_move_failed_files({"a"})
+        model = self.model_builder.build_model()
+        self.assertEqual(ModelFile.State.MOVE_FAILED, model.get_file("a").state)
+
+    def test_rebuild_on_move_failed_files(self):
+        self.assertTrue(self.model_builder.has_changes())
+
+        # Initial set
+        self.model_builder.set_move_failed_files({"a", "b"})
+        self.model_builder.build_model()
+        self.assertFalse(self.model_builder.has_changes())
+
+        # Does not invalidate on same
+        self.model_builder.set_move_failed_files({"a", "b"})
+        self.assertFalse(self.model_builder.has_changes())
+
+        # Invalidate on different
+        self.model_builder.set_move_failed_files({"a", "c"})
         self.assertTrue(self.model_builder.has_changes())
 
 

@@ -56,6 +56,10 @@ class TestFormatDiscord(unittest.TestCase):
         embed = json.loads(body)["embeds"][0]
         self.assertIn("custom_event", embed["title"])
 
+    def test_download_start_has_label_and_color(self):
+        self.assertEqual("Download Started", EVENT_LABELS["download_start"])
+        self.assertEqual(0xFEE75C, DISCORD_COLORS["download_start"])
+
 
 class TestFormatTelegram(unittest.TestCase):
     def test_url_contains_bot_token(self):

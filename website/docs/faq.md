@@ -20,6 +20,38 @@ No. SeedSync does not collect or transmit data.
 - Confirm username/password or SSH key
 - Check the Logs page for specific errors
 
+## FTPS transfers fail with a TLS or certificate error
+
+When the [transfer protocol](./configuration.md#transfer-protocol-ftps) is `ftps`, the Logs page may show TLS handshake or certificate-validation errors such as "certificate verification failed", "self-signed certificate", or "hostname mismatch".
+
+This means **Verify FTPS Certificate** is enabled and the server's certificate could not be validated — common with seedboxes that use self-signed or hostname-mismatched certificates.
+
+To fix:
+
+- If your provider's certificate is properly issued (CA-signed, matching hostname), this usually indicates a real problem worth investigating with them.
+- Otherwise, open **Settings**, turn **Verify FTPS Certificate** off, and restart. The data channel stays TLS-encrypted, but the certificate is no longer authenticated (SeedSync logs a `WARNING` each time it connects this way). See the [security note](./configuration.md#ftps-certificate-verification-security) for the trade-off.
+
+If the error is a generic TLS handshake failure (not a certificate error), confirm the server actually offers FTPS on the configured **Remote FTP Port** (commonly `21`) and that it supports explicit `AUTH TLS`.
+
+## FTPS transfers stall or never start behind a firewall/NAT
+
+FTPS uses **passive mode**, which opens extra outbound data connections to ephemeral high-numbered ports on the server. If scanning works but transfers hang at "Logging in..." or never move data, a restrictive egress firewall is the usual cause.
+
+- Allow outbound TCP from the container to the seedbox on the FTPS control port (typically `21`) **and** the provider's passive-mode port range.
+- The container only makes *outbound* connections, so it works behind NAT without inbound port-forwarding — but the egress range must be open. See the [egress note](./installation.md#network-egress-ftps-only).
+
+## FTPS transfers never start, but scanning works
+
+If files appear in the dashboard (scanning succeeds) but downloads never begin when the transfer protocol is `ftps`, the most likely cause is a **protocol mismatch**: your seedbox offers SSH/SFTP but does **not** offer FTPS (or offers it on a different port than configured).
+
+Scanning **always** uses SSH, so it keeps working even when FTPS is misconfigured — which makes this symptom look confusing. The transfer side, meanwhile, can't establish an FTPS session.
+
+To fix:
+
+- Confirm your provider actually offers FTPS, and on which port. Set that as **Remote FTP Port** in Settings (it is **not** the same as **Remote Port**, which is SSH).
+- Check the Logs page for FTPS connection errors (connection refused, TLS handshake failure, certificate errors).
+- If your provider does not offer FTPS at all, switch **Transfer Protocol** back to `sftp` in Settings and restart. SFTP uses the same SSH connection that scanning already relies on.
+
 ## Locale errors in logs
 
 Some servers require a matching locale. Add these environment variables to the container:

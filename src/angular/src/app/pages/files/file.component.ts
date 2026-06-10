@@ -21,6 +21,17 @@ export enum FileAction {
   DELETE_REMOTE
 }
 
+// Payload emitted for each single-file action. Carries the target file plus a
+// callback the parent invokes to clear this child's activeAction when the
+// backend rejects the request — the file model never changes on failure, so
+// ngOnChanges cannot recover the row on its own. The callback is necessary
+// because <app-file> is rendered inside *cdkVirtualFor, which recycles
+// instances and prevents the parent from keying a @ViewChildren to a file.
+export interface FileActionEvent {
+  file: ViewFile;
+  clearActiveAction: () => void;
+}
+
 @Component({
   selector: 'app-file',
   standalone: true,
@@ -48,12 +59,12 @@ export class FileComponent implements OnChanges, OnDestroy {
   options = input.required<Observable<ViewFileOptions>>();
 
   checkEvent = output<{file: ViewFile, shiftKey: boolean}>();
-  queueEvent = output<ViewFile>();
-  stopEvent = output<ViewFile>();
-  extractEvent = output<ViewFile>();
-  deleteLocalEvent = output<ViewFile>();
-  validateEvent = output<ViewFile>();
-  deleteRemoteEvent = output<ViewFile>();
+  queueEvent = output<FileActionEvent>();
+  stopEvent = output<FileActionEvent>();
+  extractEvent = output<FileActionEvent>();
+  deleteLocalEvent = output<FileActionEvent>();
+  validateEvent = output<FileActionEvent>();
+  deleteRemoteEvent = output<FileActionEvent>();
 
   activeAction: FileAction | null = null;
 
@@ -128,24 +139,50 @@ export class FileComponent implements OnChanges, OnDestroy {
     return this.activeAction == null && this.file().isRemotelyDeletable;
   }
 
+  // Cleared by the parent when an action's backend request fails or errors.
+  // Runs inside the parent's async subscribe callback, so OnPush needs an
+  // explicit markForCheck to re-enable the buttons and stop the spinner.
+  // <app-file> is recycled by *cdkVirtualFor, so a late failure callback may
+  // target an instance now bound to a different file/action; only clear when
+  // this instance still represents the same file and the same in-flight action.
+  clearActiveAction(forFile?: ViewFile, forAction?: FileAction | null): void {
+    if (forFile !== undefined) {
+      const current = this.file();
+      if (
+        current.pairId !== forFile.pairId ||
+        current.name !== forFile.name ||
+        this.activeAction !== forAction
+      ) {
+        return;
+      }
+    }
+    this.activeAction = null;
+    this.cdr.markForCheck();
+  }
+
+  private actionEvent(file: ViewFile): FileActionEvent {
+    const action = this.activeAction;
+    return { file, clearActiveAction: () => this.clearActiveAction(file, action) };
+  }
+
   onQueue(file: ViewFile): void {
     this.activeAction = FileAction.QUEUE;
-    this.queueEvent.emit(file);
+    this.queueEvent.emit(this.actionEvent(file));
   }
 
   onStop(file: ViewFile): void {
     this.activeAction = FileAction.STOP;
-    this.stopEvent.emit(file);
+    this.stopEvent.emit(this.actionEvent(file));
   }
 
   onExtract(file: ViewFile): void {
     this.activeAction = FileAction.EXTRACT;
-    this.extractEvent.emit(file);
+    this.extractEvent.emit(this.actionEvent(file));
   }
 
   onValidate(file: ViewFile): void {
     this.activeAction = FileAction.VALIDATE;
-    this.validateEvent.emit(file);
+    this.validateEvent.emit(this.actionEvent(file));
   }
 
   onDeleteLocal(file: ViewFile): void {
@@ -153,7 +190,7 @@ export class FileComponent implements OnChanges, OnDestroy {
       this.clearConfirmTimer();
       this.confirmingDelete = null;
       this.activeAction = FileAction.DELETE_LOCAL;
-      this.deleteLocalEvent.emit(file);
+      this.deleteLocalEvent.emit(this.actionEvent(file));
     } else {
       this.setConfirming('local');
     }
@@ -164,7 +201,7 @@ export class FileComponent implements OnChanges, OnDestroy {
       this.clearConfirmTimer();
       this.confirmingDelete = null;
       this.activeAction = FileAction.DELETE_REMOTE;
-      this.deleteRemoteEvent.emit(file);
+      this.deleteRemoteEvent.emit(this.actionEvent(file));
     } else {
       this.setConfirming('remote');
     }

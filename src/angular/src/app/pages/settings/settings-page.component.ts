@@ -18,8 +18,12 @@ import { OptionComponent, OptionValue } from './option.component';
 import { PathPairsComponent } from './path-pairs.component';
 import { IntegrationsComponent } from './integrations.component';
 import {
+  ConfigValuePath,
   IOptionsContext,
+  OVERRIDE_NOTE,
+  getConfigValue,
   OPTIONS_CONTEXT_SERVER,
+  OPTIONS_CONTEXT_FTPS,
   OPTIONS_CONTEXT_DISCOVERY,
   OPTIONS_CONTEXT_CONNECTIONS,
   OPTIONS_CONTEXT_OTHER,
@@ -49,6 +53,7 @@ import {
 })
 export class SettingsPageComponent implements OnInit {
   serverContext: IOptionsContext = OPTIONS_CONTEXT_SERVER;
+  ftpsContext: IOptionsContext = OPTIONS_CONTEXT_FTPS;
   autoqueueContext: IOptionsContext = OPTIONS_CONTEXT_AUTOQUEUE;
   validateContext: IOptionsContext = OPTIONS_CONTEXT_VALIDATE;
   readonly OPTIONS_CONTEXT_DISCOVERY = OPTIONS_CONTEXT_DISCOVERY;
@@ -86,7 +91,9 @@ export class SettingsPageComponent implements OnInit {
   );
   private badValueNotifs = new Map<string, Notification>();
 
-  private static readonly OVERRIDE_NOTE = 'Overridden by Path Pairs when any pair is enabled';
+  // Retained for the unit spec, which reads this via a statics cast. The
+  // canonical note now lives next to the option definitions in options-list.ts.
+  private static readonly OVERRIDE_NOTE = OVERRIDE_NOTE;
 
   ngOnInit(): void {
     this.connectedService.connected$.pipe(
@@ -112,56 +119,80 @@ export class SettingsPageComponent implements OnInit {
     });
 
     this.configService.config$.pipe(
-      map((config) => config?.validate?.enabled ?? false),
-      distinctUntilChanged(),
+      map((config) => ({
+        validateEnabled: config?.validate?.enabled ?? false,
+        protocolIsSftp: (config?.lftp?.protocol ?? 'sftp') !== 'ftps',
+      })),
+      distinctUntilChanged(
+        (a, b) => a.validateEnabled === b.validateEnabled && a.protocolIsSftp === b.protocolIsSftp,
+      ),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe((validateEnabled) => {
+    ).subscribe(({ validateEnabled, protocolIsSftp }) => {
       this.validateContext = SettingsPageComponent.buildValidateContext(validateEnabled);
+      this.ftpsContext = SettingsPageComponent.buildFtpsContext(protocolIsSftp);
       this.cdr.markForCheck();
     });
   }
 
-  private static buildServerContext(hasEnabledPairs: boolean): IOptionsContext {
+  /**
+   * Apply the per-option disable rules carried by each option definition
+   * (disabledWhen/overrideNote). One generic transform replaces the former
+   * per-context builders: an option is disabled when its disabledWhen flag is
+   * currently active, and its description is swapped for overrideNote when one
+   * is provided.
+   */
+  private static applyDisableRules(
+    context: IOptionsContext,
+    active: { pairsEnabled: boolean; validateDisabled: boolean; protocolSftp: boolean },
+  ): IOptionsContext {
     return {
-      ...OPTIONS_CONTEXT_SERVER,
-      options: OPTIONS_CONTEXT_SERVER.options.map((option) => {
-        if (hasEnabledPairs && (option.valuePath[1] === 'remote_path' || option.valuePath[1] === 'local_path')) {
-          return { ...option, description: SettingsPageComponent.OVERRIDE_NOTE, disabled: true };
+      ...context,
+      options: context.options.map((option) => {
+        if (option.disabledWhen && active[option.disabledWhen]) {
+          return option.overrideNote !== undefined
+            ? { ...option, disabled: true, description: option.overrideNote }
+            : { ...option, disabled: true };
         }
         return option;
       }),
     };
+  }
+
+  private static buildServerContext(hasEnabledPairs: boolean): IOptionsContext {
+    return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_SERVER, {
+      pairsEnabled: hasEnabledPairs,
+      validateDisabled: false,
+      protocolSftp: false,
+    });
+  }
+
+  private static buildFtpsContext(protocolIsSftp: boolean): IOptionsContext {
+    return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_FTPS, {
+      pairsEnabled: false,
+      validateDisabled: false,
+      protocolSftp: protocolIsSftp,
+    });
   }
 
   private static buildAutoqueueContext(hasEnabledPairs: boolean): IOptionsContext {
-    return {
-      ...OPTIONS_CONTEXT_AUTOQUEUE,
-      options: OPTIONS_CONTEXT_AUTOQUEUE.options.map((option) => {
-        if (hasEnabledPairs && option.valuePath[1] === 'enabled') {
-          return { ...option, description: SettingsPageComponent.OVERRIDE_NOTE, disabled: true };
-        }
-        return option;
-      }),
-    };
+    return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_AUTOQUEUE, {
+      pairsEnabled: hasEnabledPairs,
+      validateDisabled: false,
+      protocolSftp: false,
+    });
   }
 
   private static buildValidateContext(validateEnabled: boolean): IOptionsContext {
-    return {
-      ...OPTIONS_CONTEXT_VALIDATE,
-      options: OPTIONS_CONTEXT_VALIDATE.options.map((option) => {
-        if (!validateEnabled && (option.valuePath[1] === 'auto_validate' || option.valuePath[1] === 'algorithm')) {
-          return { ...option, disabled: true };
-        }
-        return option;
-      }),
-    };
+    return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_VALIDATE, {
+      pairsEnabled: false,
+      validateDisabled: !validateEnabled,
+      protocolSftp: false,
+    });
   }
 
-  getOptionValue(config: Config | null, valuePath: [string, string]): OptionValue {
+  getOptionValue(config: Config | null, valuePath: ConfigValuePath): OptionValue {
     if (!config) return null;
-    const section = (config as unknown as Record<string, Record<string, OptionValue> | undefined>)[valuePath[0]];
-    if (!section) return null;
-    return section[valuePath[1]] ?? null;
+    return getConfigValue(config, valuePath);
   }
 
   onSetConfig(section: string, option: string, value: OptionValue, requiresRestart?: boolean): void {

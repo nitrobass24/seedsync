@@ -165,6 +165,29 @@ class TestValidateConfig(unittest.TestCase):
             validate_config(ctx)
         self.assertIn("AutoQueue.auto_delete_remote", str(cm.exception))
 
+    def test_missing_protocol_raises(self):
+        ctx = _make_valid_context()
+        # Bypass property checker (protocol_allowed rejects None directly)
+        setattr(ctx.config.lftp, "__protocol", None)
+        with self.assertRaises(ControllerError) as cm:
+            validate_config(ctx)
+        self.assertIn("Lftp.protocol", str(cm.exception))
+
+    def test_ftps_requires_remote_ftp_port(self):
+        ctx = _make_valid_context()
+        ctx.config.lftp.protocol = "ftps"
+        setattr(ctx.config.lftp, "__remote_ftp_port", None)
+        with self.assertRaises(ControllerError) as cm:
+            validate_config(ctx)
+        self.assertIn("Lftp.remote_ftp_port", str(cm.exception))
+
+    def test_sftp_does_not_require_remote_ftp_port(self):
+        ctx = _make_valid_context()
+        ctx.config.lftp.protocol = "sftp"
+        setattr(ctx.config.lftp, "__remote_ftp_port", None)
+        # Should not raise: remote_ftp_port is irrelevant under sftp
+        validate_config(ctx)
+
 
 class TestConfigureLftp(unittest.TestCase):
     """Tests for configure_lftp."""
@@ -270,3 +293,51 @@ class TestConfigureLftp(unittest.TestCase):
         configure_lftp(lftp, config)
 
         self.assertFalse(lftp.xfer_verify)
+
+    def test_sftp_profile_passes_persisted_values_through(self):
+        """Under sftp (default), persisted parallelism values pass through unchanged."""
+        lftp = MagicMock()
+        config = Config()
+        config.lftp.protocol = "sftp"
+        config.lftp.num_max_parallel_downloads = 2
+        config.lftp.num_max_parallel_files_per_download = 3
+        config.lftp.num_max_connections_per_root_file = 20
+        config.lftp.num_max_connections_per_dir_file = 20
+        config.lftp.num_max_total_connections = 0
+        config.lftp.use_temp_file = True
+
+        configure_lftp(lftp, config)
+
+        self.assertEqual(lftp.num_parallel_files, 3)
+        self.assertEqual(lftp.num_connections_per_root_file, 20)
+        self.assertEqual(lftp.num_connections_per_dir_file, 20)
+        self.assertEqual(lftp.num_max_total_connections, 0)
+
+    def test_ftps_passes_persisted_values_through(self):
+        """Under ftps, persisted Connections values pass through unchanged.
+
+        The former fixed FTPS profile (parallel-files=4, dir-pget=1, root-pget=4,
+        connection-limit=8) silently overrode the user's Connections settings; it
+        has been removed. The persisted values below are deliberately all distinct
+        from that old profile, so asserting they reach lftp proves the override is
+        gone.
+        """
+        lftp = MagicMock()
+        config = Config()
+        config.lftp.protocol = "ftps"
+        config.lftp.num_max_parallel_downloads = 2
+        config.lftp.num_max_parallel_files_per_download = 3
+        config.lftp.num_max_connections_per_root_file = 20
+        config.lftp.num_max_connections_per_dir_file = 20
+        config.lftp.num_max_total_connections = 0
+        config.lftp.use_temp_file = True
+
+        configure_lftp(lftp, config)
+
+        # num_parallel_jobs is protocol-agnostic (queue parallelism)
+        self.assertEqual(lftp.num_parallel_jobs, 2)
+        # Persisted Connections values reach lftp unchanged under ftps
+        self.assertEqual(lftp.num_parallel_files, 3)
+        self.assertEqual(lftp.num_connections_per_root_file, 20)
+        self.assertEqual(lftp.num_connections_per_dir_file, 20)
+        self.assertEqual(lftp.num_max_total_connections, 0)

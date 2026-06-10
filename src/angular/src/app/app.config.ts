@@ -1,6 +1,6 @@
-import { ApplicationConfig, APP_INITIALIZER, inject, provideBrowserGlobalErrorListeners } from '@angular/core';
+import { ApplicationConfig, inject, provideAppInitializer, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter, RouteReuseStrategy } from '@angular/router';
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { provideHttpClient, withInterceptors, withXhr } from '@angular/common/http';
 
 import { apiKeyInterceptor } from './services/utils/api-key.interceptor';
 
@@ -13,6 +13,7 @@ import { ModelFileService } from './services/files/model-file.service';
 import { LogService } from './services/logs/log.service';
 import { ViewFileFilterService } from './services/files/view-file-filter.service';
 import { ViewFileSortService } from './services/files/view-file-sort.service';
+import { VIEW_FILE_COALESCE_MS } from './services/files/view-file.service';
 import { ThemeService } from './services/utils/theme.service';
 import { ConfigService } from './services/settings/config.service';
 import { AutoQueueService } from './services/autoqueue/autoqueue.service';
@@ -42,14 +43,19 @@ function initializeStreaming(): () => void {
 
 export const appConfig: ApplicationConfig = {
   providers: [
+    // Make the implicit zoneless contract explicit (zone.js is not installed).
+    // No behavioral change; guards against a transitive dep reintroducing zone.js.
+    provideZonelessChangeDetection(),
     provideBrowserGlobalErrorListeners(),
     provideRouter(ROUTES),
-    provideHttpClient(withInterceptors([apiKeyInterceptor])),
+    provideHttpClient(withXhr(), withInterceptors([apiKeyInterceptor])),
     { provide: RouteReuseStrategy, useClass: CachedReuseStrategy },
-    {
-      provide: APP_INITIALIZER,
-      useFactory: initializeStreaming,
-      multi: true,
-    },
+    // Coalesce the per-file SSE fan-out into one view rebuild per ~100ms window
+    // (issue #521). The backend controller loop ticks every ~0.5s, so this batches
+    // a burst of per-file model events without any user-perceivable delay.
+    { provide: VIEW_FILE_COALESCE_MS, useValue: 100 },
+    // initializeStreaming() runs the eager injections and returns a thunk; invoke
+    // the returned thunk to actually start StreamDispatchService (SSE streaming).
+    provideAppInitializer(() => initializeStreaming()()),
   ]
 };

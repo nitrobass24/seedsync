@@ -8,6 +8,7 @@ import json
 from datetime import UTC, datetime
 
 EVENT_LABELS: dict[str, str] = {
+    "download_start": "Download Started",
     "download_complete": "Download Complete",
     "extraction_complete": "Extraction Complete",
     "extraction_failed": "Extraction Failed",
@@ -16,6 +17,7 @@ EVENT_LABELS: dict[str, str] = {
 }
 
 DISCORD_COLORS: dict[str, int] = {
+    "download_start": 0xFEE75C,  # yellow
     "download_complete": 0x57F287,  # green
     "extraction_complete": 0x5865F2,  # blurple
     "extraction_failed": 0xED4245,  # red

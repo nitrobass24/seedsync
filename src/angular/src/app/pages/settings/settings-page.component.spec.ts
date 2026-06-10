@@ -1,16 +1,19 @@
 import '@angular/compiler';
 import { describe, it, expect } from 'vitest';
 import { SettingsPageComponent } from './settings-page.component';
-import { IOptionsContext } from './options-list';
+import { FTPS_ONLY_NOTE, IOptionsContext } from './options-list';
 
 interface SettingsPageStatics {
   buildServerContext(hasEnabledPairs: boolean): IOptionsContext;
+  buildFtpsContext(protocolIsSftp: boolean): IOptionsContext;
   buildAutoqueueContext(hasEnabledPairs: boolean): IOptionsContext;
   OVERRIDE_NOTE: string;
 }
 const settingsStatics = SettingsPageComponent as unknown as SettingsPageStatics;
 const buildServerContext = (hasEnabledPairs: boolean): IOptionsContext =>
   settingsStatics.buildServerContext(hasEnabledPairs);
+const buildFtpsContext = (protocolIsSftp: boolean): IOptionsContext =>
+  settingsStatics.buildFtpsContext(protocolIsSftp);
 const buildAutoqueueContext = (hasEnabledPairs: boolean): IOptionsContext =>
   settingsStatics.buildAutoqueueContext(hasEnabledPairs);
 const OVERRIDE_NOTE = settingsStatics.OVERRIDE_NOTE;
@@ -45,6 +48,32 @@ describe('SettingsPageComponent.buildServerContext', () => {
     for (const option of others) {
       expect(option.disabled).toBeFalsy();
     }
+  });
+});
+
+describe('SettingsPageComponent.buildFtpsContext', () => {
+  const ftpOnlyPaths = ['remote_ftp_port', 'ftp_ssl_verify_certificate'];
+
+  it('disables the FTP-only options when the protocol is sftp', () => {
+    const ctx = buildFtpsContext(true);
+    for (const path of ftpOnlyPaths) {
+      const option = ctx.options.find((o) => o.valuePath[1] === path)!;
+      expect(option.disabled).toBe(true);
+      expect(option.description).toBe(FTPS_ONLY_NOTE);
+    }
+  });
+
+  it('enables the FTP-only options when the protocol is ftps', () => {
+    const ctx = buildFtpsContext(false);
+    for (const path of ftpOnlyPaths) {
+      const option = ctx.options.find((o) => o.valuePath[1] === path)!;
+      expect(option.disabled).toBeFalsy();
+    }
+  });
+
+  it('never disables the protocol selector itself', () => {
+    const protocol = buildFtpsContext(true).options.find((o) => o.valuePath[1] === 'protocol')!;
+    expect(protocol.disabled).toBeFalsy();
   });
 });
 

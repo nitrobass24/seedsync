@@ -61,6 +61,22 @@ class TestCheckers(unittest.TestCase):
         with self.assertRaises(ConfigError):
             Checkers.algorithm_allowed(TestCheckers, "algo", "invalid")
 
+    def test_protocol_allowed(self):
+        self.assertEqual("sftp", Checkers.protocol_allowed(None, "", "sftp"))
+        self.assertEqual("ftps", Checkers.protocol_allowed(None, "", "ftps"))
+        # Case + whitespace normalization
+        self.assertEqual("sftp", Checkers.protocol_allowed(None, "", "SFTP"))
+        self.assertEqual("ftps", Checkers.protocol_allowed(None, "", "  Ftps  "))
+        # Invalid protocols
+        with self.assertRaises(ConfigError):
+            Checkers.protocol_allowed(TestCheckers, "protocol", "scp")
+        with self.assertRaises(ConfigError):
+            Checkers.protocol_allowed(TestCheckers, "protocol", "sptf")
+        with self.assertRaises(ConfigError):
+            Checkers.protocol_allowed(TestCheckers, "protocol", "")
+        with self.assertRaises(ConfigError):
+            Checkers.protocol_allowed(TestCheckers, "protocol", "ftp")
+
     def test_log_level_allowed(self):
         for level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
             self.assertEqual(level, Checkers.log_level_allowed(None, "", level))
@@ -247,6 +263,9 @@ class TestConfig(unittest.TestCase):
             "net_max_retries": "2",
             "net_reconnect_interval_base": "3",
             "net_reconnect_interval_multiplier": "1",
+            "protocol": "ftps",
+            "remote_ftp_port": "21",
+            "ftp_ssl_verify_certificate": "True",
         }
         lftp = Config.Lftp.from_dict(good_dict)
         self.assertEqual("remote.server.com", lftp.remote_address)
@@ -271,6 +290,9 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(2, lftp.net_max_retries)
         self.assertEqual(3, lftp.net_reconnect_interval_base)
         self.assertEqual(1, lftp.net_reconnect_interval_multiplier)
+        self.assertEqual("ftps", lftp.protocol)
+        self.assertEqual(21, lftp.remote_ftp_port)
+        self.assertEqual(True, lftp.ftp_ssl_verify_certificate)
 
         self.check_common(
             Config.Lftp,
@@ -345,6 +367,10 @@ class TestConfig(unittest.TestCase):
         self.check_bad_value_error(Config.Lftp, good_dict, "net_max_retries", "-1")
         self.check_bad_value_error(Config.Lftp, good_dict, "net_reconnect_interval_base", "-1")
         self.check_bad_value_error(Config.Lftp, good_dict, "net_reconnect_interval_multiplier", "-1")
+        self.check_bad_value_error(Config.Lftp, good_dict, "protocol", "scp")
+        self.check_bad_value_error(Config.Lftp, good_dict, "protocol", "sptf")
+        self.check_bad_value_error(Config.Lftp, good_dict, "remote_ftp_port", "-1")
+        self.check_bad_value_error(Config.Lftp, good_dict, "remote_ftp_port", "0")
 
     def test_controller(self):
         good_dict = {
@@ -640,6 +666,9 @@ class TestConfig(unittest.TestCase):
         net_max_retries = 2
         net_reconnect_interval_base = 3
         net_reconnect_interval_multiplier = 1
+        protocol = sftp
+        remote_ftp_port = 21
+        ftp_ssl_verify_certificate = False
 
         [Controller]
         interval_ms_remote_scan = 1234
@@ -665,6 +694,7 @@ class TestConfig(unittest.TestCase):
 
         [Notifications]
         webhook_url =
+        notify_on_download_start = False
         notify_on_download_complete = True
         notify_on_extraction_complete = True
         notify_on_extraction_failed = True
@@ -820,6 +850,9 @@ class TestConfig(unittest.TestCase):
         config.lftp.net_max_retries = 2
         config.lftp.net_reconnect_interval_base = 3
         config.lftp.net_reconnect_interval_multiplier = 1
+        config.lftp.protocol = "sftp"
+        config.lftp.remote_ftp_port = 21
+        config.lftp.ftp_ssl_verify_certificate = False
         config.controller.interval_ms_remote_scan = 1000
         config.controller.interval_ms_local_scan = 1000
         config.controller.interval_ms_downloading_scan = 1000
@@ -837,6 +870,86 @@ class TestConfig(unittest.TestCase):
         config_str = config.to_str()
         config2 = Config.from_str(config_str)
         self.assertEqual(config.as_dict(), config2.as_dict())
+
+    def _full_config(self) -> Config:
+        """Build a complete, valid Config (all required fields set)."""
+        config = Config()
+        config.general.log_level = "INFO"
+        config.general.verbose = False
+        config.general.exclude_patterns = ""
+        config.lftp.remote_address = "addr"
+        config.lftp.remote_username = "user"
+        config.lftp.remote_password = "pass"
+        config.lftp.remote_port = 22
+        config.lftp.remote_path = "/remote"
+        config.lftp.local_path = "/local"
+        config.lftp.remote_path_to_scan_script = "/scan"
+        config.lftp.use_ssh_key = False
+        config.lftp.num_max_parallel_downloads = 1
+        config.lftp.num_max_parallel_files_per_download = 1
+        config.lftp.num_max_connections_per_root_file = 1
+        config.lftp.num_max_connections_per_dir_file = 1
+        config.lftp.num_max_total_connections = 0
+        config.lftp.use_temp_file = False
+        config.lftp.net_limit_rate = ""
+        config.lftp.net_socket_buffer = "8M"
+        config.lftp.pget_min_chunk_size = "100M"
+        config.lftp.mirror_parallel_directories = True
+        config.lftp.net_timeout = 20
+        config.lftp.net_max_retries = 2
+        config.lftp.net_reconnect_interval_base = 3
+        config.lftp.net_reconnect_interval_multiplier = 1
+        config.lftp.protocol = "sftp"
+        config.lftp.remote_ftp_port = 21
+        config.lftp.ftp_ssl_verify_certificate = False
+        config.controller.interval_ms_remote_scan = 1000
+        config.controller.interval_ms_local_scan = 1000
+        config.controller.interval_ms_downloading_scan = 1000
+        config.controller.extract_path = "/tmp"
+        config.controller.use_local_path_as_extract_path = True
+        config.controller.use_staging = False
+        config.controller.staging_path = "/staging"
+        config.web.port = 8800
+        config.autoqueue.enabled = True
+        config.autoqueue.patterns_only = False
+        config.autoqueue.auto_extract = True
+        config.autoqueue.auto_delete_remote = False
+        return config
+
+    def test_special_char_values_round_trip(self):
+        """Values containing '%', quotes, and unicode must survive a
+        to_str/from_str round trip verbatim.
+
+        Regression guard for the '%' interpolation crash (#507): the default
+        configparser BasicInterpolation treats '%' as a format token and raises
+        on both write and read. These run across free-text and secret fields.
+        """
+        specials = [
+            "100%secret",
+            "%%escaped%%",
+            "rate=50%",
+            'has"double',
+            "has'single",
+            "mix'\"both",
+            "ünïcødé☃",
+            "$(whoami)`id`",
+        ]
+        for value in specials:
+            with self.subTest(value=value):
+                config = self._full_config()
+                config.lftp.remote_password = value  # sensitive free-text
+                config.general.exclude_patterns = value  # free-text
+                config.lftp.net_limit_rate = value  # free-text
+                config.notifications.webhook_url = value  # sensitive free-text
+
+                config2 = Config.from_str(config.to_str())
+
+                self.assertEqual(value, config2.lftp.remote_password)
+                self.assertEqual(value, config2.general.exclude_patterns)
+                self.assertEqual(value, config2.lftp.net_limit_rate)
+                self.assertEqual(value, config2.notifications.webhook_url)
+                # Full structural equality as a backstop.
+                self.assertEqual(config.as_dict(), config2.as_dict())
 
     def test_controller_staging_missing_keys_use_defaults(self):
         """Staging properties missing from config should use None defaults (backward compat)"""
@@ -924,6 +1037,31 @@ class TestConfig(unittest.TestCase):
         self.assertIsNone(lftp.net_max_retries)
         self.assertIsNone(lftp.net_reconnect_interval_base)
         self.assertIsNone(lftp.net_reconnect_interval_multiplier)
+
+    def test_lftp_missing_ftps_keys_uses_defaults(self):
+        """Pre-feature configs with no FTPS keys must default to sftp/21/False (backward compat)"""
+        good_dict = {
+            "remote_address": "addr",
+            "remote_username": "user",
+            "remote_password": "pass",
+            "remote_port": "22",
+            "remote_path": "/remote",
+            "local_path": "/local",
+            "remote_path_to_scan_script": "/scan",
+            "use_ssh_key": "False",
+            "num_max_parallel_downloads": "1",
+            "num_max_parallel_files_per_download": "1",
+            "num_max_connections_per_root_file": "1",
+            "num_max_connections_per_dir_file": "1",
+            "num_max_total_connections": "0",
+            "use_temp_file": "False",
+            "net_limit_rate": "500K",
+            # protocol / remote_ftp_port / ftp_ssl_verify_certificate intentionally omitted
+        }
+        lftp = Config.Lftp.from_dict(good_dict)
+        self.assertEqual("sftp", lftp.protocol)
+        self.assertEqual(21, lftp.remote_ftp_port)
+        self.assertEqual(False, lftp.ftp_ssl_verify_certificate)
 
     def test_controller_staging_round_trip(self):
         """Staging properties should survive a serialization round trip"""

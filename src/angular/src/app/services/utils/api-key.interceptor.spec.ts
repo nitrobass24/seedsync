@@ -148,4 +148,28 @@ describe("apiKeyInterceptor", () => {
     expect(req.request.headers.has("X-Api-Key")).toBe(false);
     req.flush("");
   });
+
+  // --- Redacted sentinel guard (#514) ---
+
+  it("should never send the redacted sentinel as a credential", () => {
+    // /server/config/get redacts the key to '********'; that must never be
+    // sent as a credential.
+    mockConfigService.configSnapshot = { web: { api_key: "********" } };
+
+    http.get("/server/config/get", { responseType: "text" }).subscribe();
+
+    const req = httpTesting.expectOne("/server/config/get");
+    expect(req.request.headers.has("X-Api-Key")).toBe(false);
+    req.flush("");
+  });
+
+  it("should send the real snapshot key (present during the session it was set)", () => {
+    mockConfigService.configSnapshot = { web: { api_key: "snapshot-key" } };
+
+    http.get("/server/config/get", { responseType: "text" }).subscribe();
+
+    const req = httpTesting.expectOne("/server/config/get");
+    expect(req.request.headers.get("X-Api-Key")).toBe("snapshot-key");
+    req.flush("");
+  });
 });

@@ -5,7 +5,7 @@
 SeedSync is a Docker-based tool that syncs files from a remote seedbox to a local machine using LFTP.
 
 - **Frontend**: Angular 21 (Bootstrap 5.3, Font Awesome 7, Vitest)
-- **Backend**: Python 3.12 with Bottle
+- **Backend**: Python 3.13 with Bottle
 - **Container**: Multi-arch Docker image (amd64, arm64)
 - **Registry**: ghcr.io/nitrobass24/seedsync
 
@@ -16,7 +16,7 @@ src/
 ├── angular/          # Angular 21 frontend
 ├── python/           # Python backend
 ├── docker/           # Docker build files
-└── e2e/              # End-to-end tests
+└── e2e-playwright/   # Playwright end-to-end tests
 website/              # Docusaurus documentation site
 ```
 
@@ -39,7 +39,7 @@ All work MUST follow this branching discipline:
    ```
 3. **Commit only to the feature branch**: Never commit directly to `develop` or `master`.
 4. **One concern per branch**: Do not mix unrelated changes into the same branch. If you discover a separate issue while working, finish or stash your current work, then create a new branch for the other issue.
-5. **Open a PR to `develop`**: When the work is complete, push the feature branch and open a PR targeting `develop`. Include a summary and test plan.
+5. **Open a PR to `develop`**: When the work is complete, push the feature branch and open a PR targeting `develop`. Include a summary and test plan. Releases are the only path that PRs to `master` — see the Release Process below.
 6. **Do not carry dirty working-tree changes across branches**: Before switching branches, either commit or stash. Never rely on uncommitted edits surviving a `git checkout`.
 
 ## Release Process
@@ -64,26 +64,31 @@ Example:
 - **Bug name** - Description of fix
 ```
 
-### 2. Update MODERNIZATION_PLAN.md
-
-If the change relates to modernization tasks:
-- Update task status (🔄 IN PROGRESS → ✅)
-- Update version references
-- Update architecture diagram if needed
-
-### 3. Update package.json Version
+### 2. Update package.json Version
 
 Update the version in `src/angular/package.json` to match the release version. This is displayed on the About page.
 
-### 4. Create Release
+### 3. Create Release
+
+Releases use a `release/vX.Y.Z` branch off `develop`, a PR into `master`, and a tag on the resulting merge commit. Never commit the release directly to `develop` or `master`.
 
 ```bash
-# Commit all changes
-git add CHANGELOG.md MODERNIZATION_PLAN.md src/angular/package.json
-git commit -m "Release vX.Y.Z - Brief description"
-git push origin master
+# Branch from the latest develop
+git checkout develop && git pull origin develop
+git checkout -b release/vX.Y.Z
 
-# Create and push tag
+# Stage the release commit (CHANGELOG / package.json)
+git add CHANGELOG.md src/angular/package.json
+git commit -m "Release vX.Y.Z - Brief description"
+git push -u origin release/vX.Y.Z
+
+# Open a PR targeting master
+gh pr create --base master --head release/vX.Y.Z \
+  --title "Release vX.Y.Z - Brief description" \
+  --body "Sync develop → master for vX.Y.Z. See CHANGELOG.md for details."
+
+# After the PR is merged into master, fetch and tag the merge commit
+git checkout master && git pull origin master
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
@@ -93,7 +98,7 @@ The CI workflow will automatically:
 - Push to ghcr.io
 - Create GitHub release with auto-generated notes
 
-### 5. Update GitHub Release Notes
+### 4. Update GitHub Release Notes
 
 After CI creates the release, update the release notes with detailed changelog:
 
@@ -127,7 +132,7 @@ Format should match CHANGELOG.md entries with:
 - Issue references where applicable
 - Always include a "Docker Pull" section with the `docker pull` command for the release version
 
-### 6. Verify Release
+### 5. Verify Release
 
 - Check GitHub Actions completed successfully
 - Verify image is available: `docker pull ghcr.io/nitrobass24/seedsync:X.Y.Z`
@@ -144,7 +149,6 @@ Format should match CHANGELOG.md entries with:
 | File | Purpose |
 |------|---------|
 | `CHANGELOG.md` | Release history and notes |
-| `MODERNIZATION_PLAN.md` | Project modernization status |
 | `src/docker/build/docker-image/Dockerfile` | Multi-stage Docker build |
 | `.github/workflows/ci.yml` | CI/CD pipeline |
 | `.github/workflows/docs-pages.yml` | Documentation deployment |
@@ -154,11 +158,15 @@ Format should match CHANGELOG.md entries with:
 
 ### CI (`ci.yml`)
 
+Triggers: `push` to `master` or `develop`, `pull_request` against `master` or `develop`, and `push` of a tag matching `v[0-9]+.[0-9]+.[0-9]+`.
+
+Release-relevant matrix:
+
 | Trigger | Build & Test | Publish Image | Create Release |
 |---------|--------------|---------------|----------------|
 | PR to master | ✅ | ❌ | ❌ |
 | Push to master | ✅ | ❌ | ❌ |
-| Push tag (v*.*.*) | ✅ | ✅ | ✅ |
+| Push tag (`v*.*.*`) | ✅ | ✅ | ✅ |
 
 - **Build & Test**: Builds Docker image and verifies container starts
 - **Publish Image**: Pushes multi-arch image to ghcr.io (only on release tags)
@@ -259,6 +267,17 @@ When you see these, open an issue for the extraction rather than working around 
 - **Qualitative checks**: code review. Reviewers should push back on "this file is getting unwieldy" even without a hard rule.
 - **Mechanical checks** (Python): ruff's `C901` (cyclomatic complexity) with `max-complexity = 12`. Enforced in CI; existing outliers are annotated with `# noqa: C901`. Test files (`tests/**`) are excluded via `per-file-ignores` in `pyproject.toml`.
 - **Ratchet pattern**: when a bound exists but the codebase has outliers, set the threshold just above the worst and drop it over time (same pattern we use for `--max-warnings` in `ng lint`).
+
+### Angular mutating-service contract
+
+Services that mutate a `BehaviorSubject` from a REST/HTTP call should follow **one** documented contract so callers can reason about side effects:
+
+- **Update the subject inside the returned observable's pipeline (`tap`/`map`), not via a second internal `.subscribe()`.** A second internal subscribe fires the side effect independently of the caller, runs the request a second time when the source is cold, and makes "when does the store update?" caller-independent and surprising. Folding the mutation into the returned pipeline means the store updates exactly when (and as many times as) the caller subscribes.
+- **Return a typed result and recover errors with `catchError`** so the caller always gets a value (or a typed failure) rather than an error notification. Map HTTP responses to a small typed result/`WebReaction`.
+
+`IntegrationsService` (`src/angular/src/app/services/settings/integrations.service.ts`) is the reference implementation: `create`/`update`/`remove`/`test` use `tap`/`map` to update `instancesSubject` and `catchError` to map failures to a typed result, with no second subscribe.
+
+`ConfigService.set` and `AutoQueueService.add/remove` were migrated to this contract (#542): they now fold their `BehaviorSubject` mutation into the returned pipeline via `tap` (no second internal subscribe) and return the typed `WebReaction` (`RestService.sendRequest` already recovers HTTP errors into a failure `WebReaction`, so no extra `catchError` is needed). Their specs subscribe to the returned observable before asserting the subject mutated, since the mutation now defers to caller subscription. No remaining services use the legacy second-subscribe pattern.
 
 ## GitHub Repository
 

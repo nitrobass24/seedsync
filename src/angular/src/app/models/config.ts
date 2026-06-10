@@ -3,6 +3,17 @@
  * Note: Naming convention matches that used in the JSON.
  */
 
+/** The value any single config field may hold. */
+export type ConfigValue = string | number | boolean | null;
+
+/**
+ * A config section read as a string-keyed bag of ConfigValues. Sections do NOT
+ * `extends` this (that would collapse `keyof Section` to `string` and defeat the
+ * typo-catching ConfigValuePath in options-list.ts); it is only used as an
+ * explicit, localized cast target at the few dynamic section/option access sites.
+ */
+export type ConfigSection = Record<string, ConfigValue>;
+
 export interface General {
   log_level: string | null;
   verbose: boolean | null;
@@ -17,6 +28,7 @@ export interface Lftp {
   remote_path: string | null;
   local_path: string | null;
   remote_path_to_scan_script: string | null;
+  remote_python_path: string | null;
   use_ssh_key: boolean | null;
   num_max_parallel_downloads: number | null;
   num_max_parallel_files_per_download: number | null;
@@ -32,6 +44,9 @@ export interface Lftp {
   net_max_retries: number | null;
   net_reconnect_interval_base: number | null;
   net_reconnect_interval_multiplier: number | null;
+  protocol: string | null;
+  remote_ftp_port: number | null;
+  ftp_ssl_verify_certificate: boolean | null;
 }
 
 export interface Controller {
@@ -62,6 +77,7 @@ export interface Logging {
 
 export interface Notifications {
   webhook_url: string | null;
+  notify_on_download_start: boolean | null;
   notify_on_download_complete: boolean | null;
   notify_on_extraction_complete: boolean | null;
   notify_on_extraction_failed: boolean | null;
@@ -106,6 +122,7 @@ export const DEFAULT_LFTP: Lftp = {
   remote_path: null,
   local_path: null,
   remote_path_to_scan_script: null,
+  remote_python_path: null,
   use_ssh_key: null,
   num_max_parallel_downloads: null,
   num_max_parallel_files_per_download: null,
@@ -121,6 +138,9 @@ export const DEFAULT_LFTP: Lftp = {
   net_max_retries: null,
   net_reconnect_interval_base: null,
   net_reconnect_interval_multiplier: null,
+  protocol: 'sftp',
+  remote_ftp_port: 21,
+  ftp_ssl_verify_certificate: false,
 };
 
 export const DEFAULT_CONTROLLER: Controller = {
@@ -151,6 +171,7 @@ export const DEFAULT_LOGGING: Logging = {
 
 export const DEFAULT_NOTIFICATIONS: Notifications = {
   webhook_url: null,
+  notify_on_download_start: null,
   notify_on_download_complete: null,
   notify_on_extraction_complete: null,
   notify_on_extraction_failed: null,

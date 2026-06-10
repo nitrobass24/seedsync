@@ -4,8 +4,9 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import MagicMock
 
-from common import Config, IntegrationsConfig, PathPairsConfig
+from common import Config, IntegrationsConfig, PathPairsConfig, ServiceExit, ServiceRestart
 from seedsync import Seedsync
 
 
@@ -129,6 +130,11 @@ class TestSeedsync(unittest.TestCase):
         for section, inner_config in config_dict.items():
             for key in inner_config:
                 self.assertIsNotNone(inner_config[key], msg=f"{section}.{key} is uninitialized")
+
+        # FTPS keys default to the sftp-safe baseline (must match Lftp.__init__)
+        self.assertEqual("sftp", config.lftp.protocol)
+        self.assertEqual(21, config.lftp.remote_ftp_port)
+        self.assertEqual(False, config.lftp.ftp_ssl_verify_certificate)
 
         # Test that default config is a valid config
         config_dict = config.as_dict()
@@ -342,3 +348,107 @@ class TestLoadPathPairsConfig(unittest.TestCase):
         # Backup file should exist
         backup_files = [f for f in os.listdir(self.tmpdir) if f.endswith(".bak")]
         self.assertTrue(len(backup_files) > 0, "Expected a backup file to be created")
+
+
+class TestPersistResilience(unittest.TestCase):
+    """Tests for issue #512: a transient persist() write failure must not kill the service.
+
+    run() builds Controller/WebApp/real threads and loops forever, so it cannot be
+    exercised directly. We test the extracted _persist_periodic() helper on a bare
+    instance via Seedsync.__new__ with a mocked context/logger. (The need for
+    __new__ here itself signals that run()'s shutdown/persist coupling is a future
+    extraction candidate.)
+    """
+
+    def _make_bare_seedsync(self):
+        s = Seedsync.__new__(Seedsync)
+        s.context = MagicMock()
+        return s
+
+    def test_periodic_persist_failure_is_swallowed_and_logged(self):
+        """A transient OSError (e.g. ENOSPC) during periodic persist must not propagate."""
+        s = self._make_bare_seedsync()
+        s.persist = MagicMock(side_effect=OSError("ENOSPC"))
+
+        # Must NOT raise — the supervisor loop has to keep running.
+        s._persist_periodic()
+
+        s.persist.assert_called_once()
+        s.context.logger.exception.assert_called_once()
+
+    def test_periodic_persist_success_no_error_log(self):
+        """On a successful persist, no error is logged."""
+        s = self._make_bare_seedsync()
+        s.persist = MagicMock()
+
+        s._persist_periodic()
+
+        s.persist.assert_called_once()
+        s.context.logger.exception.assert_not_called()
+
+    def test_periodic_persist_does_not_swallow_keyboardinterrupt(self):
+        """The guard is `except Exception`, so BaseException-derived signals propagate."""
+        s = self._make_bare_seedsync()
+        s.persist = MagicMock(side_effect=KeyboardInterrupt())
+
+        with self.assertRaises(KeyboardInterrupt):
+            s._persist_periodic()
+
+    def test_periodic_persist_does_not_swallow_systemexit(self):
+        """SystemExit (also BaseException) must propagate, not be swallowed."""
+        s = self._make_bare_seedsync()
+        s.persist = MagicMock(side_effect=SystemExit())
+
+        with self.assertRaises(SystemExit):
+            s._persist_periodic()
+
+    def test_final_persist_failure_is_swallowed_and_logged(self):
+        """AC3: a write failure during the shutdown persist must not propagate,
+        or it would mask the original in-flight exception run() re-raises."""
+        s = self._make_bare_seedsync()
+        s.persist = MagicMock(side_effect=OSError("ENOSPC"))
+
+        s._final_persist()  # must NOT raise
+
+        s.persist.assert_called_once()
+        s.context.logger.exception.assert_called_once()
+
+    def test_final_persist_success_no_error_log(self):
+        s = self._make_bare_seedsync()
+        s.persist = MagicMock()
+
+        s._final_persist()
+
+        s.persist.assert_called_once()
+        s.context.logger.exception.assert_not_called()
+
+    def test_shutdown_cause_intentional_exit_logged_at_info(self):
+        """AC2: an intentional ServiceExit/ServiceRestart is logged at INFO, not
+        surfaced as an error."""
+        for exc in (ServiceExit(), ServiceRestart()):
+            with self.subTest(exc=type(exc).__name__):
+                s = self._make_bare_seedsync()
+                try:
+                    raise exc
+                except (ServiceExit, ServiceRestart) as e:
+                    s._log_shutdown_cause(e)
+                s.context.logger.info.assert_called_once()
+                s.context.logger.exception.assert_not_called()
+
+    def test_shutdown_cause_unexpected_error_logged_at_exception(self):
+        """AC2: a genuine crash is surfaced at ERROR/exception with a traceback,
+        not the friendly INFO line — so an abnormal shutdown is visible."""
+        s = self._make_bare_seedsync()
+        try:
+            raise RuntimeError("child thread blew up")
+        except RuntimeError as e:
+            s._log_shutdown_cause(e)
+        s.context.logger.exception.assert_called_once()
+        s.context.logger.info.assert_not_called()
+
+    def test_service_exit_and_restart_are_app_errors_caught_by_shutdown_handler(self):
+        """ServiceExit/ServiceRestart subclass Exception, so run()'s `except Exception`
+        still catches them and the bare `raise` re-propagates them to the outer loop.
+        This guards the invariant the fix must preserve."""
+        self.assertIsInstance(ServiceExit(), Exception)
+        self.assertIsInstance(ServiceRestart(), Exception)

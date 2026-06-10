@@ -1,7 +1,9 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from urllib.parse import quote
+
+import timeout_decorator
 
 from controller import Controller
 from tests.integration.test_web.test_web_app import BaseTestWebApp
@@ -239,3 +241,62 @@ class TestControllerHandlerValidation(BaseTestWebApp):
         resp = self.test_app.get("/server/command/queue/" + uri, expect_errors=True)
         self.assertEqual(400, resp.status_int)
         self.controller.queue_command.assert_not_called()
+
+
+class TestControllerHandlerTimeout(BaseTestWebApp):
+    """Tests that a stalled controller does not hang the request thread (issue #526)."""
+
+    # Patch the bound down so the timeout path resolves quickly and the test
+    # never relies on real-time waits beyond a fraction of a second.
+    @timeout_decorator.timeout(5)
+    @patch("web.handler.controller._ACTION_TIMEOUT_IN_SECS", 0.05)
+    def test_action_timeout_returns_504(self):
+        # queue_command never invokes any callback -> event is never set
+        self.controller.queue_command = MagicMock()
+
+        resp = self.test_app.get("/server/command/queue/test1", expect_errors=True)
+        self.assertEqual(504, resp.status_int)
+        # The command was still dispatched to the controller
+        self.controller.queue_command.assert_called_once()
+        command = self.controller.queue_command.call_args[0][0]
+        self.assertEqual(Controller.Command.Action.QUEUE, command.action)
+        self.assertEqual("test1", command.filename)
+
+    @timeout_decorator.timeout(5)
+    @patch("web.handler.controller._ACTION_TIMEOUT_IN_SECS", 0.05)
+    def test_delete_remote_timeout_returns_504(self):
+        # Confirms all endpoints share the timeout behavior via __dispatch_command
+        self.controller.queue_command = MagicMock()
+
+        resp = self.test_app.get("/server/command/delete_remote/test1", expect_errors=True)
+        self.assertEqual(504, resp.status_int)
+        self.controller.queue_command.assert_called_once()
+        command = self.controller.queue_command.call_args[0][0]
+        self.assertEqual(Controller.Command.Action.DELETE_REMOTE, command.action)
+
+    @timeout_decorator.timeout(5)
+    @patch("web.handler.controller._ACTION_TIMEOUT_IN_SECS", 0.05)
+    def test_success_unaffected_by_timeout_bound(self):
+        # When the controller responds in time, the 200 path is unchanged
+        def side_effect(cmd: Controller.Command):
+            cmd.callbacks[0].on_success()
+
+        self.controller.queue_command = MagicMock()
+        self.controller.queue_command.side_effect = side_effect
+
+        resp = self.test_app.get("/server/command/queue/test1")
+        self.assertEqual(200, resp.status_int)
+
+    @timeout_decorator.timeout(5)
+    @patch("web.handler.controller._ACTION_TIMEOUT_IN_SECS", 0.05)
+    def test_failure_unaffected_by_timeout_bound(self):
+        # When the controller signals failure in time, the 400 path is unchanged
+        def side_effect(cmd: Controller.Command):
+            cmd.callbacks[0].on_failure("boom")
+
+        self.controller.queue_command = MagicMock()
+        self.controller.queue_command.side_effect = side_effect
+
+        resp = self.test_app.get("/server/command/queue/test1", expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+        self.assertIn("boom", resp.text)

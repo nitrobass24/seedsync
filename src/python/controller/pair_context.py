@@ -93,10 +93,15 @@ def validate_config(context: Context) -> None:
         "num_max_connections_per_root_file",
         "num_max_connections_per_dir_file",
         "num_max_total_connections",
+        "protocol",
     ]
     for field in lftp_fields:
         if getattr(config.lftp, field) is None:
             missing.append(f"Lftp.{field}")
+
+    # FTP port: when protocol is ftps, remote_ftp_port must be set
+    if config.lftp.protocol == "ftps" and config.lftp.remote_ftp_port is None:
+        missing.append("Lftp.remote_ftp_port")
 
     # Controller required fields
     controller_fields = [
@@ -131,7 +136,14 @@ def validate_config(context: Context) -> None:
 
 
 def configure_lftp(lftp: Lftp, config: Config) -> None:
-    """Apply shared LFTP configuration settings."""
+    """Apply shared LFTP configuration settings.
+
+    Parallelism comes from the persisted Connections settings for both
+    protocols. FTPS previously overrode these with a fixed profile derived at
+    apply-time, which silently ignored the user's Connections settings (the
+    Settings UI showed values that were never applied); that override has been
+    removed so what the UI shows is what lftp runs.
+    """
     cfg = config.lftp
     lftp.num_parallel_jobs = cfg.num_max_parallel_downloads  # type: ignore[assignment]
     lftp.num_parallel_files = cfg.num_max_parallel_files_per_download  # type: ignore[assignment]

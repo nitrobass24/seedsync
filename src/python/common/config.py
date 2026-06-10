@@ -103,6 +103,18 @@ class Checkers:
         return normalized
 
     @staticmethod
+    def protocol_allowed(cls: T, name: str, value: str) -> str:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
+        allowed = {"sftp", "ftps"}
+        normalized = value.strip().lower() if value else ""
+        if normalized not in allowed:
+            raise ConfigError(
+                "Bad config: {}.{} ({}) must be one of: {}".format(
+                    cls.__name__, name, value, ", ".join(sorted(allowed))
+                )
+            )
+        return normalized
+
+    @staticmethod
     def log_level_allowed(cls: T, name: str, value: str) -> str:  # type: ignore[reportInvalidTypeVarUse, reportSelfClsParameterName]
         allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
         normalized = value.strip().upper() if value else ""
@@ -289,6 +301,9 @@ class Config(Persist):
         net_reconnect_interval_multiplier = PROP(
             "net_reconnect_interval_multiplier", Checkers.int_non_negative, Converters.int
         )
+        protocol = PROP("protocol", Checkers.protocol_allowed, Converters.null)
+        remote_ftp_port = PROP("remote_ftp_port", Checkers.int_positive, Converters.int)
+        ftp_ssl_verify_certificate = PROP("ftp_ssl_verify_certificate", Checkers.null, Converters.bool)
 
         def __init__(self):
             super().__init__()
@@ -315,6 +330,9 @@ class Config(Persist):
             self.net_max_retries = None
             self.net_reconnect_interval_base = None
             self.net_reconnect_interval_multiplier = None
+            self.protocol = "sftp"
+            self.remote_ftp_port = 21
+            self.ftp_ssl_verify_certificate = False
 
     class Controller(IC):
         interval_ms_remote_scan = PROP("interval_ms_remote_scan", Checkers.int_positive, Converters.int)
@@ -366,6 +384,7 @@ class Config(Persist):
 
     class Notifications(IC):
         webhook_url = PROP("webhook_url", Checkers.string_allow_empty, Converters.null)
+        notify_on_download_start = PROP("notify_on_download_start", Checkers.null, Converters.bool)
         notify_on_download_complete = PROP("notify_on_download_complete", Checkers.null, Converters.bool)
         notify_on_extraction_complete = PROP("notify_on_extraction_complete", Checkers.null, Converters.bool)
         notify_on_extraction_failed = PROP("notify_on_extraction_failed", Checkers.null, Converters.bool)
@@ -377,6 +396,7 @@ class Config(Persist):
         def __init__(self):
             super().__init__()
             self.webhook_url = ""
+            self.notify_on_download_start = False
             self.notify_on_download_complete = True
             self.notify_on_extraction_complete = True
             self.notify_on_extraction_failed = True
@@ -424,7 +444,11 @@ class Config(Persist):
     @classmethod
     @overrides(Persist)
     def from_str(cls: type["Config"], content: str) -> "Config":
-        config_parser = configparser.ConfigParser()
+        # interpolation=None: config values are opaque strings (passwords,
+        # exclude patterns, rate limits) that may legitimately contain '%'.
+        # The default BasicInterpolation would treat '%' as a format token and
+        # raise on read/write (see #507).
+        config_parser = configparser.ConfigParser(interpolation=None)
         try:
             config_parser.read_string(content)
         except (configparser.MissingSectionHeaderError, configparser.ParsingError) as e:
@@ -438,7 +462,9 @@ class Config(Persist):
 
     @overrides(Persist)
     def to_str(self) -> str:
-        config_parser = configparser.ConfigParser()
+        # interpolation=None: see from_str. A '%' in any value must survive the
+        # write/read round-trip verbatim rather than being treated as a token.
+        config_parser = configparser.ConfigParser(interpolation=None)
         config_dict = self.as_dict()
         for section in config_dict:
             config_parser.add_section(section)

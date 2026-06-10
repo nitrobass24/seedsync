@@ -30,6 +30,19 @@ class IntegrationsHandler(IHandler):
         self.__path_pairs_path = path_pairs_path
         self._logger = logging.getLogger(self.__class__.__name__)
 
+    def _persist_or_500(self, action: str) -> HTTPResponse | None:
+        """Persist the integrations config; return a 500 response on OSError, else None."""
+        try:
+            self.__config.to_file(self.__integrations_path)
+        except OSError:
+            self._logger.exception("Failed to persist integrations after %s", action)
+            return HTTPResponse(
+                body=json.dumps({"error": "failed to persist integrations"}),
+                status=500,
+                headers={"Content-Type": "application/json"},
+            )
+        return None
+
     @overrides(IHandler)
     def add_routes(self, web_app: WebApp):
         web_app.add_handler("/server/integrations", self.__handle_list)
@@ -57,7 +70,9 @@ class IntegrationsHandler(IHandler):
             self.__config.add_instance(instance)
         except ValueError as e:
             return HTTPResponse(body=str(e), status=409)
-        self.__config.to_file(self.__integrations_path)
+        err = self._persist_or_500(f"creating instance {instance.id!r}")
+        if err is not None:
+            return err
         return HTTPResponse(
             body=json.dumps(self._redact(instance.to_dict())),
             status=201,
@@ -99,7 +114,9 @@ class IntegrationsHandler(IHandler):
             if "not found" in msg:
                 return HTTPResponse(body="Integration not found", status=404)
             return HTTPResponse(body=msg, status=400)
-        self.__config.to_file(self.__integrations_path)
+        err = self._persist_or_500(f"updating instance {instance_id!r}")
+        if err is not None:
+            return err
         return HTTPResponse(
             body=json.dumps(self._redact(updated.to_dict())),
             headers={"Content-Type": "application/json"},
@@ -112,8 +129,14 @@ class IntegrationsHandler(IHandler):
             return HTTPResponse(body="Integration not found", status=404)
         # Detach from any path pair that referenced it so we don't leave dangling pointers.
         self.__path_pairs_config.detach_arr_target(instance_id)
-        self.__config.to_file(self.__integrations_path)
+        # Persist path_pairs *before* integrations: if the process dies between
+        # writes, an orphaned instance (still in integrations.json, no longer
+        # referenced) is recoverable; a dangling arr_target_id (instance gone,
+        # path pair still references it) is rejected by cross-validation on load.
         self.__path_pairs_config.to_file(self.__path_pairs_path)
+        err = self._persist_or_500(f"deleting instance {instance_id!r}")
+        if err is not None:
+            return err
         return HTTPResponse(status=204)
 
     def __handle_test(self, instance_id: str):

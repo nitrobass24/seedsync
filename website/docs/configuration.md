@@ -13,13 +13,64 @@ SeedSync stores its state and settings in `/config` inside the container. Mount 
 Open the UI and fill out the Settings page:
 
 - **Remote Server**: SSH hostname or IP
-- **Remote Port**: Defaults to `22`
+- **Remote Port**: SSH port, defaults to `22`. This is the **SSH/SFTP control port** and is **always used for scanning** (file discovery). When the transfer protocol is `sftp`, it is also the port used for transfers. It is **not** the FTPS port — see [Transfer Protocol (FTPS)](#transfer-protocol-ftps) below.
 - **Username**: Remote SSH user
 - **Password or SSH Key**: Use key-based auth when possible
 - **Remote Path**: Path on the server to sync
 - **Local Path**: Must be `/downloads` inside the container
 - **Server Script Path**: Directory on the remote server where SeedSync copies its scanner utility. Defaults to `/tmp`. Some seedbox providers restrict writes to `/tmp` — if you see an SCP permission error on startup, change this to a directory you own (e.g. `~` or `~/.local`).
 - **Remote Python Path**: Path to the Python 3 binary on the remote server. Leave empty to use the default `python3`. Set this if your seedbox has a custom Python install (e.g. `~/python3/bin/python3`).
+
+## Transfer Protocol (FTPS)
+
+By default SeedSync transfers files over **SFTP** (the SSH file-transfer protocol). You can optionally switch the transfer protocol to **FTPS** (FTP over TLS), which on high-latency links can reach significantly higher throughput than SFTP because it sidesteps the SSH layer and lets the raw TCP window autotune to the link's bandwidth-delay product.
+
+These options live in the main Settings page:
+
+- **Transfer Protocol**: `sftp` (default) or `ftps`. Selects how bulk file transfers are moved. Requires a restart to take effect.
+- **Remote FTP Port**: The FTPS port on the remote server, defaults to `21`. **Only used when Transfer Protocol is `ftps`.** This is distinct from **Remote Port** (SSH); the two are almost always different (`21` vs `22`).
+- **Verify FTPS Certificate**: Whether to validate the server's TLS certificate. **Off by default** — see the security note below. Requires a restart to take effect.
+
+:::important Scanning always uses SSH
+FTPS has no remote command execution, so SeedSync **always** discovers files (scans the remote directory) over SSH using your **Remote Server**, **Remote Port**, and credentials — regardless of the transfer protocol. This means FTPS mode is a hybrid: you need **both** working SSH access (for scanning) **and** working FTPS access (for transfers). Virtually all seedboxes offer both.
+
+```
+File discovery / scan  ── always ──▶  SSH   (Remote Port, e.g. 22)
+Bulk file transfer     ── toggle ──▶  SFTP (Remote Port) | FTPS (Remote FTP Port, e.g. 21)
+```
+
+If scanning works (files appear in the dashboard) but transfers never start, the FTPS side is the likely culprit — see the [FAQ](./faq.md#ftps-transfers-never-start-but-scanning-works).
+:::
+
+### FTPS performance tuning differs from SFTP
+
+When you select `ftps`, SeedSync automatically applies an FTPS-tuned connection profile that **overrides** the SFTP-oriented connection settings on the Connections panel. The two protocols want opposite shapes:
+
+- **SFTP** needs many connections with heavy per-file parallelism (pget) to beat its per-stream cap.
+- **FTPS** wants **file-level parallelism with low per-file connection counts** (pget-n of 1–2) and is actively hurt by pget-heavy configs.
+
+The FTPS profile applied at transfer time is: 4 parallel files per directory, 1 connection per directory file, 4 connections per root single file, and a total connection limit of 8. Your manually-tuned SFTP **Connections** values are not used while `protocol = ftps`; switching back to `sftp` restores them.
+
+:::note Per-pair connection limit caveat
+The FTPS total-connection limit of 8 is **per LFTP instance** (per active path pair). If you run *N* enabled path pairs that all transfer from the same FTPS account, they can collectively open up to *N* × 8 connections. Some seedbox providers enforce a per-account FTP connection cap; if late transfers stall or drop to a crawl, reduce the number of simultaneously-enabled pairs.
+:::
+
+### FTPS certificate verification (security)
+
+**Certificate verification is OFF by default.** The data channel is always TLS-encrypted, but with verification off SeedSync does **not** authenticate the server's certificate. This is **encryption without authentication**: an attacker positioned between SeedSync and the seedbox could present any certificate (a man-in-the-middle) and intercept the credential exchange. This is a real downgrade compared to SFTP, which authenticates the server via its SSH host key.
+
+The default is off because many seedboxes ship self-signed or hostname-mismatched certificates that would otherwise fail validation. Each time an FTPS transfer starts with verification off, SeedSync logs a `WARNING` so the downgrade is never silent.
+
+**Remediation — to close the MITM exposure, do one of the following:**
+
+- Use a server with a properly-issued (CA-signed, hostname-matching) certificate, then enable **Verify FTPS Certificate**.
+- If your provider's certificate validates, simply enable **Verify FTPS Certificate**.
+
+If you cannot enable verification, treat the connection as encrypted-but-unauthenticated and weigh that against your threat model.
+
+:::note FTPS tuning was validated on a specific lftp build
+The FTPS parallelism profile was measured against Homebrew lftp 4.9.3, not the Alpine lftp shipped in the container image. If you see worse-than-expected FTPS throughput, the conservative fallback is to keep per-file connection counts low (`pget-n` of 1) and rely on file-level parallelism rather than raising pget.
+:::
 
 ## Path Pairs
 
@@ -58,6 +109,10 @@ Configure exclude patterns per path pair, or in the main settings when using a s
 - **Max Parallel Files**: Number of files fetched in parallel within a directory download
 - **Rename unfinished files**: Downloading files get a `.lftp` extension
 - **Bandwidth Limit**: Cap download speed with values like `500K`, `2M`, or raw bytes/sec. Set to `0` or leave empty for unlimited.
+
+:::note
+These connection values are tuned for **SFTP** (the default). When the [transfer protocol](#transfer-protocol-ftps) is set to `ftps`, SeedSync applies its own FTPS-tuned profile at transfer time and these values are not used.
+:::
 
 ## Integrity Check
 

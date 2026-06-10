@@ -13,15 +13,12 @@ import logging
 import os
 from collections.abc import Callable
 from queue import Queue
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .controller import Controller
 
 from common import AppError, Context, MultiprocessingLogger
 from lftp import LftpError
 from model import ModelError, ModelFile
 
+from .commands import MAX_CONCURRENT_COMMAND_PROCESSES, Command, CommandProcessWrapper
 from .controller_persist import ControllerPersist
 from .delete import DeleteLocalProcess, DeleteRemoteProcess
 from .exclude_patterns import parse_exclude_patterns
@@ -31,6 +28,7 @@ from .move import MoveProcess
 from .pair_context import PairContext
 from .persist_keys import persist_key
 from .validate import ValidateProcess, ValidateRequest
+from .worker_supervisor import WorkerSupervisor
 
 
 class CommandPipeline:
@@ -48,8 +46,8 @@ class CommandPipeline:
         context: Context,
         password: str | None,
         mp_logger: MultiprocessingLogger,
-        extract_process: ExtractProcess,
-        validate_process: ValidateProcess,
+        extract_process: WorkerSupervisor[ExtractProcess],
+        validate_process: WorkerSupervisor[ValidateProcess],
         logger: logging.Logger,
         sync_persist_callback: Callable[[], None],
     ):
@@ -65,10 +63,10 @@ class CommandPipeline:
         self.sync_persist_callback = sync_persist_callback
 
         # The command queue
-        self.command_queue: Queue[Controller.Command] = Queue()
+        self.command_queue: Queue[Command] = Queue()
 
         # Keep track of active command processes (shared)
-        self.active_command_processes: list[Controller.CommandProcessWrapper] = []
+        self.active_command_processes: list[CommandProcessWrapper] = []
 
         # Keep track of active move processes (staging -> final, shared)
         self.active_move_processes: list[MoveProcess] = []
@@ -78,25 +76,23 @@ class CommandPipeline:
         # Track files with pending validation so extraction-completion doesn't race the move
         self.pending_validation_keys: set[str] = set()
 
-    def queue(self, command: Controller.Command) -> None:
+        # Worker ids already reported as dead, so a permanently-dead extract/
+        # validate worker is surfaced once at ERROR rather than every cycle.
+        self.__reported_dead_workers: set[int] = set()
+
+    def queue(self, command: Command) -> None:
         """Put a command on the queue for processing."""
         self.command_queue.put(command)
 
     def step(self):
-        """Process commands from queue.
+        """Process commands from queue."""
 
-        References Controller.Command, Controller.Command.Action,
-        Controller.MAX_CONCURRENT_COMMAND_PROCESSES, and
-        Controller.CommandProcessWrapper which remain in Controller.
-        """
-        from .controller import Controller
-
-        def _notify_failure(_command: Controller.Command, _msg: str):
+        def _notify_failure(_command: Command, _msg: str):
             self._logger.warning(f"Command failed. {_msg}")
             for _callback in _command.callbacks:
                 _callback.on_failure(_msg)
 
-        deferred: list[Controller.Command] = []
+        deferred: list[Command] = []
 
         while not self.command_queue.empty():
             command = self.command_queue.get()
@@ -113,7 +109,7 @@ class CommandPipeline:
                 _notify_failure(command, f"File '{command.filename}' not found")
                 continue
 
-            success = self._dispatch_command(command, file, pc, deferred, _notify_failure, Controller)
+            success = self._dispatch_command(command, file, pc, deferred, _notify_failure)
 
             if not success:
                 continue
@@ -126,25 +122,20 @@ class CommandPipeline:
 
     def _dispatch_command(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        deferred: list[Controller.Command],
-        _notify_failure: Callable[[Controller.Command, str], None],
-        controller_cls: type[Controller],
+        deferred: list[Command],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Dispatch a command to the appropriate handler. Returns True on success."""
-        Action = controller_cls.Command.Action
+        Action = Command.Action
         handlers = {
             Action.QUEUE: lambda: self._handle_queue(command, file, pc, _notify_failure),
             Action.STOP: lambda: self._handle_stop(command, file, pc, _notify_failure),
             Action.EXTRACT: lambda: self._handle_extract(command, file, pc, _notify_failure),
-            Action.DELETE_LOCAL: lambda: self._handle_delete_local(
-                command, file, pc, deferred, _notify_failure, controller_cls
-            ),
-            Action.DELETE_REMOTE: lambda: self._handle_delete_remote(
-                command, file, pc, deferred, _notify_failure, controller_cls
-            ),
+            Action.DELETE_LOCAL: lambda: self._handle_delete_local(command, file, pc, deferred, _notify_failure),
+            Action.DELETE_REMOTE: lambda: self._handle_delete_remote(command, file, pc, deferred, _notify_failure),
             Action.VALIDATE: lambda: self._handle_validate(command, file, pc, _notify_failure),
         }
         handler = handlers.get(command.action)
@@ -154,10 +145,10 @@ class CommandPipeline:
 
     def _handle_queue(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        _notify_failure: Callable[[Controller.Command, str], None],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the QUEUE action. Returns True on success, False on failure."""
         if file.remote_size is None:
@@ -173,10 +164,10 @@ class CommandPipeline:
 
     def _handle_stop(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        _notify_failure: Callable[[Controller.Command, str], None],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the STOP action. Returns True on success, False on failure."""
         if file.state not in (ModelFile.State.DOWNLOADING, ModelFile.State.QUEUED):
@@ -191,10 +182,10 @@ class CommandPipeline:
 
     def _handle_extract(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        _notify_failure: Callable[[Controller.Command, str], None],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the EXTRACT action. Returns True on success, False on failure."""
         if file.state not in (
@@ -219,15 +210,14 @@ class CommandPipeline:
 
     def _handle_delete_local(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        deferred: list[Controller.Command],
-        _notify_failure: Callable[[Controller.Command, str], None],
-        controller_cls: type[Controller],
+        deferred: list[Command],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the DELETE_LOCAL action. Returns True on success, False on failure/deferred."""
-        if len(self.active_command_processes) >= controller_cls.MAX_CONCURRENT_COMMAND_PROCESSES:
+        if len(self.active_command_processes) >= MAX_CONCURRENT_COMMAND_PROCESSES:
             self._logger.debug(
                 "Deferring %s for '%s': %d active processes at cap",
                 command.action,
@@ -266,22 +256,21 @@ class CommandPipeline:
             if delete_path != _pc.local_path:
                 _pc.active_scan_process.force_scan()
 
-        command_wrapper = controller_cls.CommandProcessWrapper(process=process, post_callback=post_callback)
+        command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback)
         self.active_command_processes.append(command_wrapper)
         command_wrapper.process.start()
         return True
 
     def _handle_delete_remote(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        deferred: list[Controller.Command],
-        _notify_failure: Callable[[Controller.Command, str], None],
-        controller_cls: type[Controller],
+        deferred: list[Command],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the DELETE_REMOTE action. Returns True on success, False on failure/deferred."""
-        if len(self.active_command_processes) >= controller_cls.MAX_CONCURRENT_COMMAND_PROCESSES:
+        if len(self.active_command_processes) >= MAX_CONCURRENT_COMMAND_PROCESSES:
             self._logger.debug(
                 "Deferring %s for '%s': %d active processes at cap",
                 command.action,
@@ -316,19 +305,17 @@ class CommandPipeline:
             file_name=file.name,
         )
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
-        command_wrapper = controller_cls.CommandProcessWrapper(
-            process=process, post_callback=pc.remote_scan_process.force_scan
-        )
+        command_wrapper = CommandProcessWrapper(process=process, post_callback=pc.remote_scan_process.force_scan)
         self.active_command_processes.append(command_wrapper)
         command_wrapper.process.start()
         return True
 
     def _handle_validate(
         self,
-        command: Controller.Command,
+        command: Command,
         file: ModelFile,
         pc: PairContext,
-        _notify_failure: Callable[[Controller.Command, str], None],
+        _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the VALIDATE action. Returns True on success, False on failure."""
         if not self._context.config.validate.enabled:
@@ -374,7 +361,7 @@ class CommandPipeline:
         Cleanup the list of active commands and do any callbacks
         :return:
         """
-        still_active_processes: list[Controller.CommandProcessWrapper] = []
+        still_active_processes: list[CommandProcessWrapper] = []
         for command_process in self.active_command_processes:
             if command_process.process.is_alive():
                 still_active_processes.append(command_process)
@@ -391,15 +378,54 @@ class CommandPipeline:
             if move_process.is_alive():
                 still_active_moves.append(move_process)
             else:
-                try:
-                    move_process.propagate_exception()
-                except Exception:
-                    self._logger.warning("Move process failed: %s", move_process.name, exc_info=True)
-                    move_key = persist_key(move_process.pair_id, move_process.file_name)
-                    self.moved_file_keys.discard(move_key)
-                for pc in self._pair_contexts:
-                    pc.local_scan_process.force_scan()
+                self._finalize_move_process(move_process)
+                # Reap the finished process now (join + close its queues) so its
+                # FDs are released immediately. It is dropped from
+                # active_move_processes below, so Controller.exit() never sees it
+                # and would otherwise leak its queue FDs until shutdown.
+                move_process.join()
+                move_process.close_queues()
         self.active_move_processes = still_active_moves
+
+    def _finalize_move_process(self, move_process: MoveProcess) -> None:
+        """Finalize a completed move: surface failures, discard key on failure, rescan.
+
+        A move can fail two ways: by raising (propagate_exception) or by
+        reporting a MoveFailedResult on its failed queue (silent return paths
+        such as a vanished source or a size mismatch). In both cases the moved
+        key is discarded so the next model-update cycle re-spawns the move
+        (in-session retry, #536) and the file is surfaced as MOVE_FAILED so it is
+        not silently shown as done. A successful move clears any prior MOVE_FAILED.
+        """
+        failed = False
+        try:
+            move_process.propagate_exception()
+        except Exception:
+            self._logger.warning("Move process failed: %s", move_process.name, exc_info=True)
+            failed = True
+        for result in move_process.pop_failed():
+            self._logger.error(f"Move failed for '{result.name}': {result.error_message}")
+            failed = True
+        move_key = persist_key(move_process.pair_id, move_process.file_name)
+        if failed:
+            # Discard the moved key so the next cycle re-spawns the move (retry),
+            # and surface the failure as a visible MOVE_FAILED model state.
+            self.moved_file_keys.discard(move_key)
+            self._persist.move_failed_file_names.add(move_key)
+            self.sync_persist_callback()
+        else:
+            # Move succeeded -- clear any prior failure so the file proceeds normally.
+            if move_key in self._persist.move_failed_file_names:
+                self._persist.move_failed_file_names.discard(move_key)
+                self.sync_persist_callback()
+        # The move only changed the owning pair's local_path, so rescan just that
+        # pair; fall back to all pairs only if the owner can't be located.
+        owner = next((pc for pc in self._pair_contexts if pc.pair_id == move_process.pair_id), None)
+        if owner is not None:
+            owner.local_scan_process.force_scan()
+        else:
+            for pc in self._pair_contexts:
+                pc.local_scan_process.force_scan()
 
     def propagate_exceptions(self):
         """
@@ -419,8 +445,52 @@ class CommandPipeline:
             pc.local_scan_process.propagate_exception()
             pc.remote_scan_process.propagate_exception()
         self._mp_logger.propagate_exception()
-        self._extract_process.propagate_exception()
-        self._validate_process.propagate_exception()
+        # A fault in an extract/validate worker that surfaces outside its
+        # per-task guard (OOM, queue corruption, run_init/run_cleanup bug)
+        # must degrade that feature only, not kill the whole controller.
+        # Isolate each worker so one dead worker doesn't stop the other or
+        # halt all downloads.
+        try:
+            self._extract_process.propagate_exception()
+        except Exception:
+            self._logger.warning("Extract worker process failed: %s", self._extract_process.name, exc_info=True)
+        try:
+            self._validate_process.propagate_exception()
+        except Exception:
+            self._logger.warning("Validate worker process failed: %s", self._validate_process.name, exc_info=True)
+        # propagate_exception() consumes the queued fault once, so report the dead
+        # state once at ERROR (per supervisor) to keep the degradation visible,
+        # then recreate the worker so extract/validate resumes without a full
+        # service restart (#535). The supervisor swaps in the fresh worker so the
+        # pipeline and updater (which share the same supervisor) both see it.
+        self.__report_if_worker_dead(self._extract_process, "Extract")
+        self.__report_if_worker_dead(self._validate_process, "Validate")
+        self._extract_process.recreate_if_dead()
+        self._validate_process.recreate_if_dead()
+
+    def __report_if_worker_dead(
+        self, worker: WorkerSupervisor[ExtractProcess] | WorkerSupervisor[ValidateProcess], feature: str
+    ) -> None:
+        # Dedupe on the live worker instance, not the supervisor: the supervisor's
+        # id is stable across recreate_if_dead(), so keying on it would suppress the
+        # ERROR for every death after the first. A recreated worker is a new
+        # instance (new id), so its later death is reported again (#535 follow-up).
+        worker_id = id(worker.worker)
+        if worker_id in self.__reported_dead_workers:
+            return
+        try:
+            alive = worker.is_alive()
+        except (ValueError, AssertionError):
+            # Never started or already closed — treat as not-running.
+            alive = False
+        if not alive:
+            self.__reported_dead_workers.add(worker_id)
+            self._logger.error(
+                "%s worker process %s has died and will be restarted; %s will resume automatically.",
+                feature,
+                worker.name,
+                feature.lower(),
+            )
 
     def spawn_deferred_move(self, pair_id: str | None, file_name: str):
         """Spawn the staging->final move for a file whose validation just finished.
@@ -436,37 +506,46 @@ class CommandPipeline:
             return
         self.spawn_move_process(file_name, pc)
 
-    def spawn_move_process(self, file_name: str, pc: PairContext):
-        """
-        Spawn a MoveProcess to move a file from staging to the final local_path
+    def spawn_move_process(self, file_name: str, pc: PairContext) -> bool:
+        """Spawn a MoveProcess to move a file from staging to the final local_path.
+
+        Returns True if a move process was actually spawned, False if the call was
+        a no-op (already moved / in flight, staging disabled, or nothing left in
+        staging). A retry of a failed move uses this to tell a real retry from a
+        resolved no-op so it can clear a stale MOVE_FAILED state (#536 follow-up).
         """
         pair_id = pc.pair_id
         move_key = persist_key(pair_id, file_name)
         if move_key in self.moved_file_keys:
             self._logger.debug(f"Skipping move for {file_name} - already moved")
-            return
+            return False
 
         dest_path = pc.local_path
         staging_source = self._pair_staging_dir(pc)
         if staging_source is None:
             self._logger.debug(f"Skipping move for {file_name} - staging is not enabled")
-            return
+            return False
 
         # Skip if the file doesn't exist in staging (e.g. already moved in a prior session)
         staging_file = os.path.join(staging_source, file_name)
         if not os.path.exists(staging_file):
             self._logger.debug(f"Skipping move for {file_name} - not found in staging")
             self.moved_file_keys.add(move_key)
-            return
+            return False
 
-        self.moved_file_keys.add(move_key)
         process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name, pair_id=pair_id)
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
-        self.active_move_processes.append(process)
+        # Start before publishing bookkeeping: if start() raises we must not leave
+        # a stale move_key (which would block every future retry of this move) or
+        # a never-started process in active_move_processes (cleanup() would then
+        # join()/close_queues() it and raise AssertionError).
         process.start()
+        self.moved_file_keys.add(move_key)
+        self.active_move_processes.append(process)
         self._logger.info(f"Spawned move process for {file_name} (staging -> local)")
+        return True
 
-    def _get_pair_context_for_command(self, command: Controller.Command) -> PairContext | None:
+    def _get_pair_context_for_command(self, command: Command) -> PairContext | None:
         """Find the pair context for a command based on pair_id."""
         return self.find_pair_by_id(command.pair_id)
 

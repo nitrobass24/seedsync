@@ -1,13 +1,51 @@
-import { OptionType } from './option.component';
+import { Config, ConfigSection } from '../../models/config';
+import { OptionType, OptionValue } from './option.component';
+
+/**
+ * A [section, option] path into the Config model. The union over Config's
+ * sections keeps each tuple's second element constrained to keys of that
+ * section, so a typo or a renamed field is a compile error rather than a
+ * silently-broken magic string.
+ */
+export type ConfigValuePath = {
+  [S in keyof Config]: [S, keyof Config[S]];
+}[keyof Config];
+
+/**
+ * Conditions under which an option is rendered disabled. The component maps
+ * each flag to a runtime predicate; co-locating the condition with the option
+ * definition keeps the disable rules next to the options they affect.
+ */
+export type OptionDisabledWhen = 'pairsEnabled' | 'validateDisabled' | 'protocolSftp';
 
 export interface IOption {
   type: OptionType;
   label: string;
-  valuePath: [string, string];
+  valuePath: ConfigValuePath;
   description: string | null;
   disabled?: boolean;
   choices?: string[];
   requiresRestart?: boolean;
+  /** When set, the option is disabled while the named condition holds. */
+  disabledWhen?: OptionDisabledWhen;
+  /** Description shown in place of the default while disabledWhen is active. */
+  overrideNote?: string;
+}
+
+/** Note shown on options that Path Pairs overrides once any pair is enabled. */
+export const OVERRIDE_NOTE = 'Overridden by Path Pairs when any pair is enabled';
+
+/** Note shown on FTPS-only options while the transfer protocol is SFTP. */
+export const FTPS_ONLY_NOTE = 'Enabled only when Transfer Protocol is set to FTPS';
+
+/** Read a config value by its typed [section, option] path. */
+export function getConfigValue(config: Config, path: ConfigValuePath): OptionValue {
+  const [section, option] = path;
+  // path is a typo-checked ConfigValuePath; the read itself is dynamic, so the
+  // string-indexed section access is localized here through ConfigSection.
+  const sectionObj = config[section] as unknown as ConfigSection;
+  if (!sectionObj) return null;
+  return sectionObj[option as string] ?? null;
 }
 
 export interface IOptionsContext {
@@ -54,6 +92,8 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
       valuePath: ['lftp', 'remote_path'],
       description: 'Path to your files on the remote server',
       requiresRestart: true,
+      disabledWhen: 'pairsEnabled',
+      overrideNote: OVERRIDE_NOTE,
     },
     {
       type: OptionType.Text,
@@ -61,6 +101,8 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
       valuePath: ['lftp', 'local_path'],
       description: 'Downloaded files are placed here',
       requiresRestart: true,
+      disabledWhen: 'pairsEnabled',
+      overrideNote: OVERRIDE_NOTE,
     },
     {
       type: OptionType.Text,
@@ -84,6 +126,50 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
         'Path to Python 3 on the remote server. Leave empty to use the default "python3". ' +
         'Set this if your seedbox has a custom Python install (e.g. "~/python3/bin/python3").',
       requiresRestart: true,
+    },
+  ],
+};
+
+/**
+ * Dedicated Transfer Protocol section (rendered top-right, above Connections)
+ * so the transfer-protocol choice and its FTPS-only options are discoverable
+ * instead of being buried among the SSH server fields.
+ */
+export const OPTIONS_CONTEXT_FTPS: IOptionsContext = {
+  header: 'Transfer Protocol',
+  id: 'ftps',
+  options: [
+    {
+      type: OptionType.Select,
+      label: 'Transfer Protocol',
+      valuePath: ['lftp', 'protocol'],
+      description:
+        'SFTP (default) or FTPS for bulk file transfers. FTPS can be substantially faster ' +
+        'on high-latency links. File discovery always uses SSH, so SSH access is required ' +
+        'even when FTPS is selected.',
+      choices: ['sftp', 'ftps'],
+      requiresRestart: true,
+    },
+    {
+      type: OptionType.Text,
+      label: 'Remote FTP Port',
+      valuePath: ['lftp', 'remote_ftp_port'],
+      description: 'FTPS port on the remote server. Used only when the transfer protocol is FTPS.',
+      requiresRestart: true,
+      disabledWhen: 'protocolSftp',
+      overrideNote: FTPS_ONLY_NOTE,
+    },
+    {
+      type: OptionType.Checkbox,
+      label: 'Verify FTPS certificate',
+      valuePath: ['lftp', 'ftp_ssl_verify_certificate'],
+      description:
+        'Validate the remote server\'s TLS certificate when using FTPS. ' +
+        'Off by default because many seedboxes use self-signed or mismatched certificates; ' +
+        'leaving it off means the connection is encrypted but not authenticated.',
+      requiresRestart: true,
+      disabledWhen: 'protocolSftp',
+      overrideNote: FTPS_ONLY_NOTE,
     },
   ],
 };
@@ -215,6 +301,8 @@ export const OPTIONS_CONTEXT_AUTOQUEUE: IOptionsContext = {
       valuePath: ['autoqueue', 'enabled'],
       description: null,
       requiresRestart: true,
+      disabledWhen: 'pairsEnabled',
+      overrideNote: OVERRIDE_NOTE,
     },
     {
       type: OptionType.Checkbox,
@@ -366,6 +454,12 @@ export const OPTIONS_CONTEXT_NOTIFICATIONS: IOptionsContext = {
     },
     {
       type: OptionType.Checkbox,
+      label: 'Notify on download start',
+      valuePath: ['notifications', 'notify_on_download_start'],
+      description: null,
+    },
+    {
+      type: OptionType.Checkbox,
       label: 'Notify on download complete',
       valuePath: ['notifications', 'notify_on_download_complete'],
       description: null,
@@ -435,6 +529,7 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
       label: 'Auto-validate after download',
       valuePath: ['validate', 'auto_validate'],
       description: 'Automatically validate files when download completes. Requires post-download validation above.',
+      disabledWhen: 'validateDisabled',
     },
     {
       type: OptionType.Select,
@@ -442,6 +537,7 @@ export const OPTIONS_CONTEXT_VALIDATE: IOptionsContext = {
       valuePath: ['validate', 'algorithm'],
       description: 'Checksum algorithm used for both inline transfer verification and post-download validation',
       choices: ['md5', 'sha1', 'sha256'],
+      disabledWhen: 'validateDisabled',
     },
   ],
 };

@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import json
+from unittest.mock import patch
 from urllib.parse import quote
 
 from common import Config
@@ -42,6 +43,22 @@ class TestConfigHandler(BaseTestWebApp):
         resp = self.test_app.get("/server/config/set/web/port/8080")
         self.assertEqual(200, resp.status_int)
         self.assertEqual(8080, self.context.config.web.port)
+
+    def test_set_percent_value_persists_and_reloads(self):
+        """A config value containing '%' must set, persist, and reload cleanly.
+
+        Regression guard for #507: the persist path (to_file -> Config.to_str)
+        used configparser's default BasicInterpolation, which raised on '%'.
+        """
+        value = "100%secret"
+        uri = quote(quote(value, safe=""), safe="")
+        resp = self.test_app.get("/server/config/set/lftp/remote_password/" + uri)
+        self.assertEqual(200, resp.status_int)
+        self.assertEqual(value, self.context.config.lftp.remote_password)
+        # Reload from the persisted settings file to confirm the on-disk round trip.
+        with open(self.context.config_path) as f:
+            reloaded = Config.from_str(f.read())
+        self.assertEqual(value, reloaded.lftp.remote_password)
 
     def test_set_missing_section(self):
         self.assertFalse(self.context.config.has_section("bad_section"))
@@ -107,3 +124,165 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertEqual(400, resp.status_int)
         self.assertIn("Cannot set sensitive field to redacted value", str(resp.html))
         self.assertEqual("real-password", self.context.config.lftp.remote_password)
+
+    def test_set_persistence_failure_rolls_back(self):
+        """If to_file raises, in-memory state must revert and no LFTP callback fires."""
+        self.context.config.general.log_level = "INFO"
+        with patch.object(Config, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.get("/server/config/set/general/log_level/DEBUG", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertIn("Failed to persist config general.log_level", str(resp.html))
+        self.assertEqual("INFO", self.context.config.general.log_level)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
+    def test_set_persistence_failure_rolls_back_on_non_oserror(self):
+        """A non-OSError persist failure must also revert in-memory state.
+
+        Regression guard for #507 Part 2: serialization can raise non-OSError
+        exceptions (e.g. configparser.Error). Those must still trigger the
+        rollback rather than escaping and leaving the new value live but never
+        persisted.
+        """
+        self.context.config.general.log_level = "INFO"
+        with patch.object(Config, "to_file", side_effect=RuntimeError("serialize boom")):
+            resp = self.test_app.get("/server/config/set/general/log_level/DEBUG", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertIn("Failed to persist config general.log_level", str(resp.html))
+        self.assertEqual("INFO", self.context.config.general.log_level)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
+    def test_set_persistence_failure_rolls_back_lftp_tuning_key(self):
+        """A failed write on a hot-reload key must not fire the LFTP callback."""
+        self.context.config.lftp.num_max_parallel_downloads = 3
+        with patch.object(Config, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.get("/server/config/set/lftp/num_max_parallel_downloads/7", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual(3, self.context.config.lftp.num_max_parallel_downloads)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
+    def test_set_persistence_success_fires_lftp_callback(self):
+        """Baseline: a successful write on a hot-reload key still fires the callback."""
+        resp = self.test_app.get("/server/config/set/lftp/num_max_parallel_downloads/7")
+        self.assertEqual(200, resp.status_int)
+        self.assertEqual(7, self.context.config.lftp.num_max_parallel_downloads)
+        self.controller.request_lftp_reconfigure.assert_called_once()
+
+    def test_set_protocol_ftps_persists_without_lftp_callback(self):
+        """protocol is a connection-level key: it persists but does NOT fire the
+        LFTP hot-reload callback (it is not in _LFTP_TUNING_KEYS).
+        """
+        self.assertEqual("sftp", self.context.config.lftp.protocol)
+        resp = self.test_app.get("/server/config/set/lftp/protocol/ftps")
+        self.assertEqual(200, resp.status_int)
+        self.assertEqual("ftps", self.context.config.lftp.protocol)
+        # Connection-level change requires a restart, so the hot-reload callback
+        # must not fire.
+        self.controller.request_lftp_reconfigure.assert_not_called()
+        # Confirm the on-disk round trip.
+        with open(self.context.config_path) as f:
+            reloaded = Config.from_str(f.read())
+        self.assertEqual("ftps", reloaded.lftp.protocol)
+
+    def test_set_remote_ftp_port_persists_without_lftp_callback(self):
+        """remote_ftp_port is connection-level: persists but does NOT fire the
+        LFTP hot-reload callback.
+        """
+        self.assertEqual(21, self.context.config.lftp.remote_ftp_port)
+        resp = self.test_app.get("/server/config/set/lftp/remote_ftp_port/21")
+        self.assertEqual(200, resp.status_int)
+        self.assertEqual(21, self.context.config.lftp.remote_ftp_port)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+        with open(self.context.config_path) as f:
+            reloaded = Config.from_str(f.read())
+        self.assertEqual(21, reloaded.lftp.remote_ftp_port)
+
+    def test_set_connection_key_no_callback_contrast_with_tuning_key(self):
+        """Contrast: a connection-level key does NOT fire the callback, while a
+        known tuning key (same handler, same request shape) DOES.
+        """
+        # Connection-level key: no callback.
+        resp = self.test_app.get("/server/config/set/lftp/protocol/ftps")
+        self.assertEqual(200, resp.status_int)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
+        # Known tuning key: callback fires.
+        resp = self.test_app.get("/server/config/set/lftp/num_max_parallel_downloads/7")
+        self.assertEqual(200, resp.status_int)
+        self.controller.request_lftp_reconfigure.assert_called_once()
+
+    def test_set_protocol_invalid_value_rejected(self):
+        """An invalid protocol (e.g. scp) is rejected with a 400 and the
+        'must be one of' message; the value is left unchanged.
+        """
+        self.assertEqual("sftp", self.context.config.lftp.protocol)
+        resp = self.test_app.get("/server/config/set/lftp/protocol/scp", expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+        self.assertIn("Bad config: Lftp.protocol (scp) must be one of:", str(resp.html))
+        self.assertEqual("sftp", self.context.config.lftp.protocol)
+        self.controller.request_lftp_reconfigure.assert_not_called()
+
+    def test_get_surfaces_ftps_fields_unredacted(self):
+        """/server/config/get surfaces protocol/remote_ftp_port/
+        ftp_ssl_verify_certificate; none are sensitive, so none are redacted.
+        """
+        self.context.config.lftp.protocol = "ftps"
+        self.context.config.lftp.remote_ftp_port = 990
+        self.context.config.lftp.ftp_ssl_verify_certificate = True
+        resp = self.test_app.get("/server/config/get")
+        self.assertEqual(200, resp.status_int)
+        json_dict = json.loads(str(resp.html))
+        self.assertEqual("ftps", json_dict["lftp"]["protocol"])
+        self.assertEqual(990, json_dict["lftp"]["remote_ftp_port"])
+        self.assertEqual(True, json_dict["lftp"]["ftp_ssl_verify_certificate"])
+        # None of the new fields are sensitive, so none are redacted.
+        self.assertNotEqual(Config.REDACTED_SENTINEL, json_dict["lftp"]["protocol"])
+        self.assertNotEqual(Config.REDACTED_SENTINEL, json_dict["lftp"]["remote_ftp_port"])
+        self.assertNotEqual(Config.REDACTED_SENTINEL, json_dict["lftp"]["ftp_ssl_verify_certificate"])
+
+    def test_set_serializes_concurrent_writers(self):
+        """The handler's __write_lock must serialize concurrent set_config calls.
+
+        Without the lock, two threads can interleave the mutate → persist →
+        rollback sequence and the second thread's value can be captured into
+        to_file mid-way through the first thread's rollback. With the lock,
+        every full mutate→persist→rollback runs atomically.
+        """
+        import threading
+
+        # Block to_file just long enough that thread B's request would
+        # interleave with thread A's failed write if the lock were missing.
+        enter_to_file = threading.Event()
+        release_to_file = threading.Event()
+
+        def slow_failing_write(*_args, **_kw):
+            enter_to_file.set()
+            release_to_file.wait(timeout=5)
+            raise OSError("disk full")
+
+        results: dict[str, int] = {}
+
+        def writer_a():
+            with patch.object(Config, "to_file", side_effect=slow_failing_write):
+                resp = self.test_app.get("/server/config/set/general/log_level/DEBUG", expect_errors=True)
+                results["a"] = resp.status_int
+
+        def writer_b():
+            enter_to_file.wait(timeout=5)
+            resp = self.test_app.get("/server/config/set/general/log_level/WARNING", expect_errors=True)
+            results["b"] = resp.status_int
+
+        t_a = threading.Thread(target=writer_a)
+        t_b = threading.Thread(target=writer_b)
+        t_a.start()
+        t_b.start()
+        # Give B a moment to block on the lock, then release A.
+        enter_to_file.wait(timeout=5)
+        release_to_file.set()
+        t_a.join(timeout=10)
+        t_b.join(timeout=10)
+
+        # A failed (500), B saw a fully-rolled-back state, then succeeded (200).
+        self.assertEqual(500, results["a"])
+        self.assertEqual(200, results["b"])
+        # B's value wins because it ran after A's rollback completed.
+        self.assertEqual("WARNING", self.context.config.general.log_level)

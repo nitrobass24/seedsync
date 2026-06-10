@@ -1,3 +1,0 @@
-#!/bin/sh
-SSH=/usr/bin/ssh
-/usr/local/bin/run_as_user "$SSH" "$@"

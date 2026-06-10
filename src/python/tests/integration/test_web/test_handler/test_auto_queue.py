@@ -1,8 +1,10 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from unittest.mock import patch
 from urllib.parse import quote
 
-from controller import AutoQueuePattern
+from controller import AutoQueuePattern, AutoQueuePersist
+from controller.auto_queue import AutoQueuePersistListener
 from tests.integration.test_web.test_web_app import BaseTestWebApp
 
 
@@ -135,3 +137,53 @@ class TestAutoQueueHandler(BaseTestWebApp):
         resp = self.test_app.get("/server/autoqueue/remove/", expect_errors=True)
         self.assertEqual(404, resp.status_int)
         self.assertEqual(0, len(self.auto_queue_persist.patterns))
+
+    def test_add_returns_500_when_persistence_fails(self):
+        with patch.object(AutoQueuePersist, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.get("/server/autoqueue/add/onepattern", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual("Failed to persist auto-queue", resp.text)
+        # Contract (#518): the in-memory mutation *is* rolled back on persistence
+        # failure. add_pattern fires a listener side effect that auto-queues
+        # matching files this session; leaving the pattern live while it never
+        # reached disk causes "phantom" queueing that contradicts the 500. The
+        # handler removes the pattern again so disk and memory stay consistent.
+        self.assertNotIn(AutoQueuePattern("onepattern"), self.auto_queue_persist.patterns)
+
+    def test_add_500_rolls_back_listener_side_effect(self):
+        # The core of #518: rolling back __patterns is not enough — the
+        # pattern_added side effect (which drives the controller's queue replay)
+        # must also be undone. Attach a real listener and prove its new_patterns
+        # is cleared after the failed add.
+        listener = AutoQueuePersistListener()
+        self.auto_queue_persist.add_listener(listener)
+        with patch.object(AutoQueuePersist, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.get("/server/autoqueue/add/onepattern", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual("Failed to persist auto-queue", resp.text)
+        self.assertNotIn(AutoQueuePattern("onepattern"), self.auto_queue_persist.patterns)
+        self.assertNotIn(AutoQueuePattern("onepattern"), listener.new_patterns)
+
+    def test_add_500_rolls_back_on_non_oserror_persist_failure(self):
+        # Review (#537): rollback must fire for ANY persist failure, not just
+        # OSError (e.g. a to_str()/serialization error), or the listener side
+        # effect leaks while nothing reached disk.
+        listener = AutoQueuePersistListener()
+        self.auto_queue_persist.add_listener(listener)
+        with patch.object(AutoQueuePersist, "to_file", side_effect=RuntimeError("serialize boom")):
+            resp = self.test_app.get("/server/autoqueue/add/onepattern", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual("Failed to persist auto-queue", resp.text)
+        self.assertNotIn(AutoQueuePattern("onepattern"), self.auto_queue_persist.patterns)
+        self.assertNotIn(AutoQueuePattern("onepattern"), listener.new_patterns)
+
+    def test_remove_returns_500_when_persistence_fails(self):
+        self.auto_queue_persist.add_pattern(AutoQueuePattern(pattern="onepattern"))
+        with patch.object(AutoQueuePersist, "to_file", side_effect=OSError("disk full")):
+            resp = self.test_app.get("/server/autoqueue/remove/onepattern", expect_errors=True)
+        self.assertEqual(500, resp.status_int)
+        self.assertEqual("Failed to persist auto-queue", resp.text)
+        # Contract (#518): the in-memory removal is rolled back on persistence
+        # failure. The pattern was persisted on disk before removal, so re-adding
+        # it keeps in-memory state consistent with the unchanged on-disk file.
+        self.assertIn(AutoQueuePattern("onepattern"), self.auto_queue_persist.patterns)

@@ -3,6 +3,7 @@
 import logging
 import math
 import os
+from collections import deque
 
 from lftp import LftpJobStatus
 from model import Model, ModelError, ModelFile
@@ -38,6 +39,7 @@ class ModelBuilder:
         self.__validate_statuses: dict[str, ValidateStatus] = {}
         self.__validated_files: set[str] = set()
         self.__corrupt_files: set[str] = set()
+        self.__move_failed_files: set[str] = set()
         self.__auto_delete_remote = False
         self.__cached_model: Model | None = None
         self.__smoothed_etas: dict[str, float] = {}
@@ -124,6 +126,13 @@ class ModelBuilder:
         if self.__corrupt_files != prev_corrupt_files:
             self.__cached_model = None
 
+    def set_move_failed_files(self, move_failed_files: set[str]):
+        prev_move_failed_files = self.__move_failed_files
+        self.__move_failed_files = move_failed_files
+        # Invalidate the cache
+        if self.__move_failed_files != prev_move_failed_files:
+            self.__cached_model = None
+
     def set_auto_delete_remote(self, enabled: bool):
         if self.__auto_delete_remote != enabled:
             self.__auto_delete_remote = enabled
@@ -141,6 +150,7 @@ class ModelBuilder:
         self.__validate_statuses.clear()
         self.__validated_files.clear()
         self.__corrupt_files.clear()
+        self.__move_failed_files.clear()
         self.__auto_delete_remote = False
         self.__cached_model = None
         self.__smoothed_etas.clear()
@@ -236,11 +246,11 @@ class ModelBuilder:
         # for the pair
         # Note: in this case the frontier contains nodes that have already been process, it is
         #       merely used for traversing children
-        frontier: list[tuple[SystemFile | None, SystemFile | None, LftpJobStatus | None, ModelFile]] = []
+        frontier: deque[tuple[SystemFile | None, SystemFile | None, LftpJobStatus | None, ModelFile]] = deque()
         if remote or local:
             frontier.append((remote, local, status, root_model_file))
         while frontier:
-            _remote, _local, _status, _model_file = frontier.pop(0)
+            _remote, _local, _status, _model_file = frontier.popleft()
             _remote_children: dict[str, SystemFile] = {sf.name: sf for sf in _remote.children} if _remote else {}
             _local_children: dict[str, SystemFile] = {sf.name: sf for sf in _local.children} if _local else {}
             _all_children_names: set[str] = set[str]().union(_remote_children.keys(), _local_children.keys())
@@ -426,10 +436,10 @@ class ModelBuilder:
                 # root is a directory that also exists remotely
                 # check all the children
                 all_downloaded = True
-                frontier_check: list[ModelFile] = []
-                frontier_check += model_file.get_children()
+                frontier_check: deque[ModelFile] = deque()
+                frontier_check.extend(model_file.iter_children())
                 while frontier_check:
-                    _child_file = frontier_check.pop(0)
+                    _child_file = frontier_check.popleft()
                     if (
                         not _child_file.is_dir
                         and _child_file.remote_size is not None
@@ -437,7 +447,7 @@ class ModelBuilder:
                     ):
                         all_downloaded = False
                         break
-                    frontier_check += _child_file.get_children()
+                    frontier_check.extend(_child_file.iter_children())
                 if all_downloaded:
                     model_file.state = ModelFile.State.DOWNLOADED
                 else:
@@ -481,6 +491,19 @@ class ModelBuilder:
             ModelFile.State.VALIDATED,
         ):
             model_file.state = ModelFile.State.CORRUPT
+
+        # finally we check if the staging->final move failed
+        # root is MoveFailed if it is in a post-download state and in the move-failed list.
+        # A failed move leaves the file sitting in staging (still DOWNLOADED/EXTRACTED/
+        # VALIDATED), so without this it would render as silently "done" (#536).
+        if model_file.name in self.__move_failed_files and model_file.state in (
+            ModelFile.State.DOWNLOADED,
+            ModelFile.State.EXTRACTED,
+            ModelFile.State.EXTRACT_FAILED,
+            ModelFile.State.VALIDATED,
+            ModelFile.State.CORRUPT,
+        ):
+            model_file.state = ModelFile.State.MOVE_FAILED
 
     def _check_persist_authority(self, model_file: ModelFile, incomplete_children: bool):
         # next we check persist authority for previously downloaded files

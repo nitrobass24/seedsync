@@ -43,4 +43,5 @@ export enum ViewFileStatus {
   VALIDATING      = 'validating',
   VALIDATED       = 'validated',
   CORRUPT         = 'corrupt',
+  MOVE_FAILED     = 'move_failed',
 }

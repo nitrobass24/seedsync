@@ -1,14 +1,32 @@
-import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject, Observable, of, from } from 'rxjs';
-import { mergeMap, toArray } from 'rxjs/operators';
+import { Injectable, InjectionToken, inject } from '@angular/core';
+import { BehaviorSubject, Observable } from 'rxjs';
+import { auditTime } from 'rxjs/operators';
 
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
 import { PathPairsService } from '../settings/path-pairs.service';
 import { WebReaction } from '../utils/rest.service';
-import { ModelFile, ModelFileState } from '../../models/model-file';
-import { ViewFile, ViewFileStatus } from '../../models/view-file';
+import { ModelFile } from '../../models/model-file';
+import { ViewFile } from '../../models/view-file';
 import { fileKey } from './file-key';
+import { mapState, deriveCapabilities } from './view-file-capabilities';
+import { ViewFileSelectionService } from './view-file-selection.service';
+import { ViewFileCommandService } from './view-file-command.service';
+
+/**
+ * Coalescing window (ms) for batching incremental SSE model-file emissions before
+ * rebuilding the view. The backend controller loop emits one SSE event per changed
+ * file every ~0.5s; without coalescing, N concurrently-downloading files trigger N
+ * full view rebuilds + 2N subject emissions per cycle (issue #521).
+ *
+ * Defaults to 0 (synchronous pass-through) so unit tests — which read the view
+ * synchronously right after emitting — stay deterministic without extra setup.
+ * Production overrides this in app.config.ts.
+ */
+export const VIEW_FILE_COALESCE_MS = new InjectionToken<number>('VIEW_FILE_COALESCE_MS', {
+  providedIn: 'root',
+  factory: () => 0,
+});
 
 function viewFileKey(vf: ViewFile): string {
   return fileKey(vf.pairId, vf.name);
@@ -25,6 +43,9 @@ export class ViewFileService {
   private readonly logger = inject(LoggerService);
   private readonly modelFileService = inject(ModelFileService);
   private readonly pathPairsService = inject(PathPairsService);
+  private readonly coalesceMs = inject(VIEW_FILE_COALESCE_MS);
+  private readonly selection = inject(ViewFileSelectionService);
+  private readonly commands = inject(ViewFileCommandService);
 
   private pairNameMap = new Map<string, string>();
   private files: ViewFile[] = [];
@@ -34,16 +55,17 @@ export class ViewFileService {
 
   private prevModelFiles = new Map<string, ModelFile>();
 
+  // Resolve a view-file key to its backing ModelFile from the diffing-owned
+  // snapshot. Threaded into ViewFileCommandService so command dispatch keeps the
+  // exact resolution semantics this service has always used (`prevModelFiles`).
+  private readonly resolveModelFile = (key: string): ModelFile | undefined => this.prevModelFiles.get(key);
+
   private filterCriteria: ViewFileFilterCriteria | null = null;
   private sortComparator: ViewFileComparator | null = null;
 
-  private checkedSet = new Set<string>();
-  private readonly checkedSubject = new BehaviorSubject<Set<string>>(new Set());
-  private lastCheckedKey: string | null = null;
-
   readonly files$: Observable<ViewFile[]> = this.filesSubject.asObservable();
   readonly filteredFiles$: Observable<ViewFile[]> = this.filteredFilesSubject.asObservable();
-  readonly checked$ = this.checkedSubject.asObservable();
+  readonly checked$ = this.selection.checked$;
 
   constructor() {
     this.pathPairsService.pairs$.subscribe((pairs) => {
@@ -51,17 +73,43 @@ export class ViewFileService {
       for (const pair of pairs) {
         this.pairNameMap.set(pair.id, pair.name);
       }
-      // Rebuild pairName on existing view files immediately
+      // Rebuild pairName on existing view files immediately. Only re-spread rows
+      // whose resolved pairName actually changed so unchanged rows keep identity.
       if (this.files.length > 0) {
-        this.files = this.files.map(f => ({
-          ...f,
-          pairName: f.pairId ? (this.pairNameMap.get(f.pairId) ?? null) : null,
-        }));
-        this.pushViewFiles();
+        let changed = false;
+        const nextFiles = this.files.map(f => {
+          const pairName = f.pairId ? (this.pairNameMap.get(f.pairId) ?? null) : null;
+          if (pairName === f.pairName) {
+            return f;
+          }
+          changed = true;
+          return { ...f, pairName };
+        });
+        if (changed) {
+          // pairName changed for some rows; if the active sort keys on pairName
+          // the order is now stale (pushViewFiles does not re-sort), so reapply
+          // the comparator before pushing.
+          if (this.sortComparator != null) {
+            nextFiles.sort(this.sortComparator);
+          }
+          this.files = nextFiles;
+          this.pushViewFiles();
+        }
       }
     });
 
-    this.modelFileService.files$.subscribe({
+    // Coalesce the per-file SSE fan-out: the backend emits one model event per
+    // changed file every ~0.5s, so N active files would otherwise drive N full
+    // view rebuilds per tick. auditTime collapses a burst into a single rebuild
+    // on the trailing edge (the last Map already reflects the cumulative state,
+    // since each event is an idempotent set/delete on the shared key space).
+    // coalesceMs === 0 (the unit-test default) keeps the pass-through synchronous.
+    const modelFiles$ =
+      this.coalesceMs > 0
+        ? this.modelFileService.files$.pipe(auditTime(this.coalesceMs))
+        : this.modelFileService.files$;
+
+    modelFiles$.subscribe({
       next: (modelFiles) => {
         const t0 = performance.now();
         this.buildViewFromModelFiles(modelFiles);
@@ -105,120 +153,93 @@ export class ViewFileService {
     }
   }
 
+  // Thin facades over ViewFileCommandService — kept so existing consumers (and
+  // the existing spec) target a single service. Command dispatch lives in
+  // ViewFileCommandService (issue #541); this service threads in the
+  // diffing-owned ModelFile resolver.
   queue(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Queue view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.queue(f));
+    return this.commands.queue(file, this.resolveModelFile);
   }
 
   stop(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Stop view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.stop(f));
+    return this.commands.stop(file, this.resolveModelFile);
   }
 
   extract(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Extract view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.extract(f));
+    return this.commands.extract(file, this.resolveModelFile);
   }
 
   deleteLocal(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Locally delete view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.deleteLocal(f));
+    return this.commands.deleteLocal(file, this.resolveModelFile);
   }
 
   deleteRemote(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Remotely delete view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.deleteRemote(f));
+    return this.commands.deleteRemote(file, this.resolveModelFile);
   }
 
   validate(file: ViewFile): Observable<WebReaction> {
-    this.logger.debug('Validate view file: ' + file.name);
-    return this.createAction(file, (f) => this.modelFileService.validate(f));
+    return this.commands.validate(file, this.resolveModelFile);
   }
 
   toggleCheck(file: ViewFile): void {
-    const key = viewFileKey(file);
-    if (this.checkedSet.has(key)) {
-      this.checkedSet.delete(key);
-    } else {
-      this.checkedSet.add(key);
-    }
-    this.lastCheckedKey = key;
+    this.selection.toggle(viewFileKey(file));
     this.updateCheckedState();
   }
 
   shiftCheck(file: ViewFile): void {
-    if (this.lastCheckedKey == null) {
-      this.toggleCheck(file);
-      return;
-    }
-    const filtered = this.filteredFilesSubject.getValue();
-    const lastIdx = filtered.findIndex(f => viewFileKey(f) === this.lastCheckedKey);
-    const currIdx = filtered.findIndex(f => viewFileKey(f) === viewFileKey(file));
-    if (lastIdx < 0 || currIdx < 0) {
-      this.toggleCheck(file);
-      return;
-    }
-    const start = Math.min(lastIdx, currIdx);
-    const end = Math.max(lastIdx, currIdx);
-    for (let i = start; i <= end; i++) {
-      this.checkedSet.add(viewFileKey(filtered[i]));
-    }
-    this.lastCheckedKey = viewFileKey(file);
+    const filteredKeys = this.filteredFilesSubject.getValue().map(viewFileKey);
+    this.selection.shiftRange(viewFileKey(file), filteredKeys);
     this.updateCheckedState();
   }
 
   checkAll(): void {
-    const filtered = this.filteredFilesSubject.getValue();
-    for (const f of filtered) {
-      this.checkedSet.add(viewFileKey(f));
-    }
+    const filteredKeys = this.filteredFilesSubject.getValue().map(viewFileKey);
+    this.selection.checkAll(filteredKeys);
     this.updateCheckedState();
   }
 
   uncheckAll(): void {
-    this.checkedSet.clear();
-    this.lastCheckedKey = null;
+    this.selection.uncheckAll();
     this.updateCheckedState();
   }
 
+  // Re-spread only the rows whose derived isChecked flips, preserving object
+  // identity for unchanged rows so OnPush/ngOnChanges can skip them. isChecked
+  // stays strictly derived from the selection service's checked set. The
+  // checked$ emission itself is owned by ViewFileSelectionService — this method
+  // only reconciles the diffing-owned `this.files` array and re-pushes the view.
   private updateCheckedState(): void {
-    this.files = this.files.map(f => ({
-      ...f,
-      isChecked: this.checkedSet.has(viewFileKey(f))
-    }));
-    this.checkedSubject.next(new Set(this.checkedSet));
+    let changed = false;
+    const nextFiles = this.files.map(f => {
+      const isChecked = this.selection.isChecked(viewFileKey(f));
+      if (isChecked === f.isChecked) {
+        return f;
+      }
+      changed = true;
+      return { ...f, isChecked };
+    });
+    if (changed) {
+      this.files = nextFiles;
+    }
     this.pushViewFiles();
   }
 
+  // Thin facades over ViewFileCommandService — thread in the current display
+  // list so the command service can apply its checked + capability filter.
   bulkQueue(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isQueueable, f => this.queue(f));
+    return this.commands.bulkQueue(this.files, this.resolveModelFile);
   }
 
   bulkStop(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isStoppable, f => this.stop(f));
+    return this.commands.bulkStop(this.files, this.resolveModelFile);
   }
 
   bulkDeleteLocal(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isLocallyDeletable, f => this.deleteLocal(f), 4);
+    return this.commands.bulkDeleteLocal(this.files, this.resolveModelFile);
   }
 
   bulkDeleteRemote(): Observable<WebReaction[]> {
-    return this.bulkAction(f => f.isRemotelyDeletable, f => this.deleteRemote(f), 4);
-  }
-
-  private bulkAction(
-    filter: (f: ViewFile) => boolean,
-    action: (f: ViewFile) => Observable<WebReaction>,
-    concurrency = Infinity
-  ): Observable<WebReaction[]> {
-    const checked = this.files.filter(f => this.checkedSet.has(viewFileKey(f)) && filter(f));
-    if (checked.length === 0) {
-      return of([]);
-    }
-    return from(checked).pipe(
-      mergeMap(f => action(f), concurrency),
-      toArray()
-    );
+    return this.commands.bulkDeleteRemote(this.files, this.resolveModelFile);
   }
 
   setFilterCriteria(criteria: ViewFileFilterCriteria | null): void {
@@ -244,7 +265,7 @@ export class ViewFileService {
   private buildViewFromModelFiles(modelFiles: Map<string, ModelFile>): void {
     this.logger.debug('Received next model files');
 
-    const newViewFiles = [...this.files];
+    let newViewFiles = [...this.files];
 
     const addedKeys: string[] = [];
     const removedKeys: string[] = [];
@@ -278,7 +299,7 @@ export class ViewFileService {
       const index = this.indices.get(key)!;
       const oldViewFile = newViewFiles[index];
       const newViewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap, oldViewFile.isSelected);
-      newViewFiles[index] = { ...newViewFile, isChecked: this.checkedSet.has(key) };
+      newViewFiles[index] = { ...newViewFile, isChecked: this.selection.isChecked(key) };
       if (this.sortComparator != null && this.sortComparator(oldViewFile, newViewFile) !== 0) {
         reSort = true;
       }
@@ -288,23 +309,20 @@ export class ViewFileService {
     for (const key of addedKeys) {
       reSort = true;
       const viewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap);
-      newViewFiles.push({ ...viewFile, isChecked: this.checkedSet.has(key) });
+      newViewFiles.push({ ...viewFile, isChecked: this.selection.isChecked(key) });
       this.indices.set(viewFileKey(viewFile), newViewFiles.length - 1);
     }
 
-    // Do the removes (no re-sort required)
-    let checkedChanged = false;
-    for (const key of removedKeys) {
+    // Do the removes (no re-sort required). Filter out every removed key in a
+    // single O(n) pass instead of findIndex+splice per key (O(n*m)). filter is
+    // stable, so the surviving order is identical to the splice-loop result.
+    if (removedKeys.length > 0) {
       updateIndices = true;
-      if (this.checkedSet.delete(key)) {
-        checkedChanged = true;
-      }
-      const index = newViewFiles.findIndex((v) => viewFileKey(v) === key);
-      newViewFiles.splice(index, 1);
-      this.indices.delete(key);
-    }
-    if (checkedChanged) {
-      this.checkedSubject.next(new Set(this.checkedSet));
+      const removed = new Set(removedKeys);
+      // Drop any checked entries for removed files; the selection service
+      // re-emits checked$ iff at least one was actually present.
+      this.selection.pruneRemoved(removedKeys);
+      newViewFiles = newViewFiles.filter((v) => !removed.has(viewFileKey(v)));
     }
 
     if (reSort && this.sortComparator != null) {
@@ -323,34 +341,6 @@ export class ViewFileService {
     this.logger.debug('New view model: %O', this.files);
   }
 
-  private createAction(
-    file: ViewFile,
-    action: (file: ModelFile) => Observable<WebReaction>,
-  ): Observable<WebReaction> {
-    return new Observable((observer) => {
-      const key = viewFileKey(file);
-      if (!this.prevModelFiles.has(key)) {
-        this.logger.error('File to queue not found: ' + key);
-        observer.next({ success: false, data: null, errorMessage: `File '${file.name}' not found` });
-        observer.complete();
-      } else {
-        const modelFile = this.prevModelFiles.get(key)!;
-        action(modelFile).subscribe({
-          next: (reaction) => {
-            this.logger.debug('Received model reaction: %O', reaction);
-            observer.next(reaction);
-            observer.complete();
-          },
-          error: (err) => {
-            this.logger.error('Action failed for file: ' + key, err);
-            observer.next({ success: false, data: null, errorMessage: String(err?.message ?? err) });
-            observer.complete();
-          },
-        });
-      }
-    });
-  }
-
   private pushViewFiles(): void {
     this.filesSubject.next(this.files);
 
@@ -358,8 +348,28 @@ export class ViewFileService {
     if (this.filterCriteria != null) {
       filteredFiles = this.files.filter((f) => this.filterCriteria!.meetsCriteria(f));
     }
+
+    // Skip re-emitting the filtered list when its membership/order is unchanged
+    // (element-wise reference-identical to the last emission). The rendered DOM is
+    // identical either way; this lets OnPush consumers skip a needless CD pass.
+    const prevFiltered = this.filteredFilesSubject.getValue();
+    if (filteredFiles !== prevFiltered && arraysReferenceEqual(filteredFiles, prevFiltered)) {
+      return;
+    }
     this.filteredFilesSubject.next(filteredFiles);
   }
+}
+
+function arraysReferenceEqual(a: readonly ViewFile[], b: readonly ViewFile[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function modelFilesEqual(a: ModelFile, b: ModelFile): boolean {
@@ -387,98 +397,14 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     percentDownloaded = 100;
   }
 
-  let status: ViewFileStatus;
-  switch (modelFile.state) {
-    case ModelFileState.DEFAULT:
-      if (localSize > 0 && remoteSize > 0) {
-        status = ViewFileStatus.STOPPED;
-      } else {
-        status = ViewFileStatus.DEFAULT;
-      }
-      break;
-    case ModelFileState.QUEUED:
-      status = ViewFileStatus.QUEUED;
-      break;
-    case ModelFileState.DOWNLOADING:
-      status = ViewFileStatus.DOWNLOADING;
-      break;
-    case ModelFileState.DOWNLOADED:
-      status = ViewFileStatus.DOWNLOADED;
-      break;
-    case ModelFileState.DELETED:
-      status = ViewFileStatus.DELETED;
-      break;
-    case ModelFileState.EXTRACTING:
-      status = ViewFileStatus.EXTRACTING;
-      break;
-    case ModelFileState.EXTRACTED:
-      status = ViewFileStatus.EXTRACTED;
-      break;
-    case ModelFileState.EXTRACT_FAILED:
-      status = ViewFileStatus.EXTRACT_FAILED;
-      break;
-    case ModelFileState.VALIDATING:
-      status = ViewFileStatus.VALIDATING;
-      break;
-    case ModelFileState.VALIDATED:
-      status = ViewFileStatus.VALIDATED;
-      break;
-    case ModelFileState.CORRUPT:
-      status = ViewFileStatus.CORRUPT;
-      break;
-    default:
-      status = ViewFileStatus.DEFAULT;
-  }
-
-  const isQueueable =
-    ([ViewFileStatus.DEFAULT, ViewFileStatus.STOPPED, ViewFileStatus.DELETED].includes(status) && remoteSize > 0) ||
-    status === ViewFileStatus.CORRUPT;
-  const isStoppable = [ViewFileStatus.QUEUED, ViewFileStatus.DOWNLOADING].includes(status);
-  const isExtractable =
-    [
-      ViewFileStatus.DEFAULT,
-      ViewFileStatus.STOPPED,
-      ViewFileStatus.DOWNLOADED,
-      ViewFileStatus.EXTRACTED,
-      ViewFileStatus.EXTRACT_FAILED,
-      ViewFileStatus.VALIDATED,
-      ViewFileStatus.CORRUPT,
-    ].includes(status) && localSize > 0;
-  const isLocallyDeletable =
-    [
-      ViewFileStatus.DEFAULT,
-      ViewFileStatus.STOPPED,
-      ViewFileStatus.DOWNLOADED,
-      ViewFileStatus.EXTRACTED,
-      ViewFileStatus.EXTRACT_FAILED,
-      ViewFileStatus.VALIDATED,
-      ViewFileStatus.CORRUPT,
-    ].includes(status) && localSize > 0;
-  const isRemotelyDeletable =
-    [
-      ViewFileStatus.DEFAULT,
-      ViewFileStatus.STOPPED,
-      ViewFileStatus.DOWNLOADED,
-      ViewFileStatus.EXTRACTED,
-      ViewFileStatus.EXTRACT_FAILED,
-      ViewFileStatus.VALIDATED,
-      ViewFileStatus.CORRUPT,
-      ViewFileStatus.DELETED,
-    ].includes(status) && remoteSize > 0;
-  const validatableStatuses = [
-    ViewFileStatus.DOWNLOADED,
-    ViewFileStatus.EXTRACTED,
-    ViewFileStatus.EXTRACT_FAILED,
-    ViewFileStatus.VALIDATED,
-    ViewFileStatus.CORRUPT,
-  ];
-  const isValidatable =
-    validatableStatuses.includes(status) && modelFile.local_size != null && modelFile.remote_size != null;
-
-  let validateTooltip: string | null = null;
-  if (!isValidatable && validatableStatuses.includes(status) && modelFile.remote_size == null) {
-    validateTooltip = 'Remote file not available for checksum comparison';
-  }
+  const status = mapState(modelFile.state, localSize, remoteSize);
+  const capabilities = deriveCapabilities(
+    status,
+    localSize,
+    remoteSize,
+    modelFile.local_size,
+    modelFile.remote_size,
+  );
 
   return {
     name: modelFile.name,
@@ -495,13 +421,7 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     isArchive: modelFile.is_extractable,
     isSelected,
     isChecked: false,
-    isQueueable,
-    isStoppable,
-    isExtractable,
-    isLocallyDeletable,
-    isRemotelyDeletable,
-    isValidatable,
-    validateTooltip,
+    ...capabilities,
     localCreatedTimestamp: modelFile.local_created_timestamp,
     localModifiedTimestamp: modelFile.local_modified_timestamp,
     remoteCreatedTimestamp: modelFile.remote_created_timestamp,
