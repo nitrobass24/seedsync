@@ -31,7 +31,7 @@
     "@angular/forms": "^22.0.4",
     "@angular/platform-browser": "^22.0.4",
     "@angular/router": "^22.0.4",
-    "@fortawesome/fontawesome-free": "^7.1.0",
+    "@fortawesome/fontawesome-free": "^7.3.0",
     "bootstrap": "^5.3.8",
     "compare-versions": "^6.1.1",
     "rxjs": "~7.8.0",
