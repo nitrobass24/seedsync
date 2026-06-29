@@ -78,15 +78,18 @@ class ModelUpdater:
         self._move_retry_counts: dict[str, int] = {}
 
     def update(self) -> None:
-        # Grab the latest extract results (shared)
+        # Grab the latest extract results. Completed/failed go through the
+        # supervisor (not .worker) so results buffered from a dead worker during
+        # recreation are surfaced exactly once (#571); statuses are display-only
+        # and read straight off the live worker.
         latest_extract_statuses = self._extract_process.worker.pop_latest_statuses()
-        latest_extracted_results = self._extract_process.worker.pop_completed()
-        latest_failed_extractions = self._extract_process.worker.pop_failed()
+        latest_extracted_results = self._extract_process.pop_completed()
+        latest_failed_extractions = self._extract_process.pop_failed()
 
-        # Grab the latest validate results (shared)
+        # Grab the latest validate results (same #571 contract as extract).
         latest_validate_statuses = self._validate_process.worker.pop_latest_statuses()
-        latest_validated_results = self._validate_process.worker.pop_completed()
-        latest_failed_validations = self._validate_process.worker.pop_failed()
+        latest_validated_results = self._validate_process.pop_completed()
+        latest_failed_validations = self._validate_process.pop_failed()
 
         # Process each pair context's scan results and LFTP status
         for pc in self._pair_contexts:
