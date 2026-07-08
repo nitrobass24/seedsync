@@ -21,11 +21,25 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Protocol, TypeVar, cast
 
 from common import AppProcess
 
 W = TypeVar("W", bound=AppProcess)
+
+
+class _ResultReader(Protocol):
+    """The result-queue drain surface shared by the Extract/Validate workers.
+
+    These live on the concrete workers rather than the ``AppProcess`` base (the
+    completed/failed result types differ between Extract and Validate), so the
+    supervisor reaches them via a cast when draining a dead worker before its
+    queues are closed (#571).
+    """
+
+    def pop_completed(self) -> list[Any]: ...
+
+    def pop_failed(self) -> list[Any]: ...
 
 
 class WorkerSupervisor(Generic[W]):
@@ -52,6 +66,11 @@ class WorkerSupervisor(Generic[W]):
         # to the same cross-process logging queue before it is started.
         self._mp_log_queue: Any = None
         self._mp_log_level: int | None = None
+        # Results drained from a dead worker during recreation, surfaced on the
+        # next pop_completed()/pop_failed() so finished work emitted just before
+        # a crash is not silently dropped when its queues close (#571).
+        self._buffered_completed: list[Any] = []
+        self._buffered_failed: list[Any] = []
 
     @property
     def worker(self) -> W:
@@ -93,18 +112,51 @@ class WorkerSupervisor(Generic[W]):
     def propagate_exception(self) -> None:
         self._worker.propagate_exception()
 
+    def pop_completed(self) -> list[Any]:
+        """Drain completed results, prepended with any buffered from a dead worker.
+
+        Readers must go through the supervisor (not ``self.worker``) so results a
+        worker emitted just before crashing — captured by :meth:`_drain_dead`
+        during recreation — are surfaced exactly once, ahead of the fresh
+        worker's own results (#571). ModelUpdater drains this in the same
+        controller cycle as recreation, so the carry-over is picked up promptly.
+
+        The live worker is read *before* the buffer is cleared so that a failure
+        reading the live worker does not drop the carry-over: the buffer is left
+        intact and surfaces on a later cycle instead of being lost.
+        """
+        fresh = cast(_ResultReader, self._worker).pop_completed()
+        buffered = self._buffered_completed
+        self._buffered_completed = []
+        return buffered + fresh
+
+    def pop_failed(self) -> list[Any]:
+        """Drain failed results, prepended with any buffered from a dead worker (#571).
+
+        See :meth:`pop_completed` for the carry-over contract, including the
+        read-live-before-clearing-the-buffer ordering that keeps the carry-over
+        from being lost if the live read fails.
+        """
+        fresh = cast(_ResultReader, self._worker).pop_failed()
+        buffered = self._buffered_failed
+        self._buffered_failed = []
+        return buffered + fresh
+
     # --- delegated worker methods (dynamic) ---
 
     def __getattr__(self, item: str) -> Any:
         """Delegate the worker's own methods to the current live instance.
 
-        Covers the result-queue readers (``pop_latest_statuses``/
-        ``pop_completed``/``pop_failed``) and the request-dispatch methods
-        (``extract``/``validate``) — the worker surface that differs between
-        ExtractProcess and ValidateProcess and so cannot be typed on a single
-        ``Generic[W]`` supervisor. Callers that need the concrete return types
-        read them through :attr:`worker` (e.g. ``supervisor.worker.pop_completed()``);
-        ModelUpdater does this.
+        Covers the display-only status reader (``pop_latest_statuses``) and the
+        request-dispatch methods (``extract``/``validate``) — the worker surface
+        that differs between ExtractProcess and ValidateProcess and so cannot be
+        typed on a single ``Generic[W]`` supervisor. Callers that need the
+        concrete status type read it through :attr:`worker` (e.g.
+        ``supervisor.worker.pop_latest_statuses()``); ModelUpdater does this. The
+        completed/failed readers are *not* dynamic — they are the explicit
+        :meth:`pop_completed`/:meth:`pop_failed` above so they can carry over a
+        dead worker's buffered results (#571), and ModelUpdater calls those
+        through the supervisor rather than via :attr:`worker`.
 
         Only invoked for attributes not defined on the supervisor itself, so the
         explicit delegations above always win. ``_worker`` is set in
@@ -144,9 +196,36 @@ class WorkerSupervisor(Generic[W]):
         # Swap before reaping the old worker so a failure releasing the dead
         # worker's queues still leaves the supervisor pointing at the live one.
         self._worker = fresh
-        self._reap_dead(dead)
+        # Capture any finished results still in the dead worker's queues before
+        # _reap_dead() closes them, so they are not silently dropped (#571). The
+        # finally guarantees the dead worker's queues are still closed (FDs
+        # freed) even in the unlikely event draining itself raises.
+        try:
+            self._drain_dead(dead)
+        finally:
+            self._reap_dead(dead)
         self._logger.info("%s worker process restarted as %s", self._feature, fresh.name)
         return True
+
+    def _drain_dead(self, dead: W) -> None:
+        """Buffer results the dead worker emitted before crashing (#571).
+
+        Runs before :meth:`_reap_dead` closes the dead worker's queues. Each
+        queue is drained in isolation and best-effort: a worker mid-crash may
+        raise on a read, and a drain failure must never block the restart. The
+        results are *extended* onto the buffers (not assigned) so repeated
+        restarts before a consumer drain accumulate rather than clobber. They
+        surface on the next :meth:`pop_completed`/:meth:`pop_failed`.
+        """
+        reader = cast(_ResultReader, dead)
+        try:
+            self._buffered_completed.extend(reader.pop_completed())
+        except Exception:
+            self._logger.debug("Error draining dead %s worker completions during restart", self._feature, exc_info=True)
+        try:
+            self._buffered_failed.extend(reader.pop_failed())
+        except Exception:
+            self._logger.debug("Error draining dead %s worker failures during restart", self._feature, exc_info=True)
 
     def _is_dead(self) -> bool:
         """True if the worker was started and has since exited."""
