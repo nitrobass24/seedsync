@@ -236,6 +236,7 @@ class TestWorkerSupervisorRecreation(unittest.TestCase):
             self.sup.recreate_if_dead()
 
         self.initial.close_queues.assert_called_once()
+        self.assertIs(self.replacement, self.sup.worker)
 
     def test_recreate_survives_dead_worker_close_failure(self):
         # Releasing the dead worker's queues must not abort the swap.
