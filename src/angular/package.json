@@ -24,29 +24,29 @@
   "private": true,
   "packageManager": "npm@10.9.2",
   "dependencies": {
-    "@angular/cdk": "^22.0.0",
-    "@angular/common": "^22.0.0",
-    "@angular/compiler": "^22.0.0",
-    "@angular/core": "^22.0.0",
-    "@angular/forms": "^22.0.0",
-    "@angular/platform-browser": "^22.0.0",
-    "@angular/router": "^22.0.0",
-    "@fortawesome/fontawesome-free": "^7.1.0",
+    "@angular/cdk": "^22.0.3",
+    "@angular/common": "^22.0.5",
+    "@angular/compiler": "^22.0.5",
+    "@angular/core": "^22.0.5",
+    "@angular/forms": "^22.0.5",
+    "@angular/platform-browser": "^22.0.5",
+    "@angular/router": "^22.0.5",
+    "@fortawesome/fontawesome-free": "^7.3.0",
     "bootstrap": "^5.3.8",
     "compare-versions": "^6.1.1",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@angular/build": "^22.0.0",
-    "@angular/cli": "^22.0.0",
-    "@angular/compiler-cli": "^22.0.0",
+    "@angular/build": "^22.0.5",
+    "@angular/cli": "^22.0.5",
+    "@angular/compiler-cli": "^22.0.5",
     "@eslint/js": "^10.0.1",
     "angular-eslint": "22.0.0",
-    "eslint": "^10.4.1",
+    "eslint": "^10.6.0",
     "jsdom": "^29.1.1",
     "typescript": "~6.0.3",
-    "typescript-eslint": "8.61.0",
-    "vitest": "^4.1.8"
+    "typescript-eslint": "8.62.1",
+    "vitest": "^4.1.9"
   }
 }
