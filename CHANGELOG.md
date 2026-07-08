@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.1] - 2026-07-08
+
+### Changed
+
+- **Dependency and workflow updates** - Updated Angular frontend dependencies, TypeScript ESLint, GitHub Actions, and website dependencies merged through develop.
+
+### Fixed
+
+- **Dead worker result preservation** - Extract/validate worker results emitted immediately before a crash are now drained and buffered before dead worker queues are closed, so completed and failed results are surfaced exactly once after supervisor recovery. (#571, #590)
+
 ## [1.0.0] - 2026-06-10
 
 First stable release. This milestone bundles the optional FTPS transfer protocol, a large backend reliability and persistence hardening pass, frontend performance work, the Angular 22 upgrade, and a security-focused test and runtime baseline.
