@@ -16,6 +16,16 @@
     height: calc(100vh - var(--file-list-chrome-height, 160px));
     height: calc(100dvh - var(--file-list-chrome-height, 160px));
     min-height: 200px;
+    overflow-anchor: none;
+    scroll-behavior: auto;
+}
+
+/* Mobile rows wrap and can expand to show details/actions, so they cannot use
+   CDK's fixed-size virtual scroll strategy. Keep the same bounded viewport and
+   let the browser scroll the naturally-sized rows instead. */
+.native-file-viewport {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
 }
 
 /* striped rows — use template-driven .even class instead of :nth-child
