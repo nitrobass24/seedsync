@@ -11,7 +11,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { AsyncPipe } from '@angular/common';
+import { AsyncPipe, NgTemplateOutlet } from '@angular/common';
 import { Observable } from 'rxjs';
 import { CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf } from '@angular/cdk/scrolling';
 
@@ -32,7 +32,7 @@ const MOBILE_FILE_LIST_QUERY = '(max-width: 600px)';
 @Component({
   selector: 'app-file-list',
   standalone: true,
-  imports: [AsyncPipe, FileComponent, BulkActionBarComponent, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf],
+  imports: [AsyncPipe, NgTemplateOutlet, FileComponent, BulkActionBarComponent, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf],
   templateUrl: './file-list.component.html',
   styleUrls: ['./file-list.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush

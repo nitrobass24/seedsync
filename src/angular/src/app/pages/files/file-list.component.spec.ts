@@ -175,6 +175,49 @@ describe('FileListComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('app-file').length).toBe(3);
   });
 
+  it('should follow the mobile media query and remove its listener on destroy', () => {
+    fixture.destroy();
+    const mediaQueryTarget = new EventTarget();
+    const addEventListener = vi.spyOn(mediaQueryTarget, 'addEventListener');
+    const removeEventListener = vi.spyOn(mediaQueryTarget, 'removeEventListener');
+    const mediaQueryList = Object.assign(mediaQueryTarget, {
+      matches: true,
+      media: '(max-width: 600px)',
+      onchange: null,
+    }) as unknown as MediaQueryList;
+    const matchMedia = vi.fn().mockReturnValue(mediaQueryList);
+    const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+    Object.defineProperty(window, 'matchMedia', {
+      value: matchMedia,
+      configurable: true,
+    });
+
+    try {
+      fixture = TestBed.createComponent(FileListComponent);
+      component = fixture.componentInstance;
+
+      expect(matchMedia).toHaveBeenCalledWith('(max-width: 600px)');
+      expect(component.useNativeScrolling()).toBe(true);
+      expect(addEventListener).toHaveBeenCalledWith('change', expect.any(Function));
+
+      const listener = addEventListener.mock.calls[0][1] as (event: MediaQueryListEvent) => void;
+      const changeEvent = new Event('change') as MediaQueryListEvent;
+      Object.defineProperty(changeEvent, 'matches', { value: false });
+      mediaQueryList.dispatchEvent(changeEvent);
+      expect(component.useNativeScrolling()).toBe(false);
+
+      fixture.destroy();
+      expect(removeEventListener).toHaveBeenCalledWith('change', listener);
+    } finally {
+      if (!fixture.componentRef.hostView.destroyed) fixture.destroy();
+      if (originalDescriptor) {
+        Object.defineProperty(window, 'matchMedia', originalDescriptor);
+      } else {
+        delete (window as unknown as { matchMedia?: typeof window.matchMedia }).matchMedia;
+      }
+    }
+  });
+
   it('should render naturally-sized rows instead of fixed virtual rows on mobile', () => {
     fixture.destroy();
     fixture = TestBed.createComponent(FileListComponent);
