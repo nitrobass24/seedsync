@@ -42,7 +42,7 @@
     "@angular/cli": "^22.0.6",
     "@angular/compiler-cli": "^22.0.6",
     "@eslint/js": "^10.0.1",
-    "angular-eslint": "22.0.0",
+    "angular-eslint": "22.1.0",
     "eslint": "^10.7.0",
     "jsdom": "^29.1.1",
     "typescript": "~6.0.3",
