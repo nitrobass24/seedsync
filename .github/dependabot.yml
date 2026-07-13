@@ -17,6 +17,10 @@ updates:
       interval: "weekly"
     target-branch: "develop"
     open-pull-requests-limit: 5
+    groups:
+      docusaurus:
+        patterns:
+          - "@docusaurus/*"
 
   - package-ecosystem: "pip"
     directory: "/src/python"
