@@ -8,6 +8,7 @@ import {
   OnDestroy,
   ViewChild,
   inject,
+  signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AsyncPipe } from '@angular/common';
@@ -25,6 +26,8 @@ import { NotificationLevel, createNotification } from '../../models/notification
 import { fileKey } from '../../services/files/file-key';
 import { FileComponent, FileActionEvent } from './file.component';
 import { BulkActionBarComponent } from './bulk-action-bar.component';
+
+const MOBILE_FILE_LIST_QUERY = '(max-width: 600px)';
 
 @Component({
   selector: 'app-file-list',
@@ -47,11 +50,22 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
 
   private resizeObserver: ResizeObserver | null = null;
   private pendingFrame: number | null = null;
+  private mobileMediaQuery: MediaQueryList | null = null;
+
+  readonly useNativeScrolling = signal(false);
 
   files: Observable<ViewFile[]> = this.viewFileService.filteredFiles$;
   options: Observable<ViewFileOptions> = this.viewFileOptionsService.options$;
   checked$ = this.viewFileService.checked$;
   identify = FileListComponent.identify;
+
+  constructor() {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+
+    this.mobileMediaQuery = window.matchMedia(MOBILE_FILE_LIST_QUERY);
+    this.useNativeScrolling.set(this.mobileMediaQuery.matches);
+    this.mobileMediaQuery.addEventListener('change', this.onMobileMediaChange);
+  }
 
   static identify(_index: number, item: ViewFile): string {
     return fileKey(item.pairId, item.name);
@@ -62,6 +76,8 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.mobileMediaQuery?.removeEventListener('change', this.onMobileMediaChange);
+    this.mobileMediaQuery = null;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     if (this.pendingFrame !== null) {
@@ -79,12 +95,12 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   // (everything stacked above it flows into that offset) and expose it to CSS.
   private installChromeHeightObserver(): void {
     if (typeof ResizeObserver === 'undefined') return;
-    const viewportEl = this.viewport?.elementRef.nativeElement as HTMLElement | undefined;
-    if (!viewportEl) return;
 
     this.zone.runOutsideAngular(() => {
       const update = (): void => {
         this.pendingFrame = null;
+        const viewportEl = this.elRef.nativeElement.querySelector<HTMLElement>('.file-viewport');
+        if (!viewportEl) return;
         const top = viewportEl.getBoundingClientRect().top + window.scrollY;
         const chrome = Math.max(0, Math.ceil(top));
         document.documentElement.style.setProperty(
@@ -115,6 +131,10 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
       schedule();
     });
   }
+
+  private readonly onMobileMediaChange = (event: MediaQueryListEvent): void => {
+    this.useNativeScrolling.set(event.matches);
+  };
 
   onSelect(file: ViewFile): void {
     if (file.isSelected) {

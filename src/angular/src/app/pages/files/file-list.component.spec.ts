@@ -175,6 +175,31 @@ describe('FileListComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('app-file').length).toBe(3);
   });
 
+  it('should render naturally-sized rows instead of fixed virtual rows on mobile', () => {
+    fixture.destroy();
+    fixture = TestBed.createComponent(FileListComponent);
+    component = fixture.componentInstance;
+    component.useNativeScrolling.set(true);
+    filteredFilesSubject.next(Array.from(
+      { length: 25 },
+      (_, index) => makeViewFile({ name: `file-${index}.mkv` }),
+    ));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('cdk-virtual-scroll-viewport')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.native-file-viewport')).not.toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.file-row').length).toBe(25);
+  });
+
+  it('should retain virtual scrolling outside the mobile breakpoint', () => {
+    component.useNativeScrolling.set(false);
+    fixture.detectChanges();
+
+    const viewport = fixture.nativeElement.querySelector('cdk-virtual-scroll-viewport');
+    expect(viewport).not.toBeNull();
+    expect(viewport.getAttribute('itemsize')).toBe('82');
+  });
+
   // --- Header ---
 
   it('should render the header row with column labels', () => {
