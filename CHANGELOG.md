@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.2] - 2026-07-27
+
+### Fixed
+
+- **Mobile file list scrolling** - The file list no longer uses a fixed-size scroll container on mobile, restoring natural page scrolling on small screens; desktop and mobile now share a single responsive file row template. (#370)
+
+### Changed
+
+- **Dependency updates** - Updated Angular frontend dependencies (Angular group, TypeScript ESLint, ESLint, Font Awesome, and transitive packages), website dependencies (PostCSS, React DOM, webpack-dev-server, and others), and GitHub Actions (setup-python 7, setup-uv 9, docker/login-action 4.5.1).
+- **Dependabot grouping** - Docusaurus dependency updates are now grouped into a single Dependabot PR.
+
 ## [1.0.1] - 2026-07-08
 
 ### Changed
