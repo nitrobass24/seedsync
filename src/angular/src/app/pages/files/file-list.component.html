@@ -22,8 +22,8 @@
         </app-bulk-action-bar>
       }
     }
-    <cdk-virtual-scroll-viewport itemSize="82" class="file-viewport">
-        <div *cdkVirtualFor="let file of files; trackBy: identify; let isEven = even" class="file-row" [class.even]="isEven">
+    <ng-template #fileRow let-file let-isEven="isEven">
+        <div class="file-row" [class.even]="isEven">
             <app-file
                 [file]="file"
                 [options]="options"
@@ -37,5 +37,18 @@
                 (deleteRemoteEvent)="onDeleteRemote($event)">
             </app-file>
         </div>
-    </cdk-virtual-scroll-viewport>
+    </ng-template>
+    @if (useNativeScrolling()) {
+        <div class="file-viewport native-file-viewport">
+            @for (file of files | async; track identify($index, file); let isEven = $even) {
+                <ng-container [ngTemplateOutlet]="fileRow" [ngTemplateOutletContext]="{$implicit: file, isEven: isEven}" />
+            }
+        </div>
+    } @else {
+        <cdk-virtual-scroll-viewport itemSize="82" class="file-viewport">
+            <ng-container *cdkVirtualFor="let file of files; trackBy: identify; let isEven = even">
+                <ng-container [ngTemplateOutlet]="fileRow" [ngTemplateOutletContext]="{$implicit: file, isEven: isEven}" />
+            </ng-container>
+        </cdk-virtual-scroll-viewport>
+    }
 </div>

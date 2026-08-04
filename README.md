@@ -24,7 +24,7 @@
   <a href="https://nitrobass24.github.io/seedsync/">
     <img src="https://img.shields.io/badge/docs-website-blue" alt="Documentation">
   </a>
-  <img src="https://img.shields.io/badge/Angular-21-dd0031" alt="Angular 21">
+  <img src="https://img.shields.io/badge/Angular-22-dd0031" alt="Angular 22">
   <img src="https://img.shields.io/badge/Python-3.13-3776ab" alt="Python 3.13">
   <img src="https://img.shields.io/badge/platform-amd64%20%7C%20arm64-lightgrey" alt="Platform">
   <br>
