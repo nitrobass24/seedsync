@@ -16,6 +16,7 @@ from .status import (
     IStatusComponentListener as IStatusComponentListener,
 )
 from .app_process import AppProcess as AppProcess, AppOneShotProcess as AppOneShotProcess
+from .pipe_primitives import PipeStream as PipeStream, PipeFlag as PipeFlag
 from .remote_path_utils import (
     escape_remote_path_single as escape_remote_path_single,
     escape_remote_path_double as escape_remote_path_double,

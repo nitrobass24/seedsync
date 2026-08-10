@@ -9,7 +9,7 @@ from multiprocessing import Value
 
 import timeout_decorator
 
-from common import AppOneShotProcess, AppProcess
+from common import AppOneShotProcess, AppProcess, PipeStream
 
 
 class DummyException(Exception):
@@ -74,6 +74,24 @@ class LongRunningThreadProcess(AppProcess):
         print("Thread task started")
         while True:
             pass
+
+
+class FloodProcess(AppProcess):
+    """Floods its result stream with large payloads so terminate()'s SIGTERM
+    kills it mid-send, leaving a partial message in the pipe."""
+
+    def __init__(self):
+        super().__init__(name=self.__class__.__name__)
+        self.stream = PipeStream()
+
+    def run_init(self):
+        pass
+
+    def run_loop(self):
+        self.stream.put(b"x" * (1024 * 1024))
+
+    def run_cleanup(self):
+        pass
 
 
 class DummyOneShotProcess(AppOneShotProcess):
@@ -165,6 +183,20 @@ class TestAppProcess(unittest.TestCase):
         time.sleep(0.2)
         self.process.terminate()
         self.process.join()
+        self.process = None
+
+    @timeout_decorator.timeout(15)
+    def test_pop_after_kill_mid_send_does_not_block(self):
+        # A child killed mid-send of a large payload leaves a partial message.
+        # The parent's subsequent pop_all must return (EOF via the closed
+        # send-end copy) instead of blocking forever in recv()
+        self.process = FloodProcess()
+        self.process.start()
+        time.sleep(0.3)  # let the child fill the pipe and block in send
+        self.process.terminate()
+        self.process.join()
+        self.process.stream.pop_all()  # hangs without the fix
+        self.process.stream.close()
         self.process = None
 
 

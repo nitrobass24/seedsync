@@ -8,7 +8,7 @@ import queue
 import time
 from datetime import datetime
 
-from common import AppProcess, overrides
+from common import AppProcess, PipeStream, overrides
 
 from .dispatch import ExtractDispatch, ExtractDispatchError, ExtractListener, ExtractStatus
 from .extract_request import ExtractRequest
@@ -43,8 +43,8 @@ class ExtractProcess(AppProcess):
         def __init__(
             self,
             logger: logging.Logger,
-            completed_queue: multiprocessing.Queue[ExtractCompletedResult],
-            failed_queue: multiprocessing.Queue[ExtractFailedResult],
+            completed_queue: PipeStream,
+            failed_queue: PipeStream,
         ):
             self.logger = logger
             self.completed_queue = completed_queue
@@ -65,9 +65,9 @@ class ExtractProcess(AppProcess):
     def __init__(self):
         super().__init__(name=self.__class__.__name__)
         self.__command_queue: multiprocessing.Queue[ExtractRequest] = multiprocessing.Queue()
-        self.__status_result_queue: multiprocessing.Queue[ExtractStatusResult] = multiprocessing.Queue()
-        self.__completed_result_queue: multiprocessing.Queue[ExtractCompletedResult] = multiprocessing.Queue()
-        self.__failed_result_queue: multiprocessing.Queue[ExtractFailedResult] = multiprocessing.Queue()
+        self.__status_result_queue = PipeStream()
+        self.__completed_result_queue = PipeStream()
+        self.__failed_result_queue = PipeStream()
         self.__dispatch: ExtractDispatch | None = None
 
     @overrides(AppProcess)
@@ -124,11 +124,8 @@ class ExtractProcess(AppProcess):
         self.__command_queue.close()
         self.__command_queue.join_thread()
         self.__status_result_queue.close()
-        self.__status_result_queue.join_thread()
         self.__completed_result_queue.close()
-        self.__completed_result_queue.join_thread()
         self.__failed_result_queue.close()
-        self.__failed_result_queue.join_thread()
         super().close_queues()
 
     def extract(self, req: ExtractRequest):
@@ -146,13 +143,8 @@ class ExtractProcess(AppProcess):
         this method was called
         :return:
         """
-        latest_result = None
-        try:
-            while True:
-                latest_result = self.__status_result_queue.get(block=False)
-        except queue.Empty:
-            pass
-        return latest_result
+        results = self.__status_result_queue.pop_all()
+        return results[-1] if results else None
 
     def pop_completed(self) -> list[ExtractCompletedResult]:
         """
@@ -161,14 +153,7 @@ class ExtractProcess(AppProcess):
         last time this method was called.
         :return:
         """
-        completed: list[ExtractCompletedResult] = []
-        try:
-            while True:
-                result = self.__completed_result_queue.get(block=False)
-                completed.append(result)
-        except queue.Empty:
-            pass
-        return completed
+        return self.__completed_result_queue.pop_all()
 
     def pop_failed(self) -> list[ExtractFailedResult]:
         """
@@ -176,11 +161,4 @@ class ExtractProcess(AppProcess):
         Returns an empty list if no new failures since the last call.
         :return:
         """
-        failed: list[ExtractFailedResult] = []
-        try:
-            while True:
-                result = self.__failed_result_queue.get(block=False)
-                failed.append(result)
-        except queue.Empty:
-            pass
-        return failed
+        return self.__failed_result_queue.pop_all()

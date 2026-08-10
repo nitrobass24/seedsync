@@ -2,12 +2,10 @@
 from __future__ import annotations
 
 import logging
-import multiprocessing
-import queue
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from common import AppError, AppProcess, overrides
+from common import AppError, AppProcess, PipeFlag, PipeStream, overrides
 from system import SystemFile
 
 
@@ -66,8 +64,8 @@ class ScannerProcess(AppProcess):
         :param interval_in_ms: Minimum interval (in ms) between results
         """
         super().__init__(name=scanner.__class__.__name__)
-        self.__queue: multiprocessing.Queue[ScannerResult] = multiprocessing.Queue()
-        self.__wake_event = multiprocessing.Event()
+        self.__queue = PipeStream()
+        self.__wake_event = PipeFlag()
         self.__scanner = scanner
         self.__interval_in_ms = interval_in_ms
         self.verbose = verbose
@@ -113,18 +111,13 @@ class ScannerProcess(AppProcess):
         this method was called
         :return:
         """
-        latest_scan = None
-        try:
-            while True:
-                latest_scan = self.__queue.get(block=False)
-        except queue.Empty:
-            pass
-        return latest_scan
+        results = self.__queue.pop_all()
+        return results[-1] if results else None
 
     @overrides(AppProcess)
     def close_queues(self):
         self.__queue.close()
-        self.__queue.join_thread()
+        self.__wake_event.close()
         super().close_queues()
 
     def force_scan(self) -> None:
