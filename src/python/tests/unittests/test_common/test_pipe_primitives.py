@@ -150,6 +150,7 @@ class TestPipeFlag(unittest.TestCase):
         flag.close()
         flag.close()
 
+    @timeout_decorator.timeout(5)
     def test_repeated_sets_coalesce_after_start(self):
         # After start() (close_unused_in_parent), the parent keeps its recv
         # end so the dedup poll works: repeated sets against a busy/stopped
