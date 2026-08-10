@@ -144,13 +144,18 @@ class TestPipeFlag(unittest.TestCase):
         flag.close()
         flag.close()
 
-    def test_set_does_not_raise_after_parent_drops_recv_end(self):
-        # The parent drops its recv-end copy after start(); set() must still
-        # work (no dedup poll on a closed conn, no error on repeated sets)
+    def test_repeated_sets_coalesce_after_start(self):
+        # After start() (close_unused_in_parent), the parent keeps its recv
+        # end so the dedup poll works: repeated sets against a busy/stopped
+        # child must leave at most ONE pending byte, never accumulate toward
+        # a pipe-buffer block of the setting thread
         flag = PipeFlag()
         flag.close_unused_in_parent()
-        flag.set()
-        flag.set()
+        for _ in range(100):
+            flag.set()
+        recv_conn = flag._PipeFlag__recv_conn
+        recv_conn.recv_bytes()  # consume the single pending byte
+        self.assertFalse(recv_conn.poll(0))  # nothing accumulated behind it
         flag.close()
 
     def test_reads_as_set_when_sender_gone(self):

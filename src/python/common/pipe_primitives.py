@@ -73,9 +73,10 @@ class PipeFlag:
         self.__recv_conn, self.__send_conn = multiprocessing.Pipe(duplex=False)
 
     def set(self):
-        # Dedup via poll only while this process still holds the recv end;
-        # the parent drops it after start(), so parent sets always send a
-        # byte — bounded, since the child's clear() drains accumulation
+        # Dedup: poll does not consume, and once the child recvs the pending
+        # byte the poll goes false again — so repeated sets against a busy or
+        # stopped child coalesce into at most one buffered byte instead of
+        # accumulating toward a pipe-buffer block of the setting thread
         if not self.__recv_conn.closed and self.__recv_conn.poll(0):
             return
         with contextlib.suppress(BrokenPipeError):
@@ -95,9 +96,14 @@ class PipeFlag:
                 self.__recv_conn.recv_bytes()
 
     def close_unused_in_parent(self):
-        """Parent calls after start(): drops the parent's recv-end copy."""
-        if not self.__recv_conn.closed:
-            self.__recv_conn.close()
+        """Parent calls after start(): keeps BOTH ends, unlike PipeStream.
+
+        The recv end is retained so set()'s dedup poll stays usable — without
+        it every set() sends a byte and repeated force_scan() against a busy
+        or stopped child accumulates toward a pipe-buffer block of the
+        setting thread. Retaining it does not weaken orphan detection: the
+        child's EOF-reads-as-set depends only on send fds closing, and parent
+        death closes every parent fd anyway."""
 
     def close_unused_in_child(self):
         """Child calls at the top of run(): drops the child's send-end copy so

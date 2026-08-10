@@ -192,7 +192,11 @@ class TestAppProcess(unittest.TestCase):
         # send-end copy) instead of blocking forever in recv()
         self.process = FloodProcess()
         self.process.start()
-        time.sleep(0.3)  # let the child fill the pipe and block in send
+        # Wait until the child's first send is observable (poll does not
+        # consume). A 1MB payload cannot fit the ~64KB pipe buffer, so once
+        # data appears the child is deterministically blocked mid-send —
+        # a fixed sleep could terminate before the child ever entered put()
+        self.assertTrue(self.process.stream._PipeStream__recv_conn.poll(10))
         self.process.terminate()
         self.process.join()
         self.process.stream.pop_all()  # hangs without the fix
