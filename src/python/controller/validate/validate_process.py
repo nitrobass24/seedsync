@@ -11,7 +11,7 @@ import time
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from common import AppProcess, escape_remote_path_double, escape_remote_path_single, overrides
+from common import AppProcess, PipeStream, escape_remote_path_double, escape_remote_path_single, overrides
 
 if TYPE_CHECKING:
     from ssh import Sshcp
@@ -112,9 +112,9 @@ class ValidateProcess(AppProcess):
     def __init__(self):
         super().__init__(name=self.__class__.__name__)
         self.__command_queue: multiprocessing.Queue[ValidateRequest] = multiprocessing.Queue()
-        self.__status_result_queue: multiprocessing.Queue[ValidateStatusResult] = multiprocessing.Queue()
-        self.__completed_result_queue: multiprocessing.Queue[ValidateCompletedResult] = multiprocessing.Queue()
-        self.__failed_result_queue: multiprocessing.Queue[ValidateFailedResult] = multiprocessing.Queue()
+        self.__status_result_queue = PipeStream()
+        self.__completed_result_queue = PipeStream()
+        self.__failed_result_queue = PipeStream()
         self.__active_validations: dict[tuple[str | None, str], ValidateRequest] = {}
 
     @overrides(AppProcess)
@@ -380,11 +380,8 @@ class ValidateProcess(AppProcess):
         self.__command_queue.close()
         self.__command_queue.join_thread()
         self.__status_result_queue.close()
-        self.__status_result_queue.join_thread()
         self.__completed_result_queue.close()
-        self.__completed_result_queue.join_thread()
         self.__failed_result_queue.close()
-        self.__failed_result_queue.join_thread()
         super().close_queues()
 
     def validate(self, req: ValidateRequest):
@@ -393,32 +390,13 @@ class ValidateProcess(AppProcess):
 
     def pop_latest_statuses(self) -> ValidateStatusResult | None:
         """Process-safe method to retrieve latest validation status."""
-        latest_result = None
-        try:
-            while True:
-                latest_result = self.__status_result_queue.get(block=False)
-        except queue.Empty:
-            pass
-        return latest_result
+        results = self.__status_result_queue.pop_all()
+        return results[-1] if results else None
 
     def pop_completed(self) -> list[ValidateCompletedResult]:
         """Process-safe method to retrieve newly completed validations."""
-        completed: list[ValidateCompletedResult] = []
-        try:
-            while True:
-                result = self.__completed_result_queue.get(block=False)
-                completed.append(result)
-        except queue.Empty:
-            pass
-        return completed
+        return self.__completed_result_queue.pop_all()
 
     def pop_failed(self) -> list[ValidateFailedResult]:
         """Process-safe method to retrieve newly failed validations."""
-        failed: list[ValidateFailedResult] = []
-        try:
-            while True:
-                result = self.__failed_result_queue.get(block=False)
-                failed.append(result)
-        except queue.Empty:
-            pass
-        return failed
+        return self.__failed_result_queue.pop_all()

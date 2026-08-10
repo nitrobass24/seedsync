@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.3] - 2026-08-10
+
+### Fixed
+
+- **Crash after download completes: "OSError: [Errno 24] No file descriptors available"** — Not a file-descriptor leak: musl libc (Alpine base image) caps named POSIX semaphores at 256 per process, and every `multiprocessing.Queue` costs 3 semaphores / every `Event` costs 5, so a config with ~4 path pairs sat at the cap and the first staging→final `MoveProcess` after a download pushed it over (with 6+ pairs the container crashed at startup). Single-producer/single-consumer result queues and wake/terminate events are now backed by pipes (`PipeStream`/`PipeFlag`, 0 semaphores each), taking the main process from ~250 semaphores at 4 pairs to ~21 — and ~3 per pair instead of ~51, so large path-pair configs now work. `mp.Queue` remains only for parent→child dispatch and the multi-process log queue. Pipe ends unused by each process are closed after spawn, so a peer that dies mid-operation now yields EOF instead of a hung read/write — hardening inherited from review, not present in the old queue-based code. (#654)
+
 ## [1.0.2] - 2026-07-27
 
 ### Fixed

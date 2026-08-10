@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import datetime
 import errno
-import multiprocessing
 import os
-import queue
 import shutil
 
-from common import AppOneShotProcess, Constants, overrides
+from common import AppOneShotProcess, Constants, PipeStream, overrides
 
 
 class MoveFailedResult:
@@ -42,7 +40,7 @@ class MoveProcess(AppOneShotProcess):
         self.__dest_path = dest_path
         self.__file_name = file_name
         self._pair_id = pair_id
-        self.__failed_result_queue: multiprocessing.Queue[MoveFailedResult] = multiprocessing.Queue()
+        self.__failed_result_stream = PipeStream()
 
     @property
     def file_name(self) -> str:
@@ -100,7 +98,7 @@ class MoveProcess(AppOneShotProcess):
     def _report_failure(self, message: str) -> None:
         """Log and publish a move failure so the controller can surface it."""
         self.logger.error(message)
-        self.__failed_result_queue.put(
+        self.__failed_result_stream.put(
             MoveFailedResult(
                 timestamp=datetime.datetime.now(),
                 name=self.__file_name,
@@ -186,16 +184,9 @@ class MoveProcess(AppOneShotProcess):
 
     def pop_failed(self) -> list[MoveFailedResult]:
         """Process-safe method to retrieve any move failures."""
-        failed: list[MoveFailedResult] = []
-        try:
-            while True:
-                failed.append(self.__failed_result_queue.get(block=False))
-        except queue.Empty:
-            pass
-        return failed
+        return self.__failed_result_stream.pop_all()
 
     @overrides(AppOneShotProcess)
     def close_queues(self):
-        self.__failed_result_queue.close()
-        self.__failed_result_queue.join_thread()
+        self.__failed_result_stream.close()
         super().close_queues()

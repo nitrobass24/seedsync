@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 import logging
-import queue
 import signal
 import sys
 import threading
 import time
 from abc import abstractmethod
 from datetime import datetime
-from multiprocessing import Event, Process, Queue
+from multiprocessing import Process, Queue
 
 import tblib.pickling_support
 
 from common import ServiceExit, overrides
+
+# Direct submodule import: common/__init__ imports app_process before
+# pipe_primitives, so "from common import PipeStream" would be circular
+from common.pipe_primitives import PipeFlag, PipeStream
 
 tblib.pickling_support.install()
 
@@ -52,13 +55,33 @@ class AppProcess(Process):
         self._mp_log_queue = None
         self._mp_log_level = None
         self.logger = logging.getLogger(self.__name)
-        self.__exception_queue: Queue[ExceptionWrapper] = Queue()
-        self._terminate = Event()
+        self.__exception_stream = PipeStream()
+        self._terminate: PipeFlag | None = PipeFlag()
+        # Child-local exit flag: a child cannot set the parent->child
+        # _terminate PipeFlag, so one-shot processes set this instead
+        self._done = False
 
     def set_mp_log_queue(self, log_queue: Queue[logging.LogRecord], log_level: int):
         """Configure cross-process logging. Must be called before start()."""
         self._mp_log_queue = log_queue
         self._mp_log_level = log_level
+
+    def __pipes(self):
+        # Every PipeStream/PipeFlag in this codebase is a direct attribute of
+        # the process (incl. name-mangled subclass ones), so scanning vars()
+        # closes unused ends for all subclasses in one place
+        for value in vars(self).values():
+            if isinstance(value, (PipeStream, PipeFlag)):
+                yield value
+
+    @overrides(Process)
+    def start(self):
+        super().start()
+        # The child already holds fd copies (spawn pickling / fork). Drop the
+        # parent's unused ends so a child killed mid-send leaves EOF — pop_all
+        # returns — instead of a partial message that blocks recv() forever
+        for pipe in self.__pipes():
+            pipe.close_unused_in_parent()
 
     @overrides(Process)
     def run(self):
@@ -67,6 +90,12 @@ class AppProcess(Process):
         # is changed back to fork.
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
         signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+        # Drop the child's unused pipe ends: put() then raises BrokenPipeError
+        # instead of blocking forever if the parent dies without terminate(),
+        # and a dead parent reads as a set terminate flag (EOF is pollable)
+        for pipe in self.__pipes():
+            pipe.close_unused_in_child()
 
         # Set the thread name for convenience
         threading.current_thread().name = self.__name
@@ -88,14 +117,14 @@ class AppProcess(Process):
 
         try:
             assert self._terminate is not None
-            while not self._terminate.is_set():
+            while not self._done and not self._terminate.is_set():
                 self.run_loop()
             self.logger.debug("Process received terminate flag")
         except ServiceExit:
             self.logger.debug("Process received a ServiceExit")
         except Exception as e:
             self.logger.debug("Process caught an exception")
-            self.__exception_queue.put(ExceptionWrapper(e))
+            self.__exception_stream.put(ExceptionWrapper(e))
             raise
         finally:
             self.run_cleanup()
@@ -127,9 +156,9 @@ class AppProcess(Process):
         Must be called after the process has been joined. Subclasses should
         override to close their own queues and call super().
         """
-        self.__exception_queue.close()
-        self.__exception_queue.join_thread()
-        # Release multiprocessing primitives that hold semaphore FDs
+        self.__exception_stream.close()
+        if self._terminate is not None:
+            self._terminate.close()
         self._terminate = None
         self._mp_log_queue = None
 
@@ -138,11 +167,9 @@ class AppProcess(Process):
         Raises any exception that was caught by the process
         :return:
         """
-        try:
-            exc = self.__exception_queue.get(block=False)
-            raise exc.re_raise()
-        except queue.Empty:
-            pass
+        wrappers = self.__exception_stream.pop_all()
+        if wrappers:
+            wrappers[0].re_raise()
 
     @abstractmethod
     def run_init(self):
@@ -179,8 +206,7 @@ class AppOneShotProcess(AppProcess):
 
     def run_loop(self):
         self.run_once()
-        assert self._terminate is not None
-        self._terminate.set()
+        self._done = True
 
     def run_cleanup(self):
         pass
