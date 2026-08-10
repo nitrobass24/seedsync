@@ -33,7 +33,7 @@ class PipeStream:
         # OSError: message truncated by a child killed mid-send; only
         # observable (instead of a blocking recv) because the parent dropped
         # its send-end copy via close_unused_in_parent().
-        items = []
+        items: list[Any] = []
         with contextlib.suppress(EOFError, OSError):
             while self.__recv_conn.poll():
                 items.append(self.__recv_conn.recv())
