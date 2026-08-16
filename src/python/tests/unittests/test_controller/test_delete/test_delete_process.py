@@ -5,7 +5,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from controller.delete.delete_process import DeleteLocalProcess, DeleteRemoteProcess
+from controller.delete.delete_process import CleanupLocalProcess, DeleteLocalProcess, DeleteRemoteProcess
 
 
 class TestDeleteLocalProcess(unittest.TestCase):
@@ -73,6 +73,73 @@ class TestDeleteLocalProcess(unittest.TestCase):
             proc.run_once()
 
         self.assertTrue(any("non-existing" in msg for msg in log_ctx.output))
+
+
+class TestCleanupLocalProcess(unittest.TestCase):
+    """Tests for CleanupLocalProcess.run_once()."""
+
+    def setUp(self):
+        logger = logging.getLogger()
+        handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(handler)
+        self.addCleanup(logger.removeHandler, handler)
+        logger.setLevel(logging.DEBUG)
+
+    @patch("controller.delete.delete_process.shutil.rmtree")
+    @patch("controller.delete.delete_process.os.path.isfile", return_value=False)
+    @patch("controller.delete.delete_process.os.path.exists", return_value=True)
+    @patch("controller.delete.delete_process.os.path.realpath")
+    def test_directory_relative_path_uses_rmtree(self, mock_realpath, mock_exists, mock_isfile, mock_rmtree):
+        mock_realpath.side_effect = lambda p: p
+        proc = CleanupLocalProcess("/base", "myfolder", ["stray_dir"])
+        proc.run_once()
+        mock_rmtree.assert_called_once_with("/base/myfolder/stray_dir", ignore_errors=True)
+
+    @patch("controller.delete.delete_process.os.remove")
+    @patch("controller.delete.delete_process.os.path.isfile", return_value=True)
+    @patch("controller.delete.delete_process.os.path.exists", return_value=True)
+    @patch("controller.delete.delete_process.os.path.realpath")
+    def test_file_relative_path_uses_os_remove(self, mock_realpath, mock_exists, mock_isfile, mock_remove):
+        mock_realpath.side_effect = lambda p: p
+        proc = CleanupLocalProcess("/base", "myfolder", ["stray_file.txt"])
+        proc.run_once()
+        mock_remove.assert_called_once_with("/base/myfolder/stray_file.txt")
+
+    @patch("controller.delete.delete_process.os.remove")
+    @patch("controller.delete.delete_process.os.path.isfile", return_value=True)
+    @patch("controller.delete.delete_process.os.path.exists", return_value=True)
+    @patch("controller.delete.delete_process.os.path.realpath")
+    def test_multiple_relative_paths_all_processed(self, mock_realpath, mock_exists, mock_isfile, mock_remove):
+        mock_realpath.side_effect = lambda p: p
+        proc = CleanupLocalProcess("/base", "myfolder", ["a.txt", "sub/b.txt"])
+        proc.run_once()
+        self.assertEqual(
+            [("/base/myfolder/a.txt",), ("/base/myfolder/sub/b.txt",)],
+            [call.args for call in mock_remove.call_args_list],
+        )
+
+    @patch("controller.delete.delete_process.os.path.exists", return_value=False)
+    @patch("controller.delete.delete_process.os.path.realpath")
+    def test_nonexistent_relative_path_logs_error_and_continues(self, mock_realpath, mock_exists):
+        mock_realpath.side_effect = lambda p: p
+        proc = CleanupLocalProcess("/base", "myfolder", ["gone.txt"])
+
+        with self.assertLogs(level="ERROR") as log_ctx:
+            proc.run_once()
+
+        self.assertTrue(any("non-existing" in msg for msg in log_ctx.output))
+
+    @patch("controller.delete.delete_process.os.remove")
+    @patch("controller.delete.delete_process.os.path.realpath")
+    def test_relative_path_escaping_base_blocked(self, mock_realpath, mock_remove):
+        mock_realpath.side_effect = lambda p: "/etc/passwd" if "evil" in p else p
+        proc = CleanupLocalProcess("/base", "myfolder", ["../../evil"])
+
+        with self.assertLogs(level="ERROR") as log_ctx:
+            proc.run_once()
+
+        self.assertTrue(any("Path traversal blocked" in msg for msg in log_ctx.output))
+        mock_remove.assert_not_called()
 
 
 class TestDeleteRemoteProcess(unittest.TestCase):

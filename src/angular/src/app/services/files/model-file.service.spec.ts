@@ -230,6 +230,27 @@ describe("ModelFileService", () => {
     );
   });
 
+  it("should call RestService.sendRequest with double-encoded filename for cleanupLocal", () => {
+    mockRestService.sendRequest.mockReturnValue(of({}));
+    const file = { name: "my file/test" } as ModelFile;
+    service.cleanupLocal(file);
+
+    const encoded = encodeURIComponent(encodeURIComponent("my file/test"));
+    expect(mockRestService.sendRequest).toHaveBeenCalledWith(
+      "/server/command/cleanup_local/" + encoded,
+    );
+  });
+
+  it("should include pair_id query param for cleanupLocal when set", () => {
+    mockRestService.sendRequest.mockReturnValue(of({}));
+    const file = { name: "test", pair_id: "pair-1" } as ModelFile;
+    service.cleanupLocal(file);
+
+    expect(mockRestService.sendRequest).toHaveBeenCalledWith(
+      "/server/command/cleanup_local/test?pair_id=pair-1",
+    );
+  });
+
   describe("malformed SSE payloads (issue #516)", () => {
     const malformed = "{not valid json";
 

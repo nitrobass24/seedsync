@@ -34,6 +34,7 @@ class Command:
         DELETE_LOCAL = 3
         DELETE_REMOTE = 4
         VALIDATE = 5
+        CLEANUP_LOCAL = 6
 
     class ICallback(ABC):
         """Command callback interface"""

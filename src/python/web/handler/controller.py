@@ -102,6 +102,7 @@ class ControllerHandler(IHandler):
         web_app.add_handler("/server/command/delete_local/<file_name>", self.__handle_action_delete_local)
         web_app.add_handler("/server/command/delete_remote/<file_name>", self.__handle_action_delete_remote)
         web_app.add_handler("/server/command/validate/<file_name>", self.__handle_action_validate)
+        web_app.add_handler("/server/command/cleanup_local/<file_name>", self.__handle_action_cleanup_local)
 
     def __dispatch_command(self, file_name: str, action: Controller.Command.Action, success_msg: str):
         """Common handler: decode filename, validate pair_id, dispatch command."""
@@ -146,4 +147,9 @@ class ControllerHandler(IHandler):
     def __handle_action_validate(self, file_name: str):
         return self.__dispatch_command(
             file_name, Controller.Command.Action.VALIDATE, "Requested validation for file '{}'"
+        )
+
+    def __handle_action_cleanup_local(self, file_name: str):
+        return self.__dispatch_command(
+            file_name, Controller.Command.Action.CLEANUP_LOCAL, "Requested local cleanup for file '{}'"
         )

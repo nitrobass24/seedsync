@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from common import AppError
-from controller.command_pipeline import CommandPipeline
+from controller.command_pipeline import CommandPipeline, _find_local_only_paths
 from controller.persist_keys import persist_key
 from lftp import LftpError
 from model import ModelFile
@@ -415,3 +415,42 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         with self.assertRaises(AppError):
             pipeline.propagate_exceptions()
+
+
+class TestFindLocalOnlyPaths(unittest.TestCase):
+    @staticmethod
+    def _make_file(name: str, is_dir: bool, remote_size, local_size=1):
+        f = ModelFile(name, is_dir)
+        f.remote_size = remote_size
+        f.local_size = local_size
+        return f
+
+    def test_no_children_returns_empty(self):
+        folder = self._make_file("folder", True, remote_size=10)
+        self.assertEqual([], _find_local_only_paths(folder))
+
+    def test_child_mirrored_remotely_excluded(self):
+        folder = self._make_file("folder", True, remote_size=10)
+        folder.add_child(self._make_file("child", False, remote_size=5))
+        self.assertEqual([], _find_local_only_paths(folder))
+
+    def test_local_only_file_child_included(self):
+        folder = self._make_file("folder", True, remote_size=10)
+        folder.add_child(self._make_file("stray", False, remote_size=None))
+        self.assertEqual(["stray"], _find_local_only_paths(folder))
+
+    def test_local_only_dir_child_included_without_recursing(self):
+        folder = self._make_file("folder", True, remote_size=10)
+        stray_dir = self._make_file("stray_dir", True, remote_size=None)
+        stray_dir.add_child(self._make_file("nested", False, remote_size=None))
+        folder.add_child(stray_dir)
+        # The stray directory itself is reported; its children are not examined
+        # since deleting it removes them too.
+        self.assertEqual(["stray_dir"], _find_local_only_paths(folder))
+
+    def test_nested_local_only_descendant_uses_relative_path(self):
+        folder = self._make_file("folder", True, remote_size=10)
+        mirrored_subdir = self._make_file("mirrored", True, remote_size=10)
+        mirrored_subdir.add_child(self._make_file("stray", False, remote_size=None))
+        folder.add_child(mirrored_subdir)
+        self.assertEqual([os.path.join("mirrored", "stray")], _find_local_only_paths(folder))

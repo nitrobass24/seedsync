@@ -30,6 +30,7 @@ function makeViewFile(
     isExtractable: false,
     isLocallyDeletable: false,
     isRemotelyDeletable: false,
+    isCleanupLocalable: false,
     isValidatable: false,
     validateTooltip: null,
     localCreatedTimestamp: null,

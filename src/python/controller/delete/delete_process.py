@@ -7,6 +7,17 @@ from common import AppOneShotProcess, escape_remote_path_double, escape_remote_p
 from ssh import Sshcp
 
 
+def _is_contained(base_path: str, target_path: str) -> bool:
+    """Return True if the resolved target_path is strictly inside resolved base_path."""
+    real_base = os.path.realpath(base_path)
+    real_target = os.path.realpath(target_path)
+    try:
+        common = os.path.commonpath([real_base, real_target])
+    except ValueError:
+        return False
+    return common == real_base and real_target != real_base
+
+
 class DeleteLocalProcess(AppOneShotProcess):
     def __init__(self, local_path: str, file_name: str):
         super().__init__(name=self.__class__.__name__)
@@ -15,21 +26,42 @@ class DeleteLocalProcess(AppOneShotProcess):
 
     def run_once(self):
         file_path = os.path.join(self.__local_path, self.__file_name)
-        # Path containment check: ensure resolved path is strictly inside local_path
-        real_base = os.path.realpath(self.__local_path)
-        real_target = os.path.realpath(file_path)
-        try:
-            common = os.path.commonpath([real_base, real_target])
-        except ValueError:
-            common = None
-        if common != real_base or real_target == real_base:
-            self.logger.error(f"Path traversal blocked: {real_target} escapes {real_base}")
+        if not _is_contained(self.__local_path, file_path):
+            self.logger.error(f"Path traversal blocked: {file_path} escapes {self.__local_path}")
             return
         self.logger.debug(f"Deleting local file {self.__file_name}")
         if not os.path.exists(file_path):
             self.logger.error(f"Failed to delete non-existing file: {file_path}")
         else:
             if os.path.isfile(file_path):
+                os.remove(file_path)
+            else:
+                shutil.rmtree(file_path, ignore_errors=True)
+
+
+class CleanupLocalProcess(AppOneShotProcess):
+    """
+    Deletes a set of local paths, relative to a folder, that exist locally but not remotely.
+    Leaves the folder itself and any content that also exists remotely untouched.
+    """
+
+    def __init__(self, local_path: str, file_name: str, relative_paths: list[str]):
+        super().__init__(name=self.__class__.__name__)
+        self.__local_path = local_path
+        self.__file_name = file_name
+        self.__relative_paths = relative_paths
+
+    def run_once(self):
+        base_path = os.path.join(self.__local_path, self.__file_name)
+        self.logger.debug(f"Cleaning up local-only contents of {self.__file_name}")
+        for relative_path in self.__relative_paths:
+            file_path = os.path.join(base_path, relative_path)
+            if not _is_contained(base_path, file_path):
+                self.logger.error(f"Path traversal blocked: {file_path} escapes {base_path}")
+                continue
+            if not os.path.exists(file_path):
+                self.logger.error(f"Failed to delete non-existing file: {file_path}")
+            elif os.path.isfile(file_path):
                 os.remove(file_path)
             else:
                 shutil.rmtree(file_path, ignore_errors=True)

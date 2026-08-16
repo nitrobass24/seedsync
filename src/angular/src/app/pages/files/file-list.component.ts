@@ -198,6 +198,15 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
     });
   }
 
+  onCleanupLocal(event: FileActionEvent): void {
+    this.viewFileService.cleanupLocal(event.file).pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
+      next: (data) => this.handleActionResponse(data, event),
+      error: (err) => this.handleActionError(err, event),
+    });
+  }
+
   private handleActionResponse(reaction: WebReaction, event: FileActionEvent): void {
     if (reaction.success) {
       this.logger.info(reaction.data);

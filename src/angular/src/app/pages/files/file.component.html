@@ -191,5 +191,14 @@
             <img src="assets/icons/delete-remote.svg" alt="" aria-hidden="true" />
             <span class="text">{{ confirmingDelete === 'remote' ? 'Confirm?' : 'Delete Remote' }}</span>
         </button>
+        <button type="button" class="button" appClickStopPropagation
+             [disabled]="!isCleanupLocalable()"
+             (click)="onCleanupLocal(file())"
+             [class.loading]="activeAction === FileAction.CLEANUP_LOCAL"
+             [class.confirming]="confirmingDelete === 'cleanup'">
+            <span class="loader"></span>
+            <img src="assets/icons/cleanup-local.svg" alt="" aria-hidden="true" />
+            <span class="text">{{ confirmingDelete === 'cleanup' ? 'Confirm?' : 'Cleanup Local' }}</span>
+        </button>
     </div>
 </div>
