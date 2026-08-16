@@ -20,7 +20,7 @@ from model import ModelError, ModelFile
 
 from .commands import MAX_CONCURRENT_COMMAND_PROCESSES, Command, CommandProcessWrapper
 from .controller_persist import ControllerPersist
-from .delete import DeleteLocalProcess, DeleteRemoteProcess
+from .delete import CleanupLocalProcess, DeleteLocalProcess, DeleteRemoteProcess
 from .exclude_patterns import parse_exclude_patterns
 from .extract import ExtractProcess, ExtractRequest
 from .model_registry import ModelRegistry
@@ -29,6 +29,26 @@ from .pair_context import PairContext
 from .persist_keys import persist_key
 from .validate import ValidateProcess, ValidateRequest
 from .worker_supervisor import WorkerSupervisor
+
+
+def _find_local_only_paths(file: ModelFile) -> list[str]:
+    """
+    Recursively find paths (relative to the given file) of content that exists
+    locally but not remotely. Once a local-only path is found, its descendants
+    are not examined further since deleting it removes them too.
+    """
+    local_only_paths: list[str] = []
+
+    def _walk(node: ModelFile, relative_prefix: str) -> None:
+        for child in node.get_children():
+            child_relative_path = os.path.join(relative_prefix, child.name) if relative_prefix else child.name
+            if child.remote_size is None:
+                local_only_paths.append(child_relative_path)
+            elif child.is_dir:
+                _walk(child, child_relative_path)
+
+    _walk(file, "")
+    return local_only_paths
 
 
 class CommandPipeline:
@@ -137,6 +157,7 @@ class CommandPipeline:
             Action.DELETE_LOCAL: lambda: self._handle_delete_local(command, file, pc, deferred, _notify_failure),
             Action.DELETE_REMOTE: lambda: self._handle_delete_remote(command, file, pc, deferred, _notify_failure),
             Action.VALIDATE: lambda: self._handle_validate(command, file, pc, _notify_failure),
+            Action.CLEANUP_LOCAL: lambda: self._handle_cleanup_local(command, file, pc, deferred, _notify_failure),
         }
         handler = handlers.get(command.action)
         if handler is None:
@@ -306,6 +327,70 @@ class CommandPipeline:
         )
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
         command_wrapper = CommandProcessWrapper(process=process, post_callback=pc.remote_scan_process.force_scan)
+        self.active_command_processes.append(command_wrapper)
+        command_wrapper.process.start()
+        return True
+
+    def _handle_cleanup_local(
+        self,
+        command: Command,
+        file: ModelFile,
+        pc: PairContext,
+        deferred: list[Command],
+        _notify_failure: Callable[[Command, str], None],
+    ) -> bool:
+        """Handle the CLEANUP_LOCAL action. Returns True on success, False on failure/deferred."""
+        if len(self.active_command_processes) >= MAX_CONCURRENT_COMMAND_PROCESSES:
+            self._logger.debug(
+                "Deferring %s for '%s': %d active processes at cap",
+                command.action,
+                command.filename,
+                len(self.active_command_processes),
+            )
+            deferred.append(command)
+            return False
+        if not file.is_dir:
+            _notify_failure(command, f"File '{command.filename}' is not a directory")
+            return False
+        if file.state not in (
+            ModelFile.State.DEFAULT,
+            ModelFile.State.DOWNLOADED,
+            ModelFile.State.EXTRACTED,
+            ModelFile.State.EXTRACT_FAILED,
+            ModelFile.State.VALIDATED,
+            ModelFile.State.CORRUPT,
+        ):
+            _notify_failure(
+                command,
+                f"Local contents of '{command.filename}' cannot be cleaned up in state {file.state!s}",
+            )
+            return False
+        if file.local_size is None:
+            _notify_failure(command, f"File '{command.filename}' does not exist locally")
+            return False
+        local_only_paths = _find_local_only_paths(file)
+        if not local_only_paths:
+            _notify_failure(command, f"No local-only content found in '{command.filename}'")
+            return False
+        cleanup_path = pc.local_path
+        pair_staging = self._pair_staging_dir(pc)
+        if pair_staging:
+            staging_file = os.path.join(pair_staging, file.name)
+            if os.path.exists(staging_file):
+                cleanup_path = pair_staging
+        process = CleanupLocalProcess(
+            local_path=cleanup_path,
+            file_name=file.name,
+            relative_paths=local_only_paths,
+        )
+        process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
+
+        def post_callback(cleanup_path: str = cleanup_path, _pc: PairContext = pc) -> None:
+            _pc.local_scan_process.force_scan()
+            if cleanup_path != _pc.local_path:
+                _pc.active_scan_process.force_scan()
+
+        command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback)
         self.active_command_processes.append(command_wrapper)
         command_wrapper.process.start()
         return True

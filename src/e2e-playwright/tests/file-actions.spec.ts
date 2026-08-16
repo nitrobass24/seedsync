@@ -18,13 +18,14 @@ test.describe("File Actions", () => {
     const row = dashboard.getFileRows().first();
     await row.click();
 
-    // All 6 action buttons should be present (some may be disabled)
+    // All 7 action buttons should be present (some may be disabled)
     await expect(dashboard.getActionButton(row, "Queue")).toBeVisible();
     await expect(dashboard.getActionButton(row, "Stop")).toBeVisible();
     await expect(dashboard.getActionButton(row, "Extract")).toBeVisible();
     await expect(dashboard.getActionButton(row, "Validate")).toBeVisible();
     await expect(dashboard.getActionButton(row, "Delete Local")).toBeVisible();
     await expect(dashboard.getActionButton(row, "Delete Remote")).toBeVisible();
+    await expect(dashboard.getActionButton(row, "Cleanup Local")).toBeVisible();
   });
 
   test("action buttons have correct disabled state based on file status", async () => {
@@ -36,7 +37,7 @@ test.describe("File Actions", () => {
     // At least one action button should exist and have a disabled attribute (either true or false)
     const buttons = row.locator(".actions button");
     const count = await buttons.count();
-    expect(count).toBe(6);
+    expect(count).toBe(7);
 
     // Each button should have a deterministic disabled state (not missing the attribute)
     for (let i = 0; i < count; i++) {
@@ -74,6 +75,21 @@ test.describe("File Actions", () => {
     // First click should change text to "Confirm?"
     await deleteRemoteBtn.click();
     await expect(deleteRemoteBtn).toContainText("Confirm?");
+  });
+
+  test("Cleanup Local button requires confirmation (double-click pattern)", async () => {
+    test.skip(fileCount === 0, "No files present on the remote seedbox");
+
+    const row = dashboard.getFileRows().first();
+    await row.click();
+
+    const cleanupLocalBtn = dashboard.getActionButton(row, "Cleanup Local");
+    const isDisabled = await cleanupLocalBtn.isDisabled();
+    test.skip(isDisabled, "Cleanup Local is disabled for this file (not a directory with local-only content)");
+
+    // First click should change text to "Confirm?"
+    await cleanupLocalBtn.click();
+    await expect(cleanupLocalBtn).toContainText("Confirm?");
   });
 
   test("clicking a different file row deselects the previous one", async () => {

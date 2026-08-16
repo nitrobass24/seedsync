@@ -70,6 +70,11 @@ export class ViewFileCommandService {
     return this.createAction(file, resolve, (f) => this.modelFileService.validate(f));
   }
 
+  cleanupLocal(file: ViewFile, resolve: ModelFileResolver): Observable<WebReaction> {
+    this.logger.debug('Clean up local-only contents of view file: ' + file.name);
+    return this.createAction(file, resolve, (f) => this.modelFileService.cleanupLocal(f));
+  }
+
   bulkQueue(files: readonly ViewFile[], resolve: ModelFileResolver): Observable<WebReaction[]> {
     return this.bulkAction(files, (f) => f.isQueueable, (f) => this.queue(f, resolve));
   }

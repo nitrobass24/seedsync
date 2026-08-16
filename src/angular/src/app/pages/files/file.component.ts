@@ -18,7 +18,8 @@ export enum FileAction {
   EXTRACT,
   VALIDATE,
   DELETE_LOCAL,
-  DELETE_REMOTE
+  DELETE_REMOTE,
+  CLEANUP_LOCAL
 }
 
 // Payload emitted for each single-file action. Carries the target file plus a
@@ -65,11 +66,12 @@ export class FileComponent implements OnChanges, OnDestroy {
   deleteLocalEvent = output<FileActionEvent>();
   validateEvent = output<FileActionEvent>();
   deleteRemoteEvent = output<FileActionEvent>();
+  cleanupLocalEvent = output<FileActionEvent>();
 
   activeAction: FileAction | null = null;
 
   // Inline double-click delete confirmation state
-  confirmingDelete: 'local' | 'remote' | null = null;
+  confirmingDelete: 'local' | 'remote' | 'cleanup' | null = null;
   private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -95,6 +97,10 @@ export class FileComponent implements OnChanges, OnDestroy {
         } else if (this.activeAction === FileAction.VALIDATE &&
                    oldFile.isValidatable && !newFile.isValidatable) {
           this.activeAction = null;
+        } else if (this.activeAction === FileAction.CLEANUP_LOCAL &&
+                   oldFile.isCleanupLocalable && !newFile.isCleanupLocalable) {
+          this.activeAction = null;
+          this.resetConfirmState();
         }
 
         if (!oldFile.isSelected && newFile.isSelected && this.fileElement &&
@@ -137,6 +143,10 @@ export class FileComponent implements OnChanges, OnDestroy {
 
   isRemotelyDeletable(): boolean {
     return this.activeAction == null && this.file().isRemotelyDeletable;
+  }
+
+  isCleanupLocalable(): boolean {
+    return this.activeAction == null && this.file().isCleanupLocalable;
   }
 
   // Cleared by the parent when an action's backend request fails or errors.
@@ -207,7 +217,18 @@ export class FileComponent implements OnChanges, OnDestroy {
     }
   }
 
-  private setConfirming(type: 'local' | 'remote'): void {
+  onCleanupLocal(file: ViewFile): void {
+    if (this.confirmingDelete === 'cleanup') {
+      this.clearConfirmTimer();
+      this.confirmingDelete = null;
+      this.activeAction = FileAction.CLEANUP_LOCAL;
+      this.cleanupLocalEvent.emit(this.actionEvent(file));
+    } else {
+      this.setConfirming('cleanup');
+    }
+  }
+
+  private setConfirming(type: 'local' | 'remote' | 'cleanup'): void {
     this.clearConfirmTimer();
     this.confirmingDelete = type;
     this.confirmResetTimer = setTimeout(() => {

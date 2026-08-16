@@ -60,6 +60,11 @@ export class ModelFileService implements StreamEventHandler {
     return this.restService.sendRequest(this.commandUrl('validate', file));
   }
 
+  cleanupLocal(file: ModelFile): Observable<WebReaction> {
+    this.logger.debug('Cleanup local model file: ' + file.name);
+    return this.restService.sendRequest(this.commandUrl('cleanup_local', file));
+  }
+
   private commandUrl(action: string, file: ModelFile): string {
     const fileNameEncoded = encodeURIComponent(encodeURIComponent(file.name));
     let url = `/server/command/${action}/${fileNameEncoded}`;

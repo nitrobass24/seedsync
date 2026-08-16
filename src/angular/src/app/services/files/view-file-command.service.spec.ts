@@ -51,6 +51,7 @@ function makeViewFile(overrides: Partial<ViewFile> & { name: string }): ViewFile
     isExtractable: false,
     isLocallyDeletable: false,
     isRemotelyDeletable: false,
+    isCleanupLocalable: false,
     isValidatable: false,
     validateTooltip: null,
     localCreatedTimestamp: null,
@@ -73,6 +74,7 @@ describe('ViewFileCommandService', () => {
     deleteLocal: ReturnType<typeof vi.fn>;
     deleteRemote: ReturnType<typeof vi.fn>;
     validate: ReturnType<typeof vi.fn>;
+    cleanupLocal: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -83,6 +85,7 @@ describe('ViewFileCommandService', () => {
       deleteLocal: vi.fn().mockReturnValue(of(OK)),
       deleteRemote: vi.fn().mockReturnValue(of(OK)),
       validate: vi.fn().mockReturnValue(of(OK)),
+      cleanupLocal: vi.fn().mockReturnValue(of(OK)),
     };
     TestBed.configureTestingModule({
       providers: [
@@ -170,12 +173,14 @@ describe('ViewFileCommandService', () => {
     service.deleteLocal(vf, resolve).subscribe();
     service.deleteRemote(vf, resolve).subscribe();
     service.validate(vf, resolve).subscribe();
+    service.cleanupLocal(vf, resolve).subscribe();
 
     expect(mockModelFileService.stop).toHaveBeenCalledWith(mf);
     expect(mockModelFileService.extract).toHaveBeenCalledWith(mf);
     expect(mockModelFileService.deleteLocal).toHaveBeenCalledWith(mf);
     expect(mockModelFileService.deleteRemote).toHaveBeenCalledWith(mf);
     expect(mockModelFileService.validate).toHaveBeenCalledWith(mf);
+    expect(mockModelFileService.cleanupLocal).toHaveBeenCalledWith(mf);
   });
 
   // --- bulk dispatch: checked + capability filter ---
