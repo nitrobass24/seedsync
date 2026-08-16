@@ -201,6 +201,7 @@ class TestAppProcess(unittest.TestCase):
         self.process.join()
         self.process.stream.pop_all()  # hangs without the fix
         self.process.stream.close()
+        self.process.close_queues()
         self.process = None
 
 

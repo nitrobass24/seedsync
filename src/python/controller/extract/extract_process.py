@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import queue
+import threading
 import time
 from datetime import datetime
 
@@ -45,10 +46,12 @@ class ExtractProcess(AppProcess):
             logger: logging.Logger,
             completed_queue: PipeStream,
             failed_queue: PipeStream,
+            failed_queue_lock: threading.Lock,
         ):
             self.logger = logger
             self.completed_queue = completed_queue
             self.failed_queue = failed_queue
+            self.failed_queue_lock = failed_queue_lock
 
         def extract_completed(self, name: str, is_dir: bool, pair_id: str | None = None):
             self.logger.info(f"Extraction completed for {name}")
@@ -60,7 +63,8 @@ class ExtractProcess(AppProcess):
         def extract_failed(self, name: str, is_dir: bool, pair_id: str | None = None):
             self.logger.error(f"Extraction failed for {name}")
             failed_result = ExtractFailedResult(timestamp=datetime.now(), name=name, is_dir=is_dir, pair_id=pair_id)
-            self.failed_queue.put(failed_result)
+            with self.failed_queue_lock:
+                self.failed_queue.put(failed_result)
 
     def __init__(self):
         super().__init__(name=self.__class__.__name__)
@@ -69,15 +73,26 @@ class ExtractProcess(AppProcess):
         self.__completed_result_queue = PipeStream()
         self.__failed_result_queue = PipeStream()
         self.__dispatch: ExtractDispatch | None = None
+        # Serializes the two same-process producer threads of the failed
+        # queue (ExtractWorker via the listener, and run_loop's dispatch-error
+        # path) — concurrent send() on one Connection end can corrupt data.
+        # A threading.Lock suffices (both are child-process threads) and costs
+        # no semaphore, unlike an mp.Lock (#654). Created child-side in
+        # run_init because locks don't survive spawn pickling.
+        self.__failed_queue_lock: threading.Lock | None = None
 
     @overrides(AppProcess)
     def run_init(self):
         # Create dispatch inside the process
         self.__dispatch = ExtractDispatch()
+        self.__failed_queue_lock = threading.Lock()
 
         # Add extract listener
         listener = ExtractProcess.__ExtractListener(
-            logger=self.logger, completed_queue=self.__completed_result_queue, failed_queue=self.__failed_result_queue
+            logger=self.logger,
+            completed_queue=self.__completed_result_queue,
+            failed_queue=self.__failed_result_queue,
+            failed_queue_lock=self.__failed_queue_lock,
         )
         self.__dispatch.add_listener(listener)
 
@@ -92,6 +107,7 @@ class ExtractProcess(AppProcess):
     @overrides(AppProcess)
     def run_loop(self):
         assert self.__dispatch is not None
+        assert self.__failed_queue_lock is not None
         # Forward all the extract commands
         try:
             while True:
@@ -108,7 +124,8 @@ class ExtractProcess(AppProcess):
                         is_dir=req.model_file.is_dir,
                         pair_id=req.pair_id,
                     )
-                    self.__failed_result_queue.put(failed_result)
+                    with self.__failed_queue_lock:
+                        self.__failed_result_queue.put(failed_result)
         except queue.Empty:
             pass
 
