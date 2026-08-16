@@ -107,6 +107,11 @@ class ControllerHandler(IHandler):
 
     @override
     def add_routes(self, web_app: WebApp):
+        # file_name arrives double-URL-encoded (see ModelFileService.commandUrl on
+        # the frontend), so a nested full_path's '/' is encoded away before it
+        # ever reaches the raw URL - it never appears as a literal '/' in the
+        # path segment, so the default (no-slash) route filter already matches
+        # nested paths correctly with no route changes needed.
         for path, action, msg in self._ACTIONS:
             web_app.add_handler(
                 f"/server/command/{path}/<file_name>",

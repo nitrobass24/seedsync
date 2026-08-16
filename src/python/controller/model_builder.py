@@ -41,6 +41,7 @@ class ModelBuilder:
         self.__corrupt_files: set[str] = set()
         self.__move_failed_files: set[str] = set()
         self.__auto_delete_remote = False
+        self.__nested_navigation_enabled = False
         self.__cached_model: Model | None = None
         self.__smoothed_etas: dict[str, float] = {}
 
@@ -138,6 +139,11 @@ class ModelBuilder:
             self.__auto_delete_remote = enabled
             self.__cached_model = None
 
+    def set_nested_navigation_enabled(self, enabled: bool):
+        if self.__nested_navigation_enabled != enabled:
+            self.__nested_navigation_enabled = enabled
+            self.__cached_model = None
+
     def clear(self):
         self.__local_files.clear()
         self.__active_files.clear()
@@ -152,6 +158,7 @@ class ModelBuilder:
         self.__corrupt_files.clear()
         self.__move_failed_files.clear()
         self.__auto_delete_remote = False
+        self.__nested_navigation_enabled = False
         self.__cached_model = None
         self.__smoothed_etas.clear()
 
@@ -171,13 +178,27 @@ class ModelBuilder:
         _dummy.propagate = False
         model.set_base_logger(_dummy)  # ignore the logs for this temp model
         effective_local = {**self.__local_files, **self.__active_files}
+
+        # Lftp job names are either a bare top-level name, or a nested file's
+        # full_path (e.g. "TopDir/file.rar") for a standalone job queued on a
+        # single file/folder inside an already-tracked directory. Nested
+        # statuses don't correspond to their own top-level entry - they get
+        # routed to the matching child in _build_children once the tree for
+        # their top-level ancestor is built.
+        if self.__nested_navigation_enabled:
+            top_level_statuses = {n: s for n, s in self.__lftp_statuses.items() if "/" not in n}
+            nested_statuses = {n: s for n, s in self.__lftp_statuses.items() if "/" in n}
+        else:
+            top_level_statuses = self.__lftp_statuses
+            nested_statuses = {}
+
         all_file_names: set[str] = set[str]().union(
-            effective_local.keys(), self.__remote_files.keys(), self.__lftp_statuses.keys()
+            effective_local.keys(), self.__remote_files.keys(), top_level_statuses.keys()
         )
         for name in all_file_names:
             remote = self.__remote_files.get(name, None)
             local = effective_local.get(name)
-            status = self.__lftp_statuses.get(name, None)
+            status = top_level_statuses.get(name, None)
 
             if remote is None and local is None and status is None:
                 # this should never happen, but just in case
@@ -216,7 +237,10 @@ class ModelBuilder:
                 status.total_transfer_state if status and status.state == LftpJobStatus.State.RUNNING else None,
             )
 
-            self._build_children(remote, local, status, model_file)
+            nested_dirs_to_finalize: list[ModelFile] = []
+            self._build_children(remote, local, status, model_file, nested_statuses, nested_dirs_to_finalize)
+            for nested_dir in nested_dirs_to_finalize:
+                self._finalize_nested_dir(nested_dir)
 
             self._estimate_eta(model_file, name, status)
             incomplete_children = self._check_root_downloaded(model_file)
@@ -238,6 +262,8 @@ class ModelBuilder:
         local: SystemFile | None,
         status: LftpJobStatus | None,
         root_model_file: ModelFile,
+        nested_statuses: dict[str, LftpJobStatus] | None = None,
+        nested_dirs_to_finalize: list[ModelFile] | None = None,
     ):
         # Traverse SystemFile children tree in BFS order
         # Store (remote, local, status, model_file) tuple in traversal frontier where remote and local
@@ -246,6 +272,7 @@ class ModelBuilder:
         # for the pair
         # Note: in this case the frontier contains nodes that have already been process, it is
         #       merely used for traversing children
+        nested_statuses = nested_statuses or {}
         frontier: deque[tuple[SystemFile | None, SystemFile | None, LftpJobStatus | None, ModelFile]] = deque()
         if remote or local:
             frontier.append((remote, local, status, root_model_file))
@@ -277,33 +304,108 @@ class ModelBuilder:
                     _child_transfer_state = next(
                         (ts for n, ts in _status.get_active_file_transfer_states() if n == _child_status_path), None
                     )
-                # Set the state, first matching criteria below decides state
-                #   child is a directory: Default
-                #   child is active: Downloading
-                #   child local_size >= remote_size: Downloaded
-                #   remote child exists and root is Queued or Downloading: Queued
-                #   Default
-                # Result:
-                #   subdirectories are always Default
-                #   downloading files are Downloading
-                #   finished files are Downloaded
-                #   Queued and Downloading root's unfinished files are Queued
-                #   Local-only files are Default
-                if _is_dir:
-                    _child_model_file.state = ModelFile.State.DEFAULT
-                elif _child_transfer_state:
-                    _child_model_file.state = ModelFile.State.DOWNLOADING
-                elif _remote_child and _local_child and _local_child.size >= _remote_child.size:
-                    _child_model_file.state = ModelFile.State.DOWNLOADED
-                elif _remote_child and root_model_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
-                    _child_model_file.state = ModelFile.State.QUEUED
-                else:
-                    _child_model_file.state = ModelFile.State.DEFAULT
+
+                # A standalone job queued directly on this nested file/folder (independent
+                # of whether its parent is being mirrored), matched by full_path
+                _nested_status = nested_statuses.get(_child_model_file.full_path)
+                if _nested_status is not None and _is_dir and nested_dirs_to_finalize is not None:
+                    nested_dirs_to_finalize.append(_child_model_file)
+
+                _child_model_file.state, _effective_transfer_state = ModelBuilder._determine_child_state(
+                    _is_dir, _child_transfer_state, _nested_status, _remote_child, _local_child, root_model_file
+                )
 
                 # fill the rest
-                ModelBuilder._fill_model_file(_child_model_file, _remote_child, _local_child, _child_transfer_state)
+                ModelBuilder._fill_model_file(_child_model_file, _remote_child, _local_child, _effective_transfer_state)
                 # add child to frontier
                 frontier.append((_remote_child, _local_child, _status, _child_model_file))
+
+    @staticmethod
+    def _determine_child_state(
+        is_dir: bool,
+        child_transfer_state: LftpJobStatus.TransferState | None,
+        nested_status: LftpJobStatus | None,
+        remote_child: SystemFile | None,
+        local_child: SystemFile | None,
+        root_model_file: ModelFile,
+    ) -> tuple[ModelFile.State, LftpJobStatus.TransferState | None]:
+        """Determine a child's state and effective transfer state.
+
+        First matching criterion below decides state:
+          child has its own standalone job: Queued/Downloading (files and dirs)
+          child is a directory (no standalone job): Default (rolled up to
+            Downloaded/etc. by _finalize_nested_dir once its descendants are final)
+          child is active (part of parent's mirror job): Downloading
+          child local_size >= remote_size: Downloaded
+          remote child exists and root is Queued or Downloading: Queued
+          Default
+        A standalone job's own transfer state takes priority over the parent
+        mirror's per-file state when filling in speed/eta.
+        """
+        if nested_status is not None:
+            state = (
+                ModelFile.State.QUEUED
+                if nested_status.state == LftpJobStatus.State.QUEUED
+                else ModelFile.State.DOWNLOADING
+            )
+            effective_transfer_state = (
+                nested_status.total_transfer_state
+                if nested_status.state == LftpJobStatus.State.RUNNING
+                else child_transfer_state
+            )
+            return state, effective_transfer_state
+        if is_dir:
+            return ModelFile.State.DEFAULT, child_transfer_state
+        if child_transfer_state:
+            return ModelFile.State.DOWNLOADING, child_transfer_state
+        if remote_child and local_child and local_child.size >= remote_child.size:
+            return ModelFile.State.DOWNLOADED, child_transfer_state
+        if remote_child and root_model_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING):
+            return ModelFile.State.QUEUED, child_transfer_state
+        return ModelFile.State.DEFAULT, child_transfer_state
+
+    @staticmethod
+    def _all_remote_descendants_downloaded(model_file: ModelFile) -> bool:
+        """Check whether every remote descendant file (not dir) of model_file is Downloaded."""
+        frontier: deque[ModelFile] = deque()
+        frontier.extend(model_file.iter_children())
+        while frontier:
+            _child_file = frontier.popleft()
+            if (
+                not _child_file.is_dir
+                and _child_file.remote_size is not None
+                and _child_file.state != ModelFile.State.DOWNLOADED
+            ):
+                return False
+            frontier.extend(_child_file.iter_children())
+        return True
+
+    def _finalize_nested_dir(self, dir_file: ModelFile) -> None:
+        """Finalize a nested directory that has its own standalone lftp job.
+
+        Estimates its ETA (if downloading and lftp didn't report one) and rolls
+        it up to Downloaded once every remote descendant file is Downloaded.
+        Mirrors the root-level rollup in _check_root_downloaded/_estimate_eta,
+        but a nested dir's own state is Queued/Downloading (set directly from
+        its standalone job status), not Default, so it needs its own pass.
+        """
+        if (
+            dir_file.state == ModelFile.State.DOWNLOADING
+            and dir_file.eta is None
+            and dir_file.downloading_speed is not None
+            and dir_file.downloading_speed > 0
+            and dir_file.transferred_size is not None
+            and dir_file.remote_size is not None
+        ):
+            remaining = max(dir_file.remote_size - dir_file.transferred_size, 0)
+            dir_file.eta = math.ceil(remaining / dir_file.downloading_speed)
+
+        if (
+            dir_file.state in (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING)
+            and dir_file.remote_size is not None
+            and ModelBuilder._all_remote_descendants_downloaded(dir_file)
+        ):
+            dir_file.state = ModelFile.State.DOWNLOADED
 
     @staticmethod
     def _fill_model_file(
@@ -433,22 +535,8 @@ class ModelBuilder:
                 # root is a finished single file
                 model_file.state = ModelFile.State.DOWNLOADED
             elif model_file.is_dir and model_file.remote_size is not None:
-                # root is a directory that also exists remotely
-                # check all the children
-                all_downloaded = True
-                frontier_check: deque[ModelFile] = deque()
-                frontier_check.extend(model_file.iter_children())
-                while frontier_check:
-                    _child_file = frontier_check.popleft()
-                    if (
-                        not _child_file.is_dir
-                        and _child_file.remote_size is not None
-                        and _child_file.state != ModelFile.State.DOWNLOADED
-                    ):
-                        all_downloaded = False
-                        break
-                    frontier_check.extend(_child_file.iter_children())
-                if all_downloaded:
+                # root is a directory that also exists remotely - check all the children
+                if ModelBuilder._all_remote_descendants_downloaded(model_file):
                     model_file.state = ModelFile.State.DOWNLOADED
                 else:
                     incomplete_children = True

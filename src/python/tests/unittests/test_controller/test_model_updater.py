@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 from controller.model_updater import ModelUpdater
 from controller.persist_keys import KEY_SEP, persist_key
+from lftp import LftpJobStatus
 
 
 class TestSyncPersistToAllBuilders(unittest.TestCase):
@@ -138,6 +139,76 @@ class TestSyncPersistToAllBuilders(unittest.TestCase):
         pc_abc.model_builder.set_validated_files.assert_called_once_with({"good.mkv"})
         pc_abc.model_builder.set_corrupt_files.assert_called_once_with({"corrupt.mkv"})
         pc_abc.model_builder.set_move_failed_files.assert_called_once_with({"stuck.mkv"})
+
+
+class TestDetectLftpCompletionsNestedFiltering(unittest.TestCase):
+    """Nested (path-containing) lftp job names must never reach the active-scan
+    fast path: ActiveScanner/ModelBuilder.set_active_files would otherwise treat
+    a nested full_path as its own top-level SystemFile, injecting a fake
+    top-level entry into the model. This is unconditional (not toggle-gated) -
+    it's a correctness fix in the active-file pipeline, not an opt-in feature."""
+
+    def _make_pair_context(self, pair_id=None):
+        pc = MagicMock()
+        pc.pair_id = pair_id
+        pc.prev_downloading_file_names = set()
+        pc.pending_completion = set()
+        return pc
+
+    def _make_updater(self, pair_contexts, persist=None):
+        pipeline = MagicMock()
+        registry = MagicMock()
+        extract_process = MagicMock()
+        validate_process = MagicMock()
+        context = MagicMock()
+        logger = MagicMock()
+
+        return ModelUpdater(
+            pair_contexts=pair_contexts,
+            persist=persist or MagicMock(),
+            pipeline=pipeline,
+            registry=registry,
+            extract_process=extract_process,
+            validate_process=validate_process,
+            context=context,
+            password=None,
+            logger=logger,
+        )
+
+    @staticmethod
+    def _status(name, state=LftpJobStatus.State.RUNNING):
+        return LftpJobStatus(job_id=1, job_type=LftpJobStatus.Type.PGET, state=state, name=name, flags="")
+
+    def test_nested_names_excluded_from_active_downloading(self):
+        pc = self._make_pair_context("pair-1")
+        updater = self._make_updater([pc])
+        statuses = [self._status("TopLevel"), self._status("TopDir/nested_file.rar")]
+
+        updater._detect_lftp_completions(pc, statuses)
+
+        self.assertEqual(["TopLevel"], pc.active_downloading_file_names)
+
+    def test_top_level_only_names_all_included(self):
+        pc = self._make_pair_context("pair-1")
+        updater = self._make_updater([pc])
+        statuses = [self._status("A"), self._status("B")]
+
+        updater._detect_lftp_completions(pc, statuses)
+
+        self.assertEqual({"A", "B"}, set(pc.active_downloading_file_names))
+
+    def test_prev_downloading_file_names_still_tracks_nested_names(self):
+        """The completion-detection bookkeeping (separate from the active-scan
+        fast path) must still see nested names, so a nested job's completion is
+        still detected and persisted."""
+        pc = self._make_pair_context("pair-1")
+        updater = self._make_updater([pc])
+        statuses = [self._status("TopDir/nested_file.rar")]
+
+        updater._detect_lftp_completions(pc, statuses)
+
+        self.assertEqual({"TopDir/nested_file.rar"}, pc.prev_downloading_file_names)
+        self.assertEqual([], pc.active_downloading_file_names)
 
 
 class TestRetryFailedMoves(unittest.TestCase):

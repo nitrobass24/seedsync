@@ -9,7 +9,7 @@ from controller.command_pipeline import CommandPipeline, _find_local_only_paths
 from controller.commands import MAX_CONCURRENT_COMMAND_PROCESSES, Command
 from controller.persist_keys import persist_key
 from lftp import LftpError
-from model import ModelFile
+from model import ModelError, ModelFile
 
 
 class TestCommandPipelineHelpers(unittest.TestCase):
@@ -634,3 +634,323 @@ class TestHandleCleanupLocal(unittest.TestCase):
         notify_failure.assert_not_called()
         self.assertEqual([command], deferred)
         self.assertEqual(MAX_CONCURRENT_COMMAND_PROCESSES, len(pipeline.active_command_processes))
+
+
+class TestCommandPipelineNestedNavigation(unittest.TestCase):
+    """Nested folder navigation: resolution, race guards, and scope cuts."""
+
+    def _make_pipeline(self, pair_contexts=None, nested_enabled=True):
+        if pair_contexts is None:
+            pair_contexts = []
+        registry = MagicMock()
+        persist = MagicMock()
+        context = MagicMock()
+        context.config.controller.enable_nested_navigation = nested_enabled
+        mp_logger = MagicMock()
+        extract_process = MagicMock()
+        validate_process = MagicMock()
+        logger = MagicMock()
+        sync_persist_callback = MagicMock()
+
+        pipeline = CommandPipeline(
+            pair_contexts=pair_contexts,
+            registry=registry,
+            persist=persist,
+            context=context,
+            password=None,
+            mp_logger=mp_logger,
+            extract_process=extract_process,
+            validate_process=validate_process,
+            logger=logger,
+            sync_persist_callback=sync_persist_callback,
+        )
+        return pipeline
+
+    def _make_pair_context(self, pair_id=None):
+        pc = MagicMock()
+        pc.pair_id = pair_id
+        return pc
+
+    @staticmethod
+    def _make_notify():
+        calls = []
+        return calls, (lambda command, msg: calls.append(msg))
+
+    # --- _resolve_command_file ---
+
+    def test_resolve_command_file_top_level_uses_get_file(self):
+        pipeline = self._make_pipeline(nested_enabled=True)
+        expected = ModelFile("top.txt", False)
+        pipeline._registry.get_file.return_value = expected
+
+        result = pipeline._resolve_command_file("top.txt", pair_id="pair-1")
+
+        pipeline._registry.get_file.assert_called_once_with("top.txt", pair_id="pair-1")
+        pipeline._registry.resolve_full_path.assert_not_called()
+        self.assertIs(expected, result)
+
+    def test_resolve_command_file_nested_uses_resolve_full_path_when_enabled(self):
+        pipeline = self._make_pipeline(nested_enabled=True)
+        expected = ModelFile("leaf.txt", False)
+        pipeline._registry.resolve_full_path.return_value = expected
+
+        result = pipeline._resolve_command_file("TopDir/leaf.txt", pair_id="pair-1")
+
+        pipeline._registry.resolve_full_path.assert_called_once_with("TopDir/leaf.txt", pair_id="pair-1")
+        pipeline._registry.get_file.assert_not_called()
+        self.assertIs(expected, result)
+
+    def test_resolve_command_file_nested_falls_back_to_get_file_when_disabled(self):
+        """When the toggle is off, a '/'-containing name goes through the plain
+        top-level lookup (which raises ModelError, exactly like before this
+        feature existed), never resolve_full_path."""
+        pipeline = self._make_pipeline(nested_enabled=False)
+        pipeline._registry.get_file.side_effect = ModelError("not found")
+
+        with self.assertRaises(ModelError):
+            pipeline._resolve_command_file("TopDir/leaf.txt", pair_id="pair-1")
+
+        pipeline._registry.get_file.assert_called_once_with("TopDir/leaf.txt", pair_id="pair-1")
+        pipeline._registry.resolve_full_path.assert_not_called()
+
+    # --- _find_queue_conflict ---
+
+    def test_find_queue_conflict_none_when_idle(self):
+        root = ModelFile("Top", True)
+        child = ModelFile("child.txt", False)
+        root.add_child(child)
+
+        self.assertIsNone(CommandPipeline._find_queue_conflict(child))
+
+    def test_find_queue_conflict_ancestor_active_blocks_nested_queue(self):
+        root = ModelFile("Top", True)
+        root.state = ModelFile.State.DOWNLOADING
+        child = ModelFile("child.txt", False)
+        root.add_child(child)
+
+        conflict = CommandPipeline._find_queue_conflict(child)
+        self.assertIsNotNone(conflict)
+        self.assertIn("Top", conflict)
+        self.assertIn("child.txt", conflict)
+
+    def test_find_queue_conflict_descendant_active_blocks_folder_queue(self):
+        root = ModelFile("Top", True)
+        sub = ModelFile("Sub", True)
+        leaf = ModelFile("leaf.txt", False)
+        leaf.state = ModelFile.State.QUEUED
+        sub.add_child(leaf)
+        root.add_child(sub)
+
+        conflict = CommandPipeline._find_queue_conflict(root)
+        self.assertIsNotNone(conflict)
+        self.assertIn("leaf.txt", conflict)
+
+    def test_find_queue_conflict_none_for_file_queue_when_no_relatives_active(self):
+        # A plain file (not a dir) never checks descendants; only ancestors.
+        leaf = ModelFile("leaf.txt", False)
+        self.assertIsNone(CommandPipeline._find_queue_conflict(leaf))
+
+    # --- _handle_queue ---
+
+    def test_handle_queue_nested_uses_full_path_and_succeeds(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.general.exclude_patterns = ""
+
+        root = ModelFile("Top", True)
+        leaf = ModelFile("leaf.rar", False)
+        leaf.remote_size = 100
+        root.add_child(leaf)
+        command = Command(Command.Action.QUEUE, "Top/leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_queue(command, leaf, pc, notify)
+
+        self.assertTrue(result)
+        self.assertEqual([], calls)
+        pc.lftp.queue.assert_called_once_with("Top/leaf.rar", False, exclude_patterns=[])
+
+    def test_handle_queue_rejects_when_ancestor_active(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+
+        root = ModelFile("Top", True)
+        root.state = ModelFile.State.DOWNLOADING
+        leaf = ModelFile("leaf.rar", False)
+        leaf.remote_size = 100
+        root.add_child(leaf)
+        command = Command(Command.Action.QUEUE, "Top/leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_queue(command, leaf, pc, notify)
+
+        self.assertFalse(result)
+        self.assertEqual(1, len(calls))
+        pc.lftp.queue.assert_not_called()
+
+    # --- _handle_stop ---
+
+    def test_handle_stop_nested_uses_full_path(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pc.lftp.kill.return_value = True
+
+        root = ModelFile("Top", True)
+        leaf = ModelFile("leaf.rar", False)
+        leaf.state = ModelFile.State.DOWNLOADING
+        root.add_child(leaf)
+        command = Command(Command.Action.STOP, "Top/leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_stop(command, leaf, pc, notify)
+
+        self.assertTrue(result)
+        self.assertEqual([], calls)
+        pc.lftp.kill.assert_called_once_with("Top/leaf.rar")
+
+    def test_handle_stop_fails_when_no_independent_job(self):
+        """A nested/dir STOP with no independent lftp job (it's downloading only
+        as part of its parent's mirror) must fail clearly, not silently no-op."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pc.lftp.kill.return_value = False
+
+        leaf = ModelFile("leaf.rar", False)
+        leaf.state = ModelFile.State.DOWNLOADING
+        command = Command(Command.Action.STOP, "leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_stop(command, leaf, pc, notify)
+
+        self.assertFalse(result)
+        self.assertEqual(1, len(calls))
+
+    # --- _handle_delete_local / _handle_delete_remote use full_path ---
+
+    @patch("controller.command_pipeline.DeleteLocalProcess")
+    def test_handle_delete_local_nested_uses_full_path(self, mock_delete_cls):
+        pc = self._make_pair_context("pair-1")
+        pc.local_path = "/local"
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.controller.use_staging = False
+
+        leaf = ModelFile("leaf.rar", False)
+        leaf.state = ModelFile.State.DOWNLOADED
+        leaf.local_size = 100
+        command = Command(Command.Action.DELETE_LOCAL, "Top/leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_delete_local(command, leaf, pc, [], notify)
+
+        self.assertTrue(result)
+        mock_delete_cls.assert_called_once_with(local_path="/local", file_name="Top/leaf.rar")
+
+    @patch("controller.command_pipeline.DeleteRemoteProcess")
+    def test_handle_delete_remote_nested_uses_full_path(self, mock_delete_cls):
+        pc = self._make_pair_context("pair-1")
+        pc.remote_path = "/remote"
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+
+        leaf = ModelFile("leaf.rar", False)
+        leaf.state = ModelFile.State.DOWNLOADED
+        leaf.remote_size = 100
+        command = Command(Command.Action.DELETE_REMOTE, "Top/leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_delete_remote(command, leaf, pc, [], notify)
+
+        self.assertTrue(result)
+        _, kwargs = mock_delete_cls.call_args
+        self.assertEqual("Top/leaf.rar", kwargs["file_name"])
+
+    # --- _dispatch_command: nested EXTRACT/VALIDATE scope cut ---
+
+    def test_dispatch_rejects_nested_extract(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+
+        root = ModelFile("Top", True)
+        leaf = ModelFile("leaf.rar", False)
+        root.add_child(leaf)
+        command = Command(Command.Action.EXTRACT, "Top/leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._dispatch_command(command, leaf, pc, [], notify)
+
+        self.assertFalse(result)
+        self.assertEqual(1, len(calls))
+        self.assertIn("EXTRACT", calls[0])
+
+    def test_dispatch_rejects_nested_validate(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+
+        root = ModelFile("Top", True)
+        leaf = ModelFile("leaf.rar", False)
+        root.add_child(leaf)
+        command = Command(Command.Action.VALIDATE, "Top/leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._dispatch_command(command, leaf, pc, [], notify)
+
+        self.assertFalse(result)
+        self.assertEqual(1, len(calls))
+        self.assertIn("VALIDATE", calls[0])
+
+    def test_dispatch_allows_top_level_extract(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.controller.use_staging = False
+
+        top = ModelFile("Top.rar", False)
+        top.state = ModelFile.State.DOWNLOADED
+        top.local_size = 100
+        command = Command(Command.Action.EXTRACT, "Top.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._dispatch_command(command, top, pc, [], notify)
+
+        self.assertTrue(result)
+        self.assertEqual([], calls)
+        pipeline._extract_process.extract.assert_called_once()
+
+    # --- step(): end-to-end resolution ---
+
+    def test_step_nested_queue_end_to_end(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.general.exclude_patterns = ""
+
+        root = ModelFile("Top", True)
+        leaf = ModelFile("leaf.rar", False)
+        leaf.remote_size = 100
+        root.add_child(leaf)
+        pipeline._registry.resolve_full_path.return_value = leaf
+
+        command = Command(Command.Action.QUEUE, "Top/leaf.rar", pair_id="pair-1")
+        callback = MagicMock()
+        command.add_callback(callback)
+        pipeline.queue(command)
+
+        pipeline.step()
+
+        pipeline._registry.resolve_full_path.assert_called_once_with("Top/leaf.rar", pair_id="pair-1")
+        pc.lftp.queue.assert_called_once_with("Top/leaf.rar", False, exclude_patterns=[])
+        callback.on_success.assert_called_once()
+        callback.on_failure.assert_not_called()
+
+    def test_step_nested_queue_not_found_when_disabled(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=False)
+        pipeline._registry.get_file.side_effect = ModelError("not found")
+
+        command = Command(Command.Action.QUEUE, "Top/leaf.rar", pair_id="pair-1")
+        callback = MagicMock()
+        command.add_callback(callback)
+        pipeline.queue(command)
+
+        pipeline.step()
+
+        pipeline._registry.resolve_full_path.assert_not_called()
+        callback.on_failure.assert_called_once()
+        callback.on_success.assert_not_called()

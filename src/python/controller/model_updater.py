@@ -466,6 +466,7 @@ class ModelUpdater:
         pc.active_scanner.set_active_files(active_files)
 
         pc.model_builder.set_auto_delete_remote(bool(self._context.config.autoqueue.auto_delete_remote))
+        pc.model_builder.set_nested_navigation_enabled(bool(self._context.config.controller.enable_nested_navigation))
 
         if latest_remote_scan is not None:
             remote_files = filter_excluded_files(
@@ -498,7 +499,13 @@ class ModelUpdater:
                 pc.pending_completion.update(just_completed)
                 pc.local_scan_process.force_scan()
 
-            pc.active_downloading_file_names = list(current_downloading)
+            # The active scanner is a top-level-only fast path (it stats a name
+            # directly under the local root), so nested (path-containing) names
+            # are excluded here regardless of the nested-navigation toggle -
+            # feeding one through would inject a fake top-level entry into the
+            # model. Nested downloads still get picked up by the regular
+            # recursive local scan, just less often.
+            pc.active_downloading_file_names = [name for name in current_downloading if "/" not in name]
             pc.prev_downloading_file_names = current_downloading
 
     def sync_persist_to_all_builders(self):
