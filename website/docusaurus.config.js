@@ -25,21 +25,6 @@ const config = {
   // Default is the Cloudflare subpath; override for GitHub Pages via env.
   baseUrl: process.env.DOCS_BASE_URL || '/seedsync/',
 
-  // GitHub pages deployment config.
-  // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'nitrobass24', // GitHub org/user name.
-  projectName: 'seedsync-website', // Repo name.
-
-  onBrokenLinks: 'throw',
-
-  // Even if you don't use internationalization, you can use this field to set
-  // useful metadata like html lang. For example, if your site is Chinese, you
-  // may want to replace "en" with "zh-Hans".
-  i18n: {
-    defaultLocale: 'en',
-    locales: ['en'],
-  },
-
   presets: [
     [
       'classic',
