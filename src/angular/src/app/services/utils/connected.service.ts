@@ -15,14 +15,6 @@ export class ConnectedService implements StreamEventHandler {
   readonly connected$: Observable<boolean> =
     this.connectedSubject.asObservable();
 
-  getEventNames(): string[] {
-    return [];
-  }
-
-  onEvent(_eventName: string, _data: string): void {
-    // No events to handle
-  }
-
   onConnected(): void {
     if (!this.connectedSubject.getValue()) {
       this.connectedSubject.next(true);

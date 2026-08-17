@@ -17,7 +17,6 @@ export interface ModelFile {
   local_modified_timestamp: Date | null;
   remote_created_timestamp: Date | null;
   remote_modified_timestamp: Date | null;
-  children: ModelFile[];
 }
 
 export enum ModelFileState {
@@ -69,15 +68,9 @@ export interface ModelFileJson {
   local_modified_timestamp: number | null;
   remote_created_timestamp: number | null;
   remote_modified_timestamp: number | null;
-  children: ModelFileJson[];
 }
 
 export function modelFileFromJson(json: ModelFileJson): ModelFile {
-  const children: ModelFile[] = [];
-  for (const child of json.children) {
-    children.push(modelFileFromJson(child));
-  }
-
   return {
     name: json.name,
     pair_id: json.pair_id ?? null,
@@ -97,6 +90,5 @@ export function modelFileFromJson(json: ModelFileJson): ModelFile {
       json.remote_created_timestamp != null ? new Date(1000 * +json.remote_created_timestamp) : null,
     remote_modified_timestamp:
       json.remote_modified_timestamp != null ? new Date(1000 * +json.remote_modified_timestamp) : null,
-    children,
   };
 }

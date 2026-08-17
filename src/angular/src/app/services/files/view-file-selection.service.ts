@@ -28,11 +28,6 @@ export class ViewFileSelectionService {
     return this.checkedSet.has(key);
   }
 
-  /** A defensive copy of the current checked-key set. */
-  snapshot(): Set<string> {
-    return new Set(this.checkedSet);
-  }
-
   /**
    * Toggle a single key's checked state and make it the shift-range anchor.
    * Emits the updated set on {@link checked$}.
