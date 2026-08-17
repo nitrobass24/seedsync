@@ -128,17 +128,16 @@ docker inspect seedsync-dev
 
 The Dockerfile uses three stages:
 
-1. **angular-builder**: Builds the Angular frontend with Node 12
-2. **scanfs-builder**: Builds the scanfs binary with PyInstaller
-3. **runtime**: Final slim Python 3.12 image with all components
+1. **angular-builder**: Builds the Angular frontend with Node 22
+2. **python-deps**: Installs Python dependencies with uv
+3. **runtime**: Final Alpine image with all components
 
 ### Image Size
 
-Target: ~240MB (optimized from original 439MB)
+Target: ~45MB (Alpine-only, multi-arch)
 
 Key optimizations:
-- Using `python:3.12-slim-bookworm` base
-- pip instead of Poetry
+- Using `alpine:3.23` base
 - Minimal runtime dependencies
 - No documentation tools in runtime
 

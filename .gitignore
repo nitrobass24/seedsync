@@ -19,3 +19,10 @@ dev-config/
 # Local-only audit artifacts — contain sensitive security details, keep out of git
 SECURITY_FINDINGS.md
 REVIEW.md
+
+# Local scratch/design notes — keep out of git
+download-scenarios.md
+feature-archive-cleanup-design.md
+feature-ftps-support-design.md
+fix-654-semaphore-diet-design.md
+ftps-jobs-v-samples.md
