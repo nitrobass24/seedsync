@@ -359,6 +359,57 @@ describe("StreamDispatchService", () => {
     expect(latestEventSource().url).toBe("/server/stream");
   });
 
+  // --- Partial handlers (all interface members are optional) ---
+
+  it("should accept a handler that omits every callback", () => {
+    vi.useFakeTimers();
+    service.registerHandler({});
+
+    service.start();
+    const es = latestEventSource();
+    es.simulateOpen();
+    es.simulateError();
+
+    expect(es.closed).toBe(true);
+  });
+
+  it("should deliver events to a handler implementing only getEventNames and onEvent", () => {
+    vi.useFakeTimers();
+    const onEvent = vi.fn();
+    service.registerHandler({ getEventNames: () => ["model-init"], onEvent });
+
+    service.start();
+    const es = latestEventSource();
+    es.simulateOpen();
+    es.simulateEvent("model-init", '{"test": true}');
+    es.simulateError();
+
+    expect(onEvent).toHaveBeenCalledWith("model-init", '{"test": true}');
+  });
+
+  it("should not throw when an event arrives for a handler without onEvent", () => {
+    service.registerHandler({ getEventNames: () => ["model-init"] });
+
+    service.start();
+
+    expect(() => latestEventSource().simulateEvent("model-init", "data")).not.toThrow();
+  });
+
+  it("should still notify full handlers when a partial handler omits getEventNames", () => {
+    const partial = { onConnected: vi.fn() };
+    const full = makeHandler(["model-init"]);
+    service.registerHandler(partial);
+    service.registerHandler(full);
+
+    service.start();
+    latestEventSource().simulateOpen();
+    latestEventSource().simulateEvent("model-init", "data");
+
+    expect(partial.onConnected).toHaveBeenCalled();
+    expect(full.onConnected).toHaveBeenCalled();
+    expect(full.onEvent).toHaveBeenCalledWith("model-init", "data");
+  });
+
   // --- Stale EventSource guard ---
 
   it("should ignore error from a stale EventSource after API key change", () => {
