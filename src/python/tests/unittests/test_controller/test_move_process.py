@@ -2,24 +2,12 @@
 
 import errno
 import os
-import queue
 import shutil
 import tempfile
 import unittest
 from unittest import mock
 
 from controller.move.move_process import MoveFailedResult, MoveProcess
-
-
-class _SyncQueue(queue.Queue):
-    """A queue.Queue with close/join_thread stubs so it can replace
-    multiprocessing.Queue in single-process tests (no feeder-thread race)."""
-
-    def close(self):
-        pass
-
-    def join_thread(self):
-        pass
 
 
 class TestMoveProcess(unittest.TestCase):
@@ -35,11 +23,9 @@ class TestMoveProcess(unittest.TestCase):
         shutil.rmtree(self.dst_dir, ignore_errors=True)
 
     def _make_process(self, **kwargs):
-        # Replace multiprocessing.Queue with a synchronous queue so that
-        # pop_failed() in these single-process tests never races the feeder
-        # thread (mirrors the validate/extract process test pattern).
-        with mock.patch("controller.move.move_process.multiprocessing.Queue", _SyncQueue):
-            process = MoveProcess(**kwargs)
+        # The failed-result PipeStream is synchronous in-process (no feeder
+        # thread), so pop_failed() needs no fake in these single-process tests.
+        process = MoveProcess(**kwargs)
         self._processes.append(process)
         return process
 
