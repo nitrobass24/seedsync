@@ -44,6 +44,28 @@
       </label>
     }
 
+    @case (OptionType.Directory) {
+      <label>
+        <span class="name">{{ label() }}</span>
+        <span class="directory-field">
+          <input type="text"
+                 class="form-control"
+                 [disabled]="disabled() || value() === null || value() === undefined"
+                 [ngModel]="value()"
+                 (ngModelChange)="onChange($event)" />
+          <button type="button"
+                  class="btn btn-sm btn-outline-secondary directory-browse-btn"
+                  [disabled]="disabled()"
+                  (click)="onBrowseClick()">
+            Browse&hellip;
+          </button>
+        </span>
+        @if (description()) {
+          <span class="description">{{ description() }}</span>
+        }
+      </label>
+    }
+
     @case (OptionType.Select) {
       <label>
         <span class="name">{{ label() }}</span>

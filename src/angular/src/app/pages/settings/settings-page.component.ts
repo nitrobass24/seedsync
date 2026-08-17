@@ -1,13 +1,15 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AsyncPipe, NgTemplateOutlet, TitleCasePipe } from '@angular/common';
-import { distinctUntilChanged, map } from 'rxjs';
+import { distinctUntilChanged, filter, map, take } from 'rxjs';
 
 import { LoggerService } from '../../services/utils/logger.service';
 import { ConfigService } from '../../services/settings/config.service';
 import { NotificationService } from '../../services/utils/notification.service';
 import { NotificationChannel, NotificationsService, NOTIFICATION_CHANNELS } from '../../services/settings/notifications.service';
 import { TestResult } from '../../services/utils/test-result';
+import { ConnectionTestService } from '../../services/settings/connection-test.service';
+import { ConnectionStatusService } from '../../services/settings/connection-status.service';
 import { ServerCommandService } from '../../services/server/server-command.service';
 import { ConnectedService } from '../../services/utils/connected.service';
 import { PathPairsService } from '../../services/settings/path-pairs.service';
@@ -18,9 +20,11 @@ import { ClickStopPropagationDirective } from '../../common/click-stop-propagati
 import { OptionComponent, OptionValue } from './option.component';
 import { PathPairsComponent } from './path-pairs.component';
 import { IntegrationsComponent } from './integrations.component';
+import { DirectoryPickerComponent, DirectoryBrowseKind } from './directory-picker.component';
 import {
   ActiveDisableFlags,
   ConfigValuePath,
+  IOption,
   IOptionsContext,
   applyDisableRules,
   getConfigValue,
@@ -38,6 +42,16 @@ import {
   OPTIONS_CONTEXT_NOTIFICATIONS,
 } from './options-list';
 
+/** lftp fields that determine whether a connection is reachable. Changing any
+ * of these invalidates a previously-verified connection. */
+const CONNECTION_FIELDS: ReadonlySet<string> = new Set([
+  'remote_address',
+  'remote_username',
+  'remote_password',
+  'remote_port',
+  'use_ssh_key',
+]);
+
 @Component({
   selector: 'app-settings-page',
   standalone: true,
@@ -48,6 +62,7 @@ import {
     OptionComponent,
     PathPairsComponent,
     IntegrationsComponent,
+    DirectoryPickerComponent,
     ClickStopPropagationDirective,
   ],
   templateUrl: './settings-page.component.html',
@@ -77,6 +92,8 @@ export class SettingsPageComponent implements OnInit {
   private readonly configService = inject(ConfigService);
   private readonly notifService = inject(NotificationService);
   private readonly notificationsService = inject(NotificationsService);
+  private readonly connectionTestService = inject(ConnectionTestService);
+  private readonly connectionStatusService = inject(ConnectionStatusService);
   private readonly commandService = inject(ServerCommandService);
   private readonly connectedService = inject(ConnectedService);
   private readonly pathPairsService = inject(PathPairsService);
@@ -88,6 +105,15 @@ export class SettingsPageComponent implements OnInit {
   commandsEnabled = false;
   testing: Record<NotificationChannel, boolean> = { discord: false, telegram: false };
   results: Record<NotificationChannel, TestResult | null> = { discord: null, telegram: null };
+  testingConnection = false;
+  connectionResult: TestResult | null = null;
+  /** True once a Test Connection call has succeeded against the currently
+   * saved lftp connection fields. Gates the Server Directory picker. */
+  connectionVerified = false;
+
+  directoryPickerOption: IOption | null = null;
+  directoryPickerKind: DirectoryBrowseKind = 'local';
+  directoryPickerInitialPath = '/';
 
   private readonly active: ActiveDisableFlags = { pairsEnabled: false, validateDisabled: false, protocolSftp: false };
 
@@ -133,6 +159,20 @@ export class SettingsPageComponent implements OnInit {
       this.active.protocolSftp = protocolIsSftp;
       this.rebuildContexts();
     });
+
+    // If the connection already looks fully configured when the page loads,
+    // silently verify it once so the Server Directory picker doesn't force a
+    // manual "Test Connection" click every visit when the connection is
+    // already known to be good.
+    this.configService.config$.pipe(
+      filter((config): config is Config => config !== null),
+      take(1),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((config) => {
+      if (config.lftp?.remote_address && config.lftp?.remote_username && config.lftp?.remote_port) {
+        this.onTestConnection();
+      }
+    });
   }
 
   private rebuildContexts(): void {
@@ -146,6 +186,12 @@ export class SettingsPageComponent implements OnInit {
   getOptionValue(config: Config | null, valuePath: ConfigValuePath): OptionValue {
     if (!config) return null;
     return getConfigValue(config, valuePath);
+  }
+
+  /** The Server Directory field is locked out until a connection is verified
+   * (unless it's already disabled for another reason, e.g. path pairs). */
+  isServerDirectoryLocked(option: IOption): boolean {
+    return option.valuePath[1] === 'remote_path' && !option.disabled && !this.connectionVerified;
   }
 
   onSetConfig(section: string, option: string, value: OptionValue, requiresRestart?: boolean): void {
@@ -162,6 +208,13 @@ export class SettingsPageComponent implements OnInit {
 
           if (requiresRestart) {
             this.notifService.show(this.configRestartNotif);
+          }
+
+          // A changed connection field invalidates any previously-verified
+          // connection, re-locking the Server Directory picker until re-tested.
+          if (section === 'lftp' && CONNECTION_FIELDS.has(option)) {
+            this.setConnectionVerified(false);
+            this.connectionResult = null;
           }
         } else {
           const notif = createNotification(
@@ -209,5 +262,45 @@ export class SettingsPageComponent implements OnInit {
       this.results[channel] = result;
       this.cdr.markForCheck();
     });
+  }
+
+  onTestConnection(): void {
+    this.testingConnection = true;
+    this.connectionResult = null;
+    this.connectionTestService.testConnection().pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((result) => {
+      this.testingConnection = false;
+      this.connectionResult = result;
+      this.setConnectionVerified(result.success);
+      this.cdr.markForCheck();
+    });
+  }
+
+  private setConnectionVerified(verified: boolean): void {
+    this.connectionVerified = verified;
+    this.connectionStatusService.setVerified(verified);
+  }
+
+  onBrowseDirectory(option: IOption): void {
+    this.directoryPickerKind = option.valuePath[1] === 'remote_path' ? 'remote' : 'local';
+    const current = this.getOptionValue(this.configService.configSnapshot, option.valuePath);
+    this.directoryPickerInitialPath = typeof current === 'string' && current ? current : '/';
+    this.directoryPickerOption = option;
+    this.cdr.markForCheck();
+  }
+
+  onDirectorySelected(path: string): void {
+    const option = this.directoryPickerOption;
+    this.directoryPickerOption = null;
+    if (option) {
+      this.onSetConfig(option.valuePath[0], option.valuePath[1], path, option.requiresRestart);
+    }
+    this.cdr.markForCheck();
+  }
+
+  onDirectoryPickerCancel(): void {
+    this.directoryPickerOption = null;
+    this.cdr.markForCheck();
   }
 }

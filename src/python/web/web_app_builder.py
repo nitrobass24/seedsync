@@ -6,6 +6,7 @@ from common import Constants, Context
 from controller import AutoQueuePersist, Controller
 
 from .handler.auto_queue import AutoQueueHandler
+from .handler.browse import BrowseHandler
 from .handler.config import ConfigHandler
 from .handler.controller import ControllerHandler
 from .handler.integrations import IntegrationsHandler
@@ -54,6 +55,7 @@ class WebAppBuilder:
             context.integrations_config, context.path_pairs_config, context.integrations_path, context.path_pairs_path
         )
         self.notifications_handler = NotificationsHandler(context.config)
+        self.browse_handler = BrowseHandler(context.config)
 
     def build(self) -> WebApp:
         web_app = WebApp(context=self.__context, controller=self.__controller)
@@ -80,6 +82,7 @@ class WebAppBuilder:
         self.path_pairs_handler.add_routes(web_app)
         self.integrations_handler.add_routes(web_app)
         self.notifications_handler.add_routes(web_app)
+        self.browse_handler.add_routes(web_app)
 
         web_app.add_default_routes()
 
