@@ -8,6 +8,7 @@ export enum OptionType {
   Checkbox,
   Password,
   Select,
+  Directory,
 }
 
 /** Value emitted by OptionComponent — matches the possible config value types. */
@@ -36,6 +37,7 @@ export class OptionComponent implements OnInit, OnDestroy {
   readonly choices = input<string[]>([]);
 
   readonly changeEvent = output<OptionValue>();
+  readonly browseRequested = output<void>();
 
   readonly OptionType = OptionType;
 
@@ -70,5 +72,9 @@ export class OptionComponent implements OnInit, OnDestroy {
       return;
     }
     this.newValue.next(value);
+  }
+
+  onBrowseClick(): void {
+    this.browseRequested.emit();
   }
 }

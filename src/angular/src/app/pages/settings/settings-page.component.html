@@ -1,9 +1,46 @@
 <div id="settings">
   <div id="accordion">
     <div id="left">
-      <ng-container
-        *ngTemplateOutlet="optionsList; context: serverContext">
-      </ng-container>
+      <div class="card">
+        <h3 class="card-header">{{ serverContext.header }}</h3>
+        <div class="card-body">
+          @for (option of serverContext.options; track option.label) {
+            <div [class.option-spaced]="option.valuePath[1] === 'remote_port'">
+              <app-option
+                [type]="option.type"
+                [label]="option.label"
+                [description]="option.description"
+                [disabled]="!!option.disabled || isServerDirectoryLocked(option)"
+                [choices]="option.choices || []"
+                [value]="getOptionValue(config$ | async, option.valuePath)"
+                (changeEvent)="onSetConfig(option.valuePath[0], option.valuePath[1], $event, option.requiresRestart)"
+                (browseRequested)="onBrowseDirectory(option)">
+              </app-option>
+              @if (isServerDirectoryLocked(option)) {
+                <div class="connection-lock-note" role="note">
+                  <span class="connection-lock-icon" aria-hidden="true">&#9888;&#65039;</span>
+                  Disabled until a working connection is established. Use "Test Connection" above.
+                </div>
+              }
+            </div>
+            @if (option.valuePath[1] === 'remote_port') {
+              <div class="test-row test-row-end">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        [disabled]="testingConnection || !commandsEnabled"
+                        (click)="onTestConnection()">
+                  {{ testingConnection ? 'Testing...' : 'Test Connection' }}
+                </button>
+                <span class="test-result" aria-live="polite" aria-atomic="true"
+                      [class.test-result-empty]="!connectionResult"
+                      [class.text-success]="connectionResult && connectionResult.success"
+                      [class.text-danger]="connectionResult && !connectionResult.success">
+                  {{ connectionResult?.message }}
+                </span>
+              </div>
+            }
+          }
+        </div>
+      </div>
 
       <div class="card">
         <app-path-pairs></app-path-pairs>
@@ -129,6 +166,15 @@
       <span class="text">Restart</span>
     </button>
   </div>
+
+  @if (directoryPickerOption) {
+    <app-directory-picker
+      [kind]="directoryPickerKind"
+      [initialPath]="directoryPickerInitialPath"
+      (pathSelected)="onDirectorySelected($event)"
+      (cancelPick)="onDirectoryPickerCancel()">
+    </app-directory-picker>
+  }
 </div>
 
 <ng-template #optionsList let-header="header" let-options="options">

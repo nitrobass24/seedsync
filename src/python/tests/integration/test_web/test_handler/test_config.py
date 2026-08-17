@@ -5,6 +5,7 @@ from unittest.mock import patch
 from urllib.parse import quote
 
 from common import Config
+from ssh import SshcpError
 from tests.integration.test_web.test_web_app import BaseTestWebApp
 
 
@@ -286,3 +287,54 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertEqual(200, results["b"])
         # B's value wins because it ran after A's rollback completed.
         self.assertEqual("WARNING", self.context.config.general.log_level)
+
+    def _post_test_connection(self, expect_errors=False):
+        # CSRF protection exempts localhost; the default TestApp REMOTE_ADDR
+        # is not localhost, so it must be set explicitly for POST requests.
+        return self.test_app.post(
+            "/server/config/test-connection",
+            extra_environ={"REMOTE_ADDR": "127.0.0.1"},
+            expect_errors=expect_errors,
+        )
+
+    def test_test_connection_missing_required_settings(self):
+        resp = self._post_test_connection(expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+        json_dict = json.loads(resp.text)
+        self.assertIn("remote_address", json_dict["error"])
+        self.assertIn("remote_username", json_dict["error"])
+        self.assertIn("remote_port", json_dict["error"])
+
+    def test_test_connection_success(self):
+        self.context.config.lftp.remote_address = "example.com"
+        self.context.config.lftp.remote_username = "user"
+        self.context.config.lftp.remote_password = "pass"
+        self.context.config.lftp.remote_port = 22
+        with patch("web.lftp_ssh.Sshcp.detect_shell", return_value="/bin/bash"):
+            resp = self._post_test_connection()
+        self.assertEqual(200, resp.status_int)
+        json_dict = json.loads(resp.text)
+        self.assertTrue(json_dict["success"])
+
+    def test_test_connection_failure_surfaces_error(self):
+        self.context.config.lftp.remote_address = "example.com"
+        self.context.config.lftp.remote_username = "user"
+        self.context.config.lftp.remote_password = "wrong-pass"
+        self.context.config.lftp.remote_port = 22
+        with patch("web.lftp_ssh.Sshcp.detect_shell", side_effect=SshcpError("Incorrect password")):
+            resp = self._post_test_connection(expect_errors=True)
+        self.assertEqual(502, resp.status_int)
+        json_dict = json.loads(resp.text)
+        self.assertEqual("Incorrect password", json_dict["error"])
+
+    def test_test_connection_uses_ssh_key_omits_password(self):
+        self.context.config.lftp.remote_address = "example.com"
+        self.context.config.lftp.remote_username = "user"
+        self.context.config.lftp.remote_password = "should-be-ignored"
+        self.context.config.lftp.remote_port = 22
+        self.context.config.lftp.use_ssh_key = True
+        with patch("web.lftp_ssh.Sshcp") as mock_sshcp:
+            mock_sshcp.return_value.detect_shell.return_value = "/bin/bash"
+            resp = self._post_test_connection()
+        self.assertEqual(200, resp.status_int)
+        mock_sshcp.assert_called_once_with(host="example.com", port=22, user="user", password=None)

@@ -1,5 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import json
 import logging
 import threading
 from collections.abc import Callable
@@ -9,7 +10,9 @@ from urllib.parse import unquote
 from bottle import HTTPResponse
 
 from common import Config, ConfigError
+from ssh import SshcpError
 
+from .. import lftp_ssh
 from ..serialize import SerializeConfig
 from ..web_app import IHandler, WebApp
 
@@ -61,6 +64,7 @@ class ConfigHandler(IHandler):
         web_app.add_handler("/server/config/get", self.__handle_get_config)
         # The regex allows slashes in values
         web_app.add_handler("/server/config/set/<section>/<key>/<value:re:.+>", self.__handle_set_config)
+        web_app.add_post_handler("/server/config/test-connection", self.__handle_test_connection)
 
     def __handle_get_config(self):
         out_json = SerializeConfig.config(self.__config)
@@ -109,3 +113,23 @@ class ConfigHandler(IHandler):
         if Config.is_sensitive(section, key):
             return HTTPResponse(body=f"{section}.{key} updated")
         return HTTPResponse(body=f"{section}.{key} set to {value}")
+
+    def __handle_test_connection(self):
+        lftp = self.__config.lftp
+        missing = lftp_ssh.missing_connection_fields(lftp)
+        if missing:
+            return HTTPResponse(
+                body=json.dumps({"error": f"Missing required setting(s): {', '.join(missing)}"}),
+                status=400,
+                headers={"Content-Type": "application/json"},
+            )
+        ssh = lftp_ssh.build_sshcp(lftp)
+        try:
+            ssh.detect_shell()
+        except SshcpError as e:
+            return HTTPResponse(
+                body=json.dumps({"error": str(e)}), status=502, headers={"Content-Type": "application/json"}
+            )
+        return HTTPResponse(
+            body=json.dumps({"success": True}), status=200, headers={"Content-Type": "application/json"}
+        )

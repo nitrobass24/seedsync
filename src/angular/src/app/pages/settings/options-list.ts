@@ -110,6 +110,13 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
     },
     {
       type: OptionType.Text,
+      label: 'Remote SSH Port',
+      valuePath: ['lftp', 'remote_port'],
+      description: null,
+      requiresRestart: true,
+    },
+    {
+      type: OptionType.Directory,
       label: 'Server Directory',
       valuePath: ['lftp', 'remote_path'],
       description: 'Path to your files on the remote server',
@@ -118,20 +125,13 @@ export const OPTIONS_CONTEXT_SERVER: IOptionsContext = {
       overrideNote: OVERRIDE_NOTE,
     },
     {
-      type: OptionType.Text,
+      type: OptionType.Directory,
       label: 'Local Directory',
       valuePath: ['lftp', 'local_path'],
       description: 'Downloaded files are placed here',
       requiresRestart: true,
       disabledWhen: 'pairsEnabled',
       overrideNote: OVERRIDE_NOTE,
-    },
-    {
-      type: OptionType.Text,
-      label: 'Remote SSH Port',
-      valuePath: ['lftp', 'remote_port'],
-      description: null,
-      requiresRestart: true,
     },
     {
       type: OptionType.Text,

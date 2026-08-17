@@ -49,6 +49,21 @@ input[type="text"] {
     width: 100%;
 }
 
+.directory-field {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+
+    input[type="text"] {
+        flex: 1 1 auto;
+    }
+
+    .directory-browse-btn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+}
+
 // ── Dark mode refinements ──
 :host-context([data-bs-theme="dark"]) {
     input[type="text"] {

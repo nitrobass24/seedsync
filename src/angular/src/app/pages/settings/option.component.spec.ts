@@ -139,3 +139,40 @@ describe('OptionComponent — onChange and effectiveChoices', () => {
     expect(component.effectiveChoices()).toEqual(['opt1', 'opt2']);
   });
 });
+
+describe('OptionComponent — Directory type', () => {
+  let component: OptionComponent;
+  let fixture: ComponentFixture<OptionComponent>;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({});
+    fixture = TestBed.createComponent(OptionComponent);
+    component = fixture.componentInstance;
+    fixture.componentRef.setInput('type', OptionType.Directory);
+    fixture.componentRef.setInput('value', '/some/path');
+    fixture.detectChanges();
+  });
+
+  it('emits browseRequested when the Browse button is clicked', () => {
+    let emitted = false;
+    component.browseRequested.subscribe(() => (emitted = true));
+
+    const button = fixture.nativeElement.querySelector('.directory-browse-btn') as HTMLButtonElement;
+    button.click();
+
+    expect(emitted).toBe(true);
+  });
+
+  it('disables the Browse button when the option is disabled', () => {
+    fixture.componentRef.setInput('disabled', true);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('.directory-browse-btn') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it('renders the current value in the text input', () => {
+    const input = fixture.nativeElement.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input.value).toBe('/some/path');
+  });
+});

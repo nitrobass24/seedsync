@@ -1,5 +1,8 @@
 import '@angular/compiler';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { TestBed } from '@angular/core/testing';
+import { of, Subject } from 'rxjs';
+import { SettingsPageComponent } from './settings-page.component';
 import {
   FTPS_ONLY_NOTE,
   IOptionsContext,
@@ -9,6 +12,15 @@ import {
   OPTIONS_CONTEXT_SERVER,
   applyDisableRules,
 } from './options-list';
+import { ConfigService } from '../../services/settings/config.service';
+import { NotificationService } from '../../services/utils/notification.service';
+import { NotificationsService } from '../../services/settings/notifications.service';
+import { TestResult } from '../../services/utils/test-result';
+import { ConnectionTestService } from '../../services/settings/connection-test.service';
+import { ConnectionStatusService } from '../../services/settings/connection-status.service';
+import { ServerCommandService } from '../../services/server/server-command.service';
+import { ConnectedService } from '../../services/utils/connected.service';
+import { PathPairsService } from '../../services/settings/path-pairs.service';
 
 const inactive = { pairsEnabled: false, validateDisabled: false, protocolSftp: false };
 const buildServerContext = (hasEnabledPairs: boolean): IOptionsContext =>
@@ -77,6 +89,240 @@ describe('applyDisableRules: buildFtpsContext', () => {
   });
 });
 
+describe('SettingsPageComponent.onTestConnection', () => {
+  let component: SettingsPageComponent;
+  let testConnectionSubject: Subject<TestResult>;
+  let mockConnectionTestService: { testConnection: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    testConnectionSubject = new Subject<TestResult>();
+    mockConnectionTestService = {
+      testConnection: vi.fn().mockReturnValue(testConnectionSubject.asObservable()),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ConfigService, useValue: { config$: of(null) } },
+        { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
+        { provide: NotificationsService, useValue: { test: vi.fn() } },
+        { provide: ConnectionTestService, useValue: mockConnectionTestService },
+        { provide: ServerCommandService, useValue: { restart: vi.fn() } },
+        { provide: ConnectedService, useValue: { connected$: of(false) } },
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(SettingsPageComponent);
+    component = fixture.componentInstance;
+  });
+
+  it('sets testingConnection and clears the previous result while the request is in flight', () => {
+    component.connectionResult = { success: false, message: 'stale' };
+    component.onTestConnection();
+
+    expect(component.testingConnection).toBe(true);
+    expect(component.connectionResult).toBeNull();
+    expect(mockConnectionTestService.testConnection).toHaveBeenCalled();
+  });
+
+  it('surfaces a successful result, marks the connection verified, and shares it via ConnectionStatusService', () => {
+    let sharedVerified: boolean | undefined;
+    TestBed.inject(ConnectionStatusService).verified$.subscribe((v) => (sharedVerified = v));
+
+    component.onTestConnection();
+    testConnectionSubject.next({ success: true, message: 'Connection successful' });
+
+    expect(component.testingConnection).toBe(false);
+    expect(component.connectionResult).toEqual({ success: true, message: 'Connection successful' });
+    expect(component.connectionVerified).toBe(true);
+    expect(sharedVerified).toBe(true);
+  });
+
+  it('surfaces a failed result with the server-provided error message and leaves it unverified', () => {
+    component.onTestConnection();
+    testConnectionSubject.next({ success: false, message: 'Incorrect password' });
+
+    expect(component.testingConnection).toBe(false);
+    expect(component.connectionResult).toEqual({ success: false, message: 'Incorrect password' });
+    expect(component.connectionVerified).toBe(false);
+  });
+});
+
+describe('SettingsPageComponent connection-field changes invalidate a verified connection', () => {
+  let component: SettingsPageComponent;
+  let setSubject: Subject<{ success: boolean; data: string | null; errorMessage: string | null }>;
+  let mockConfigService: { config$: unknown; configSnapshot: unknown; set: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    setSubject = new Subject();
+    mockConfigService = {
+      config$: of(null),
+      configSnapshot: null,
+      set: vi.fn().mockReturnValue(setSubject.asObservable()),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
+        { provide: NotificationsService, useValue: { test: vi.fn() } },
+        { provide: ConnectionTestService, useValue: { testConnection: vi.fn().mockReturnValue(of(null)) } },
+        { provide: ServerCommandService, useValue: { restart: vi.fn() } },
+        { provide: ConnectedService, useValue: { connected$: of(false) } },
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(SettingsPageComponent);
+    component = fixture.componentInstance;
+    component.connectionVerified = true;
+    component.connectionResult = { success: true, message: 'Connection successful' };
+  });
+
+  it('resets connectionVerified when a connection field is changed successfully', () => {
+    component.onSetConfig('lftp', 'remote_address', 'new.host.example.com');
+    setSubject.next({ success: true, data: 'lftp.remote_address set to new.host.example.com', errorMessage: null });
+
+    expect(component.connectionVerified).toBe(false);
+    expect(component.connectionResult).toBeNull();
+  });
+
+  it('does not reset connectionVerified for unrelated fields', () => {
+    component.onSetConfig('lftp', 'remote_path', '/some/path');
+    setSubject.next({ success: true, data: 'lftp.remote_path set to /some/path', errorMessage: null });
+
+    expect(component.connectionVerified).toBe(true);
+  });
+
+  it('does not reset connectionVerified when the set request fails', () => {
+    component.onSetConfig('lftp', 'remote_port', '22');
+    setSubject.next({ success: false, data: null, errorMessage: 'Bad config' });
+
+    expect(component.connectionVerified).toBe(true);
+  });
+});
+
+describe('SettingsPageComponent directory picker', () => {
+  let component: SettingsPageComponent;
+  let mockConfigService: { config$: unknown; configSnapshot: unknown; set: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    mockConfigService = {
+      config$: of(null),
+      configSnapshot: { lftp: { remote_path: '/remote/current', local_path: '/local/current' } },
+      set: vi.fn().mockReturnValue(of({ success: true, data: 'ok', errorMessage: null })),
+    };
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
+        { provide: NotificationsService, useValue: { test: vi.fn() } },
+        { provide: ConnectionTestService, useValue: { testConnection: vi.fn().mockReturnValue(of(null)) } },
+        { provide: ServerCommandService, useValue: { restart: vi.fn() } },
+        { provide: ConnectedService, useValue: { connected$: of(false) } },
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(SettingsPageComponent);
+    component = fixture.componentInstance;
+  });
+
+  it('opens the picker for remote_path with kind "remote" and the current value', () => {
+    const option = buildServerContext(false).options.find((o) => o.valuePath[1] === 'remote_path')!;
+    component.onBrowseDirectory(option);
+
+    expect(component.directoryPickerOption).toBe(option);
+    expect(component.directoryPickerKind).toBe('remote');
+    expect(component.directoryPickerInitialPath).toBe('/remote/current');
+  });
+
+  it('opens the picker for local_path with kind "local"', () => {
+    const option = buildServerContext(false).options.find((o) => o.valuePath[1] === 'local_path')!;
+    component.onBrowseDirectory(option);
+
+    expect(component.directoryPickerKind).toBe('local');
+    expect(component.directoryPickerInitialPath).toBe('/local/current');
+  });
+
+  it('defaults to "/" when the field has no current value', () => {
+    mockConfigService.configSnapshot = { lftp: { remote_path: null, local_path: null } };
+    const option = buildServerContext(false).options.find((o) => o.valuePath[1] === 'remote_path')!;
+    component.onBrowseDirectory(option);
+
+    expect(component.directoryPickerInitialPath).toBe('/');
+  });
+
+  it('persists the selected path and closes the picker on select', () => {
+    const option = buildServerContext(false).options.find((o) => o.valuePath[1] === 'remote_path')!;
+    component.onBrowseDirectory(option);
+
+    component.onDirectorySelected('/remote/chosen');
+
+    expect(mockConfigService.set).toHaveBeenCalledWith('lftp', 'remote_path', '/remote/chosen');
+    expect(component.directoryPickerOption).toBeNull();
+  });
+
+  it('closes the picker without persisting on cancel', () => {
+    const option = buildServerContext(false).options.find((o) => o.valuePath[1] === 'remote_path')!;
+    component.onBrowseDirectory(option);
+
+    component.onDirectoryPickerCancel();
+
+    expect(mockConfigService.set).not.toHaveBeenCalled();
+    expect(component.directoryPickerOption).toBeNull();
+  });
+});
+
+describe('SettingsPageComponent auto-verifies an already-configured connection on load', () => {
+  it('calls testConnection once when the loaded config already has connection fields set', () => {
+    const config = { lftp: { remote_address: 'host', remote_username: 'user', remote_port: 22 } };
+    const mockTestConnection = vi.fn().mockReturnValue(of({ success: true, message: 'Connection successful' }));
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ConfigService, useValue: { config$: of(config), configSnapshot: config } },
+        { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
+        { provide: NotificationsService, useValue: { test: vi.fn() } },
+        { provide: ConnectionTestService, useValue: { testConnection: mockTestConnection } },
+        { provide: ServerCommandService, useValue: { restart: vi.fn() } },
+        { provide: ConnectedService, useValue: { connected$: of(false) } },
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(SettingsPageComponent);
+    fixture.detectChanges();
+
+    expect(mockTestConnection).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.connectionVerified).toBe(true);
+  });
+
+  it('does not auto-test when the connection is not yet configured', () => {
+    const config = { lftp: { remote_address: null, remote_username: null, remote_port: null } };
+    const mockTestConnection = vi.fn().mockReturnValue(of({ success: true, message: 'Connection successful' }));
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ConfigService, useValue: { config$: of(config), configSnapshot: config } },
+        { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
+        { provide: NotificationsService, useValue: { test: vi.fn() } },
+        { provide: ConnectionTestService, useValue: { testConnection: mockTestConnection } },
+        { provide: ServerCommandService, useValue: { restart: vi.fn() } },
+        { provide: ConnectedService, useValue: { connected$: of(false) } },
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(SettingsPageComponent);
+    fixture.detectChanges();
+
+    expect(mockTestConnection).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.connectionVerified).toBe(false);
+  });
+});
+
 describe('applyDisableRules: buildAutoqueueContext', () => {
   it('should disable enabled checkbox when pairs are enabled', () => {
     const ctx = buildAutoqueueContext(true);
@@ -100,5 +346,80 @@ describe('applyDisableRules: buildAutoqueueContext', () => {
     for (const option of others) {
       expect(option.disabled).toBeFalsy();
     }
+  });
+});
+
+describe('SettingsPageComponent.isServerDirectoryLocked', () => {
+  let component: SettingsPageComponent;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ConfigService, useValue: { config$: of(null) } },
+        { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
+        { provide: NotificationsService, useValue: { testDiscord: vi.fn(), testTelegram: vi.fn() } },
+        { provide: ConnectionTestService, useValue: { testConnection: vi.fn().mockReturnValue(of(null)) } },
+        { provide: ServerCommandService, useValue: { restart: vi.fn() } },
+        { provide: ConnectedService, useValue: { connected$: of(false) } },
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+      ],
+    });
+    component = TestBed.createComponent(SettingsPageComponent).componentInstance;
+  });
+
+  it('is locked for remote_path when the connection is not yet verified', () => {
+    const option = buildServerContext(false).options.find((o) => o.valuePath[1] === 'remote_path')!;
+    component.connectionVerified = false;
+
+    expect(component.isServerDirectoryLocked(option)).toBe(true);
+  });
+
+  it('is unlocked for remote_path once the connection is verified', () => {
+    const option = buildServerContext(false).options.find((o) => o.valuePath[1] === 'remote_path')!;
+    component.connectionVerified = true;
+
+    expect(component.isServerDirectoryLocked(option)).toBe(false);
+  });
+
+  it('is not "locked" (no redundant note) when already disabled for another reason, e.g. path pairs', () => {
+    const option = buildServerContext(true).options.find((o) => o.valuePath[1] === 'remote_path')!;
+    component.connectionVerified = false;
+
+    expect(option.disabled).toBe(true);
+    expect(component.isServerDirectoryLocked(option)).toBe(false);
+  });
+
+  it('never locks local_path (no SSH connection needed to browse locally)', () => {
+    const option = buildServerContext(false).options.find((o) => o.valuePath[1] === 'local_path')!;
+    component.connectionVerified = false;
+
+    expect(component.isServerDirectoryLocked(option)).toBe(false);
+  });
+});
+
+describe('SettingsPageComponent Server Directory lock note renders end-to-end', () => {
+  it('shows the note while unverified and hides it once Test Connection succeeds', () => {
+    const testConnectionSubject = new Subject<TestResult>();
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ConfigService, useValue: { config$: of({ lftp: {} }) } },
+        { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
+        { provide: NotificationsService, useValue: { testDiscord: vi.fn(), testTelegram: vi.fn() } },
+        { provide: ConnectionTestService, useValue: { testConnection: vi.fn().mockReturnValue(testConnectionSubject.asObservable()) } },
+        { provide: ServerCommandService, useValue: { restart: vi.fn() } },
+        { provide: ConnectedService, useValue: { connected$: of(false) } },
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+      ],
+    });
+    const fixture = TestBed.createComponent(SettingsPageComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.connection-lock-note')).not.toBeNull();
+
+    fixture.componentInstance.onTestConnection();
+    testConnectionSubject.next({ success: true, message: 'Connection successful' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.connection-lock-note')).toBeNull();
   });
 });
