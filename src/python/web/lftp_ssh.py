@@ -20,3 +20,15 @@ def build_sshcp(lftp: "Config.Lftp") -> Sshcp:
     """
     password = None if lftp.use_ssh_key else lftp.remote_password
     return Sshcp(host=lftp.remote_address, port=lftp.remote_port, user=lftp.remote_username, password=password)
+
+
+def is_credential_error(message: str) -> bool:
+    """Whether an SshcpError message indicates bad credentials (wrong
+    password, or a rejected key), as opposed to a network/host-level failure
+    (bad hostname, connection refused, timeout). Repeatedly retrying a
+    connection test after a credential failure -- as opposed to a transient
+    network blip -- risks tripping fail2ban-style bans on the remote server,
+    so callers use this to stop offering retries until the credentials
+    actually change.
+    """
+    return "Incorrect password" in message or "Permission denied" in message

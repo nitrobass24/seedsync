@@ -60,4 +60,28 @@ describe('ConnectionTestService', () => {
     expect(result!.success).toBe(false);
     expect(result!.message).toBe('Connection failed');
   });
+
+  it('testConnection() forwards credentialError: true from the server', () => {
+    let result: TestResult | undefined;
+    service.testConnection().subscribe((r) => (result = r));
+
+    httpMock.expectOne('/server/config/test-connection').flush(
+      { error: 'Incorrect password', credential_error: true },
+      { status: 502, statusText: 'Bad Gateway' },
+    );
+
+    expect(result!.credentialError).toBe(true);
+  });
+
+  it('testConnection() omits credentialError for a non-credential failure', () => {
+    let result: TestResult | undefined;
+    service.testConnection().subscribe((r) => (result = r));
+
+    httpMock.expectOne('/server/config/test-connection').flush(
+      { error: 'Connection refused by server' },
+      { status: 502, statusText: 'Bad Gateway' },
+    );
+
+    expect(result!.credentialError).toBe(false);
+  });
 });
