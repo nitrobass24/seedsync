@@ -391,8 +391,12 @@ class CommandPipeline:
                 _pc.active_scan_process.force_scan()
 
         command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback)
+        try:
+            command_wrapper.process.start()
+        except Exception as exc:
+            _notify_failure(command, f"Failed to start local cleanup for '{command.filename}': {exc!s}")
+            return False
         self.active_command_processes.append(command_wrapper)
-        command_wrapper.process.start()
         return True
 
     def _handle_validate(

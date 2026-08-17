@@ -352,6 +352,20 @@ describe("ViewFileService", () => {
     expect(latestFiles()[0].isCleanupLocalable).toBe(true);
   });
 
+  it("should not set isCleanupLocalable when the only child is a mirrored empty directory", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.DEFAULT,
+        children: [
+          makeModelFile({ name: "child", is_dir: true, local_size: 0, remote_size: 0, children: [] }),
+        ],
+      }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(false);
+  });
+
   it("should not set isCleanupLocalable when status does not allow local actions", () => {
     emitModelFiles([
       makeModelFile({
