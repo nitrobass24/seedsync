@@ -1,6 +1,6 @@
 # SeedSync Docs Website
 
-Static documentation site for the SeedSync project, built with Docusaurus and deployed to Cloudflare Workers.
+Static documentation site for the SeedSync project, built with Docusaurus and deployed to GitHub Pages.
 
 ## Requirements
 
@@ -27,10 +27,5 @@ npm run build
 
 ## Deploy
 
-This project deploys to Cloudflare Workers using Wrangler and `wrangler.toml`.
-
-```bash
-npm run deploy
-```
-
-For CI/CD, see `.github/workflows/deploy.yml`.
+Deployment is automated: the `docs-pages.yml` GitHub Actions workflow builds
+the site and publishes it to GitHub Pages whenever `website/` changes.
