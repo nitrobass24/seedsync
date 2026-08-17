@@ -22,7 +22,6 @@ function makeStatus(overrides: Partial<{
       ...overrides.server,
     },
     controller: {
-      latestLocalScanTime: null,
       latestRemoteScanTime: new Date(),
       latestRemoteScanFailed: false,
       latestRemoteScanError: null,

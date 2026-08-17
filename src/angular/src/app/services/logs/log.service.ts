@@ -51,14 +51,6 @@ export class LogService implements StreamEventHandler {
         }
     }
 
-    onConnected(): void {
-        // intentional no-op
-    }
-
-    onDisconnected(): void {
-        // intentional no-op
-    }
-
     fetchHistory(params: LogHistoryParams = {}): Observable<LogHistoryEntry[]> {
         let httpParams = new HttpParams();
         if (params.search) httpParams = httpParams.set('search', params.search);

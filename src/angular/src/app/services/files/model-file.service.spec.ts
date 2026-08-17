@@ -22,7 +22,6 @@ function makeFileJson(name: string, state = "DEFAULT") {
     local_modified_timestamp: null,
     remote_created_timestamp: null,
     remote_modified_timestamp: null,
-    children: [],
   };
 }
 

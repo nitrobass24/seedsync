@@ -17,7 +17,6 @@ export class ServerStatusService implements StreamEventHandler {
       errorMessage: Localization.Notification.STATUS_CONNECTION_WAITING,
     },
     controller: {
-      latestLocalScanTime: null,
       latestRemoteScanTime: null,
       latestRemoteScanFailed: false,
       latestRemoteScanError: null,
@@ -47,10 +46,6 @@ export class ServerStatusService implements StreamEventHandler {
     }
   }
 
-  onConnected(): void {
-    // nothing to do
-  }
-
   onDisconnected(): void {
     this.statusSubject.next({
       server: {
@@ -58,7 +53,6 @@ export class ServerStatusService implements StreamEventHandler {
         errorMessage: Localization.Error.SERVER_DISCONNECTED,
       },
       controller: {
-        latestLocalScanTime: null,
         latestRemoteScanTime: null,
         latestRemoteScanFailed: false,
         latestRemoteScanError: null,
