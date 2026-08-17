@@ -127,9 +127,11 @@ class ConfigHandler(IHandler):
         try:
             ssh.detect_shell()
         except SshcpError as e:
-            return HTTPResponse(
-                body=json.dumps({"error": str(e)}), status=502, headers={"Content-Type": "application/json"}
-            )
+            message = str(e)
+            body: dict[str, object] = {"error": message}
+            if lftp_ssh.is_credential_error(message):
+                body["credential_error"] = True
+            return HTTPResponse(body=json.dumps(body), status=502, headers={"Content-Type": "application/json"})
         return HTTPResponse(
             body=json.dumps({"success": True}), status=200, headers={"Content-Type": "application/json"}
         )

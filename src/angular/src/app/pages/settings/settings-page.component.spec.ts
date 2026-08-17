@@ -15,8 +15,7 @@ import {
 import { ConfigService } from '../../services/settings/config.service';
 import { NotificationService } from '../../services/utils/notification.service';
 import { NotificationsService } from '../../services/settings/notifications.service';
-import { TestResult } from '../../services/utils/test-result';
-import { ConnectionTestService } from '../../services/settings/connection-test.service';
+import { ConnectionTestService, TestResult as ConnectionTestResult } from '../../services/settings/connection-test.service';
 import { ConnectionStatusService } from '../../services/settings/connection-status.service';
 import { ServerCommandService } from '../../services/server/server-command.service';
 import { ConnectedService } from '../../services/utils/connected.service';
@@ -91,11 +90,11 @@ describe('applyDisableRules: buildFtpsContext', () => {
 
 describe('SettingsPageComponent.onTestConnection', () => {
   let component: SettingsPageComponent;
-  let testConnectionSubject: Subject<TestResult>;
+  let testConnectionSubject: Subject<ConnectionTestResult>;
   let mockConnectionTestService: { testConnection: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    testConnectionSubject = new Subject<TestResult>();
+    testConnectionSubject = new Subject<ConnectionTestResult>();
     mockConnectionTestService = {
       testConnection: vi.fn().mockReturnValue(testConnectionSubject.asObservable()),
     };
@@ -106,7 +105,10 @@ describe('SettingsPageComponent.onTestConnection', () => {
         { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
         { provide: NotificationsService, useValue: { test: vi.fn() } },
         { provide: ConnectionTestService, useValue: mockConnectionTestService },
-        { provide: ServerCommandService, useValue: { restart: vi.fn() } },
+        {
+          provide: ServerCommandService,
+          useValue: { restart: vi.fn().mockReturnValue(of({ success: true, data: 'ok', errorMessage: null })) },
+        },
         { provide: ConnectedService, useValue: { connected$: of(false) } },
         { provide: PathPairsService, useValue: { pairs$: of([]) } },
       ],
@@ -146,6 +148,35 @@ describe('SettingsPageComponent.onTestConnection', () => {
     expect(component.connectionResult).toEqual({ success: false, message: 'Incorrect password' });
     expect(component.connectionVerified).toBe(false);
   });
+
+  it('locks out further testing on a credential-error failure', () => {
+    component.onTestConnection();
+    testConnectionSubject.next({ success: false, message: 'Incorrect password', credentialError: true });
+
+    expect(component.connectionLockedOut).toBe(true);
+  });
+
+  it('does not lock out on a non-credential failure', () => {
+    component.onTestConnection();
+    testConnectionSubject.next({ success: false, message: 'Connection refused by server' });
+
+    expect(component.connectionLockedOut).toBe(false);
+  });
+
+  it('does not call the service (or reset testingConnection) while locked out', () => {
+    component.connectionLockedOut = true;
+    component.onTestConnection();
+
+    expect(mockConnectionTestService.testConnection).not.toHaveBeenCalled();
+    expect(component.testingConnection).toBe(false);
+  });
+
+  it('onCommandRestart() clears the lockout', () => {
+    component.connectionLockedOut = true;
+    component.onCommandRestart();
+
+    expect(component.connectionLockedOut).toBe(false);
+  });
 });
 
 describe('SettingsPageComponent connection-field changes invalidate a verified connection', () => {
@@ -177,6 +208,7 @@ describe('SettingsPageComponent connection-field changes invalidate a verified c
     component = fixture.componentInstance;
     component.connectionVerified = true;
     component.connectionResult = { success: true, message: 'Connection successful' };
+    component.connectionLockedOut = true;
   });
 
   it('resets connectionVerified when a connection field is changed successfully', () => {
@@ -187,11 +219,19 @@ describe('SettingsPageComponent connection-field changes invalidate a verified c
     expect(component.connectionResult).toBeNull();
   });
 
+  it('clears a credential-error lockout when a connection field is changed successfully', () => {
+    component.onSetConfig('lftp', 'remote_password', 'new-password');
+    setSubject.next({ success: true, data: 'lftp.remote_password updated', errorMessage: null });
+
+    expect(component.connectionLockedOut).toBe(false);
+  });
+
   it('does not reset connectionVerified for unrelated fields', () => {
     component.onSetConfig('lftp', 'remote_path', '/some/path');
     setSubject.next({ success: true, data: 'lftp.remote_path set to /some/path', errorMessage: null });
 
     expect(component.connectionVerified).toBe(true);
+    expect(component.connectionLockedOut).toBe(true);
   });
 
   it('does not reset connectionVerified when the set request fails', () => {
@@ -399,7 +439,7 @@ describe('SettingsPageComponent.isServerDirectoryLocked', () => {
 
 describe('SettingsPageComponent Server Directory lock note renders end-to-end', () => {
   it('shows the note while unverified and hides it once Test Connection succeeds', () => {
-    const testConnectionSubject = new Subject<TestResult>();
+    const testConnectionSubject = new Subject<ConnectionTestResult>();
     TestBed.configureTestingModule({
       providers: [
         { provide: ConfigService, useValue: { config$: of({ lftp: {} }) } },
@@ -421,5 +461,78 @@ describe('SettingsPageComponent Server Directory lock note renders end-to-end', 
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('.connection-lock-note')).toBeNull();
+  });
+});
+
+describe('SettingsPageComponent connection lockout banner renders end-to-end', () => {
+  function setUpFixture() {
+    const testConnectionSubject = new Subject<ConnectionTestResult>();
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ConfigService, useValue: { config$: of({ lftp: {} }) } },
+        { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
+        { provide: NotificationsService, useValue: { testDiscord: vi.fn(), testTelegram: vi.fn() } },
+        { provide: ConnectionTestService, useValue: { testConnection: vi.fn().mockReturnValue(testConnectionSubject.asObservable()) } },
+        {
+          provide: ServerCommandService,
+          useValue: { restart: vi.fn().mockReturnValue(of({ success: true, data: 'ok', errorMessage: null })) },
+        },
+        { provide: ConnectedService, useValue: { connected$: of(true) } },
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+      ],
+    });
+    const fixture = TestBed.createComponent(SettingsPageComponent);
+    fixture.detectChanges();
+    return { fixture, testConnectionSubject };
+  }
+
+  it('is absent before any failure and appears after a credential-error failure', () => {
+    const { fixture, testConnectionSubject } = setUpFixture();
+    expect(fixture.nativeElement.querySelector('.connection-lockout-banner')).toBeNull();
+
+    fixture.componentInstance.onTestConnection();
+    testConnectionSubject.next({ success: false, message: 'Incorrect password', credentialError: true });
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector('.connection-lockout-banner');
+    expect(banner).not.toBeNull();
+    expect(banner.textContent).toContain('Further connection tests are blocked');
+  });
+
+  it('disables the Test Connection button while the banner is showing', () => {
+    const { fixture, testConnectionSubject } = setUpFixture();
+    fixture.componentInstance.onTestConnection();
+    testConnectionSubject.next({ success: false, message: 'Incorrect password', credentialError: true });
+    fixture.detectChanges();
+
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find(
+      (b) => (b as HTMLButtonElement).textContent?.trim() === 'Test Connection',
+    ) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it('clicking Restart clears the lockout and hides the banner', () => {
+    const { fixture, testConnectionSubject } = setUpFixture();
+    fixture.componentInstance.onTestConnection();
+    testConnectionSubject.next({ success: false, message: 'Incorrect password', credentialError: true });
+    fixture.detectChanges();
+
+    const restartButton = Array.from(fixture.nativeElement.querySelectorAll('button')).find(
+      (b) => (b as HTMLButtonElement).textContent?.trim() === 'Restart',
+    ) as HTMLButtonElement;
+    restartButton.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.connectionLockedOut).toBe(false);
+    expect(fixture.nativeElement.querySelector('.connection-lockout-banner')).toBeNull();
+  });
+
+  it('does not show the banner for a non-credential failure', () => {
+    const { fixture, testConnectionSubject } = setUpFixture();
+    fixture.componentInstance.onTestConnection();
+    testConnectionSubject.next({ success: false, message: 'Connection refused by server' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.connection-lockout-banner')).toBeNull();
   });
 });

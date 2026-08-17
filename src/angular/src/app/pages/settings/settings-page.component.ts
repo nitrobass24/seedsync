@@ -110,6 +110,11 @@ export class SettingsPageComponent implements OnInit {
   /** True once a Test Connection call has succeeded against the currently
    * saved lftp connection fields. Gates the Server Directory picker. */
   connectionVerified = false;
+  /** True after a Test Connection call fails with a bad-credential error.
+   * Blocks further Test Connection attempts (repeated failed auth attempts
+   * risk a fail2ban-style ban on the remote server) until the connection
+   * settings change or the Restart button is clicked. */
+  connectionLockedOut = false;
 
   directoryPickerOption: IOption | null = null;
   directoryPickerKind: DirectoryBrowseKind = 'local';
@@ -211,10 +216,13 @@ export class SettingsPageComponent implements OnInit {
           }
 
           // A changed connection field invalidates any previously-verified
-          // connection, re-locking the Server Directory picker until re-tested.
+          // connection, re-locking the Server Directory picker until re-tested,
+          // and clears a credential-error lockout since the credentials are
+          // no longer what caused it.
           if (section === 'lftp' && CONNECTION_FIELDS.has(option)) {
             this.setConnectionVerified(false);
             this.connectionResult = null;
+            this.connectionLockedOut = false;
           }
         } else {
           const notif = createNotification(
@@ -240,6 +248,11 @@ export class SettingsPageComponent implements OnInit {
 
   onCommandRestart(): void {
     this.notifService.hide(this.configRestartNotif);
+    // A restart is the user's remediation action for a credential-error
+    // lockout too: clear it eagerly so Test Connection isn't left blocked
+    // once the app comes back up.
+    this.connectionLockedOut = false;
+    this.cdr.markForCheck();
 
     this.commandService.restart().subscribe({
       next: (reaction) => {
@@ -265,6 +278,9 @@ export class SettingsPageComponent implements OnInit {
   }
 
   onTestConnection(): void {
+    if (this.connectionLockedOut) {
+      return;
+    }
     this.testingConnection = true;
     this.connectionResult = null;
     this.connectionTestService.testConnection().pipe(
@@ -273,6 +289,9 @@ export class SettingsPageComponent implements OnInit {
       this.testingConnection = false;
       this.connectionResult = result;
       this.setConnectionVerified(result.success);
+      if (!result.success && result.credentialError) {
+        this.connectionLockedOut = true;
+      }
       this.cdr.markForCheck();
     });
   }

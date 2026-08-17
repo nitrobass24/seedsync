@@ -159,6 +159,15 @@
     flex: 0 0 auto;
 }
 
+.connection-lockout-banner {
+    align-items: flex-start;
+    font-weight: 500;
+}
+
+.connection-lockout-text {
+    flex: 1 1 auto;
+}
+
 /* Medium and large screens */
 @media only screen and (min-width: $medium-min-width) {
     #settings {

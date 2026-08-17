@@ -327,6 +327,39 @@ class TestConfigHandler(BaseTestWebApp):
         json_dict = json.loads(resp.text)
         self.assertEqual("Incorrect password", json_dict["error"])
 
+    def test_test_connection_incorrect_password_flags_credential_error(self):
+        self.context.config.lftp.remote_address = "example.com"
+        self.context.config.lftp.remote_username = "user"
+        self.context.config.lftp.remote_password = "wrong-pass"
+        self.context.config.lftp.remote_port = 22
+        with patch("web.lftp_ssh.Sshcp.detect_shell", side_effect=SshcpError("Incorrect password")):
+            resp = self._post_test_connection(expect_errors=True)
+        json_dict = json.loads(resp.text)
+        self.assertTrue(json_dict["credential_error"])
+
+    def test_test_connection_permission_denied_flags_credential_error(self):
+        self.context.config.lftp.remote_address = "example.com"
+        self.context.config.lftp.remote_username = "user"
+        self.context.config.lftp.remote_port = 22
+        self.context.config.lftp.use_ssh_key = True
+        with patch(
+            "web.lftp_ssh.Sshcp.detect_shell",
+            side_effect=SshcpError("user@example.com: Permission denied (publickey)."),
+        ):
+            resp = self._post_test_connection(expect_errors=True)
+        json_dict = json.loads(resp.text)
+        self.assertTrue(json_dict["credential_error"])
+
+    def test_test_connection_non_credential_failure_omits_credential_error(self):
+        self.context.config.lftp.remote_address = "example.com"
+        self.context.config.lftp.remote_username = "user"
+        self.context.config.lftp.remote_password = "pass"
+        self.context.config.lftp.remote_port = 22
+        with patch("web.lftp_ssh.Sshcp.detect_shell", side_effect=SshcpError("Connection refused by server")):
+            resp = self._post_test_connection(expect_errors=True)
+        json_dict = json.loads(resp.text)
+        self.assertNotIn("credential_error", json_dict)
+
     def test_test_connection_uses_ssh_key_omits_password(self):
         self.context.config.lftp.remote_address = "example.com"
         self.context.config.lftp.remote_username = "user"

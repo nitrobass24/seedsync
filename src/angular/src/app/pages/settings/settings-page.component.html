@@ -26,7 +26,7 @@
             @if (option.valuePath[1] === 'remote_port') {
               <div class="test-row test-row-end">
                 <button type="button" class="btn btn-sm btn-outline-secondary"
-                        [disabled]="testingConnection || !commandsEnabled"
+                        [disabled]="testingConnection || !commandsEnabled || connectionLockedOut"
                         (click)="onTestConnection()">
                   {{ testingConnection ? 'Testing...' : 'Test Connection' }}
                 </button>
@@ -37,6 +37,16 @@
                   {{ connectionResult?.message }}
                 </span>
               </div>
+              @if (connectionLockedOut) {
+                <div class="connection-lock-note connection-lockout-banner" role="alert">
+                  <span class="connection-lock-icon" aria-hidden="true">&#9888;&#65039;</span>
+                  <span class="connection-lockout-text">
+                    Further connection tests are blocked after a bad-credential failure, to avoid the remote
+                    server denying further connections. Change the connection settings above, or click
+                    Restart below to try again.
+                  </span>
+                </div>
+              }
             }
           }
         </div>
