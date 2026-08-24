@@ -2,8 +2,9 @@
 
 import logging
 import os
+from typing import override
 
-from common import Constants, Localization, overrides
+from common import Constants, Localization
 from system import SystemFile, SystemScanner, SystemScannerError
 
 from .scanner_process import IScanner, ScannerError
@@ -21,11 +22,11 @@ class LocalScanner(IScanner):
             self.__scanner.set_lftp_temp_suffix(Constants.LFTP_TEMP_FILE_SUFFIX)
         self.logger = logging.getLogger("LocalScanner")
 
-    @overrides(IScanner)
+    @override
     def set_base_logger(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild("LocalScanner")
 
-    @overrides(IScanner)
+    @override
     def scan(self) -> list[SystemFile]:
         # If the scan path doesn't exist yet (e.g. staging directory not created),
         # return empty results instead of crashing the scanner process

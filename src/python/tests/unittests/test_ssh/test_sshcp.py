@@ -7,11 +7,11 @@ import shutil
 import sys
 import tempfile
 import unittest
+from typing import override
 
 import timeout_decorator
 from parameterized import parameterized
 
-from common import overrides
 from ssh import Sshcp, SshcpError
 from tests.utils import TestUtils, requires_live_ssh
 
@@ -27,7 +27,7 @@ _PARAMS = [("password", _PASSWORD), ("keyauth", None)]
 class TestSshcp(unittest.TestCase):
     __KEEP_FILES = False  # for debugging
 
-    @overrides(unittest.TestCase)
+    @override
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp(prefix="test_sshcp")
         self.local_dir = os.path.join(self.temp_dir, "local")
@@ -57,7 +57,7 @@ class TestSshcp(unittest.TestCase):
         with open(self.local_file, "w") as f:
             f.write("this is a test file")
 
-    @overrides(unittest.TestCase)
+    @override
     def tearDown(self):
         if not self.__KEEP_FILES:
             shutil.rmtree(self.temp_dir)

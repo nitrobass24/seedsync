@@ -2,8 +2,9 @@
 
 import json
 import re
+from typing import override
 
-from common import Constants, Persist, PersistError, overrides
+from common import Constants, Persist, PersistError
 
 from .persist_keys import KEY_SEP
 
@@ -49,7 +50,7 @@ class ControllerPersist(Persist):
         return migrated
 
     @classmethod
-    @overrides(Persist)
+    @override
     def from_str(cls: type["ControllerPersist"], content: str) -> "ControllerPersist":
         persist = cls()
         try:
@@ -73,7 +74,7 @@ class ControllerPersist(Persist):
         except (json.decoder.JSONDecodeError, KeyError) as e:
             raise PersistError(f"Error parsing ControllerPersist - {type(e).__name__}: {e!s}") from e
 
-    @overrides(Persist)
+    @override
     def to_str(self) -> str:
         dct: dict[str, list[str]] = {}
         dct[ControllerPersist.__KEY_DOWNLOADED_FILE_NAMES] = list(self.downloaded_file_names)

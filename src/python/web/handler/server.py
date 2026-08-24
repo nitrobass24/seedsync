@@ -1,10 +1,11 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import threading
+from typing import override
 
 from bottle import HTTPResponse
 
-from common import Context, overrides
+from common import Context
 
 from ..web_app import IHandler, WebApp
 
@@ -14,7 +15,7 @@ class ServerHandler(IHandler):
         self.logger = context.logger.getChild("ServerActionHandler")
         self._restart_event = threading.Event()
 
-    @overrides(IHandler)
+    @override
     def add_routes(self, web_app: WebApp):
         web_app.add_handler("/server/command/restart", self._handle_action_restart)
 

@@ -5,13 +5,13 @@ import time
 from collections.abc import Iterable
 from socketserver import ThreadingMixIn
 from threading import Thread
-from typing import Any
+from typing import Any, override
 from wsgiref.simple_server import WSGIRequestHandler, WSGIServer, make_server
 from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
 import bottle
 
-from common import Context, Job, overrides
+from common import Context, Job
 
 from .web_app import WebApp
 
@@ -30,7 +30,7 @@ class WebAppJob(Job):
         self.__server = None
         self.__server_thread = None
 
-    @overrides(Job)
+    @override
     def setup(self):
         # Note: do not use requestlogger.WSGILogger as it breaks SSE
         self.__server = MyWSGIRefServer(self.web_access_logger, host="0.0.0.0", port=self.__context.config.web.port)
@@ -39,11 +39,11 @@ class WebAppJob(Job):
         )
         self.__server_thread.start()
 
-    @overrides(Job)
+    @override
     def execute(self):
         self.__app.process()
 
-    @overrides(Job)
+    @override
     def cleanup(self):
         self.__app.stop()
         assert self.__server is not None
@@ -104,7 +104,7 @@ class MyWSGIRefServer(bottle.ServerAdapter):
         self.logger = logger
         self.server = None
 
-    @overrides(bottle.ServerAdapter)
+    @override
     def run(self, handler: WSGIApplication) -> None:
         self.logger.debug("Starting web server")
         handler = _RequestLoggingMiddleware(handler, logger=self.logger, level=logging.DEBUG)

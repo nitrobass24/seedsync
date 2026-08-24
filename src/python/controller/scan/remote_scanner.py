@@ -5,8 +5,9 @@ import json
 import logging
 import os
 import time
+from typing import override
 
-from common import Localization, overrides
+from common import Localization
 from common import escape_remote_path_double as _escape_remote_path_double
 from common import escape_remote_path_single as _escape_remote_path_single
 from ssh import Sshcp, SshcpError
@@ -50,12 +51,12 @@ class RemoteScanner(IScanner):
         if os.path.basename(self.__remote_path_to_scan_script) != script_name:
             self.__remote_path_to_scan_script = os.path.join(self.__remote_path_to_scan_script, script_name)
 
-    @overrides(IScanner)
+    @override
     def set_base_logger(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild("RemoteScanner")
         self.__ssh.set_base_logger(self.logger)
 
-    @overrides(IScanner)
+    @override
     def scan(self) -> list[SystemFile]:
         if self.__first_run:
             self._install_scanfs()

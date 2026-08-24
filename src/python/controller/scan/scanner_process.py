@@ -4,8 +4,9 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import override
 
-from common import AppError, AppProcess, PipeFlag, PipeStream, overrides
+from common import AppError, AppProcess, PipeFlag, PipeStream
 from system import SystemFile
 
 
@@ -70,16 +71,16 @@ class ScannerProcess(AppProcess):
         self.__interval_in_ms = interval_in_ms
         self.verbose = verbose
 
-    @overrides(AppProcess)
+    @override
     def run_init(self):
         # Set the base logger for scanner
         self.__scanner.set_base_logger(self.logger)
 
-    @overrides(AppProcess)
+    @override
     def run_cleanup(self):
         pass
 
-    @overrides(AppProcess)
+    @override
     def run_loop(self):
         timestamp_start = datetime.now()
         if self.verbose:
@@ -114,7 +115,7 @@ class ScannerProcess(AppProcess):
         results = self.__queue.pop_all()
         return results[-1] if results else None
 
-    @overrides(AppProcess)
+    @override
     def close_queues(self):
         self.__queue.close()
         self.__wake_event.close()
