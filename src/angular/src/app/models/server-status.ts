@@ -7,7 +7,6 @@ export interface ServerStatus {
     errorMessage: string | null;
   };
   controller: {
-    latestLocalScanTime: Date | null;
     latestRemoteScanTime: Date | null;
     latestRemoteScanFailed: boolean;
     latestRemoteScanError: string | null;
@@ -34,11 +33,6 @@ export interface ServerStatusJson {
 }
 
 export function serverStatusFromJson(json: ServerStatusJson): ServerStatus {
-  let latestLocalScanTime: Date | null = null;
-  if (json.controller.latest_local_scan_time != null) {
-    latestLocalScanTime = new Date(1000 * +json.controller.latest_local_scan_time);
-  }
-
   let latestRemoteScanTime: Date | null = null;
   if (json.controller.latest_remote_scan_time != null) {
     latestRemoteScanTime = new Date(1000 * +json.controller.latest_remote_scan_time);
@@ -50,7 +44,6 @@ export function serverStatusFromJson(json: ServerStatusJson): ServerStatus {
       errorMessage: json.server.error_msg,
     },
     controller: {
-      latestLocalScanTime,
       latestRemoteScanTime,
       latestRemoteScanFailed: json.controller.latest_remote_scan_failed,
       latestRemoteScanError: json.controller.latest_remote_scan_error,

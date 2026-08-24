@@ -50,7 +50,6 @@ describe('serverStatusFromJson', () => {
 
     const result = serverStatusFromJson(json);
 
-    expect(result.controller.latestLocalScanTime).toEqual(new Date(1700000000 * 1000));
     expect(result.controller.latestRemoteScanTime).toEqual(new Date(1700000100 * 1000));
   });
 
@@ -73,7 +72,6 @@ describe('serverStatusFromJson', () => {
   it('should handle null timestamps', () => {
     const result = serverStatusFromJson(makeJson());
 
-    expect(result.controller.latestLocalScanTime).toBeNull();
     expect(result.controller.latestRemoteScanTime).toBeNull();
   });
 });

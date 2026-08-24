@@ -4,20 +4,21 @@ import { LoggerService } from '../utils/logger.service';
 
 /**
  * Interface that services implement to receive SSE events
- * from the StreamDispatchService.
+ * from the StreamDispatchService. All members are optional so handlers
+ * only implement the callbacks they care about.
  */
 export interface StreamEventHandler {
   /** Event names this handler is interested in. */
-  getEventNames(): string[];
+  getEventNames?(): string[];
 
   /** Called when the SSE connection opens. */
-  onConnected(): void;
+  onConnected?(): void;
 
   /** Called when the SSE connection drops. */
-  onDisconnected(): void;
+  onDisconnected?(): void;
 
   /** Called when a subscribed event arrives. */
-  onEvent(eventName: string, data: string): void;
+  onEvent?(eventName: string, data: string): void;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -37,7 +38,7 @@ export class StreamDispatchService {
   private readonly handlers: StreamEventHandler[] = [];
 
   registerHandler(handler: StreamEventHandler): void {
-    for (const eventName of handler.getEventNames()) {
+    for (const eventName of handler.getEventNames?.() ?? []) {
       this.eventNameToHandler.set(eventName, handler);
     }
     this.handlers.push(handler);
@@ -87,7 +88,7 @@ export class StreamDispatchService {
     for (const eventName of Array.from(this.eventNameToHandler.keys())) {
       eventSource.addEventListener(eventName, (event: MessageEvent) => {
         this.zone.run(() => {
-          this.eventNameToHandler.get(eventName)!.onEvent(eventName, event.data);
+          this.eventNameToHandler.get(eventName)!.onEvent?.(eventName, event.data);
         });
       });
     }
@@ -97,7 +98,7 @@ export class StreamDispatchService {
       // A successful connection resets the backoff so the next drop retries fast.
       this.retryAttempt = 0;
       for (const handler of this.handlers) {
-        this.zone.run(() => handler.onConnected());
+        this.zone.run(() => handler.onConnected?.());
       }
     };
 
@@ -112,7 +113,7 @@ export class StreamDispatchService {
       this.closeAndCancelRetry();
 
       for (const handler of this.handlers) {
-        this.zone.run(() => handler.onDisconnected());
+        this.zone.run(() => handler.onDisconnected?.());
       }
 
       const delay = this.nextRetryDelayMs();

@@ -8,8 +8,6 @@ import { RestService, WebReaction } from '../utils/rest.service';
 import { StreamDispatchService } from '../base/stream-dispatch.service';
 import { Config, ConfigSection, ConfigValue, REDACTED_SENTINEL } from '../../models/config';
 
-// ConfigValue is re-exported for callers that import it from this service.
-export type { ConfigValue };
 
 /**
  * Config viewed as a record of string-keyed sections, for dynamic

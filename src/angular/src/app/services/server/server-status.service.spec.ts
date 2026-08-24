@@ -68,9 +68,6 @@ describe("ServerStatusService", () => {
     service.status$.subscribe((s) => (result = s));
     expect(result!.server.up).toBe(true);
     expect(result!.server.errorMessage).toBe("");
-    expect(result!.controller.latestLocalScanTime).toEqual(
-      new Date(1000 * 1700000000),
-    );
     expect(result!.controller.latestRemoteScanTime).toBeNull();
     expect(result!.controller.latestRemoteScanFailed).toBe(false);
   });
@@ -98,7 +95,6 @@ describe("ServerStatusService", () => {
     expect(result!.server.errorMessage).toBe(
       Localization.Error.SERVER_DISCONNECTED,
     );
-    expect(result!.controller.latestLocalScanTime).toBeNull();
     expect(result!.controller.latestRemoteScanTime).toBeNull();
     expect(result!.controller.latestRemoteScanFailed).toBe(false);
     expect(result!.controller.latestRemoteScanError).toBeNull();
