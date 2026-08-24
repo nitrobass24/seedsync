@@ -10,6 +10,7 @@ import { FileSizePipe } from '../../common/file-size.pipe';
 import { EtaPipe } from '../../common/eta.pipe';
 import { CapitalizePipe } from '../../common/capitalize.pipe';
 import { ClickStopPropagationDirective } from '../../common/click-stop-propagation.directive';
+import { DoubleClickConfirm } from '../../common/double-click-confirm';
 import { Observable } from 'rxjs';
 
 export enum FileAction {
@@ -69,8 +70,11 @@ export class FileComponent implements OnChanges, OnDestroy {
   activeAction: FileAction | null = null;
 
   // Inline double-click delete confirmation state
-  confirmingDelete: 'local' | 'remote' | null = null;
-  private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly deleteConfirm = new DoubleClickConfirm<'local' | 'remote'>(() => this.cdr.markForCheck());
+
+  get confirmingDelete(): 'local' | 'remote' | null {
+    return this.deleteConfirm.confirming;
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     const fileChange = changes['file'];
@@ -80,18 +84,18 @@ export class FileComponent implements OnChanges, OnDestroy {
       if (oldFile != null && newFile != null) {
         if (oldFile.pairId !== newFile.pairId || oldFile.name !== newFile.name) {
           this.activeAction = null;
-          this.resetConfirmState();
+          this.deleteConfirm.reset();
         } else if (oldFile.status !== newFile.status) {
           this.activeAction = null;
-          this.resetConfirmState();
+          this.deleteConfirm.reset();
         } else if (this.activeAction === FileAction.DELETE_REMOTE &&
                    oldFile.isRemotelyDeletable && !newFile.isRemotelyDeletable) {
           this.activeAction = null;
-          this.resetConfirmState();
+          this.deleteConfirm.reset();
         } else if (this.activeAction === FileAction.DELETE_LOCAL &&
                    oldFile.isLocallyDeletable && !newFile.isLocallyDeletable) {
           this.activeAction = null;
-          this.resetConfirmState();
+          this.deleteConfirm.reset();
         } else if (this.activeAction === FileAction.VALIDATE &&
                    oldFile.isValidatable && !newFile.isValidatable) {
           this.activeAction = null;
@@ -106,7 +110,7 @@ export class FileComponent implements OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.clearConfirmTimer();
+    this.deleteConfirm.clearTimer();
   }
 
   onCheck(event: Event, file: ViewFile): void {
@@ -186,46 +190,16 @@ export class FileComponent implements OnChanges, OnDestroy {
   }
 
   onDeleteLocal(file: ViewFile): void {
-    if (this.confirmingDelete === 'local') {
-      this.clearConfirmTimer();
-      this.confirmingDelete = null;
+    if (this.deleteConfirm.confirm('local')) {
       this.activeAction = FileAction.DELETE_LOCAL;
       this.deleteLocalEvent.emit(this.actionEvent(file));
-    } else {
-      this.setConfirming('local');
     }
   }
 
   onDeleteRemote(file: ViewFile): void {
-    if (this.confirmingDelete === 'remote') {
-      this.clearConfirmTimer();
-      this.confirmingDelete = null;
+    if (this.deleteConfirm.confirm('remote')) {
       this.activeAction = FileAction.DELETE_REMOTE;
       this.deleteRemoteEvent.emit(this.actionEvent(file));
-    } else {
-      this.setConfirming('remote');
-    }
-  }
-
-  private setConfirming(type: 'local' | 'remote'): void {
-    this.clearConfirmTimer();
-    this.confirmingDelete = type;
-    this.confirmResetTimer = setTimeout(() => {
-      this.confirmingDelete = null;
-      this.confirmResetTimer = null;
-      this.cdr.markForCheck();
-    }, 3000);
-  }
-
-  private resetConfirmState(): void {
-    this.clearConfirmTimer();
-    this.confirmingDelete = null;
-  }
-
-  private clearConfirmTimer(): void {
-    if (this.confirmResetTimer !== null) {
-      clearTimeout(this.confirmResetTimer);
-      this.confirmResetTimer = null;
     }
   }
 

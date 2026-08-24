@@ -34,21 +34,6 @@ export enum ModelFileState {
   MOVE_FAILED     = 'move_failed',
 }
 
-const STATE_LOOKUP: Record<string, ModelFileState> = {
-  DEFAULT:        ModelFileState.DEFAULT,
-  QUEUED:         ModelFileState.QUEUED,
-  DOWNLOADING:    ModelFileState.DOWNLOADING,
-  DOWNLOADED:     ModelFileState.DOWNLOADED,
-  DELETED:        ModelFileState.DELETED,
-  EXTRACTING:     ModelFileState.EXTRACTING,
-  EXTRACTED:      ModelFileState.EXTRACTED,
-  EXTRACT_FAILED: ModelFileState.EXTRACT_FAILED,
-  VALIDATING:     ModelFileState.VALIDATING,
-  VALIDATED:      ModelFileState.VALIDATED,
-  CORRUPT:        ModelFileState.CORRUPT,
-  MOVE_FAILED:    ModelFileState.MOVE_FAILED,
-};
-
 /**
  * Shape of a ModelFile as received in JSON from the backend.
  * All fields are raw (timestamps in seconds, state as string).
@@ -77,7 +62,7 @@ export function modelFileFromJson(json: ModelFileJson): ModelFile {
     is_dir: json.is_dir,
     local_size: json.local_size,
     remote_size: json.remote_size,
-    state: STATE_LOOKUP[json.state.toUpperCase()] ?? ModelFileState.DEFAULT,
+    state: ModelFileState[json.state.toUpperCase() as keyof typeof ModelFileState] ?? ModelFileState.DEFAULT,
     downloading_speed: json.downloading_speed,
     eta: json.eta,
     full_path: json.full_path,

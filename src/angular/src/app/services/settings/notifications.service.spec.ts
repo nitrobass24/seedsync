@@ -26,9 +26,9 @@ describe('NotificationsService', () => {
     httpMock.verify();
   });
 
-  it('testDiscord() returns success on HTTP 200', () => {
+  it("test('discord') returns success on HTTP 200", () => {
     let result: TestResult | undefined;
-    service.testDiscord().subscribe((r) => (result = r));
+    service.test('discord').subscribe((r) => (result = r));
 
     const req = httpMock.expectOne('/server/notifications/test/discord');
     expect(req.request.method).toBe('POST');
@@ -38,9 +38,9 @@ describe('NotificationsService', () => {
     expect(result!.message).toBe('Notification sent successfully');
   });
 
-  it('testDiscord() surfaces server-provided error message on failure', () => {
+  it("test('discord') surfaces server-provided error message on failure", () => {
     let result: TestResult | undefined;
-    service.testDiscord().subscribe((r) => (result = r));
+    service.test('discord').subscribe((r) => (result = r));
 
     httpMock.expectOne('/server/notifications/test/discord').flush(
       { error: 'Discord webhook URL not configured' },
@@ -51,9 +51,9 @@ describe('NotificationsService', () => {
     expect(result!.message).toBe('Discord webhook URL not configured');
   });
 
-  it('testDiscord() falls back to generic message when error body is unparsable', () => {
+  it("test('discord') falls back to generic message when error body is unparsable", () => {
     let result: TestResult | undefined;
-    service.testDiscord().subscribe((r) => (result = r));
+    service.test('discord').subscribe((r) => (result = r));
 
     httpMock.expectOne('/server/notifications/test/discord').error(new ProgressEvent('error'));
 
@@ -61,9 +61,9 @@ describe('NotificationsService', () => {
     expect(result!.message).toBe('Notification failed');
   });
 
-  it('testTelegram() returns success on HTTP 200', () => {
+  it("test('telegram') returns success on HTTP 200", () => {
     let result: TestResult | undefined;
-    service.testTelegram().subscribe((r) => (result = r));
+    service.test('telegram').subscribe((r) => (result = r));
 
     const req = httpMock.expectOne('/server/notifications/test/telegram');
     expect(req.request.method).toBe('POST');
@@ -73,9 +73,9 @@ describe('NotificationsService', () => {
     expect(result!.message).toBe('Notification sent successfully');
   });
 
-  it('testTelegram() surfaces server-provided error message on failure', () => {
+  it("test('telegram') surfaces server-provided error message on failure", () => {
     let result: TestResult | undefined;
-    service.testTelegram().subscribe((r) => (result = r));
+    service.test('telegram').subscribe((r) => (result = r));
 
     httpMock.expectOne('/server/notifications/test/telegram').flush(
       { error: 'Telegram bot token not configured' },
@@ -86,9 +86,9 @@ describe('NotificationsService', () => {
     expect(result!.message).toBe('Telegram bot token not configured');
   });
 
-  it('testTelegram() falls back to generic message when error body is unparsable', () => {
+  it("test('telegram') falls back to generic message when error body is unparsable", () => {
     let result: TestResult | undefined;
-    service.testTelegram().subscribe((r) => (result = r));
+    service.test('telegram').subscribe((r) => (result = r));
 
     httpMock.expectOne('/server/notifications/test/telegram').error(new ProgressEvent('error'));
 

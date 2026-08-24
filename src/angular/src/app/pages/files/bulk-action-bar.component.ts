@@ -1,6 +1,7 @@
 import {
     Component, ChangeDetectionStrategy, ChangeDetectorRef, OnDestroy, input, output, inject
 } from '@angular/core';
+import { DoubleClickConfirm } from '../../common/double-click-confirm';
 
 @Component({
     selector: 'app-bulk-action-bar',
@@ -54,48 +55,25 @@ export class BulkActionBarComponent implements OnDestroy {
     deleteRemoteEvent = output<void>();
     clearEvent = output<void>();
 
-    // Inline double-click delete confirmation state
-    confirmingDelete: 'local' | 'remote' | null = null;
-    private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
+    private readonly deleteConfirm = new DoubleClickConfirm<'local' | 'remote'>(() => this.cdr.markForCheck());
+
+    get confirmingDelete(): 'local' | 'remote' | null {
+        return this.deleteConfirm.confirming;
+    }
 
     ngOnDestroy(): void {
-        this.clearConfirmTimer();
+        this.deleteConfirm.clearTimer();
     }
 
     onDeleteLocal(): void {
-        if (this.confirmingDelete === 'local') {
-            this.clearConfirmTimer();
-            this.confirmingDelete = null;
+        if (this.deleteConfirm.confirm('local')) {
             this.deleteLocalEvent.emit();
-        } else {
-            this.setConfirming('local');
         }
     }
 
     onDeleteRemote(): void {
-        if (this.confirmingDelete === 'remote') {
-            this.clearConfirmTimer();
-            this.confirmingDelete = null;
+        if (this.deleteConfirm.confirm('remote')) {
             this.deleteRemoteEvent.emit();
-        } else {
-            this.setConfirming('remote');
-        }
-    }
-
-    private setConfirming(type: 'local' | 'remote'): void {
-        this.clearConfirmTimer();
-        this.confirmingDelete = type;
-        this.confirmResetTimer = setTimeout(() => {
-            this.confirmingDelete = null;
-            this.confirmResetTimer = null;
-            this.cdr.markForCheck();
-        }, 3000);
-    }
-
-    private clearConfirmTimer(): void {
-        if (this.confirmResetTimer !== null) {
-            clearTimeout(this.confirmResetTimer);
-            this.confirmResetTimer = null;
         }
     }
 }

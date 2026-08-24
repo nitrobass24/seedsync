@@ -356,9 +356,7 @@ describe("ViewFileService", () => {
       }),
     ]);
 
-    const criteria: ViewFileFilterCriteria = {
-      meetsCriteria: (vf: ViewFile) => vf.status === ViewFileStatus.QUEUED,
-    };
+    const criteria: ViewFileFilterCriteria = (vf: ViewFile) => vf.status === ViewFileStatus.QUEUED;
     service.setFilterCriteria(criteria);
 
     const filtered = latestFilteredFiles();
@@ -871,9 +869,7 @@ describe("ViewFileService", () => {
       makeModelFile({ name: "a", remote_size: 200, local_size: 50, state: ModelFileState.DOWNLOADING }),
       makeModelFile({ name: "b", remote_size: 200, local_size: 0, state: ModelFileState.DEFAULT }),
     ]);
-    const criteria: ViewFileFilterCriteria = {
-      meetsCriteria: (vf) => vf.status === ViewFileStatus.DEFAULT,
-    };
+    const criteria: ViewFileFilterCriteria = (vf) => vf.status === ViewFileStatus.DEFAULT;
     service.setFilterCriteria(criteria);
 
     let emissions = 0;
@@ -900,9 +896,7 @@ describe("ViewFileService", () => {
   });
 
   it("should re-emit the filtered list when membership changes", () => {
-    const criteria: ViewFileFilterCriteria = {
-      meetsCriteria: (vf) => vf.status === ViewFileStatus.DOWNLOADING,
-    };
+    const criteria: ViewFileFilterCriteria = (vf) => vf.status === ViewFileStatus.DOWNLOADING;
     service.setFilterCriteria(criteria);
     emitModelFiles([
       makeModelFile({ name: "a", remote_size: 200, local_size: 50, state: ModelFileState.DEFAULT }),

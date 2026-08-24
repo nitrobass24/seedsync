@@ -7,6 +7,7 @@ import { catchError } from 'rxjs/operators';
 
 import { IntegrationsService, TestConnectionResult } from '../../services/settings/integrations.service';
 import { ArrInstance, ArrInstanceCreate, ArrKind, ARR_KINDS } from '../../models/arr-instance';
+import { DoubleClickConfirm } from '../../common/double-click-confirm';
 import { REDACTED_SENTINEL } from '../../models/config';
 
 interface InstanceForm {
@@ -45,11 +46,14 @@ export class IntegrationsComponent implements OnDestroy {
   testResults = new Map<string, TestConnectionResult>();
 
   // Double-click delete confirmation
-  confirmingDeleteId: string | null = null;
-  private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly deleteConfirm = new DoubleClickConfirm<string>(() => this.cdr.markForCheck());
+
+  get confirmingDeleteId(): string | null {
+    return this.deleteConfirm.confirming;
+  }
 
   ngOnDestroy(): void {
-    this.clearConfirmTimer();
+    this.deleteConfirm.clearTimer();
   }
 
   // --- Add ---
@@ -103,7 +107,7 @@ export class IntegrationsComponent implements OnDestroy {
 
   onStartEdit(instance: ArrInstance): void {
     this.onCancelAdd();
-    this.resetConfirmState();
+    this.deleteConfirm.reset();
     this.editingId = instance.id;
     this.editForm = {
       name: instance.name,
@@ -151,23 +155,18 @@ export class IntegrationsComponent implements OnDestroy {
   // --- Delete (double-click confirm) ---
 
   onDelete(id: string): void {
-    if (this.confirmingDeleteId === id) {
-      this.clearConfirmTimer();
+    if (this.deleteConfirm.confirm(id)) {
       this.integrationsService.remove(id).pipe(
         takeUntilDestroyed(this.destroyRef),
       ).subscribe((success) => {
         if (success) {
           this.errorMessage = null;
-          this.confirmingDeleteId = null;
           this.testResults.delete(id);
         } else {
           this.errorMessage = 'Failed to delete integration. Please try again.';
-          this.confirmingDeleteId = null;
         }
         this.cdr.markForCheck();
       });
-    } else {
-      this.setConfirming(id);
     }
   }
 
@@ -220,32 +219,11 @@ export class IntegrationsComponent implements OnDestroy {
   private cancelEdit(): void {
     this.editingId = null;
     this.editForm = this.emptyForm();
-    this.resetConfirmState();
+    this.deleteConfirm.reset();
   }
 
   private emptyForm(kind: ArrKind = 'sonarr'): InstanceForm {
     return { name: '', kind, url: '', api_key: '', enabled: true };
   }
 
-  private setConfirming(id: string): void {
-    this.clearConfirmTimer();
-    this.confirmingDeleteId = id;
-    this.confirmResetTimer = setTimeout(() => {
-      this.confirmingDeleteId = null;
-      this.confirmResetTimer = null;
-      this.cdr.markForCheck();
-    }, 3000);
-  }
-
-  private resetConfirmState(): void {
-    this.clearConfirmTimer();
-    this.confirmingDeleteId = null;
-  }
-
-  private clearConfirmTimer(): void {
-    if (this.confirmResetTimer !== null) {
-      clearTimeout(this.confirmResetTimer);
-      this.confirmResetTimer = null;
-    }
-  }
 }

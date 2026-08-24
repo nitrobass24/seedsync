@@ -3,10 +3,12 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
-export interface TestResult {
-  readonly success: boolean;
-  readonly message: string;
-}
+import { TestResult, failureFromHttpError } from '../utils/test-result';
+
+export type { TestResult };
+
+export const NOTIFICATION_CHANNELS = ['discord', 'telegram'] as const;
+export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 
 const BASE_URL = '/server/notifications/test';
 
@@ -14,35 +16,10 @@ const BASE_URL = '/server/notifications/test';
 export class NotificationsService {
   private readonly http = inject(HttpClient);
 
-  testDiscord(): Observable<TestResult> {
-    return this.http.post(`${BASE_URL}/discord`, {}).pipe(
+  test(channel: NotificationChannel): Observable<TestResult> {
+    return this.http.post(`${BASE_URL}/${channel}`, {}).pipe(
       map(() => ({ success: true, message: 'Notification sent successfully' })),
-      catchError((err: HttpErrorResponse) => {
-        let message: string;
-        try {
-          const body = typeof err.error === 'string' ? JSON.parse(err.error) : err.error;
-          message = body?.error || 'Notification failed';
-        } catch {
-          message = 'Notification failed';
-        }
-        return of({ success: false, message });
-      }),
-    );
-  }
-
-  testTelegram(): Observable<TestResult> {
-    return this.http.post(`${BASE_URL}/telegram`, {}).pipe(
-      map(() => ({ success: true, message: 'Notification sent successfully' })),
-      catchError((err: HttpErrorResponse) => {
-        let message: string;
-        try {
-          const body = typeof err.error === 'string' ? JSON.parse(err.error) : err.error;
-          message = body?.error || 'Notification failed';
-        } catch {
-          message = 'Notification failed';
-        }
-        return of({ success: false, message });
-      }),
+      catchError((err: HttpErrorResponse) => of(failureFromHttpError(err, 'Notification failed'))),
     );
   }
 }

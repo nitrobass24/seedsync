@@ -1,24 +1,24 @@
 import '@angular/compiler';
 import { describe, it, expect } from 'vitest';
-import { SettingsPageComponent } from './settings-page.component';
-import { FTPS_ONLY_NOTE, IOptionsContext } from './options-list';
+import {
+  FTPS_ONLY_NOTE,
+  IOptionsContext,
+  OVERRIDE_NOTE,
+  OPTIONS_CONTEXT_AUTOQUEUE,
+  OPTIONS_CONTEXT_FTPS,
+  OPTIONS_CONTEXT_SERVER,
+  applyDisableRules,
+} from './options-list';
 
-interface SettingsPageStatics {
-  buildServerContext(hasEnabledPairs: boolean): IOptionsContext;
-  buildFtpsContext(protocolIsSftp: boolean): IOptionsContext;
-  buildAutoqueueContext(hasEnabledPairs: boolean): IOptionsContext;
-  OVERRIDE_NOTE: string;
-}
-const settingsStatics = SettingsPageComponent as unknown as SettingsPageStatics;
+const inactive = { pairsEnabled: false, validateDisabled: false, protocolSftp: false };
 const buildServerContext = (hasEnabledPairs: boolean): IOptionsContext =>
-  settingsStatics.buildServerContext(hasEnabledPairs);
+  applyDisableRules(OPTIONS_CONTEXT_SERVER, { ...inactive, pairsEnabled: hasEnabledPairs });
 const buildFtpsContext = (protocolIsSftp: boolean): IOptionsContext =>
-  settingsStatics.buildFtpsContext(protocolIsSftp);
+  applyDisableRules(OPTIONS_CONTEXT_FTPS, { ...inactive, protocolSftp: protocolIsSftp });
 const buildAutoqueueContext = (hasEnabledPairs: boolean): IOptionsContext =>
-  settingsStatics.buildAutoqueueContext(hasEnabledPairs);
-const OVERRIDE_NOTE = settingsStatics.OVERRIDE_NOTE;
+  applyDisableRules(OPTIONS_CONTEXT_AUTOQUEUE, { ...inactive, pairsEnabled: hasEnabledPairs });
 
-describe('SettingsPageComponent.buildServerContext', () => {
+describe('applyDisableRules: buildServerContext', () => {
   it('should disable remote_path and local_path when pairs are enabled', () => {
     const ctx = buildServerContext(true);
     const remotePath = ctx.options.find((o) => o.valuePath[1] === 'remote_path')!;
@@ -51,7 +51,7 @@ describe('SettingsPageComponent.buildServerContext', () => {
   });
 });
 
-describe('SettingsPageComponent.buildFtpsContext', () => {
+describe('applyDisableRules: buildFtpsContext', () => {
   const ftpOnlyPaths = ['remote_ftp_port', 'ftp_ssl_verify_certificate'];
 
   it('disables the FTP-only options when the protocol is sftp', () => {
@@ -77,7 +77,7 @@ describe('SettingsPageComponent.buildFtpsContext', () => {
   });
 });
 
-describe('SettingsPageComponent.buildAutoqueueContext', () => {
+describe('applyDisableRules: buildAutoqueueContext', () => {
   it('should disable enabled checkbox when pairs are enabled', () => {
     const ctx = buildAutoqueueContext(true);
     const enabled = ctx.options.find((o) => o.valuePath[1] === 'enabled')!;

@@ -108,93 +108,77 @@ export interface Config {
   validate: Validate;
 }
 
-export const DEFAULT_GENERAL: General = {
-  log_level: null,
-  verbose: null,
-  exclude_patterns: null,
-};
-
-export const DEFAULT_LFTP: Lftp = {
-  remote_address: null,
-  remote_username: null,
-  remote_password: null,
-  remote_port: null,
-  remote_path: null,
-  local_path: null,
-  remote_path_to_scan_script: null,
-  remote_python_path: null,
-  use_ssh_key: null,
-  num_max_parallel_downloads: null,
-  num_max_parallel_files_per_download: null,
-  num_max_connections_per_root_file: null,
-  num_max_connections_per_dir_file: null,
-  num_max_total_connections: null,
-  use_temp_file: null,
-  net_limit_rate: null,
-  net_socket_buffer: null,
-  pget_min_chunk_size: null,
-  mirror_parallel_directories: null,
-  net_timeout: null,
-  net_max_retries: null,
-  net_reconnect_interval_base: null,
-  net_reconnect_interval_multiplier: null,
-  protocol: 'sftp',
-  remote_ftp_port: 21,
-  ftp_ssl_verify_certificate: false,
-};
-
-export const DEFAULT_CONTROLLER: Controller = {
-  interval_ms_remote_scan: null,
-  interval_ms_local_scan: null,
-  interval_ms_downloading_scan: null,
-  extract_path: null,
-  use_local_path_as_extract_path: null,
-  staging_path: null,
-  use_staging: null,
-};
-
-export const DEFAULT_WEB: Web = {
-  port: null,
-  api_key: null,
-};
-
-export const DEFAULT_AUTOQUEUE: AutoQueue = {
-  enabled: null,
-  patterns_only: null,
-  auto_extract: null,
-  auto_delete_remote: null,
-};
-
-export const DEFAULT_LOGGING: Logging = {
-  log_format: null,
-};
-
-export const DEFAULT_NOTIFICATIONS: Notifications = {
-  webhook_url: null,
-  notify_on_download_start: null,
-  notify_on_download_complete: null,
-  notify_on_extraction_complete: null,
-  notify_on_extraction_failed: null,
-  notify_on_delete_complete: null,
-  discord_webhook_url: null,
-  telegram_bot_token: null,
-  telegram_chat_id: null,
-};
-
-export const DEFAULT_VALIDATE: Validate = {
-  enabled: null,
-  algorithm: null,
-  auto_validate: null,
-  xfer_verify: true,
-};
-
 export const DEFAULT_CONFIG: Config = {
-  general: { ...DEFAULT_GENERAL },
-  lftp: { ...DEFAULT_LFTP },
-  controller: { ...DEFAULT_CONTROLLER },
-  web: { ...DEFAULT_WEB },
-  autoqueue: { ...DEFAULT_AUTOQUEUE },
-  logging: { ...DEFAULT_LOGGING },
-  notifications: { ...DEFAULT_NOTIFICATIONS },
-  validate: { ...DEFAULT_VALIDATE },
+  general: {
+    log_level: null,
+    verbose: null,
+    exclude_patterns: null,
+  },
+  lftp: {
+    remote_address: null,
+    remote_username: null,
+    remote_password: null,
+    remote_port: null,
+    remote_path: null,
+    local_path: null,
+    remote_path_to_scan_script: null,
+    remote_python_path: null,
+    use_ssh_key: null,
+    num_max_parallel_downloads: null,
+    num_max_parallel_files_per_download: null,
+    num_max_connections_per_root_file: null,
+    num_max_connections_per_dir_file: null,
+    num_max_total_connections: null,
+    use_temp_file: null,
+    net_limit_rate: null,
+    net_socket_buffer: null,
+    pget_min_chunk_size: null,
+    mirror_parallel_directories: null,
+    net_timeout: null,
+    net_max_retries: null,
+    net_reconnect_interval_base: null,
+    net_reconnect_interval_multiplier: null,
+    protocol: 'sftp',
+    remote_ftp_port: 21,
+    ftp_ssl_verify_certificate: false,
+  },
+  controller: {
+    interval_ms_remote_scan: null,
+    interval_ms_local_scan: null,
+    interval_ms_downloading_scan: null,
+    extract_path: null,
+    use_local_path_as_extract_path: null,
+    staging_path: null,
+    use_staging: null,
+  },
+  web: {
+    port: null,
+    api_key: null,
+  },
+  autoqueue: {
+    enabled: null,
+    patterns_only: null,
+    auto_extract: null,
+    auto_delete_remote: null,
+  },
+  logging: {
+    log_format: null,
+  },
+  notifications: {
+    webhook_url: null,
+    notify_on_download_start: null,
+    notify_on_download_complete: null,
+    notify_on_extraction_complete: null,
+    notify_on_extraction_failed: null,
+    notify_on_delete_complete: null,
+    discord_webhook_url: null,
+    telegram_bot_token: null,
+    telegram_chat_id: null,
+  },
+  validate: {
+    enabled: null,
+    algorithm: null,
+    auto_validate: null,
+    xfer_verify: true,
+  },
 };
