@@ -4,9 +4,10 @@ import os
 import shutil
 import tempfile
 import unittest
+from typing import override
 from unittest.mock import patch
 
-from common import AppError, Localization, Persist, overrides
+from common import AppError, Localization, Persist
 from common.persist import _BACKUP_DIR_NAME, _MAX_BACKUPS
 
 
@@ -15,24 +16,24 @@ class DummyPersist(Persist):
         self.my_content = None
 
     @classmethod
-    @overrides(Persist)
+    @override
     def from_str(cls: "DummyPersist", content: str) -> "DummyPersist":
         persist = DummyPersist()
         persist.my_content = content
         return persist
 
-    @overrides(Persist)
+    @override
     def to_str(self) -> str:
         return self.my_content
 
 
 class TestPersist(unittest.TestCase):
-    @overrides(unittest.TestCase)
+    @override
     def setUp(self):
         # Create a temp directory
         self.temp_dir = tempfile.mkdtemp(prefix="test_persist")
 
-    @overrides(unittest.TestCase)
+    @override
     def tearDown(self):
         # Cleanup
         shutil.rmtree(self.temp_dir)
@@ -104,11 +105,11 @@ class TestPersist(unittest.TestCase):
 
 
 class TestPersistBackup(unittest.TestCase):
-    @overrides(unittest.TestCase)
+    @override
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp(prefix="test_persist_backup")
 
-    @overrides(unittest.TestCase)
+    @override
     def tearDown(self):
         shutil.rmtree(self.temp_dir)
 

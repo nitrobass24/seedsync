@@ -6,8 +6,8 @@ import subprocess
 import tempfile
 import unittest
 import zipfile
+from typing import override
 
-from common import overrides
 from controller.extract import Extract, ExtractError
 
 
@@ -72,12 +72,12 @@ class TestExtract(unittest.TestCase):
         if not TestExtract.__KEEP_TMP_FILES:
             shutil.rmtree(TestExtract.temp_root)
 
-    @overrides(unittest.TestCase)
+    @override
     def setUp(self):
         TestExtract.temp_dir = os.path.join(TestExtract.temp_root, "tmp")
         os.mkdir(TestExtract.temp_dir)
 
-    @overrides(unittest.TestCase)
+    @override
     def tearDown(self):
         if not TestExtract.__KEEP_TMP_FILES:
             shutil.rmtree(TestExtract.temp_dir)

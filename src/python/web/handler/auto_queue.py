@@ -2,11 +2,11 @@
 
 import logging
 import threading
+from typing import override
 from urllib.parse import unquote
 
 from bottle import HTTPResponse
 
-from common import overrides
 from controller import AutoQueuePattern, AutoQueuePersist
 
 from ..serialize import SerializeAutoQueue
@@ -29,7 +29,7 @@ class AutoQueueHandler(IHandler):
         # rollback and leave on-disk and in-memory state diverged.
         self.__write_lock = threading.Lock()
 
-    @overrides(IHandler)
+    @override
     def add_routes(self, web_app: WebApp):
         web_app.add_handler("/server/autoqueue/get", self.__handle_get_autoqueue)
         web_app.add_handler("/server/autoqueue/add/<pattern>", self.__handle_add_autoqueue)

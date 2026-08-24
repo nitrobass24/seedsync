@@ -3,22 +3,22 @@
 import logging
 import sys
 import unittest
+from typing import override
 from unittest.mock import MagicMock
 
-from common import overrides
 from model import IModelListener, Model, ModelError, ModelFile
 
 
 class DummyModelListener(IModelListener):
-    @overrides(IModelListener)
+    @override
     def file_added(self, file: ModelFile):
         pass
 
-    @overrides(IModelListener)
+    @override
     def file_removed(self, file: ModelFile):
         pass
 
-    @overrides(IModelListener)
+    @override
     def file_updated(self, old_file: ModelFile, new_file: ModelFile):
         pass
 

@@ -3,13 +3,12 @@
 import json
 import logging
 import urllib.request
-from typing import Any, cast
+from typing import Any, cast, override
 
 from bottle import HTTPResponse, request
 
 from common import ArrInstance, IntegrationsConfig, PathPairsConfig
 from common.config import Config
-from common.types import overrides
 
 from ..web_app import IHandler, WebApp
 
@@ -43,7 +42,7 @@ class IntegrationsHandler(IHandler):
             )
         return None
 
-    @overrides(IHandler)
+    @override
     def add_routes(self, web_app: WebApp):
         web_app.add_handler("/server/integrations", self.__handle_list)
         web_app.add_post_handler("/server/integrations", self.__handle_create)

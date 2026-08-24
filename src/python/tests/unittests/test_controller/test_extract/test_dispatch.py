@@ -5,11 +5,11 @@ import os
 import sys
 import time
 import unittest
+from typing import override
 from unittest.mock import MagicMock, call, patch
 
 import timeout_decorator
 
-from common import overrides
 from controller.extract import (
     ExtractDispatch,
     ExtractDispatchError,
@@ -22,11 +22,11 @@ from model import ModelFile
 
 
 class DummyExtractListener(ExtractListener):
-    @overrides(ExtractListener)
+    @override
     def extract_completed(self, name: str, is_dir: bool, pair_id: str | None = None):
         pass
 
-    @overrides(ExtractListener)
+    @override
     def extract_failed(self, name: str, is_dir: bool, pair_id: str | None = None):
         pass
 

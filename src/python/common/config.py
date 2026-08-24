@@ -5,11 +5,10 @@ import configparser
 from abc import ABC
 from collections.abc import Callable
 from io import StringIO
-from typing import Any, TypeVar
+from typing import Any, TypeVar, override
 
 from .error import AppError
 from .persist import Persist, PersistError
-from .types import overrides
 
 
 def _strtobool(val: str) -> bool:
@@ -442,7 +441,7 @@ class Config(Persist):
         pass
 
     @classmethod
-    @overrides(Persist)
+    @override
     def from_str(cls: type["Config"], content: str) -> "Config":
         # interpolation=None: config values are opaque strings (passwords,
         # exclude patterns, rate limits) that may legitimately contain '%'.
@@ -460,7 +459,7 @@ class Config(Persist):
                 config_dict[section][option] = config_parser.get(section, option)
         return cls.from_dict(config_dict)
 
-    @overrides(Persist)
+    @override
     def to_str(self) -> str:
         # interpolation=None: see from_str. A '%' in any value must survive the
         # write/read round-trip verbatim rather than being treated as a token.
