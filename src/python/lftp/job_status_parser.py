@@ -183,14 +183,6 @@ class LftpJobStatusParser:
     Parses the output of lftp's "jobs -v" command into a LftpJobStatus
     """
 
-    # Aliases to the module-level fragments (see above). Kept as class
-    # attributes so existing references via the (mangled) ``__`` names keep
-    # resolving unchanged.
-    __SIZE_UNITS_REGEX = _SIZE_UNITS_REGEX
-    __TIME_UNITS_REGEX = _TIME_UNITS_REGEX
-    __QUOTED_FILE_NAME_REGEX = _QUOTED_FILE_NAME_REGEX
-    __QUEUE_DONE_REGEX = _QUEUE_DONE_REGEX
-
     def __init__(self):
         self.logger = logging.getLogger("LftpJobStatusParser")
 
@@ -206,7 +198,7 @@ class LftpJobStatusParser:
         """
         if size == "0":
             return 0
-        m = re.compile(rf"(?P<number>\d+\.?\d*)\s*(?P<units>{LftpJobStatusParser.__SIZE_UNITS_REGEX})?")
+        m = re.compile(rf"(?P<number>\d+\.?\d*)\s*(?P<units>{_SIZE_UNITS_REGEX})?")
         result = m.search(size)
         if not result:
             raise ValueError(f"String '{size}' does not match the size pattern")
@@ -224,7 +216,7 @@ class LftpJobStatusParser:
         :param eta:
         :return:
         """
-        m = re.compile(LftpJobStatusParser.__TIME_UNITS_REGEX)
+        m = re.compile(_TIME_UNITS_REGEX)
         result = m.search(eta)
         if not result:
             raise ValueError(f"String '{eta}' does not match the eta pattern")
@@ -621,7 +613,7 @@ class LftpJobStatusParser:
     def __parse_queue(lines: list[str]) -> list[LftpJobStatus]:  # noqa: C901 — complexity 19, lftp output parser
         queue: list[LftpJobStatus] = []
 
-        queue_done_m = re.compile(LftpJobStatusParser.__QUEUE_DONE_REGEX)
+        queue_done_m = re.compile(_QUEUE_DONE_REGEX)
         if len(lines) == 1:
             if not queue_done_m.match(lines[0]):
                 # Single unrecognized line - might be empty output, skip gracefully
@@ -633,7 +625,9 @@ class LftpJobStatusParser:
             if len(lines) < 2:
                 # Not enough lines for a valid queue header - return empty queue
                 return queue
-            header1_pattern = rf"^\[\d+\] queue \((?:sftp|ftp)://.*@.*\)(?:\s+--\s+(?:\d+\.\d+|\d+)\s({LftpJobStatusParser.__SIZE_UNITS_REGEX})\/s)?$"
+            header1_pattern = (
+                rf"^\[\d+\] queue \((?:sftp|ftp)://.*@.*\)(?:\s+--\s+(?:\d+\.\d+|\d+)\s({_SIZE_UNITS_REGEX})\/s)?$"
+            )
             header2_pattern = "^(?:sftp|ftp)://.*@.*$"
             line = lines.pop(0)
             if not re.match(header1_pattern, line):

@@ -58,7 +58,7 @@ class ScannerProcess(AppProcess):
     Process to scan a file system and publish the result
     """
 
-    def __init__(self, scanner: IScanner, interval_in_ms: int, verbose: bool = True):
+    def __init__(self, scanner: IScanner, interval_in_ms: int):
         """
         Create a scanner process
         :param scanner: IScanner implementation
@@ -69,7 +69,6 @@ class ScannerProcess(AppProcess):
         self.__wake_event = PipeFlag()
         self.__scanner = scanner
         self.__interval_in_ms = interval_in_ms
-        self.verbose = verbose
 
     @override
     def run_init(self):
@@ -83,8 +82,7 @@ class ScannerProcess(AppProcess):
     @override
     def run_loop(self):
         timestamp_start = datetime.now()
-        if self.verbose:
-            self.logger.debug("Running a scan")
+        self.logger.debug("Running a scan")
         try:
             files = self.__scanner.scan()
             result = ScannerResult(timestamp=timestamp_start, files=files)
@@ -96,8 +94,7 @@ class ScannerProcess(AppProcess):
         self.__queue.put(result)
         delta_in_s = (datetime.now() - timestamp_start).total_seconds()
         delta_in_ms = int(delta_in_s * 1000)
-        if self.verbose:
-            self.logger.debug(f"Scan took {delta_in_s:.3f}s")
+        self.logger.debug(f"Scan took {delta_in_s:.3f}s")
 
         # Wait until the next interval, or until a wake event is fired
         if delta_in_ms < self.__interval_in_ms:
