@@ -39,47 +39,12 @@ RUN --mount=from=ghcr.io/astral-sh/uv:0.11,source=/uv,target=/tmp/uv \
     && rm -rf \
         /usr/local/lib/python3.13/ensurepip \
         /usr/local/lib/python3.13/idlelib \
-        /usr/local/lib/python3.13/turtle.py \
-        /usr/local/lib/python3.13/turtledemo \
         /usr/local/lib/python3.13/tkinter \
         /usr/local/lib/python3.13/test \
         /usr/local/lib/python3.13/unittest \
-        /usr/local/lib/python3.13/pydoc.py \
-        /usr/local/lib/python3.13/pydoc_data \
-        /usr/local/lib/python3.13/doctest.py \
         /usr/local/lib/python3.13/lib-dynload/_test*.so \
-        /usr/local/lib/python3.13/lib-dynload/_codecs_jp*.so \
-        /usr/local/lib/python3.13/lib-dynload/_codecs_kr*.so \
-        /usr/local/lib/python3.13/lib-dynload/_codecs_hk*.so \
-        /usr/local/lib/python3.13/lib-dynload/_codecs_cn*.so \
-        /usr/local/lib/python3.13/lib-dynload/_codecs_tw*.so \
-        /usr/local/lib/python3.13/lib-dynload/_codecs_iso*.so \
-        /usr/local/lib/python3.13/lib-dynload/_curses*.so \
-        /usr/local/lib/python3.13/lib-dynload/_sqlite3*.so \
-        /usr/local/lib/python3.13/lib-dynload/_lzma*.so \
-        /usr/local/lib/python3.13/lib-dynload/_bz2*.so \
-        /usr/local/lib/python3.13/lib-dynload/_dbm*.so \
-        /usr/local/lib/python3.13/lib-dynload/_gdbm*.so \
-        /usr/local/lib/python3.13/lib-dynload/readline*.so \
-        /usr/local/lib/python3.13/lib-dynload/_ctypes_test*.so \
-        /usr/local/lib/python3.13/lib-dynload/xx*.so \
         /usr/local/lib/python3.13/lib-dynload/_tkinter*.so \
-        /usr/local/lib/python3.13/lib-dynload/_xxtestfuzz*.so \
-        /usr/local/lib/python3.13/lib-dynload/_lsprof*.so \
-        /usr/local/lib/python3.13/lib-dynload/_interp*.so \
-        /usr/local/lib/python3.13/_pyrepl \
-        /usr/local/lib/python3.13/_pydecimal.py \
-        /usr/local/lib/python3.13/venv \
-        /usr/local/lib/python3.13/config-3.13-* \
         /usr/local/include \
-    && find /usr/local/lib/python3.13/encodings -name '*.py' \
-        ! -name '__init__.py' ! -name 'aliases.py' \
-        ! -name 'ascii.py' ! -name 'latin_1.py' \
-        ! -name 'utf_8.py' ! -name 'utf_8_sig.py' \
-        ! -name 'utf_16*.py' ! -name 'utf_32*.py' \
-        ! -name 'unicode_escape.py' ! -name 'raw_unicode_escape.py' \
-        ! -name 'charmap.py' ! -name 'idna.py' \
-        -delete \
     && find /usr/local/lib/python3.13 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 # ==============================================================================

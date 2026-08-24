@@ -36,11 +36,10 @@ select = [
     "B",    # flake8-bugbear
     "UP",   # pyupgrade
     "SIM",  # flake8-simplify
-    "C4",   # flake8-comprehensions
     "RET",  # flake8-return
     "PERF", # perflint
     "RUF",  # ruff-specific
-    "C",    # mccabe complexity
+    "C",    # flake8-comprehensions (C4) + mccabe complexity (C90)
 ]
 ignore = [
     "UP046",  # non-pep695-generic-class — requires Python 3.12+ syntax migration
@@ -70,5 +69,3 @@ known-first-party = ["common", "controller", "model", "lftp", "ssh", "web", "sys
 [tool.ruff.format]
 quote-style = "double"
 
-[tool.pytest.ini_options]
-testpaths = ["tests/unittests"]
