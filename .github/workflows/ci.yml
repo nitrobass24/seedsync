@@ -491,7 +491,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
+            type=ref,event=branch
 
       - name: Create multi-arch manifest and push
         working-directory: /tmp/digests
