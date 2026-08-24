@@ -5,9 +5,10 @@ import logging
 import sys
 import threading
 import unittest
+from typing import override
 from unittest.mock import MagicMock
 
-from common import Config, PersistError, overrides
+from common import Config, PersistError
 from controller import AutoQueue, AutoQueuePattern, AutoQueuePersist, Controller, IAutoQueuePersistListener
 from controller.auto_queue import AutoQueuePersistListener
 from model import IModelListener, ModelFile
@@ -71,11 +72,11 @@ class TestAutoQueuePattern(unittest.TestCase):
 
 
 class TestAutoQueuePersistListener(IAutoQueuePersistListener):
-    @overrides(IAutoQueuePersistListener)
+    @override
     def pattern_added(self, pattern: AutoQueuePattern):
         pass
 
-    @overrides(IAutoQueuePersistListener)
+    @override
     def pattern_removed(self, pattern: AutoQueuePattern):
         pass
 

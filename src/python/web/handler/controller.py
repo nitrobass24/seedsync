@@ -2,11 +2,11 @@
 
 import os
 from threading import Event
+from typing import override
 from urllib.parse import unquote
 
 from bottle import HTTPResponse, request
 
-from common import overrides
 from controller import Controller
 
 from ..web_app import IHandler, WebApp
@@ -71,13 +71,13 @@ class WebResponseActionCallback(Controller.Command.ICallback):
         self.success = None
         self.error = None
 
-    @overrides(Controller.Command.ICallback)
+    @override
     def on_failure(self, error: str):
         self.success = False
         self.error = error
         self.__event.set()
 
-    @overrides(Controller.Command.ICallback)
+    @override
     def on_success(self):
         self.success = True
         self.__event.set()
@@ -94,7 +94,7 @@ class ControllerHandler(IHandler):
     def __init__(self, controller: Controller):
         self.__controller = controller
 
-    @overrides(IHandler)
+    @override
     def add_routes(self, web_app: WebApp):
         web_app.add_handler("/server/command/queue/<file_name>", self.__handle_action_queue)
         web_app.add_handler("/server/command/stop/<file_name>", self.__handle_action_stop)

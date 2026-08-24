@@ -1,16 +1,16 @@
 import json
 import unittest
 import urllib.error
+from typing import override
 from unittest.mock import MagicMock, patch
 
-from common import overrides
 from tests.integration.test_web.test_web_app import BaseTestWebApp
 
 
 class TestNotificationsHandler(BaseTestWebApp):
     """Integration tests for the Discord/Telegram test notification endpoints."""
 
-    @overrides(BaseTestWebApp)
+    @override
     def setUp(self):
         super().setUp()
         from webtest import TestApp

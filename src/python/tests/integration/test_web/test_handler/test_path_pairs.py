@@ -1,16 +1,17 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import json
+from typing import override
 from unittest.mock import patch
 
-from common import ArrInstance, IntegrationsConfig, PathPair, PathPairsConfig, overrides
+from common import ArrInstance, IntegrationsConfig, PathPair, PathPairsConfig
 from tests.integration.test_web.test_web_app import BaseTestWebApp
 
 
 class TestPathPairsHandler(BaseTestWebApp):
     """Integration tests for the path pairs CRUD handler."""
 
-    @overrides(BaseTestWebApp)
+    @override
     def setUp(self):
         # Inject a real PathPairsConfig before the builder wires the handler
         self.path_pairs_config = PathPairsConfig()

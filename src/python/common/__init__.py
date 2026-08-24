@@ -1,6 +1,5 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
-from .types import overrides as overrides
 from .job import Job as Job
 from .context import Context as Context, Args as Args
 from .error import AppError as AppError, ServiceExit as ServiceExit, ServiceRestart as ServiceRestart

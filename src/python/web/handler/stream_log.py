@@ -6,9 +6,7 @@ import copy
 import logging
 import time
 from threading import Lock
-from typing import TYPE_CHECKING, Any
-
-from common import overrides
+from typing import TYPE_CHECKING, Any, override
 
 from ..serialize import SerializeLogRecord
 from ..utils import StreamQueue
@@ -41,7 +39,7 @@ class CachedQueueLogHandler(logging.Handler):
         self.__cache_lock.release()
         return cache
 
-    @overrides(logging.Handler)
+    @override
     def emit(self, record: logging.LogRecord):
         if self.__history_size_in_ms > 0:
             self.__cache_lock.acquire()
@@ -73,7 +71,7 @@ class QueueLogHandler(logging.Handler, StreamQueue[logging.LogRecord]):
         logging.Handler.__init__(self)
         StreamQueue.__init__(self)  # type: ignore[reportUnknownMemberType]
 
-    @overrides(logging.Handler)
+    @override
     def emit(self, record: logging.LogRecord) -> None:
         self.put(record)
 
@@ -97,7 +95,7 @@ class LogStreamHandler(IStreamHandler):
 
     # noinspection PyUnresolvedReferences
     @classmethod
-    @overrides(IStreamHandler)
+    @override
     def register(cls, web_app: WebApp, **kwargs: Any) -> None:
         # Initialize our cache when we register
         LogStreamHandler._cache = CachedQueueLogHandler(history_size_in_ms=LogStreamHandler._CACHE_HISTORY_SIZE_IN_MS)
@@ -105,7 +103,7 @@ class LogStreamHandler(IStreamHandler):
 
         super().register(web_app=web_app, **kwargs)
 
-    @overrides(IStreamHandler)
+    @override
     def setup(self):
         # Send out all the cached records first
         assert LogStreamHandler._cache is not None
@@ -114,13 +112,13 @@ class LogStreamHandler(IStreamHandler):
         # Then subscribe the live stream
         self.logger.addHandler(self.handler)
 
-    @overrides(IStreamHandler)
+    @override
     def get_value(self) -> str | None:
         record = self.handler.get_next_event()
         if record is not None:
             return self.serialize.record(record)
         return None
 
-    @overrides(IStreamHandler)
+    @override
     def cleanup(self):
         self.logger.removeHandler(self.handler)

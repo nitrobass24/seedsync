@@ -2,11 +2,11 @@ import json
 import logging
 import urllib.request
 from datetime import UTC, datetime
+from typing import override
 
 from bottle import HTTPResponse
 
 from common import Config
-from common.types import overrides
 from controller.notification_formatters import format_discord, format_telegram
 
 from ..web_app import IHandler, WebApp
@@ -19,7 +19,7 @@ class NotificationsHandler(IHandler):
         self.__config = config
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    @overrides(IHandler)
+    @override
     def add_routes(self, web_app: WebApp):
         web_app.add_post_handler("/server/notifications/test/discord", self.__handle_test_discord)
         web_app.add_post_handler("/server/notifications/test/telegram", self.__handle_test_telegram)

@@ -2,7 +2,9 @@
 
 
 # my libs
-from common import Context, Job, overrides
+from typing import override
+
+from common import Context, Job
 
 from .auto_queue import AutoQueue
 from .controller import Controller
@@ -19,15 +21,15 @@ class ControllerJob(Job):
         self.__controller = controller
         self.__auto_queue = auto_queue
 
-    @overrides(Job)
+    @override
     def setup(self):
         self.__controller.start()
 
-    @overrides(Job)
+    @override
     def execute(self):
         self.__controller.process()
         self.__auto_queue.process()
 
-    @overrides(Job)
+    @override
     def cleanup(self):
         self.__controller.exit()
