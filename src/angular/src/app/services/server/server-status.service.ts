@@ -6,23 +6,26 @@ import { LoggerService } from '../utils/logger.service';
 import { Localization } from '../../models/localization';
 import { ServerStatus, ServerStatusJson, serverStatusFromJson } from '../../models/server-status';
 
-@Injectable({ providedIn: 'root' })
-export class ServerStatusService implements StreamEventHandler {
-  private readonly streamDispatch = inject(StreamDispatchService);
-  private readonly logger = inject(LoggerService);
-
-  private readonly statusSubject = new BehaviorSubject<ServerStatus>({
-    server: {
-      up: false,
-      errorMessage: Localization.Notification.STATUS_CONNECTION_WAITING,
-    },
+function disconnectedStatus(errorMessage: string): ServerStatus {
+  return {
+    server: { up: false, errorMessage },
     controller: {
       latestRemoteScanTime: null,
       latestRemoteScanFailed: false,
       latestRemoteScanError: null,
       noEnabledPairs: false,
     },
-  });
+  };
+}
+
+@Injectable({ providedIn: 'root' })
+export class ServerStatusService implements StreamEventHandler {
+  private readonly streamDispatch = inject(StreamDispatchService);
+  private readonly logger = inject(LoggerService);
+
+  private readonly statusSubject = new BehaviorSubject<ServerStatus>(
+    disconnectedStatus(Localization.Notification.STATUS_CONNECTION_WAITING),
+  );
 
   readonly status$: Observable<ServerStatus> = this.statusSubject.asObservable();
 
@@ -47,17 +50,6 @@ export class ServerStatusService implements StreamEventHandler {
   }
 
   onDisconnected(): void {
-    this.statusSubject.next({
-      server: {
-        up: false,
-        errorMessage: Localization.Error.SERVER_DISCONNECTED,
-      },
-      controller: {
-        latestRemoteScanTime: null,
-        latestRemoteScanFailed: false,
-        latestRemoteScanError: null,
-        noEnabledPairs: false,
-      },
-    });
+    this.statusSubject.next(disconnectedStatus(Localization.Error.SERVER_DISCONNECTED));
   }
 }

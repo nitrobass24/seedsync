@@ -27,8 +27,6 @@ export const EMPTY_VALUE_SENTINEL = '__empty__';
 @Injectable({ providedIn: 'root' })
 export class ConfigService {
   private readonly CONFIG_GET_URL = '/server/config/get';
-  private readonly CONFIG_SET_URL = (section: string, option: string, value: string) =>
-    `/server/config/set/${section}/${option}/${value}`;
 
   private readonly connectedService = inject(ConnectedService);
   private readonly restService = inject(RestService);
@@ -77,7 +75,7 @@ export class ConfigService {
     // Double-encode the value, use sentinel for empty strings
     const valueEncoded =
       valueStr.length === 0 ? EMPTY_VALUE_SENTINEL : encodeURIComponent(encodeURIComponent(valueStr));
-    const url = this.CONFIG_SET_URL(section, option, valueEncoded);
+    const url = `/server/config/set/${section}/${option}/${valueEncoded}`;
     // Update the subject inside the returned pipeline (tap) per the mutating-
     // service contract: the store updates exactly when the caller subscribes,
     // with no second internal subscribe. sendRequest already recovers HTTP

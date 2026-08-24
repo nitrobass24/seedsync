@@ -1,19 +1,13 @@
 import '@angular/compiler';
 import { describe, it, expect } from 'vitest';
-import { SettingsPageComponent } from './settings-page.component';
-import { IOptionsContext } from './options-list';
+import { IOptionsContext, OPTIONS_CONTEXT_VALIDATE, applyDisableRules } from './options-list';
 
-// buildValidateContext is a private static reached the same way the existing
-// settings-page spec reaches buildServerContext/buildAutoqueueContext. This
-// focused spec covers the validate ('validateDisabled') branch of the generic
-// applyDisableRules transform, which the existing spec does not exercise.
-interface ValidateStatics {
-  buildValidateContext(validateEnabled: boolean): IOptionsContext;
-}
-const statics = SettingsPageComponent as unknown as ValidateStatics;
-const buildValidateContext = (enabled: boolean): IOptionsContext => statics.buildValidateContext(enabled);
+// Covers the validate ('validateDisabled') branch of the generic
+// applyDisableRules transform, which settings-page.component.spec does not exercise.
+const buildValidateContext = (enabled: boolean): IOptionsContext =>
+  applyDisableRules(OPTIONS_CONTEXT_VALIDATE, { pairsEnabled: false, validateDisabled: !enabled, protocolSftp: false });
 
-describe('SettingsPageComponent.buildValidateContext', () => {
+describe('applyDisableRules: buildValidateContext', () => {
   it('disables auto_validate and algorithm when validation is disabled', () => {
     const ctx = buildValidateContext(false);
     const autoValidate = ctx.options.find((o) => o.valuePath[1] === 'auto_validate')!;

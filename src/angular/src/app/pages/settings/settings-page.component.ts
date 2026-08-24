@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { AsyncPipe, NgTemplateOutlet } from '@angular/common';
+import { AsyncPipe, NgTemplateOutlet, TitleCasePipe } from '@angular/common';
 import { distinctUntilChanged, map } from 'rxjs';
 
 import { LoggerService } from '../../services/utils/logger.service';
 import { ConfigService } from '../../services/settings/config.service';
 import { NotificationService } from '../../services/utils/notification.service';
-import { NotificationsService, TestResult } from '../../services/settings/notifications.service';
+import { NotificationChannel, NotificationsService, NOTIFICATION_CHANNELS } from '../../services/settings/notifications.service';
+import { TestResult } from '../../services/utils/test-result';
 import { ServerCommandService } from '../../services/server/server-command.service';
 import { ConnectedService } from '../../services/utils/connected.service';
 import { PathPairsService } from '../../services/settings/path-pairs.service';
@@ -18,9 +19,10 @@ import { OptionComponent, OptionValue } from './option.component';
 import { PathPairsComponent } from './path-pairs.component';
 import { IntegrationsComponent } from './integrations.component';
 import {
+  ActiveDisableFlags,
   ConfigValuePath,
   IOptionsContext,
-  OVERRIDE_NOTE,
+  applyDisableRules,
   getConfigValue,
   OPTIONS_CONTEXT_SERVER,
   OPTIONS_CONTEXT_FTPS,
@@ -42,6 +44,7 @@ import {
   imports: [
     AsyncPipe,
     NgTemplateOutlet,
+    TitleCasePipe,
     OptionComponent,
     PathPairsComponent,
     IntegrationsComponent,
@@ -56,14 +59,17 @@ export class SettingsPageComponent implements OnInit {
   ftpsContext: IOptionsContext = OPTIONS_CONTEXT_FTPS;
   autoqueueContext: IOptionsContext = OPTIONS_CONTEXT_AUTOQUEUE;
   validateContext: IOptionsContext = OPTIONS_CONTEXT_VALIDATE;
-  readonly OPTIONS_CONTEXT_DISCOVERY = OPTIONS_CONTEXT_DISCOVERY;
-  readonly OPTIONS_CONTEXT_CONNECTIONS = OPTIONS_CONTEXT_CONNECTIONS;
-  readonly OPTIONS_CONTEXT_OTHER = OPTIONS_CONTEXT_OTHER;
-  readonly OPTIONS_CONTEXT_STAGING = OPTIONS_CONTEXT_STAGING;
-  readonly OPTIONS_CONTEXT_EXTRACT = OPTIONS_CONTEXT_EXTRACT;
-  readonly OPTIONS_CONTEXT_ADVANCED_LFTP = OPTIONS_CONTEXT_ADVANCED_LFTP;
-  readonly OPTIONS_CONTEXT_LOGGING = OPTIONS_CONTEXT_LOGGING;
-  readonly OPTIONS_CONTEXT_NOTIFICATIONS = OPTIONS_CONTEXT_NOTIFICATIONS;
+  readonly OPTIONS = {
+    discovery: OPTIONS_CONTEXT_DISCOVERY,
+    connections: OPTIONS_CONTEXT_CONNECTIONS,
+    other: OPTIONS_CONTEXT_OTHER,
+    staging: OPTIONS_CONTEXT_STAGING,
+    extract: OPTIONS_CONTEXT_EXTRACT,
+    advancedLftp: OPTIONS_CONTEXT_ADVANCED_LFTP,
+    logging: OPTIONS_CONTEXT_LOGGING,
+    notifications: OPTIONS_CONTEXT_NOTIFICATIONS,
+  };
+  readonly CHANNELS = NOTIFICATION_CHANNELS;
 
   advancedLftpCollapsed = true;
 
@@ -80,20 +86,16 @@ export class SettingsPageComponent implements OnInit {
   readonly config$ = this.configService.config$;
 
   commandsEnabled = false;
-  testingDiscord = false;
-  testingTelegram = false;
-  discordResult: TestResult | null = null;
-  telegramResult: TestResult | null = null;
+  testing: Record<NotificationChannel, boolean> = { discord: false, telegram: false };
+  results: Record<NotificationChannel, TestResult | null> = { discord: null, telegram: null };
+
+  private readonly active: ActiveDisableFlags = { pairsEnabled: false, validateDisabled: false, protocolSftp: false };
 
   private configRestartNotif: Notification = createNotification(
     NotificationLevel.INFO,
     Localization.Notification.CONFIG_RESTART,
   );
   private badValueNotifs = new Map<string, Notification>();
-
-  // Retained for the unit spec, which reads this via a statics cast. The
-  // canonical note now lives next to the option definitions in options-list.ts.
-  private static readonly OVERRIDE_NOTE = OVERRIDE_NOTE;
 
   ngOnInit(): void {
     this.connectedService.connected$.pipe(
@@ -113,9 +115,8 @@ export class SettingsPageComponent implements OnInit {
       distinctUntilChanged(),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((hasEnabledPairs) => {
-      this.serverContext = SettingsPageComponent.buildServerContext(hasEnabledPairs);
-      this.autoqueueContext = SettingsPageComponent.buildAutoqueueContext(hasEnabledPairs);
-      this.cdr.markForCheck();
+      this.active.pairsEnabled = hasEnabledPairs;
+      this.rebuildContexts();
     });
 
     this.configService.config$.pipe(
@@ -128,66 +129,18 @@ export class SettingsPageComponent implements OnInit {
       ),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(({ validateEnabled, protocolIsSftp }) => {
-      this.validateContext = SettingsPageComponent.buildValidateContext(validateEnabled);
-      this.ftpsContext = SettingsPageComponent.buildFtpsContext(protocolIsSftp);
-      this.cdr.markForCheck();
+      this.active.validateDisabled = !validateEnabled;
+      this.active.protocolSftp = protocolIsSftp;
+      this.rebuildContexts();
     });
   }
 
-  /**
-   * Apply the per-option disable rules carried by each option definition
-   * (disabledWhen/overrideNote). One generic transform replaces the former
-   * per-context builders: an option is disabled when its disabledWhen flag is
-   * currently active, and its description is swapped for overrideNote when one
-   * is provided.
-   */
-  private static applyDisableRules(
-    context: IOptionsContext,
-    active: { pairsEnabled: boolean; validateDisabled: boolean; protocolSftp: boolean },
-  ): IOptionsContext {
-    return {
-      ...context,
-      options: context.options.map((option) => {
-        if (option.disabledWhen && active[option.disabledWhen]) {
-          return option.overrideNote !== undefined
-            ? { ...option, disabled: true, description: option.overrideNote }
-            : { ...option, disabled: true };
-        }
-        return option;
-      }),
-    };
-  }
-
-  private static buildServerContext(hasEnabledPairs: boolean): IOptionsContext {
-    return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_SERVER, {
-      pairsEnabled: hasEnabledPairs,
-      validateDisabled: false,
-      protocolSftp: false,
-    });
-  }
-
-  private static buildFtpsContext(protocolIsSftp: boolean): IOptionsContext {
-    return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_FTPS, {
-      pairsEnabled: false,
-      validateDisabled: false,
-      protocolSftp: protocolIsSftp,
-    });
-  }
-
-  private static buildAutoqueueContext(hasEnabledPairs: boolean): IOptionsContext {
-    return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_AUTOQUEUE, {
-      pairsEnabled: hasEnabledPairs,
-      validateDisabled: false,
-      protocolSftp: false,
-    });
-  }
-
-  private static buildValidateContext(validateEnabled: boolean): IOptionsContext {
-    return SettingsPageComponent.applyDisableRules(OPTIONS_CONTEXT_VALIDATE, {
-      pairsEnabled: false,
-      validateDisabled: !validateEnabled,
-      protocolSftp: false,
-    });
+  private rebuildContexts(): void {
+    this.serverContext = applyDisableRules(OPTIONS_CONTEXT_SERVER, this.active);
+    this.ftpsContext = applyDisableRules(OPTIONS_CONTEXT_FTPS, this.active);
+    this.autoqueueContext = applyDisableRules(OPTIONS_CONTEXT_AUTOQUEUE, this.active);
+    this.validateContext = applyDisableRules(OPTIONS_CONTEXT_VALIDATE, this.active);
+    this.cdr.markForCheck();
   }
 
   getOptionValue(config: Config | null, valuePath: ConfigValuePath): OptionValue {
@@ -246,26 +199,14 @@ export class SettingsPageComponent implements OnInit {
     });
   }
 
-  onTestDiscord(): void {
-    this.testingDiscord = true;
-    this.discordResult = null;
-    this.notificationsService.testDiscord().pipe(
+  onTest(channel: NotificationChannel): void {
+    this.testing[channel] = true;
+    this.results[channel] = null;
+    this.notificationsService.test(channel).pipe(
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((result) => {
-      this.testingDiscord = false;
-      this.discordResult = result;
-      this.cdr.markForCheck();
-    });
-  }
-
-  onTestTelegram(): void {
-    this.testingTelegram = true;
-    this.telegramResult = null;
-    this.notificationsService.testTelegram().pipe(
-      takeUntilDestroyed(this.destroyRef),
-    ).subscribe((result) => {
-      this.testingTelegram = false;
-      this.telegramResult = result;
+      this.testing[channel] = false;
+      this.results[channel] = result;
       this.cdr.markForCheck();
     });
   }
