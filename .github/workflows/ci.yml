@@ -84,7 +84,7 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Install Ruff
-        run: uv pip install --system ruff
+        run: uv pip install --system --group dev
 
       - name: Ruff check
         working-directory: src/python
@@ -112,7 +112,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: src/python
-        run: uv pip install --system -r pyproject.toml pyright
+        run: uv pip install --system -r pyproject.toml --group dev
 
       - name: Pyright
         working-directory: src/python

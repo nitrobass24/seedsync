@@ -1,48 +1,38 @@
 # SeedSync Makefile - Docker Only
 # Simplified build system for containerized deployment
 
-.PHONY: all build build-fresh run stop logs clean test test-image test-e2e test-e2e-headed test-e2e-report size shell help
+.PHONY: all build build-fresh run stop logs clean test test-image test-e2e-docker size shell help
 
-# Default target
 all: build
 
-# Build the Docker image
-build:
+build: ## Build the Docker image
 	docker compose -f docker-compose.dev.yml build
 
-# Build without cache
-build-fresh:
+build-fresh: ## Build without cache
 	docker compose -f docker-compose.dev.yml build --no-cache
 
-# Run the container
-run:
+run: ## Run the container
 	docker compose -f docker-compose.dev.yml up -d
 
-# Stop the container
-stop:
+stop: ## Stop the container
 	docker compose -f docker-compose.dev.yml down
 
-# View logs
-logs:
+logs: ## View logs
 	docker compose -f docker-compose.dev.yml logs -f
 
-# Clean up
-clean:
+clean: ## Clean up
 	docker compose -f docker-compose.dev.yml down -v --rmi local
 	rm -rf build/
 
-# Build cached test image (first run only)
-test-image:
+test-image: ## Build cached test image (first run only)
 	docker build -t seedsync-test -f src/docker/build/test-image/Dockerfile .
 
-# Run Python tests (in container with runtime dependencies)
-test:
+test: ## Run Python tests (in container with runtime dependencies)
 	$(MAKE) test-image
 	docker run --rm -v $(PWD)/src/python:/app/python seedsync-test \
 		pytest tests/unittests -v --tb=short
 
-# Run Playwright E2E tests with a throwaway Docker container
-test-e2e-docker:
+test-e2e-docker: ## Run Playwright E2E tests in a throwaway Docker container
 	@docker rm -f seedsync-e2e-test 2>/dev/null || true
 	docker run -d --name seedsync-e2e-test -p 8801:8800 -e SEEDSYNC_DISABLE_RATE_LIMIT=1 ghcr.io/nitrobass24/seedsync:latest
 	@echo "Waiting for container to start..."
@@ -55,44 +45,11 @@ test-e2e-docker:
 		docker rm -f seedsync-e2e-test; \
 		exit $$exit_code
 
-# Run Playwright E2E tests (headless, requires running container on port 8800)
-test-e2e:
-	cd src/e2e-playwright && npx playwright test
-
-# Run Playwright E2E tests (headed, for debugging)
-test-e2e-headed:
-	cd src/e2e-playwright && npx playwright test --headed
-
-# Show Playwright HTML report
-test-e2e-report:
-	cd src/e2e-playwright && npx playwright show-report
-
-# Show image size
-size:
+size: ## Show image size
 	@docker images seedsync-seedsync --format "Image size: {{.Size}}"
 
-# Shell into running container
-shell:
+shell: ## Shell into running container
 	docker exec -it seedsync-dev /bin/sh
 
-# Help
-help:
-	@echo "SeedSync Docker Build System"
-	@echo ""
-	@echo "Usage: make [target]"
-	@echo ""
-	@echo "Targets:"
-	@echo "  build       - Build Docker image"
-	@echo "  build-fresh - Build Docker image without cache"
-	@echo "  run         - Start container"
-	@echo "  stop        - Stop container"
-	@echo "  logs        - View container logs"
-	@echo "  clean       - Remove containers and images"
-	@echo "  test        - Run Python unit tests (in Docker)"
-	@echo "  test-image  - Build cached test image"
-	@echo "  test-e2e-docker - Run E2E tests inside a fresh Docker container"
-	@echo "  test-e2e    - Run Playwright E2E tests (headless)"
-	@echo "  test-e2e-headed - Run E2E tests with browser visible"
-	@echo "  test-e2e-report - Show Playwright HTML report"
-	@echo "  size        - Show image size"
-	@echo "  shell       - Open shell in running container"
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
