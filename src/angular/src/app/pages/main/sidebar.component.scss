@@ -53,15 +53,11 @@
       margin-bottom: 2px;
     }
 
-    .fa-icon {
-      display: inline-block;
-      width: 18px;
-      height: 18px;
-      margin-inline-end: 4px;
+    .icon-svg {
+      width: 16px;
+      height: 16px;
+      margin-inline-end: 5px;
       margin-bottom: 2px;
-      text-align: center;
-      font-size: 16px;
-      line-height: 18px;
     }
   }
 
@@ -99,10 +95,6 @@
 
     img {
       filter: brightness(0) saturate(100%) invert(85%) sepia(5%) saturate(400%) hue-rotate(190deg);
-    }
-
-    .fa-icon {
-      color: #C7CEDB;
     }
   }
 
