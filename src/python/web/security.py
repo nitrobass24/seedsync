@@ -251,17 +251,14 @@ def install_api_key_auth(app: bottle.Bottle, get_api_key: Callable[[], str]) -> 
 def install_security_middleware(
     app: bottle.Bottle,
     *,
-    get_api_key: Callable[[], str] | None = None,
-    trust_x_forwarded_for: bool = False,
+    get_api_key: Callable[[], str],
     disable_rate_limiting: bool = False,
 ):
     """Install all security middleware on the given Bottle app.
 
-    :param trust_x_forwarded_for: Pass True only when behind a trusted reverse proxy.
     :param disable_rate_limiting: Skip rate limiting (for E2E test environments).
     """
     install_security_headers(app)
     install_csrf_protection(app)
-    install_rate_limiting(app, trust_x_forwarded_for=trust_x_forwarded_for, disable=disable_rate_limiting)
-    if get_api_key is not None:
-        install_api_key_auth(app, get_api_key)
+    install_rate_limiting(app, disable=disable_rate_limiting)
+    install_api_key_auth(app, get_api_key)

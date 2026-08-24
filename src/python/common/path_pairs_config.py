@@ -55,25 +55,20 @@ class PathPair:
         enabled = d.get("enabled", True)
         auto_queue = d.get("auto_queue", True)
         arr_target_ids = d.get("arr_target_ids", [])
-        if not isinstance(pair_id, str):
-            raise TypeError(f"id must be a string, got {type(pair_id).__name__}")
-        if not isinstance(name, str):
-            raise TypeError(f"name must be a string, got {type(name).__name__}")
-        if not isinstance(remote_path, str):
-            raise TypeError(f"remote_path must be a string, got {type(remote_path).__name__}")
-        if not isinstance(local_path, str):
-            raise TypeError(f"local_path must be a string, got {type(local_path).__name__}")
-        if not isinstance(enabled, bool):
-            raise TypeError(f"enabled must be a boolean, got {type(enabled).__name__}")
-        if not isinstance(auto_queue, bool):
-            raise TypeError(f"auto_queue must be a boolean, got {type(auto_queue).__name__}")
-        if not isinstance(arr_target_ids, list):
-            raise TypeError(f"arr_target_ids must be a list, got {type(arr_target_ids).__name__}")
-        validated_ids: list[str] = []
+        for field, value, expected, label in (
+            ("id", pair_id, str, "a string"),
+            ("name", name, str, "a string"),
+            ("remote_path", remote_path, str, "a string"),
+            ("local_path", local_path, str, "a string"),
+            ("enabled", enabled, bool, "a boolean"),
+            ("auto_queue", auto_queue, bool, "a boolean"),
+            ("arr_target_ids", arr_target_ids, list, "a list"),
+        ):
+            if not isinstance(value, expected):
+                raise TypeError(f"{field} must be {label}, got {type(value).__name__}")
         for tid in cast(list[Any], arr_target_ids):
             if not isinstance(tid, str):
                 raise TypeError(f"arr_target_ids entries must be strings, got {type(tid).__name__}")
-            validated_ids.append(tid)
         return PathPair(
             pair_id=pair_id,
             name=name,
@@ -81,7 +76,7 @@ class PathPair:
             local_path=local_path,
             enabled=enabled,
             auto_queue=auto_queue,
-            arr_target_ids=validated_ids,
+            arr_target_ids=cast(list[str], arr_target_ids),
         )
 
     def __eq__(self, other: object) -> bool:
