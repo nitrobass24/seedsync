@@ -4,10 +4,11 @@ import json
 import os
 import posixpath
 import shlex
+from typing import override
 
 from bottle import HTTPResponse, request
 
-from common import Config, overrides
+from common import Config
 from ssh import SshcpError
 
 from .. import lftp_ssh
@@ -23,7 +24,7 @@ class BrowseHandler(IHandler):
     def __init__(self, config: Config):
         self.__config = config
 
-    @overrides(IHandler)
+    @override
     def add_routes(self, web_app: WebApp):
         web_app.add_handler("/server/browse/local", self.__handle_browse_local)
         web_app.add_handler("/server/browse/remote", self.__handle_browse_remote)
