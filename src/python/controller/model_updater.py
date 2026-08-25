@@ -184,12 +184,8 @@ class ModelUpdater:
         ):
             pkey = persist_key(diff.new_file.pair_id, diff.new_file.name)
             self._pipeline.moved_file_keys.discard(pkey)
-            self._persist.downloaded_file_names.discard(pkey)
-            self._persist.extracted_file_names.discard(pkey)
-            self._persist.extract_failed_file_names.discard(pkey)
-            self._persist.validated_file_names.discard(pkey)
-            self._persist.corrupt_file_names.discard(pkey)
-            self._persist.move_failed_file_names.discard(pkey)
+            for names in self._persist.all_sets().values():
+                names.discard(pkey)
             self._move_retry_counts.pop(pkey, None)
             self.sync_persist_to_all_builders()
 
@@ -310,12 +306,8 @@ class ModelUpdater:
                 absent_keys.add(pkey)
         if absent_keys:
             self._logger.info(f"Persist cleanup (both absent): {absent_keys}")
-            self._persist.downloaded_file_names.difference_update(absent_keys)
-            self._persist.extracted_file_names.difference_update(absent_keys)
-            self._persist.extract_failed_file_names.difference_update(absent_keys)
-            self._persist.validated_file_names.difference_update(absent_keys)
-            self._persist.corrupt_file_names.difference_update(absent_keys)
-            self._persist.move_failed_file_names.difference_update(absent_keys)
+            for names in self._persist.all_sets().values():
+                names.difference_update(absent_keys)
             for key in absent_keys:
                 self._move_retry_counts.pop(key, None)
             self.sync_persist_to_all_builders()

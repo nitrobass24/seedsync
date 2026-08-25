@@ -48,33 +48,6 @@ class Extract:
         return f"{prefix} (exit {result.returncode}): {details}"
 
     @staticmethod
-    def verify_archive(archive_path: str):
-        """
-        Verify archive integrity using 7z test command.
-        Raises ExtractError on failure.
-        """
-        if not os.path.isfile(archive_path):
-            raise ExtractError(f"Archive verification failed: file not found: {archive_path}")
-
-        file_size = os.path.getsize(archive_path)
-        if file_size == 0:
-            raise ExtractError(f"Archive verification failed: empty file: {archive_path}")
-
-        try:
-            result = subprocess.run(
-                ["7z", "t", "--", archive_path], capture_output=True, text=True, timeout=Extract._7Z_TIMEOUT_SECS
-            )
-        except subprocess.TimeoutExpired:
-            raise ExtractError(
-                f"Archive verification timed out after {Extract._7Z_TIMEOUT_SECS}s: {archive_path}"
-            ) from None
-        except FileNotFoundError as e:
-            raise ExtractError("7z binary not found; cannot verify archive") from e
-
-        if result.returncode != 0:
-            raise ExtractError(Extract._format_7z_error(result, "Archive verification failed"))
-
-    @staticmethod
     def _detect_format(archive_path: str) -> str | None:
         """
         Detect archive format using magic bytes.

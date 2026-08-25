@@ -168,22 +168,7 @@ class Sshcp:
             self._remote_address(),
         ]
 
-        command_args = ["sftp"]
-        command_args += [
-            "-o",
-            "StrictHostKeyChecking=no",
-            "-o",
-            "UserKnownHostsFile=/dev/null",
-            "-o",
-            "LogLevel=error",
-        ]
-
-        if self.__password is None:
-            command_args += ["-o", "PasswordAuthentication=no"]
-        else:
-            command_args += ["-o", "PubkeyAuthentication=no"]
-
-        command_args += flags
+        command_args = ["sftp", *self.__common_ssh_opts(), *flags]
         command_args += args
 
         command = " ".join(command_args)
@@ -243,17 +228,20 @@ class Sshcp:
             sp.close()
             raise SshcpError("SFTP timed out") from None
 
-    def __run_command(self, command: str, flags: str, args: str) -> bytes:
-        command_args = [command, flags]
+    def __common_ssh_opts(self) -> list[str]:
+        """``-o`` options shared by ssh/scp/sftp invocations."""
+        opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=error"]
+        if self.__password is None:
+            opts += ["-o", "PasswordAuthentication=no"]
+        else:
+            opts += ["-o", "PubkeyAuthentication=no"]
+        return opts
 
-        # Common flags
-        command_args += [
-            "-o",
-            "StrictHostKeyChecking=no",
-            "-o",
-            "UserKnownHostsFile=/dev/null",
-            "-o",
-            "LogLevel=error",
+    def __run_command(self, command: str, flags: str, args: str) -> bytes:
+        command_args = [
+            command,
+            flags,
+            *self.__common_ssh_opts(),
             "-o",
             "ConnectTimeout=30",
             "-o",
@@ -268,12 +256,6 @@ class Sshcp:
         # which the classifier then surfaces as a failure. GSSAPI is never
         # negotiated on that build, so there is nothing to disable. (Reverts the
         # flag added in #562 — it broke shell detection on the Alpine image.)
-
-        if self.__password is None:
-            command_args += ["-o", "PasswordAuthentication=no"]
-        else:
-            command_args += ["-o", "PubkeyAuthentication=no"]
-
         command_args.append(args)
         command = " ".join(command_args)
         self.logger.debug(f"Command: {command}")

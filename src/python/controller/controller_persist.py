@@ -21,13 +21,15 @@ class ControllerPersist(Persist):
     Persisting state for controller
     """
 
-    # Keys
-    __KEY_DOWNLOADED_FILE_NAMES = "downloaded"
-    __KEY_EXTRACTED_FILE_NAMES = "extracted"
-    __KEY_EXTRACT_FAILED_FILE_NAMES = "extract_failed"
-    __KEY_VALIDATED_FILE_NAMES = "validated"
-    __KEY_CORRUPT_FILE_NAMES = "corrupt"
-    __KEY_MOVE_FAILED_FILE_NAMES = "move_failed"
+    # (json key, required) in on-disk order; attribute name is f"{key}_file_names"
+    _KEYS = (
+        ("downloaded", True),
+        ("extracted", True),
+        ("extract_failed", False),
+        ("validated", False),
+        ("corrupt", False),
+        ("move_failed", False),
+    )
 
     def __init__(self):
         self.downloaded_file_names: set[str] = set()
@@ -36,6 +38,10 @@ class ControllerPersist(Persist):
         self.validated_file_names: set[str] = set()
         self.corrupt_file_names: set[str] = set()
         self.move_failed_file_names: set[str] = set()
+
+    def all_sets(self) -> dict[str, set[str]]:
+        """The six persisted key sets, keyed by json key."""
+        return {key: getattr(self, f"{key}_file_names") for key, _ in self._KEYS}
 
     @staticmethod
     def _migrate_legacy_keys(keys: set[str]) -> set[str]:
@@ -55,32 +61,15 @@ class ControllerPersist(Persist):
         persist = cls()
         try:
             dct = json.loads(content)
-            persist.downloaded_file_names = set(dct[ControllerPersist.__KEY_DOWNLOADED_FILE_NAMES])
-            persist.extracted_file_names = set(dct[ControllerPersist.__KEY_EXTRACTED_FILE_NAMES])
-            persist.extract_failed_file_names = set(dct.get(ControllerPersist.__KEY_EXTRACT_FAILED_FILE_NAMES, []))
-            persist.validated_file_names = set(dct.get(ControllerPersist.__KEY_VALIDATED_FILE_NAMES, []))
-            persist.corrupt_file_names = set(dct.get(ControllerPersist.__KEY_CORRUPT_FILE_NAMES, []))
-            persist.move_failed_file_names = set(dct.get(ControllerPersist.__KEY_MOVE_FAILED_FILE_NAMES, []))
-            # Migrate any legacy colon-separated keys to unit-separator keys
-            persist.downloaded_file_names = ControllerPersist._migrate_legacy_keys(persist.downloaded_file_names)
-            persist.extracted_file_names = ControllerPersist._migrate_legacy_keys(persist.extracted_file_names)
-            persist.extract_failed_file_names = ControllerPersist._migrate_legacy_keys(
-                persist.extract_failed_file_names
-            )
-            persist.validated_file_names = ControllerPersist._migrate_legacy_keys(persist.validated_file_names)
-            persist.corrupt_file_names = ControllerPersist._migrate_legacy_keys(persist.corrupt_file_names)
-            persist.move_failed_file_names = ControllerPersist._migrate_legacy_keys(persist.move_failed_file_names)
+            for key, required in cls._KEYS:
+                values = dct[key] if required else dct.get(key, [])
+                # Migrate any legacy colon-separated keys to unit-separator keys
+                setattr(persist, f"{key}_file_names", cls._migrate_legacy_keys(set(values)))
             return persist
         except (json.decoder.JSONDecodeError, KeyError) as e:
             raise PersistError(f"Error parsing ControllerPersist - {type(e).__name__}: {e!s}") from e
 
     @override
     def to_str(self) -> str:
-        dct: dict[str, list[str]] = {}
-        dct[ControllerPersist.__KEY_DOWNLOADED_FILE_NAMES] = list(self.downloaded_file_names)
-        dct[ControllerPersist.__KEY_EXTRACTED_FILE_NAMES] = list(self.extracted_file_names)
-        dct[ControllerPersist.__KEY_EXTRACT_FAILED_FILE_NAMES] = list(self.extract_failed_file_names)
-        dct[ControllerPersist.__KEY_VALIDATED_FILE_NAMES] = list(self.validated_file_names)
-        dct[ControllerPersist.__KEY_CORRUPT_FILE_NAMES] = list(self.corrupt_file_names)
-        dct[ControllerPersist.__KEY_MOVE_FAILED_FILE_NAMES] = list(self.move_failed_file_names)
+        dct = {key: list(values) for key, values in self.all_sets().items()}
         return json.dumps(dct, indent=Constants.JSON_PRETTY_PRINT_INDENT)

@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import os
+from functools import partial
 from threading import Event
 from typing import override
 from urllib.parse import unquote
@@ -94,14 +95,22 @@ class ControllerHandler(IHandler):
     def __init__(self, controller: Controller):
         self.__controller = controller
 
+    _ACTIONS = (
+        ("queue", Controller.Command.Action.QUEUE, "Queued file '{}'"),
+        ("stop", Controller.Command.Action.STOP, "Stopped file '{}'"),
+        ("extract", Controller.Command.Action.EXTRACT, "Requested extraction for file '{}'"),
+        ("delete_local", Controller.Command.Action.DELETE_LOCAL, "Requested local delete for file '{}'"),
+        ("delete_remote", Controller.Command.Action.DELETE_REMOTE, "Requested remote delete for file '{}'"),
+        ("validate", Controller.Command.Action.VALIDATE, "Requested validation for file '{}'"),
+    )
+
     @override
     def add_routes(self, web_app: WebApp):
-        web_app.add_handler("/server/command/queue/<file_name>", self.__handle_action_queue)
-        web_app.add_handler("/server/command/stop/<file_name>", self.__handle_action_stop)
-        web_app.add_handler("/server/command/extract/<file_name>", self.__handle_action_extract)
-        web_app.add_handler("/server/command/delete_local/<file_name>", self.__handle_action_delete_local)
-        web_app.add_handler("/server/command/delete_remote/<file_name>", self.__handle_action_delete_remote)
-        web_app.add_handler("/server/command/validate/<file_name>", self.__handle_action_validate)
+        for path, action, msg in self._ACTIONS:
+            web_app.add_handler(
+                f"/server/command/{path}/<file_name>",
+                partial(self.__dispatch_command, action=action, success_msg=msg),
+            )
 
     def __dispatch_command(self, file_name: str, action: Controller.Command.Action, success_msg: str):
         """Common handler: decode filename, validate pair_id, dispatch command."""
@@ -121,29 +130,3 @@ class ControllerHandler(IHandler):
         if callback.success:
             return HTTPResponse(body=success_msg.format(decoded))
         return HTTPResponse(body=callback.error or "Unknown error", status=400)
-
-    def __handle_action_queue(self, file_name: str):
-        return self.__dispatch_command(file_name, Controller.Command.Action.QUEUE, "Queued file '{}'")
-
-    def __handle_action_stop(self, file_name: str):
-        return self.__dispatch_command(file_name, Controller.Command.Action.STOP, "Stopped file '{}'")
-
-    def __handle_action_extract(self, file_name: str):
-        return self.__dispatch_command(
-            file_name, Controller.Command.Action.EXTRACT, "Requested extraction for file '{}'"
-        )
-
-    def __handle_action_delete_local(self, file_name: str):
-        return self.__dispatch_command(
-            file_name, Controller.Command.Action.DELETE_LOCAL, "Requested local delete for file '{}'"
-        )
-
-    def __handle_action_delete_remote(self, file_name: str):
-        return self.__dispatch_command(
-            file_name, Controller.Command.Action.DELETE_REMOTE, "Requested remote delete for file '{}'"
-        )
-
-    def __handle_action_validate(self, file_name: str):
-        return self.__dispatch_command(
-            file_name, Controller.Command.Action.VALIDATE, "Requested validation for file '{}'"
-        )
