@@ -17,7 +17,6 @@ describe('ViewFileSelectionService', () => {
 
   it('starts with an empty checked set', () => {
     expect(latestChecked().size).toBe(0);
-    expect(service.snapshot().size).toBe(0);
     expect(service.isChecked('a')).toBe(false);
   });
 
@@ -52,54 +51,54 @@ describe('ViewFileSelectionService', () => {
 
   it('shiftRange falls back to toggle when there is no prior anchor', () => {
     service.shiftRange('b', ['a', 'b', 'c']);
-    expect(service.snapshot()).toEqual(new Set(['b']));
+    expect(latestChecked()).toEqual(new Set(['b']));
   });
 
   it('shiftRange selects the inclusive forward range from the anchor', () => {
     service.toggle('a'); // anchor = a
     service.shiftRange('c', ['a', 'b', 'c', 'd']);
-    expect(service.snapshot()).toEqual(new Set(['a', 'b', 'c']));
+    expect(latestChecked()).toEqual(new Set(['a', 'b', 'c']));
   });
 
   it('shiftRange selects the inclusive backward range from the anchor', () => {
     service.toggle('d'); // anchor = d
     service.shiftRange('b', ['a', 'b', 'c', 'd']);
-    expect(service.snapshot()).toEqual(new Set(['b', 'c', 'd']));
+    expect(latestChecked()).toEqual(new Set(['b', 'c', 'd']));
   });
 
   it('shiftRange moves the anchor to the latest key for chained ranges', () => {
     service.toggle('a'); // anchor = a
     service.shiftRange('c', ['a', 'b', 'c', 'd', 'e']); // anchor now c
     service.shiftRange('e', ['a', 'b', 'c', 'd', 'e']); // c..e
-    expect(service.snapshot()).toEqual(new Set(['a', 'b', 'c', 'd', 'e']));
+    expect(latestChecked()).toEqual(new Set(['a', 'b', 'c', 'd', 'e']));
   });
 
   it('shiftRange falls back to toggle when the anchor is no longer in the list', () => {
     service.toggle('z'); // anchor = z, but z not in the list below
     service.shiftRange('b', ['a', 'b', 'c']);
     // z stayed checked (from its own toggle), b toggled on via fallback
-    expect(service.snapshot()).toEqual(new Set(['z', 'b']));
+    expect(latestChecked()).toEqual(new Set(['z', 'b']));
   });
 
   it('shiftRange falls back to toggle when the target key is not in the list', () => {
     service.toggle('a'); // anchor = a
     service.shiftRange('zzz', ['a', 'b', 'c']);
     // zzz not present -> fallback toggles zzz on
-    expect(service.snapshot()).toEqual(new Set(['a', 'zzz']));
+    expect(latestChecked()).toEqual(new Set(['a', 'zzz']));
   });
 
   // --- checkAll ---
 
   it('checkAll checks every provided key', () => {
     service.checkAll(['a', 'b', 'c']);
-    expect(service.snapshot()).toEqual(new Set(['a', 'b', 'c']));
+    expect(latestChecked()).toEqual(new Set(['a', 'b', 'c']));
     expect(latestChecked()).toEqual(new Set(['a', 'b', 'c']));
   });
 
   it('checkAll unions with the existing selection', () => {
     service.toggle('x');
     service.checkAll(['a', 'b']);
-    expect(service.snapshot()).toEqual(new Set(['x', 'a', 'b']));
+    expect(latestChecked()).toEqual(new Set(['x', 'a', 'b']));
   });
 
   // --- uncheckAll ---
@@ -108,12 +107,12 @@ describe('ViewFileSelectionService', () => {
     service.toggle('a'); // anchor = a
     service.checkAll(['b', 'c']);
     service.uncheckAll();
-    expect(service.snapshot().size).toBe(0);
+    expect(latestChecked().size).toBe(0);
     expect(latestChecked().size).toBe(0);
 
     // Anchor was cleared: a subsequent shiftRange falls back to a plain toggle.
     service.shiftRange('c', ['a', 'b', 'c']);
-    expect(service.snapshot()).toEqual(new Set(['c']));
+    expect(latestChecked()).toEqual(new Set(['c']));
   });
 
   // --- pruneRemoved ---
@@ -151,15 +150,6 @@ describe('ViewFileSelectionService', () => {
     service.pruneRemoved(['b']);
     // anchor still 'a' -> range a..c selects a, c (b was removed but reselected in range)
     service.shiftRange('c', ['a', 'b', 'c']);
-    expect(service.snapshot()).toEqual(new Set(['a', 'b', 'c']));
-  });
-
-  // --- snapshot defensiveness ---
-
-  it('snapshot returns a copy that does not mutate internal state', () => {
-    service.toggle('a');
-    const snap = service.snapshot();
-    snap.add('b');
-    expect(service.isChecked('b')).toBe(false);
+    expect(latestChecked()).toEqual(new Set(['a', 'b', 'c']));
   });
 });

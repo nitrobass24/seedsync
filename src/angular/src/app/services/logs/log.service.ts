@@ -10,7 +10,6 @@ export interface LogHistoryParams {
     search?: string;
     level?: string;
     limit?: number;
-    before?: number;
 }
 
 export interface LogHistoryEntry {
@@ -51,20 +50,11 @@ export class LogService implements StreamEventHandler {
         }
     }
 
-    onConnected(): void {
-        // intentional no-op
-    }
-
-    onDisconnected(): void {
-        // intentional no-op
-    }
-
     fetchHistory(params: LogHistoryParams = {}): Observable<LogHistoryEntry[]> {
         let httpParams = new HttpParams();
-        if (params.search) httpParams = httpParams.set('search', params.search);
-        if (params.level) httpParams = httpParams.set('level', params.level);
-        if (params.limit) httpParams = httpParams.set('limit', params.limit.toString());
-        if (params.before) httpParams = httpParams.set('before', params.before.toString());
+        for (const [key, value] of Object.entries(params)) {
+            if (value) httpParams = httpParams.set(key, String(value));
+        }
         return this.http.get<LogHistoryEntry[]>('/server/logs', { params: httpParams });
     }
 }

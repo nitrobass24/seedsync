@@ -6,9 +6,7 @@ import copy
 import logging
 import time
 from threading import Lock
-from typing import TYPE_CHECKING, Any
-
-from common import overrides
+from typing import TYPE_CHECKING, Any, override
 
 from ..serialize import SerializeLogRecord
 from ..utils import StreamQueue
@@ -41,7 +39,7 @@ class CachedQueueLogHandler(logging.Handler):
         self.__cache_lock.release()
         return cache
 
-    @overrides(logging.Handler)
+    @override
     def emit(self, record: logging.LogRecord):
         if self.__history_size_in_ms > 0:
             self.__cache_lock.acquire()
@@ -52,16 +50,7 @@ class CachedQueueLogHandler(logging.Handler):
     def __prune_history(self):
         current_time_in_ms = int(time.time() * 1000)
         history_start_time_in_ms = current_time_in_ms - self.__history_size_in_ms
-        # Find the largest index older than history start time
-        prune_index = -1
-        for i, record in enumerate(self.__cached_records):
-            if 1000.0 * record.created < history_start_time_in_ms:
-                prune_index = i
-            else:
-                # assume records are order oldest to newest
-                break
-        if prune_index >= 0:
-            self.__cached_records = self.__cached_records[prune_index + 1 :]
+        self.__cached_records = [r for r in self.__cached_records if 1000.0 * r.created >= history_start_time_in_ms]
 
 
 class QueueLogHandler(logging.Handler, StreamQueue[logging.LogRecord]):
@@ -73,7 +62,7 @@ class QueueLogHandler(logging.Handler, StreamQueue[logging.LogRecord]):
         logging.Handler.__init__(self)
         StreamQueue.__init__(self)  # type: ignore[reportUnknownMemberType]
 
-    @overrides(logging.Handler)
+    @override
     def emit(self, record: logging.LogRecord) -> None:
         self.put(record)
 
@@ -87,40 +76,36 @@ class LogStreamHandler(IStreamHandler):
 
     _CACHE_HISTORY_SIZE_IN_MS = 3000
 
-    # Cache of logs
-    _cache = None
-
-    def __init__(self, logger: logging.Logger):
+    def __init__(self, logger: logging.Logger, cache: CachedQueueLogHandler):
         self.logger = logger
+        self.cache = cache
         self.handler = QueueLogHandler()
         self.serialize = SerializeLogRecord()
 
-    # noinspection PyUnresolvedReferences
     @classmethod
-    @overrides(IStreamHandler)
+    @override
     def register(cls, web_app: WebApp, **kwargs: Any) -> None:
-        # Initialize our cache when we register
-        LogStreamHandler._cache = CachedQueueLogHandler(history_size_in_ms=LogStreamHandler._CACHE_HISTORY_SIZE_IN_MS)
-        kwargs["logger"].addHandler(LogStreamHandler._cache)
+        # One shared cache, attached to the logger at registration time and
+        # handed to every stream instance the web app constructs.
+        cache = CachedQueueLogHandler(history_size_in_ms=cls._CACHE_HISTORY_SIZE_IN_MS)
+        kwargs["logger"].addHandler(cache)
+        super().register(web_app=web_app, cache=cache, **kwargs)
 
-        super().register(web_app=web_app, **kwargs)
-
-    @overrides(IStreamHandler)
+    @override
     def setup(self):
         # Send out all the cached records first
-        assert LogStreamHandler._cache is not None
-        for record in LogStreamHandler._cache.get_cached_records():
+        for record in self.cache.get_cached_records():
             self.handler.emit(record)
         # Then subscribe the live stream
         self.logger.addHandler(self.handler)
 
-    @overrides(IStreamHandler)
+    @override
     def get_value(self) -> str | None:
         record = self.handler.get_next_event()
         if record is not None:
             return self.serialize.record(record)
         return None
 
-    @overrides(IStreamHandler)
+    @override
     def cleanup(self):
         self.logger.removeHandler(self.handler)

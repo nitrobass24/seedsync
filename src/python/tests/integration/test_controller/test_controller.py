@@ -11,36 +11,37 @@ import unittest
 import zipfile
 from datetime import datetime
 from filecmp import cmp, dircmp
+from typing import override
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import timeout_decorator
 
-from common import AppError, Args, Config, Context, Localization, Status, overrides
+from common import AppError, Args, Config, Context, Localization, Status
 from controller import Controller, ControllerPersist
 from model import IModelListener, ModelFile
 from tests.utils import TestUtils, requires_live_ssh
 
 
 class DummyListener(IModelListener):
-    @overrides(IModelListener)
+    @override
     def file_added(self, file: ModelFile):
         pass
 
-    @overrides(IModelListener)
+    @override
     def file_updated(self, old_file: ModelFile, new_file: ModelFile):
         pass
 
-    @overrides(IModelListener)
+    @override
     def file_removed(self, file: ModelFile):
         pass
 
 
 class DummyCommandCallback(Controller.Command.ICallback):
-    @overrides(Controller.Command.ICallback)
+    @override
     def on_failure(self, error: str):
         pass
 
-    @overrides(Controller.Command.ICallback)
+    @override
     def on_success(self):
         pass
 
@@ -89,7 +90,7 @@ class TestController(unittest.TestCase):
             raise ValueError(f"Unsupported archive format: {os.path.basename(path)}")
         return os.path.getsize(path)
 
-    @overrides(unittest.TestCase)
+    @override
     def setUp(self):
         # Create a temp directory
         TestController.temp_dir = tempfile.mkdtemp(prefix="test_controller")
@@ -331,7 +332,7 @@ class TestController(unittest.TestCase):
         self.controller_persist = ControllerPersist()
         self.controller = None
 
-    @overrides(unittest.TestCase)
+    @override
     def tearDown(self):
         if self.controller:
             self.controller.exit()

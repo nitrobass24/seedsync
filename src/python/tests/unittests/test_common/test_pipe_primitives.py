@@ -112,9 +112,9 @@ class TestPipeFlag(unittest.TestCase):
         flag = PipeFlag()
         self.addCleanup(flag.close)
         flag.set()
-        start = time.time()
+        start = time.monotonic()
         self.assertTrue(flag.wait(5))
-        self.assertLess(time.time() - start, 1)
+        self.assertLess(time.monotonic() - start, 1)
         # wait does not consume
         self.assertTrue(flag.is_set())
 

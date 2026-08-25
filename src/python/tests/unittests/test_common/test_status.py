@@ -2,9 +2,10 @@
 
 import unittest
 from datetime import datetime
+from typing import override
 from unittest.mock import MagicMock
 
-from common import IStatusComponentListener, IStatusListener, Status, StatusComponent, overrides
+from common import IStatusComponentListener, IStatusListener, Status, StatusComponent
 
 
 class DummyStatusComponent(StatusComponent):
@@ -18,13 +19,13 @@ class DummyStatusComponent(StatusComponent):
 
 
 class DummyStatusComponentListener(IStatusComponentListener):
-    @overrides(IStatusComponentListener)
+    @override
     def notify(self, name):
         pass
 
 
 class DummyStatusListener(IStatusListener):
-    @overrides(IStatusListener)
+    @override
     def notify(self):
         pass
 

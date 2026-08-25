@@ -165,19 +165,6 @@
         }
     }
 
-    .connected {
-        height: 12px;
-        width: 100%;
-        text-align: center;
-        border-bottom: 1px solid var(--ss-log-divider);
-        margin-bottom: 15px;
-
-        span {
-            background-color: var(--ss-log-divider-bg);
-            font-size: 10px;
-            padding: 5px;
-        }
-    }
 }
 
 /* Medium and large screens */
@@ -190,10 +177,6 @@
 // ── Dark mode refinements ──
 :host-context([data-bs-theme="dark"]) {
     #logs {
-        .connected span {
-            background-color: #161A21;
-        }
-
         .btn-scroll {
             background-color: #1D222B;
             border-color: #252C37;

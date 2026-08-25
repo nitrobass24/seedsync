@@ -5,8 +5,9 @@ import json
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from typing import override
 
-from common import Constants, Context, Persist, PersistError, Serializable, overrides
+from common import Constants, Context, Persist, PersistError, Serializable
 from model import IModelListener, ModelFile
 
 from .controller import Controller
@@ -110,7 +111,7 @@ class AutoQueuePersist(Persist):
             self.__listeners.append(listener)
 
     @classmethod
-    @overrides(Persist)
+    @override
     def from_str(cls: type["AutoQueuePersist"], content: str) -> "AutoQueuePersist":
         persist = cls()
         try:
@@ -122,7 +123,7 @@ class AutoQueuePersist(Persist):
         except (json.decoder.JSONDecodeError, KeyError) as e:
             raise PersistError(f"Error parsing AutoQueuePersist - {type(e).__name__}: {e!s}") from e
 
-    @overrides(Persist)
+    @override
     def to_str(self) -> str:
         dct: dict[str, list[str]] = {}
         with self.__lock:
@@ -137,15 +138,15 @@ class AutoQueueModelListener(IModelListener):
         self.new_files: list[ModelFile] = []
         self.modified_files: list[tuple[ModelFile, ModelFile]] = []
 
-    @overrides(IModelListener)
+    @override
     def file_added(self, file: ModelFile):
         self.new_files.append(file)
 
-    @overrides(IModelListener)
+    @override
     def file_updated(self, old_file: ModelFile, new_file: ModelFile):
         self.modified_files.append((old_file, new_file))
 
-    @overrides(IModelListener)
+    @override
     def file_removed(self, file: ModelFile):
         pass
 
@@ -163,12 +164,12 @@ class AutoQueuePersistListener(IAutoQueuePersistListener):
         self.__lock = threading.RLock()
         self.new_patterns: set[AutoQueuePattern] = set()
 
-    @overrides(IAutoQueuePersistListener)
+    @override
     def pattern_added(self, pattern: AutoQueuePattern):
         with self.__lock:
             self.new_patterns.add(pattern)
 
-    @overrides(IAutoQueuePersistListener)
+    @override
     def pattern_removed(self, pattern: AutoQueuePattern):
         with self.__lock:
             self.new_patterns.discard(pattern)

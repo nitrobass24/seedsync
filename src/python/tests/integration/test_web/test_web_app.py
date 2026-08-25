@@ -6,11 +6,12 @@ import shutil
 import sys
 import tempfile
 import unittest
+from typing import override
 from unittest.mock import MagicMock
 
 from webtest import TestApp
 
-from common import Config, IntegrationsConfig, PathPairsConfig, Status, overrides
+from common import Config, IntegrationsConfig, PathPairsConfig, Status
 from controller import AutoQueuePersist
 from web import WebAppBuilder
 
@@ -21,7 +22,7 @@ class BaseTestWebApp(unittest.TestCase):
     Sets up the web app with mocks
     """
 
-    @overrides(unittest.TestCase)
+    @override
     def setUp(self):
         self.context = MagicMock()
         self.controller = MagicMock()
@@ -75,7 +76,7 @@ class BaseTestWebApp(unittest.TestCase):
         self.web_app = self.web_app_builder.build()
         self.test_app = TestApp(self.web_app)
 
-    @overrides(unittest.TestCase)
+    @override
     def tearDown(self):
         shutil.rmtree(self._test_tmpdir, ignore_errors=True)
 

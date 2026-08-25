@@ -11,12 +11,6 @@ export interface ArrInstance {
   enabled: boolean;
 }
 
-export interface ArrInstanceCreate {
-  name: string;
-  kind: ArrKind;
-  url: string;
-  api_key: string;
-  enabled: boolean;
-}
+export type ArrInstanceCreate = Omit<ArrInstance, 'id'>;
 
 export type ArrInstanceUpdate = Partial<ArrInstanceCreate>;

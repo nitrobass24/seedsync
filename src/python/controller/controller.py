@@ -228,7 +228,6 @@ class Controller:
         active_scan_process = ScannerProcess(
             scanner=active_scanner,
             interval_in_ms=self.__context.config.controller.interval_ms_downloading_scan,  # type: ignore[arg-type]
-            verbose=False,
         )
         local_scan_process = ScannerProcess(
             scanner=local_scanner,

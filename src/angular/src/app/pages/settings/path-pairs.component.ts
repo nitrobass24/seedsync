@@ -8,6 +8,7 @@ import { catchError } from 'rxjs/operators';
 import { PathPairsService } from '../../services/settings/path-pairs.service';
 import { IntegrationsService } from '../../services/settings/integrations.service';
 import { PathPair } from '../../models/path-pair';
+import { DoubleClickConfirm } from '../../common/double-click-confirm';
 import { ArrInstance } from '../../models/arr-instance';
 
 @Component({
@@ -41,11 +42,14 @@ export class PathPairsComponent implements OnDestroy {
   errorMessage: string | null = null;
 
   // Double-click delete confirmation
-  confirmingDeleteId: string | null = null;
-  private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly deleteConfirm = new DoubleClickConfirm<string>(() => this.cdr.markForCheck());
+
+  get confirmingDeleteId(): string | null {
+    return this.deleteConfirm.confirming;
+  }
 
   ngOnDestroy(): void {
-    this.clearConfirmTimer();
+    this.deleteConfirm.clearTimer();
   }
 
   // --- Add ---
@@ -89,7 +93,7 @@ export class PathPairsComponent implements OnDestroy {
 
   onStartEdit(pair: PathPair): void {
     this.onCancelAdd();
-    this.resetConfirmState();
+    this.deleteConfirm.reset();
     this.editingId = pair.id;
     this.editForm = {
       name: pair.name,
@@ -132,22 +136,17 @@ export class PathPairsComponent implements OnDestroy {
   // --- Delete (double-click confirm) ---
 
   onDelete(pairId: string): void {
-    if (this.confirmingDeleteId === pairId) {
-      this.clearConfirmTimer();
+    if (this.deleteConfirm.confirm(pairId)) {
       this.pathPairsService.remove(pairId).pipe(
         takeUntilDestroyed(this.destroyRef),
       ).subscribe((success) => {
         if (success) {
           this.errorMessage = null;
-          this.confirmingDeleteId = null;
         } else {
           this.errorMessage = 'Failed to delete path pair. Please try again.';
-          this.confirmingDeleteId = null;
         }
         this.cdr.markForCheck();
       });
-    } else {
-      this.setConfirming(pairId);
     }
   }
 
@@ -255,7 +254,7 @@ export class PathPairsComponent implements OnDestroy {
   private cancelEdit(): void {
     this.editingId = null;
     this.editForm = this.emptyForm();
-    this.resetConfirmState();
+    this.deleteConfirm.reset();
   }
 
   private emptyForm(): Omit<PathPair, 'id'> {
@@ -269,25 +268,4 @@ export class PathPairsComponent implements OnDestroy {
     };
   }
 
-  private setConfirming(pairId: string): void {
-    this.clearConfirmTimer();
-    this.confirmingDeleteId = pairId;
-    this.confirmResetTimer = setTimeout(() => {
-      this.confirmingDeleteId = null;
-      this.confirmResetTimer = null;
-      this.cdr.markForCheck();
-    }, 3000);
-  }
-
-  private resetConfirmState(): void {
-    this.clearConfirmTimer();
-    this.confirmingDeleteId = null;
-  }
-
-  private clearConfirmTimer(): void {
-    if (this.confirmResetTimer !== null) {
-      clearTimeout(this.confirmResetTimer);
-      this.confirmResetTimer = null;
-    }
-  }
 }

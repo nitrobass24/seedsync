@@ -106,12 +106,6 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewInit {
   private readonly recordBatch$ = new Subject<void>();
   private readonly searchChange$ = new Subject<void>();
 
-  // Per-object monotonic trackBy keys (#522) — unique even for identical log
-  // lines, since each record/entry is a distinct object.
-  private liveSeq = 0;
-  private historySeq = 0;
-  private readonly recordKey = new WeakMap<LogRecord, number>();
-  private readonly historyKey = new WeakMap<LogHistoryEntry, number>();
 
   ngOnInit(): void {
     this.logService.logs$.pipe(
@@ -209,36 +203,17 @@ export class LogsPageComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /**
-   * Stable, collision-free trackBy for the live-log list (#522). A monotonic
-   * sequence id is assigned per record *object* (via a WeakMap), so identical
-   * repeated log lines (same logger+message in the same millisecond — common
-   * under high-throughput DEBUG sync) still get distinct keys. Content-derived
-   * keys would collide there and trip Angular's duplicate-key reconcile
-   * (NG0955), dropping/mis-associating rows. Keying by object identity lets
-   * Angular reuse DOM nodes when the buffer is front-trimmed.
-   *
-   * Defined as an arrow field so `this` stays bound when passed by reference to
-   * `*cdkVirtualFor`'s `trackBy` (#539) — CDK invokes the TrackByFunction
-   * without the component as receiver.
+   * Track by object identity (#522): identical log lines are still distinct
+   * objects, so identity never collides where a content-derived key would
+   * (NG0955). Arrow field so `this`-less `*cdkVirtualFor` can call it (#539).
    */
-  readonly trackRecord = (_index: number, record: LogRecord): number => {
-    let key = this.recordKey.get(record);
-    if (key === undefined) {
-      key = this.liveSeq++;
-      this.recordKey.set(record, key);
-    }
-    return key;
-  };
+  readonly trackRecord = (_index: number, record: LogRecord): LogRecord => record;
 
-  /** Stable, collision-free trackBy for the history list (#522); see trackRecord. */
-  trackHistory(_index: number, entry: LogHistoryEntry): number {
-    let key = this.historyKey.get(entry);
-    if (key === undefined) {
-      key = this.historySeq++;
-      this.historyKey.set(entry, key);
-    }
-    return key;
+  /** Track history entries by object identity; see trackRecord. */
+  trackHistory(_index: number, entry: LogHistoryEntry): LogHistoryEntry {
+    return entry;
   }
+
 
   /**
    * Drain the pending SSE records into the live buffer in a single pass (#539).

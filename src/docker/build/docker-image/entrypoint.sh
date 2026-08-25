@@ -8,8 +8,6 @@ set -e
 #   - PUID=1000, PGID=1000 (typical single-user setup)
 #   - PUID=1026, PGID=100  (Synology with "users" group)
 #   - Custom user:group like "torrentapp:media"
-#
-# Compatible with both Debian (groupadd/useradd) and Alpine (addgroup/adduser).
 
 # Get user/group IDs from environment (with defaults)
 USER_ID=${PUID:-1000}
@@ -25,11 +23,7 @@ if [ -n "$EXISTING_GROUP" ]; then
 else
     GROUPNAME="seedsync"
     echo "Creating group: $GROUPNAME (GID=$GROUP_ID)"
-    if command -v groupadd >/dev/null 2>&1; then
-        groupadd -g "$GROUP_ID" "$GROUPNAME"
-    else
-        addgroup -g "$GROUP_ID" -S "$GROUPNAME"
-    fi
+    addgroup -g "$GROUP_ID" -S "$GROUPNAME"
 fi
 
 # Resolve user: check if UID already exists
@@ -40,20 +34,12 @@ if [ -n "$EXISTING_USER" ]; then
 
     # Ensure user is in the target group (may differ from their primary group)
     if ! id -nG "$USERNAME" | grep -qw "$GROUPNAME"; then
-        if command -v usermod >/dev/null 2>&1; then
-            usermod -aG "$GROUPNAME" "$USERNAME" 2>/dev/null || true
-        else
-            addgroup "$USERNAME" "$GROUPNAME" 2>/dev/null || true
-        fi
+        addgroup "$USERNAME" "$GROUPNAME" 2>/dev/null || true
     fi
 else
     USERNAME="seedsync"
     echo "Creating user: $USERNAME (UID=$USER_ID, GID=$GROUP_ID)"
-    if command -v useradd >/dev/null 2>&1; then
-        useradd -u "$USER_ID" -g "$GROUP_ID" -d /home/$USERNAME -m -s /bin/sh "$USERNAME"
-    else
-        adduser -u "$USER_ID" -G "$GROUPNAME" -h /home/$USERNAME -s /bin/sh -D "$USERNAME"
-    fi
+    adduser -u "$USER_ID" -G "$GROUPNAME" -h /home/$USERNAME -s /bin/sh -D "$USERNAME"
 fi
 
 # Get the user's home directory (may not be /home/$USERNAME for existing users)

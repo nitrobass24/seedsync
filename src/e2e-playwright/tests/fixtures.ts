@@ -8,8 +8,6 @@ import { test as base, expect, type Page } from "@playwright/test";
  *   make run   (or docker compose -f docker-compose.dev.yml up -d)
  */
 export const test = base.extend<{
-  /** The base URL of the SeedSync instance */
-  appUrl: string;
   /** Helper to wait for the SSE stream to connect and deliver initial data */
   waitForStream: (page: Page) => Promise<void>;
   /** Helper to GET a JSON API endpoint */
@@ -19,10 +17,6 @@ export const test = base.extend<{
   /** Helper to make API fetch requests with proper CSRF Origin header */
   apiFetch: (path: string, init?: RequestInit) => Promise<Response>;
 }>({
-  appUrl: async ({ baseURL }, use) => {
-    await use(baseURL || "http://localhost:8800");
-  },
-
   waitForStream: async ({}, use) => {
     await use(async (page: Page) => {
       // Wait for the Angular app to render by checking for sidebar nav links.
@@ -31,7 +25,8 @@ export const test = base.extend<{
     });
   },
 
-  apiGet: async ({ appUrl }, use) => {
+  apiGet: async ({ baseURL }, use) => {
+    const appUrl = baseURL!;
     await use(async (path: string) => {
       const res = await fetch(`${appUrl}${path}`, {
         headers: { Origin: appUrl },
@@ -41,7 +36,8 @@ export const test = base.extend<{
     });
   },
 
-  apiSetConfig: async ({ appUrl }, use) => {
+  apiSetConfig: async ({ baseURL }, use) => {
+    const appUrl = baseURL!;
     await use(async (section: string, key: string, value: string) => {
       const encoded = encodeURIComponent(encodeURIComponent(value || "__empty__"));
       const res = await fetch(
@@ -51,7 +47,8 @@ export const test = base.extend<{
     });
   },
 
-  apiFetch: async ({ appUrl }, use) => {
+  apiFetch: async ({ baseURL }, use) => {
+    const appUrl = baseURL!;
     await use(async (path: string, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       // Always include Origin header for CSRF validation

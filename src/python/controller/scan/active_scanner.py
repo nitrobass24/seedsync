@@ -4,8 +4,8 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import queue
+from typing import override
 
-from common import overrides
 from system import SystemFile, SystemScanner, SystemScannerError
 
 from .scanner_process import IScanner
@@ -27,7 +27,7 @@ class ActiveScanner(IScanner):
         self.__active_files: list[str] = []
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    @overrides(IScanner)
+    @override
     def set_base_logger(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild(self.__class__.__name__)
 
@@ -44,7 +44,7 @@ class ActiveScanner(IScanner):
         self.__active_files_queue.close()
         self.__active_files_queue.join_thread()
 
-    @overrides(IScanner)
+    @override
     def scan(self) -> list[SystemFile]:
         # Grab the latest list of active files, if any
         try:

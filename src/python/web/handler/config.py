@@ -3,11 +3,12 @@
 import logging
 import threading
 from collections.abc import Callable
+from typing import override
 from urllib.parse import unquote
 
 from bottle import HTTPResponse
 
-from common import Config, ConfigError, overrides
+from common import Config, ConfigError
 
 from ..serialize import SerializeConfig
 from ..web_app import IHandler, WebApp
@@ -55,7 +56,7 @@ class ConfigHandler(IHandler):
         # state diverged.
         self.__write_lock = threading.Lock()
 
-    @overrides(IHandler)
+    @override
     def add_routes(self, web_app: WebApp):
         web_app.add_handler("/server/config/get", self.__handle_get_config)
         # The regex allows slashes in values

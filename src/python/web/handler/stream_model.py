@@ -1,7 +1,8 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 
-from common import overrides
+from typing import override
+
 from controller import Controller
 from model import IModelListener, ModelFile
 
@@ -19,19 +20,19 @@ class WebResponseModelListener(IModelListener, StreamQueue[SerializeModel.Update
     def __init__(self):
         super().__init__()
 
-    @overrides(IModelListener)
+    @override
     def file_added(self, file: ModelFile):
         self.put(
             SerializeModel.UpdateEvent(change=SerializeModel.UpdateEvent.Change.ADDED, old_file=None, new_file=file)
         )
 
-    @overrides(IModelListener)
+    @override
     def file_removed(self, file: ModelFile):
         self.put(
             SerializeModel.UpdateEvent(change=SerializeModel.UpdateEvent.Change.REMOVED, old_file=file, new_file=None)
         )
 
-    @overrides(IModelListener)
+    @override
     def file_updated(self, old_file: ModelFile, new_file: ModelFile):
         self.put(
             SerializeModel.UpdateEvent(
@@ -48,11 +49,11 @@ class ModelStreamHandler(IStreamHandler):
         self.initial_model_files = None
         self.first_run = True
 
-    @overrides(IStreamHandler)
+    @override
     def setup(self):
         self.initial_model_files = self.controller.get_model_files_and_add_listener(self.model_listener)
 
-    @overrides(IStreamHandler)
+    @override
     def get_value(self) -> str | None:
         if self.first_run:
             self.first_run = False
@@ -63,7 +64,7 @@ class ModelStreamHandler(IStreamHandler):
             return self.serialize.update_event(event)
         return None
 
-    @overrides(IStreamHandler)
+    @override
     def cleanup(self):
         if self.model_listener:
             self.controller.remove_model_listener(self.model_listener)

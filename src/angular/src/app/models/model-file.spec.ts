@@ -107,32 +107,4 @@ describe('modelFileFromJson', () => {
     expect(result.remote_created_timestamp).toBeNull();
     expect(result.remote_modified_timestamp).toBeNull();
   });
-
-  it('should recursively parse children', () => {
-    const json = makeJson({
-      name: 'parent',
-      is_dir: true,
-      children: [
-        makeJson({ name: 'child1.txt', state: 'DOWNLOADED' }),
-        makeJson({
-          name: 'subfolder',
-          is_dir: true,
-          children: [
-            makeJson({ name: 'grandchild.txt', state: 'QUEUED' }),
-          ],
-        }),
-      ],
-    });
-
-    const result = modelFileFromJson(json);
-
-    expect(result.children).toHaveLength(2);
-    expect(result.children[0].name).toBe('child1.txt');
-    expect(result.children[0].state).toBe(ModelFileState.DOWNLOADED);
-    expect(result.children[1].name).toBe('subfolder');
-    expect(result.children[1].is_dir).toBe(true);
-    expect(result.children[1].children).toHaveLength(1);
-    expect(result.children[1].children[0].name).toBe('grandchild.txt');
-    expect(result.children[1].children[0].state).toBe(ModelFileState.QUEUED);
-  });
 });

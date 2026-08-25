@@ -84,36 +84,36 @@ describe('ViewFileFilterService — NameFilterCriteria', () => {
   it('should match all files when name filter is null', () => {
     optionsSubject.next(makeOptions({ nameFilter: null as unknown as string }));
     const file = makeViewFile({ name: 'Anything.mkv' });
-    expect(capturedCriteria!.meetsCriteria(file)).toBe(true);
+    expect(capturedCriteria!(file)).toBe(true);
   });
 
   it('should match all files when name filter is empty string', () => {
     optionsSubject.next(makeOptions({ nameFilter: '' }));
     const file = makeViewFile({ name: 'Anything.mkv' });
-    expect(capturedCriteria!.meetsCriteria(file)).toBe(true);
+    expect(capturedCriteria!(file)).toBe(true);
   });
 
   it('should match substring case-insensitively', () => {
     optionsSubject.next(makeOptions({ nameFilter: 'show' }));
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ name: 'My.Show.S01E01.mkv' }))).toBe(true);
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ name: 'MY.SHOW.S01E01.mkv' }))).toBe(true);
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ name: 'other-file.txt' }))).toBe(false);
+    expect(capturedCriteria!(makeViewFile({ name: 'My.Show.S01E01.mkv' }))).toBe(true);
+    expect(capturedCriteria!(makeViewFile({ name: 'MY.SHOW.S01E01.mkv' }))).toBe(true);
+    expect(capturedCriteria!(makeViewFile({ name: 'other-file.txt' }))).toBe(false);
   });
 
   it('should treat spaces as dots for fuzzy matching ("my show" matches "My.Show.S01E01")', () => {
     optionsSubject.next(makeOptions({ nameFilter: 'my show' }));
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ name: 'My.Show.S01E01.mkv' }))).toBe(true);
+    expect(capturedCriteria!(makeViewFile({ name: 'My.Show.S01E01.mkv' }))).toBe(true);
   });
 
   it('should treat dots as spaces for fuzzy matching ("my.show" matches "My Show S01E01")', () => {
     optionsSubject.next(makeOptions({ nameFilter: 'my.show' }));
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ name: 'My Show S01E01.mkv' }))).toBe(true);
+    expect(capturedCriteria!(makeViewFile({ name: 'My Show S01E01.mkv' }))).toBe(true);
   });
 
   it('should return false for all files when no name matches', () => {
     optionsSubject.next(makeOptions({ nameFilter: 'nonexistent' }));
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ name: 'Something.Else.mkv' }))).toBe(false);
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ name: 'Another.File.txt' }))).toBe(false);
+    expect(capturedCriteria!(makeViewFile({ name: 'Something.Else.mkv' }))).toBe(false);
+    expect(capturedCriteria!(makeViewFile({ name: 'Another.File.txt' }))).toBe(false);
   });
 
   it('should match when query contains mixed dots and spaces', () => {
@@ -121,14 +121,14 @@ describe('ViewFileFilterService — NameFilterCriteria', () => {
     // The original query lowercased: "my.show s01"
     // space→dot variant: "my.show.s01"
     // dot→space variant: "my show s01"
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ name: 'My.Show.S01E01.mkv' }))).toBe(true);
+    expect(capturedCriteria!(makeViewFile({ name: 'My.Show.S01E01.mkv' }))).toBe(true);
   });
 
   it('should match only on the file name, not other fields', () => {
     optionsSubject.next(makeOptions({ nameFilter: 'download' }));
     // Name doesn't contain "download" but status is DOWNLOADING
     const file = makeViewFile({ name: 'SomeFile.txt', status: ViewFileStatus.DOWNLOADING });
-    expect(capturedCriteria!.meetsCriteria(file)).toBe(false);
+    expect(capturedCriteria!(file)).toBe(false);
   });
 });
 
@@ -161,22 +161,22 @@ describe('ViewFileFilterService — StatusFilterCriteria', () => {
 
   it('should match all files when status filter is null', () => {
     optionsSubject.next(makeOptions({ selectedStatusFilter: null }));
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ status: ViewFileStatus.DEFAULT }))).toBe(true);
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ status: ViewFileStatus.DOWNLOADING }))).toBe(true);
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ status: ViewFileStatus.QUEUED }))).toBe(true);
+    expect(capturedCriteria!(makeViewFile({ status: ViewFileStatus.DEFAULT }))).toBe(true);
+    expect(capturedCriteria!(makeViewFile({ status: ViewFileStatus.DOWNLOADING }))).toBe(true);
+    expect(capturedCriteria!(makeViewFile({ status: ViewFileStatus.QUEUED }))).toBe(true);
   });
 
   it('should match only files with the specified status', () => {
     optionsSubject.next(makeOptions({ selectedStatusFilter: ViewFileStatus.DOWNLOADING }));
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ status: ViewFileStatus.DOWNLOADING }))).toBe(true);
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ status: ViewFileStatus.DEFAULT }))).toBe(false);
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ status: ViewFileStatus.QUEUED }))).toBe(false);
+    expect(capturedCriteria!(makeViewFile({ status: ViewFileStatus.DOWNLOADING }))).toBe(true);
+    expect(capturedCriteria!(makeViewFile({ status: ViewFileStatus.DEFAULT }))).toBe(false);
+    expect(capturedCriteria!(makeViewFile({ status: ViewFileStatus.QUEUED }))).toBe(false);
   });
 
   it('should match each status enum value correctly', () => {
     optionsSubject.next(makeOptions({ selectedStatusFilter: ViewFileStatus.EXTRACTED }));
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ status: ViewFileStatus.EXTRACTED }))).toBe(true);
-    expect(capturedCriteria!.meetsCriteria(makeViewFile({ status: ViewFileStatus.EXTRACTING }))).toBe(false);
+    expect(capturedCriteria!(makeViewFile({ status: ViewFileStatus.EXTRACTED }))).toBe(true);
+    expect(capturedCriteria!(makeViewFile({ status: ViewFileStatus.EXTRACTING }))).toBe(false);
   });
 });
 
@@ -210,19 +210,19 @@ describe('ViewFileFilterService — AndFilterCriteria', () => {
   it('should pass when both name and status match', () => {
     optionsSubject.next(makeOptions({ nameFilter: 'show', selectedStatusFilter: ViewFileStatus.DOWNLOADING }));
     const file = makeViewFile({ name: 'My.Show.S01E01.mkv', status: ViewFileStatus.DOWNLOADING });
-    expect(capturedCriteria!.meetsCriteria(file)).toBe(true);
+    expect(capturedCriteria!(file)).toBe(true);
   });
 
   it('should reject when name matches but status does not', () => {
     optionsSubject.next(makeOptions({ nameFilter: 'show', selectedStatusFilter: ViewFileStatus.DOWNLOADING }));
     const file = makeViewFile({ name: 'My.Show.S01E01.mkv', status: ViewFileStatus.DEFAULT });
-    expect(capturedCriteria!.meetsCriteria(file)).toBe(false);
+    expect(capturedCriteria!(file)).toBe(false);
   });
 
   it('should reject when status matches but name does not', () => {
     optionsSubject.next(makeOptions({ nameFilter: 'show', selectedStatusFilter: ViewFileStatus.DOWNLOADING }));
     const file = makeViewFile({ name: 'Other.File.txt', status: ViewFileStatus.DOWNLOADING });
-    expect(capturedCriteria!.meetsCriteria(file)).toBe(false);
+    expect(capturedCriteria!(file)).toBe(false);
   });
 });
 

@@ -2,10 +2,11 @@ import json
 import os
 import re
 from collections import deque
+from typing import override
 
 from bottle import HTTPResponse, request
 
-from common import Constants, overrides
+from common import Constants
 
 from ..web_app import IHandler, WebApp
 
@@ -28,7 +29,7 @@ class LogsHandler(IHandler):
         self._logdir = logdir
         self._service_name = service_name
 
-    @overrides(IHandler)
+    @override
     def add_routes(self, web_app: WebApp):
         web_app.add_handler("/server/logs", self._handle_get_logs)
 

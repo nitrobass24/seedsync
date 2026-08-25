@@ -3,16 +3,17 @@
 import json
 import unittest
 import urllib.error
+from typing import override
 from unittest.mock import MagicMock, patch
 
-from common import ArrInstance, IntegrationsConfig, PathPair, PathPairsConfig, overrides
+from common import ArrInstance, IntegrationsConfig, PathPair, PathPairsConfig
 from tests.integration.test_web.test_web_app import BaseTestWebApp
 
 
 class TestIntegrationsHandler(BaseTestWebApp):
     """Integration tests for the *arr instances CRUD + test handler."""
 
-    @overrides(BaseTestWebApp)
+    @override
     def setUp(self):
         self.integrations_config = IntegrationsConfig()
         self.path_pairs_config = PathPairsConfig()

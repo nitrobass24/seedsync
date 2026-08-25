@@ -4,10 +4,10 @@ import sys
 import threading
 import time
 from abc import ABC, abstractmethod
+from typing import override
 
 # my libs
 from .context import Context
-from .types import overrides
 
 
 class Job(threading.Thread, ABC):
@@ -29,7 +29,7 @@ class Job(threading.Thread, ABC):
         # For exception propagation
         self.exc_info = None
 
-    @overrides(threading.Thread)
+    @override
     def run(self):
         self.logger.debug(f"Thread {self.name} started")
 
