@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.4] - 2026-08-24
+
+### Changed
+
+- **Over-engineering audit cleanup (phases 1–2)** - Repo-wide cleanup tracked in #682: ~1,150 lines and 4 dependencies removed with no user-visible behavior change.
+  - **Frontend**: Font Awesome replaced by three inline SVGs (global CSS 325 → 234 kB, no webfonts shipped) (#677); dead code, barrel files and `compare-versions` removed (#675); one `CollectionService` base for the Integrations/Path Pairs services, a shared `DoubleClickConfirm` helper replacing four copies of the delete-confirm state machine, predicate-based file filtering, and assorted shrinks (#676).
+  - **Backend**: custom `overrides()` decorator replaced by `typing.override` checked statically by pyright (#668); dead code removed (`Extract.verify_archive`, scanner exclude-prefix API, `Model.get_file_keys`) and mechanical shrinks across the controller handler, ssh option building, persist key sets and log streaming (#673).
+  - **Build & infra**: dead files (`wait-for-it.sh`, PyInstaller hooks, `wrangler.toml`, Debian entrypoint branches) and Docusaurus scaffold leftovers removed (#678, #680); Makefile e2e wrappers dropped and `help` generated from target comments; hand-maintained Python stdlib strip list in the Dockerfile reduced to the high-yield entries (image +1.2 MB compressed); ruff/pyright installed from the `dev` dependency group in CI (#681).
+- **CI: manual dispatch images tagged by branch** - `workflow_dispatch` builds now publish `ghcr.io/nitrobass24/seedsync:<branch>` instead of overwriting `latest`, so PR builds can be tested live without clobbering the release tag.
+- **Dependency updates** - Angular group, Vitest, `astral-sh/setup-uv` 10.0.1, `docker/setup-buildx-action` 4.3.0.
+
+### Fixed
+
+- **Pin-filter button accessibility** - The dashboard pin filter now has an `aria-label` and `aria-pressed` state.
+
 ## [1.0.3] - 2026-08-10
 
 ### Fixed
