@@ -19,7 +19,12 @@ def build_sshcp(lftp: "Config.Lftp") -> Sshcp:
     SSH key authentication is enabled.
     """
     password = None if lftp.use_ssh_key else lftp.remote_password
-    return Sshcp(host=lftp.remote_address, port=lftp.remote_port, user=lftp.remote_username, password=password)
+    return Sshcp(
+        host=lftp.remote_address,  # type: ignore[arg-type]
+        port=lftp.remote_port,  # type: ignore[arg-type]
+        user=lftp.remote_username,
+        password=password,
+    )
 
 
 def is_credential_error(message: str) -> bool:
