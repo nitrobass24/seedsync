@@ -64,9 +64,10 @@ class CommandProcessWrapper:
     Wraps any one-shot command processes launched by the controller
     """
 
-    def __init__(self, process: AppOneShotProcess, post_callback: Callable[[], None]):
+    def __init__(self, process: AppOneShotProcess, post_callback: Callable[[], None], filename: str):
         self.process = process
         self.post_callback = post_callback
+        self.filename = filename
 
 
 MAX_CONCURRENT_COMMAND_PROCESSES = 8

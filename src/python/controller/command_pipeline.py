@@ -51,6 +51,20 @@ def _find_local_only_paths(file: ModelFile) -> list[str]:
     return local_only_paths
 
 
+def _remote_listing_failure_reason(pc: PairContext, file: ModelFile) -> str | None:
+    """Reason cleanup must be rejected if the remote tree isn't trustworthy, else None.
+
+    A failed or not-yet-received remote scan cycle leaves the model with an empty
+    remote tree, which would otherwise make every local child look local-only and
+    let cleanup delete a folder that's actually fully mirrored.
+    """
+    if not pc.remote_scan_received or (pc.latest_remote_scan is not None and pc.latest_remote_scan.failed):
+        return "remote listing unavailable"
+    if file.remote_size is None:
+        return "folder no longer exists remotely"
+    return None
+
+
 class CommandPipeline:
     """Owns the command queue and active command/move process lifecycle.
 
@@ -277,7 +291,7 @@ class CommandPipeline:
             if delete_path != _pc.local_path:
                 _pc.active_scan_process.force_scan()
 
-        command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback)
+        command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback, filename=file.name)
         self.active_command_processes.append(command_wrapper)
         command_wrapper.process.start()
         return True
@@ -326,7 +340,9 @@ class CommandPipeline:
             file_name=file.name,
         )
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
-        command_wrapper = CommandProcessWrapper(process=process, post_callback=pc.remote_scan_process.force_scan)
+        command_wrapper = CommandProcessWrapper(
+            process=process, post_callback=pc.remote_scan_process.force_scan, filename=file.name
+        )
         self.active_command_processes.append(command_wrapper)
         command_wrapper.process.start()
         return True
@@ -339,7 +355,12 @@ class CommandPipeline:
         deferred: list[Command],
         _notify_failure: Callable[[Command, str], None],
     ) -> bool:
-        """Handle the CLEANUP_LOCAL action. Returns True on success, False on failure/deferred."""
+        """Handle the CLEANUP_LOCAL action. Returns True on success, False on failure/deferred.
+
+        Deletes any descendant with remote_size is None, stopping at the first
+        local-only ancestor (deleting it removes its descendants too). Operates
+        on the staging dir instead of local_path when the file is still staged.
+        """
         if len(self.active_command_processes) >= MAX_CONCURRENT_COMMAND_PROCESSES:
             self._logger.debug(
                 "Deferring %s for '%s': %d active processes at cap",
@@ -368,6 +389,10 @@ class CommandPipeline:
         if file.local_size is None:
             _notify_failure(command, f"File '{command.filename}' does not exist locally")
             return False
+        remote_failure_reason = _remote_listing_failure_reason(pc, file)
+        if remote_failure_reason is not None:
+            _notify_failure(command, f"Cannot clean up '{command.filename}': {remote_failure_reason}")
+            return False
         local_only_paths = _find_local_only_paths(file)
         if not local_only_paths:
             _notify_failure(command, f"No local-only content found in '{command.filename}'")
@@ -390,10 +415,12 @@ class CommandPipeline:
             if cleanup_path != _pc.local_path:
                 _pc.active_scan_process.force_scan()
 
-        command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback)
+        command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback, filename=file.name)
         try:
             command_wrapper.process.start()
-        except Exception as exc:
+        except OSError as exc:
+            self._logger.error(f"Failed to start local cleanup for '{command.filename}'", exc_info=True)
+            command_wrapper.process.close_queues()
             _notify_failure(command, f"Failed to start local cleanup for '{command.filename}': {exc!s}")
             return False
         self.active_command_processes.append(command_wrapper)
@@ -459,7 +486,12 @@ class CommandPipeline:
                 try:
                     command_process.process.propagate_exception()
                 except Exception:
-                    self._logger.warning("Command process failed: %s", command_process.process.name, exc_info=True)
+                    self._logger.error(
+                        "Command process failed for '%s': %s",
+                        command_process.filename,
+                        command_process.process.name,
+                        exc_info=True,
+                    )
         self.active_command_processes = still_active_processes
 
         still_active_moves: list[MoveProcess] = []

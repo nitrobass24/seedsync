@@ -378,6 +378,36 @@ describe("ViewFileService", () => {
     expect(latestFiles()[0].isCleanupLocalable).toBe(false);
   });
 
+  it("should update isCleanupLocalable when only a child's remote_size changes, with identical parent fields", () => {
+    // A remote rename replaces a same-size mirrored child with a local-only one;
+    // every scalar field on the parent dir stays the same (#663 review).
+    const mirroredChild = makeModelFile({ name: "x.mkv", local_size: 100, remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        local_size: 100,
+        remote_size: 100,
+        state: ModelFileState.DEFAULT,
+        children: [mirroredChild],
+      }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(false);
+
+    const orphanedChild = makeModelFile({ name: "x.mkv", local_size: 100, remote_size: null });
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        local_size: 100,
+        remote_size: 100,
+        state: ModelFileState.DEFAULT,
+        children: [orphanedChild],
+      }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(true);
+  });
+
   // --- isValidatable and validateTooltip ---
 
   it("should set isValidatable when status allows and both sizes are non-null", () => {

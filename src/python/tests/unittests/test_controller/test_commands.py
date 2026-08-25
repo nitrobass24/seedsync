@@ -48,9 +48,10 @@ class TestCommandProcessWrapper(unittest.TestCase):
     def test_stores_process_and_callback(self):
         process = MagicMock()
         post_callback = MagicMock()
-        wrapper = CommandProcessWrapper(process=process, post_callback=post_callback)
+        wrapper = CommandProcessWrapper(process=process, post_callback=post_callback, filename="file.txt")
         self.assertIs(process, wrapper.process)
         self.assertIs(post_callback, wrapper.post_callback)
+        self.assertEqual("file.txt", wrapper.filename)
 
 
 class TestConcurrencyCap(unittest.TestCase):

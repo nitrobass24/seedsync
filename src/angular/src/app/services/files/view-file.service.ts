@@ -385,7 +385,8 @@ function modelFilesEqual(a: ModelFile, b: ModelFile): boolean {
     a.downloading_speed === b.downloading_speed &&
     a.eta === b.eta &&
     a.full_path === b.full_path &&
-    a.is_extractable === b.is_extractable
+    a.is_extractable === b.is_extractable &&
+    hasLocalOnlyContent(a) === hasLocalOnlyContent(b)
   );
 }
 
@@ -421,7 +422,10 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     modelFile.remote_size,
   );
   const isCleanupLocalable =
-    LOCAL_ACTION_STATUSES.includes(status) && modelFile.is_dir && hasLocalOnlyContent(modelFile);
+    LOCAL_ACTION_STATUSES.includes(status) &&
+    modelFile.is_dir &&
+    modelFile.remote_size !== null &&
+    hasLocalOnlyContent(modelFile);
 
   return {
     name: modelFile.name,

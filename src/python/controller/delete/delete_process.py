@@ -41,8 +41,13 @@ class DeleteLocalProcess(AppOneShotProcess):
 
 class CleanupLocalProcess(AppOneShotProcess):
     """
-    Deletes a set of local paths, relative to a folder, that exist locally but not remotely.
-    Leaves the folder itself and any content that also exists remotely untouched.
+    Deletes each of ``relative_paths`` beneath ``<local_path>/<file_name>``. Each
+    path is containment-checked against that base and skipped (with an error log)
+    if it escapes. The folder itself is never removed. The caller is responsible
+    for choosing only local-only paths; ``local_path`` may be a staging dir.
+
+    Raises RuntimeError if any path fails to delete, so the caller never treats
+    a partial cleanup as a full success.
     """
 
     def __init__(self, local_path: str, file_name: str, relative_paths: list[str]):
@@ -54,17 +59,27 @@ class CleanupLocalProcess(AppOneShotProcess):
     def run_once(self):
         base_path = os.path.join(self.__local_path, self.__file_name)
         self.logger.debug(f"Cleaning up local-only contents of {self.__file_name}")
+        failures: list[str] = []
         for relative_path in self.__relative_paths:
             file_path = os.path.join(base_path, relative_path)
             if not _is_contained(base_path, file_path):
                 self.logger.error(f"Path traversal blocked: {file_path} escapes {base_path}")
+                failures.append(f"{relative_path}: escapes base path")
                 continue
             if not os.path.exists(file_path):
                 self.logger.error(f"Failed to delete non-existing file: {file_path}")
-            elif os.path.isfile(file_path):
-                os.remove(file_path)
-            else:
-                shutil.rmtree(file_path, ignore_errors=True)
+                failures.append(f"{relative_path}: does not exist")
+                continue
+            try:
+                if os.path.islink(file_path) or os.path.isfile(file_path):
+                    os.unlink(file_path)
+                else:
+                    shutil.rmtree(file_path)
+            except OSError as exc:
+                self.logger.error(f"Failed to delete {file_path}: {exc!s}")
+                failures.append(f"{relative_path}: {exc!s}")
+        if failures:
+            raise RuntimeError(f"Failed to clean up {len(failures)} path(s): {'; '.join(failures)}")
 
 
 class DeleteRemoteProcess(AppOneShotProcess):
