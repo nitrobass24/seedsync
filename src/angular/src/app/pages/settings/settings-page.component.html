@@ -14,11 +14,11 @@
       </ng-container>
 
       <ng-container
-        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_STAGING">
+        *ngTemplateOutlet="optionsList; context: OPTIONS.staging">
       </ng-container>
 
       <ng-container
-        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_EXTRACT">
+        *ngTemplateOutlet="optionsList; context: OPTIONS.extract">
       </ng-container>
 
       <ng-container
@@ -26,7 +26,7 @@
       </ng-container>
 
       <ng-container
-        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_DISCOVERY">
+        *ngTemplateOutlet="optionsList; context: OPTIONS.discovery">
       </ng-container>
     </div>
     <div id="right">
@@ -35,7 +35,7 @@
       </ng-container>
 
       <ng-container
-        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_CONNECTIONS">
+        *ngTemplateOutlet="optionsList; context: OPTIONS.connections">
       </ng-container>
 
       <div class="card">
@@ -46,12 +46,12 @@
             (click)="toggleAdvancedLftp()"
             (keyup.enter)="toggleAdvancedLftp()"
             (keyup.space)="toggleAdvancedLftp(); $event.preventDefault()">
-          {{ OPTIONS_CONTEXT_ADVANCED_LFTP.header }}
+          {{ OPTIONS.advancedLftp.header }}
           <span class="collapse-indicator">{{ advancedLftpCollapsed ? '&#9654;' : '&#9660;' }}</span>
         </h3>
         @if (!advancedLftpCollapsed) {
           <div class="card-body">
-            @for (option of OPTIONS_CONTEXT_ADVANCED_LFTP.options; track option.label) {
+            @for (option of OPTIONS.advancedLftp.options; track option.label) {
               <div>
                 <app-option
                   [type]="option.type"
@@ -68,17 +68,17 @@
       </div>
 
       <ng-container
-        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_LOGGING">
+        *ngTemplateOutlet="optionsList; context: OPTIONS.logging">
       </ng-container>
 
       <ng-container
-        *ngTemplateOutlet="optionsList; context: OPTIONS_CONTEXT_OTHER">
+        *ngTemplateOutlet="optionsList; context: OPTIONS.other">
       </ng-container>
 
       <div class="card">
         <h3 class="card-header">Notifications</h3>
         <div class="card-body">
-          @for (option of OPTIONS_CONTEXT_NOTIFICATIONS.options; track option.label) {
+          @for (option of OPTIONS.notifications.options; track option.label) {
             <div>
               <app-option
                 [type]="option.type"
@@ -92,34 +92,22 @@
             </div>
           }
           <div class="notification-test-buttons">
-            <div class="test-row">
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="testingDiscord || !commandsEnabled"
-                      (click)="onTestDiscord()">
-                {{ testingDiscord ? 'Testing...' : 'Test Discord' }}
-              </button>
-              @if (discordResult) {
-                <span class="test-result" aria-live="polite" aria-atomic="true"
-                      [class.text-success]="discordResult.success"
-                      [class.text-danger]="!discordResult.success">
-                  {{ discordResult.message }}
-                </span>
-              }
-            </div>
-            <div class="test-row">
-              <button type="button" class="btn btn-sm btn-outline-secondary"
-                      [disabled]="testingTelegram || !commandsEnabled"
-                      (click)="onTestTelegram()">
-                {{ testingTelegram ? 'Testing...' : 'Test Telegram' }}
-              </button>
-              @if (telegramResult) {
-                <span class="test-result" aria-live="polite" aria-atomic="true"
-                      [class.text-success]="telegramResult.success"
-                      [class.text-danger]="!telegramResult.success">
-                  {{ telegramResult.message }}
-                </span>
-              }
-            </div>
+            @for (channel of CHANNELS; track channel) {
+              <div class="test-row">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        [disabled]="testing[channel] || !commandsEnabled"
+                        (click)="onTest(channel)">
+                  {{ testing[channel] ? 'Testing...' : 'Test ' + (channel | titlecase) }}
+                </button>
+                @if (results[channel]; as result) {
+                  <span class="test-result" aria-live="polite" aria-atomic="true"
+                        [class.text-success]="result.success"
+                        [class.text-danger]="!result.success">
+                    {{ result.message }}
+                  </span>
+                }
+              </div>
+            }
           </div>
         </div>
       </div>

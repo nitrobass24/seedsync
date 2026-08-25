@@ -48,6 +48,28 @@ export function getConfigValue(config: Config, path: ConfigValuePath): OptionVal
   return sectionObj[option as string] ?? null;
 }
 
+/** Flags that can currently disable an option (see OptionDisabledWhen). */
+export type ActiveDisableFlags = Record<OptionDisabledWhen, boolean>;
+
+/**
+ * Apply each option's disabledWhen/overrideNote rule: an option is disabled
+ * when its flag is active, and its description is swapped for overrideNote
+ * when one is provided.
+ */
+export function applyDisableRules(context: IOptionsContext, active: ActiveDisableFlags): IOptionsContext {
+  return {
+    ...context,
+    options: context.options.map((option) => {
+      if (option.disabledWhen && active[option.disabledWhen]) {
+        return option.overrideNote !== undefined
+          ? { ...option, disabled: true, description: option.overrideNote }
+          : { ...option, disabled: true };
+      }
+      return option;
+    }),
+  };
+}
+
 export interface IOptionsContext {
   header: string;
   id: string;

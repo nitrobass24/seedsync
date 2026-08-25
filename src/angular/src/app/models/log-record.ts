@@ -29,18 +29,10 @@ export interface LogRecordJson {
   exc_tb: string;
 }
 
-const LEVEL_LOOKUP: Record<string, LogLevel> = {
-  DEBUG:    LogLevel.DEBUG,
-  INFO:     LogLevel.INFO,
-  WARNING:  LogLevel.WARNING,
-  ERROR:    LogLevel.ERROR,
-  CRITICAL: LogLevel.CRITICAL,
-};
-
 export function logRecordFromJson(json: LogRecordJson): LogRecord {
   return {
     time: new Date(1000 * +json.time),
-    level: LEVEL_LOOKUP[json.level_name] ?? LogLevel.INFO,
+    level: LogLevel[json.level_name as keyof typeof LogLevel] ?? LogLevel.INFO,
     loggerName: json.logger_name,
     message: json.message,
     exceptionTraceback: json.exc_tb,
