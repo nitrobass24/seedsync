@@ -65,7 +65,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
 
         with patch.object(notifier, "_send_post", side_effect=slow_send):
             notifier._fire_webhook("download_complete", "test.txt", "2026-01-01T00:00:00+00:00")
-            started.wait(timeout=5)
+            self.assertTrue(started.wait(timeout=5))
 
             barrier.set()
             notifier.shutdown(timeout=2)
@@ -83,7 +83,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
 
         with patch.object(notifier, "_send_post", side_effect=stuck_send):
             notifier._fire_webhook("download_complete", "test.txt", "2026-01-01T00:00:00+00:00")
-            started.wait(timeout=5)
+            self.assertTrue(started.wait(timeout=5))
 
             start = time.monotonic()
             notifier.shutdown(timeout=0.2)
@@ -103,7 +103,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
 
         with patch.object(notifier, "_send_post", side_effect=failing_send):
             notifier._fire_webhook("download_complete", "test.txt", "2026-01-01T00:00:00+00:00")
-            started.wait(timeout=5)
+            self.assertTrue(started.wait(timeout=5))
 
             start = time.monotonic()
             notifier.shutdown(timeout=2)
@@ -143,7 +143,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
         with patch.object(notifier, "_send_post", side_effect=slow_send):
             for i in range(4):
                 notifier._fire_webhook("download_complete", f"file{i}.txt", "2026-01-01T00:00:00+00:00")
-            all_started.wait(timeout=5)
+            self.assertTrue(all_started.wait(timeout=5))
 
             start = time.monotonic()
             notifier.shutdown(timeout=0.3)
