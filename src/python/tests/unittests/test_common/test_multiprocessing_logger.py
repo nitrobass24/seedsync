@@ -52,7 +52,12 @@ class TestMultiprocessingLogger(unittest.TestCase):
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
         handler.setFormatter(formatter)
 
-    def _run_child_logger(self, target=_child_process, drain_secs: float = 0.5):
+    # Must exceed the listener's 0.5s poll interval: the listener does not do a
+    # final drain on shutdown, so stop() must come after at least one full poll
+    # cycle or queued records are dropped.
+    _DRAIN_SECS = 0.6
+
+    def _run_child_logger(self, target=_child_process):
         """Run target in a child process wired to a fresh MultiprocessingLogger.
 
         Stops the logger even if the timeout-decorator exception fires
@@ -65,15 +70,15 @@ class TestMultiprocessingLogger(unittest.TestCase):
             p = multiprocessing.Process(target=target, args=(mp_logger.queue, mp_logger.log_level, "process_1"))
             p.start()
             p.join()
-            # Brief wait for listener thread to drain remaining queue items
-            time.sleep(drain_secs)
+            # Wait for the listener thread to drain remaining queue items
+            time.sleep(self._DRAIN_SECS)
         finally:
             mp_logger.stop()
 
     @timeout_decorator.timeout(10)
     def test_main_logger_receives_records(self):
         with LogCapture("TestMultiprocessingLogger.MPLogger.process_1") as log_capture:
-            self._run_child_logger(drain_secs=0.2)
+            self._run_child_logger()
 
             log_capture.check(
                 ("process_1", "DEBUG", "Debug line"),
