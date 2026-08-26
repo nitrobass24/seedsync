@@ -81,7 +81,7 @@ class Status:
 
     def __setattr__(self, name: str, value: object):
         """Components can only be set once"""
-        if name in ("server", "controller") and hasattr(self, name):
+        if isinstance(getattr(self, name, None), StatusComponent):
             raise ValueError("Cannot reassign component")
         object.__setattr__(self, name, value)
 
