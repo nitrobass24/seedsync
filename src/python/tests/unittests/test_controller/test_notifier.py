@@ -52,27 +52,25 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
             notifier._fire_webhook("download_complete", "test.txt", "2026-01-01T00:00:00+00:00")
             mock_send.assert_not_called()
 
-    def test_shutdown_waits_for_inflight_threads(self):
+    def test_shutdown_waits_for_inflight_sends(self):
         notifier = self._make_notifier()
         barrier = threading.Event()
         started = threading.Event()
+        finished = threading.Event()
 
         def slow_send(*_args):
             started.set()
             barrier.wait(timeout=5)
+            finished.set()
 
         with patch.object(notifier, "_send_post", side_effect=slow_send):
             notifier._fire_webhook("download_complete", "test.txt", "2026-01-01T00:00:00+00:00")
             started.wait(timeout=5)
 
-            with notifier._lock:
-                self.assertEqual(len(notifier._active_threads), 1)
-
             barrier.set()
             notifier.shutdown(timeout=2)
 
-            with notifier._lock:
-                self.assertEqual(len(notifier._active_threads), 0)
+            self.assertTrue(finished.is_set())
 
     def test_shutdown_timeout_respected(self):
         notifier = self._make_notifier()
@@ -95,7 +93,7 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
 
         barrier.set()
 
-    def test_thread_removed_on_exception(self):
+    def test_shutdown_completes_after_send_exception(self):
         notifier = self._make_notifier()
         started = threading.Event()
 
@@ -106,12 +104,14 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
         with patch.object(notifier, "_send_post", side_effect=failing_send):
             notifier._fire_webhook("download_complete", "test.txt", "2026-01-01T00:00:00+00:00")
             started.wait(timeout=5)
+
+            start = time.monotonic()
             notifier.shutdown(timeout=2)
+            elapsed = time.monotonic() - start
 
-            with notifier._lock:
-                self.assertEqual(len(notifier._active_threads), 0)
+            self.assertLess(elapsed, 1.0)
 
-    def test_shutdown_flag_and_registration_atomic(self):
+    def test_shutdown_suppresses_all_subsequent_fires(self):
         notifier = self._make_notifier()
         notifier.shutdown(timeout=0)
 
@@ -120,10 +120,10 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
                 notifier._fire_webhook("download_complete", f"file{i}.txt", "2026-01-01T00:00:00+00:00")
 
             mock_send.assert_not_called()
-            with notifier._lock:
-                self.assertEqual(len(notifier._active_threads), 0)
 
-    def test_total_timeout_not_per_thread(self):
+    def test_total_timeout_not_per_send(self):
+        # 4 concurrent hung sends fill the executor; shutdown's deadline must
+        # apply to the batch, not per send.
         notifier = self._make_notifier()
         barriers: list[threading.Event] = []
         all_started = threading.Event()
@@ -136,12 +136,12 @@ class TestWebhookNotifierShutdown(unittest.TestCase):
             barriers.append(b)
             with started_lock:
                 started_count += 1
-                if started_count >= 5:
+                if started_count >= 4:
                     all_started.set()
             b.wait(timeout=10)
 
         with patch.object(notifier, "_send_post", side_effect=slow_send):
-            for i in range(5):
+            for i in range(4):
                 notifier._fire_webhook("download_complete", f"file{i}.txt", "2026-01-01T00:00:00+00:00")
             all_started.wait(timeout=5)
 

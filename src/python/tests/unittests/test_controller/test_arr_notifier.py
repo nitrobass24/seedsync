@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -236,25 +237,23 @@ class TestArrNotifier(unittest.TestCase):
         notifier, _, _ = self._build_notifier(instances=[inst], pairs=[pair])
         barrier = threading.Event()
         started = threading.Event()
+        finished = threading.Event()
 
         def slow_send(*_args, **_kwargs):
             started.set()
             barrier.wait(timeout=5)
+            finished.set()
 
         with patch.object(notifier, "_send_post", side_effect=slow_send):
             self._trigger(notifier, pair_id=pair.id)
             self.assertTrue(started.wait(timeout=5))
 
-            with notifier._lock:
-                self.assertEqual(len(notifier._active_threads), 1)
-
             barrier.set()
             notifier.shutdown(timeout=2)
 
-            with notifier._lock:
-                self.assertEqual(len(notifier._active_threads), 0)
+            self.assertTrue(finished.is_set())
 
-    def test_thread_cleaned_up_on_exception(self):
+    def test_shutdown_completes_after_send_exception(self):
         inst = ArrInstance(name="Sonarr", kind="sonarr", url="http://s", api_key="k")
         pair = self._make_pair(arr_target_ids=[inst.id])
         notifier, _, _ = self._build_notifier(instances=[inst], pairs=[pair])
@@ -267,10 +266,12 @@ class TestArrNotifier(unittest.TestCase):
         with patch.object(notifier, "_send_post", side_effect=failing_send):
             self._trigger(notifier, pair_id=pair.id)
             self.assertTrue(started.wait(timeout=5))
-            notifier.shutdown(timeout=2)
 
-            with notifier._lock:
-                self.assertEqual(len(notifier._active_threads), 0)
+            start = time.monotonic()
+            notifier.shutdown(timeout=2)
+            elapsed = time.monotonic() - start
+
+            self.assertLess(elapsed, 1.0)
 
     # ------------------------------------------------------------------
     # Scheme guard
