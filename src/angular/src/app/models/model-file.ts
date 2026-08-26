@@ -17,7 +17,6 @@ export interface ModelFile {
   local_modified_timestamp: Date | null;
   remote_created_timestamp: Date | null;
   remote_modified_timestamp: Date | null;
-  children: ModelFile[];
 }
 
 export enum ModelFileState {
@@ -34,21 +33,6 @@ export enum ModelFileState {
   CORRUPT         = 'corrupt',
   MOVE_FAILED     = 'move_failed',
 }
-
-const STATE_LOOKUP: Record<string, ModelFileState> = {
-  DEFAULT:        ModelFileState.DEFAULT,
-  QUEUED:         ModelFileState.QUEUED,
-  DOWNLOADING:    ModelFileState.DOWNLOADING,
-  DOWNLOADED:     ModelFileState.DOWNLOADED,
-  DELETED:        ModelFileState.DELETED,
-  EXTRACTING:     ModelFileState.EXTRACTING,
-  EXTRACTED:      ModelFileState.EXTRACTED,
-  EXTRACT_FAILED: ModelFileState.EXTRACT_FAILED,
-  VALIDATING:     ModelFileState.VALIDATING,
-  VALIDATED:      ModelFileState.VALIDATED,
-  CORRUPT:        ModelFileState.CORRUPT,
-  MOVE_FAILED:    ModelFileState.MOVE_FAILED,
-};
 
 /**
  * Shape of a ModelFile as received in JSON from the backend.
@@ -69,22 +53,16 @@ export interface ModelFileJson {
   local_modified_timestamp: number | null;
   remote_created_timestamp: number | null;
   remote_modified_timestamp: number | null;
-  children: ModelFileJson[];
 }
 
 export function modelFileFromJson(json: ModelFileJson): ModelFile {
-  const children: ModelFile[] = [];
-  for (const child of json.children) {
-    children.push(modelFileFromJson(child));
-  }
-
   return {
     name: json.name,
     pair_id: json.pair_id ?? null,
     is_dir: json.is_dir,
     local_size: json.local_size,
     remote_size: json.remote_size,
-    state: STATE_LOOKUP[json.state.toUpperCase()] ?? ModelFileState.DEFAULT,
+    state: ModelFileState[json.state.toUpperCase() as keyof typeof ModelFileState] ?? ModelFileState.DEFAULT,
     downloading_speed: json.downloading_speed,
     eta: json.eta,
     full_path: json.full_path,
@@ -97,6 +75,5 @@ export function modelFileFromJson(json: ModelFileJson): ModelFile {
       json.remote_created_timestamp != null ? new Date(1000 * +json.remote_created_timestamp) : null,
     remote_modified_timestamp:
       json.remote_modified_timestamp != null ? new Date(1000 * +json.remote_modified_timestamp) : null,
-    children,
   };
 }

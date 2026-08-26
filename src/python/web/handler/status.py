@@ -1,8 +1,10 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+from typing import override
+
 from bottle import HTTPResponse
 
-from common import Status, overrides
+from common import Status
 
 from ..serialize import SerializeStatusJson
 from ..web_app import IHandler, WebApp
@@ -12,7 +14,7 @@ class StatusHandler(IHandler):
     def __init__(self, status: Status):
         self.__status = status
 
-    @overrides(IHandler)
+    @override
     def add_routes(self, web_app: WebApp):
         web_app.add_handler("/server/status", self.__handle_get_status)
 

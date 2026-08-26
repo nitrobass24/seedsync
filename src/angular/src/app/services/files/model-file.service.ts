@@ -73,10 +73,6 @@ export class ModelFileService implements StreamEventHandler {
     this.parseEvent(eventName, data);
   }
 
-  onConnected(): void {
-    // nothing to do
-  }
-
   onDisconnected(): void {
     this.filesSubject.next(new Map());
   }

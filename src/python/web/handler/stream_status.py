@@ -1,7 +1,9 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 
-from common import IStatusListener, Status, overrides
+from typing import override
+
+from common import IStatusListener, Status
 
 from ..serialize import SerializeStatus
 from ..utils import StreamQueue
@@ -17,7 +19,7 @@ class StatusListener(IStatusListener, StreamQueue[Status]):
         super().__init__()
         self.__status = status
 
-    @overrides(IStatusListener)
+    @override
     def notify(self):
         self.put(self.__status.copy())
 
@@ -29,11 +31,11 @@ class StatusStreamHandler(IStreamHandler):
         self.status_listener = StatusListener(status)
         self.first_run = True
 
-    @overrides(IStreamHandler)
+    @override
     def setup(self):
         self.status.add_listener(self.status_listener)
 
-    @overrides(IStreamHandler)
+    @override
     def get_value(self) -> str | None:
         if self.first_run:
             self.first_run = False
@@ -44,7 +46,7 @@ class StatusStreamHandler(IStreamHandler):
             return self.serialize.status(status)
         return None
 
-    @overrides(IStreamHandler)
+    @override
     def cleanup(self):
         if self.status_listener:
             self.status.remove_listener(self.status_listener)

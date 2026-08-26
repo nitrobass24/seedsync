@@ -8,8 +8,9 @@ import queue
 import threading
 import time
 from datetime import datetime
+from typing import override
 
-from common import AppProcess, PipeStream, overrides
+from common import AppProcess, PipeStream
 
 from .dispatch import ExtractDispatch, ExtractDispatchError, ExtractListener, ExtractStatus
 from .extract_request import ExtractRequest
@@ -81,7 +82,7 @@ class ExtractProcess(AppProcess):
         # run_init because locks don't survive spawn pickling.
         self.__failed_queue_lock: threading.Lock | None = None
 
-    @overrides(AppProcess)
+    @override
     def run_init(self):
         # Create dispatch inside the process
         self.__dispatch = ExtractDispatch()
@@ -99,12 +100,12 @@ class ExtractProcess(AppProcess):
         # Start dispatch
         self.__dispatch.start()
 
-    @overrides(AppProcess)
+    @override
     def run_cleanup(self):
         assert self.__dispatch is not None
         self.__dispatch.stop()
 
-    @overrides(AppProcess)
+    @override
     def run_loop(self):
         assert self.__dispatch is not None
         assert self.__failed_queue_lock is not None
@@ -136,7 +137,7 @@ class ExtractProcess(AppProcess):
 
         time.sleep(ExtractProcess.__DEFAULT_SLEEP_INTERVAL_IN_SECS)
 
-    @overrides(AppProcess)
+    @override
     def close_queues(self):
         self.__command_queue.close()
         self.__command_queue.join_thread()

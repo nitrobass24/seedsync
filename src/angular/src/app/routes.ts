@@ -48,29 +48,6 @@ export const ROUTE_INFOS: RouteInfo[] = [
 ];
 
 export const ROUTES: Routes = [
-  {
-    path: '',
-    redirectTo: '/dashboard',
-    pathMatch: 'full'
-  },
-  {
-    path: 'dashboard',
-    component: FilesPageComponent
-  },
-  {
-    path: 'settings',
-    component: SettingsPageComponent
-  },
-  {
-    path: 'autoqueue',
-    component: AutoQueuePageComponent
-  },
-  {
-    path: 'logs',
-    component: LogsPageComponent
-  },
-  {
-    path: 'about',
-    component: AboutPageComponent
-  }
+  { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
+  ...ROUTE_INFOS.map(({ path, component }) => ({ path, component })),
 ];

@@ -2,9 +2,7 @@
 
 from abc import ABC, abstractmethod
 from threading import Lock
-from typing import Any, TypeVar
-
-from common import overrides
+from typing import Any, TypeVar, override
 
 T = TypeVar("T", bound="StatusComponent")
 
@@ -60,7 +58,7 @@ class StatusComponent(BaseStatus):
         for prop in property_names:
             setattr(dst, "__" + prop, getattr(src, "__" + prop))
 
-    @overrides(BaseStatus)
+    @override
     def _set_property(self, name: str, value: Any):
         super()._set_property(name, value)
         # Notify listeners
@@ -171,7 +169,7 @@ class Status(BaseStatus):
         comp.add_listener(self.__comp_listener)
         return comp
 
-    @overrides(BaseStatus)
+    @override
     def _set_property(self, name: str, value: Any):
         """Override set property so that it can only be set once"""
         if self._get_property(name) is not None:

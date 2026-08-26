@@ -6,8 +6,9 @@ import datetime
 import errno
 import os
 import shutil
+from typing import override
 
-from common import AppOneShotProcess, Constants, PipeStream, overrides
+from common import AppOneShotProcess, Constants, PipeStream
 
 
 class MoveFailedResult:
@@ -186,7 +187,7 @@ class MoveProcess(AppOneShotProcess):
         """Process-safe method to retrieve any move failures."""
         return self.__failed_result_stream.pop_all()
 
-    @overrides(AppOneShotProcess)
+    @override
     def close_queues(self):
         self.__failed_result_stream.close()
         super().close_queues()

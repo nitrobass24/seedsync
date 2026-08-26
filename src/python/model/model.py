@@ -165,10 +165,6 @@ class Model:
             raise ModelError("File does not exist in the model")
         return self.__files[key]
 
-    def get_file_keys(self) -> set[str]:
-        """Return the set of composite keys (pair_id:name or name)."""
-        return set(self.__files.keys())
-
     def get_file_names(self) -> set[str]:
         """Return all file names (without pair_id prefix) for backward compat."""
         return {f.name for f in self.__files.values()}

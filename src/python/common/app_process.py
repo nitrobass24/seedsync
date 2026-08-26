@@ -10,10 +10,11 @@ import time
 from abc import abstractmethod
 from datetime import datetime
 from multiprocessing import Process, Queue
+from typing import override
 
 import tblib.pickling_support
 
-from common import ServiceExit, overrides
+from common import ServiceExit
 
 # Direct submodule import: common/__init__ imports app_process before
 # pipe_primitives, so "from common import PipeStream" would be circular
@@ -74,7 +75,7 @@ class AppProcess(Process):
             if isinstance(value, (PipeStream, PipeFlag)):
                 yield value
 
-    @overrides(Process)
+    @override
     def start(self):
         super().start()
         # The child already holds fd copies (spawn pickling / fork). Drop the
@@ -83,7 +84,7 @@ class AppProcess(Process):
         for pipe in self.__pipes():
             pipe.close_unused_in_parent()
 
-    @overrides(Process)
+    @override
     def run(self):
         # With spawn, child processes start with default signal handlers, so these
         # resets are redundant. They are kept for safety in case the start method
@@ -131,7 +132,7 @@ class AppProcess(Process):
 
         self.logger.debug("Exiting process")
 
-    @overrides(Process)
+    @override
     def terminate(self):
         # Send a terminate signal, and force terminate after a timeout
         # Guard against None: close_queues() clears this reference

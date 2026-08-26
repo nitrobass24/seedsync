@@ -89,34 +89,12 @@ export interface ViewFileCapabilities {
  * @param remoteSize coalesced (non-null) remote size in bytes
  */
 export function mapState(state: ModelFileState, localSize: number, remoteSize: number): ViewFileStatus {
-  switch (state) {
-    case ModelFileState.DEFAULT:
-      return localSize > 0 && remoteSize > 0 ? ViewFileStatus.STOPPED : ViewFileStatus.DEFAULT;
-    case ModelFileState.QUEUED:
-      return ViewFileStatus.QUEUED;
-    case ModelFileState.DOWNLOADING:
-      return ViewFileStatus.DOWNLOADING;
-    case ModelFileState.DOWNLOADED:
-      return ViewFileStatus.DOWNLOADED;
-    case ModelFileState.DELETED:
-      return ViewFileStatus.DELETED;
-    case ModelFileState.EXTRACTING:
-      return ViewFileStatus.EXTRACTING;
-    case ModelFileState.EXTRACTED:
-      return ViewFileStatus.EXTRACTED;
-    case ModelFileState.EXTRACT_FAILED:
-      return ViewFileStatus.EXTRACT_FAILED;
-    case ModelFileState.VALIDATING:
-      return ViewFileStatus.VALIDATING;
-    case ModelFileState.VALIDATED:
-      return ViewFileStatus.VALIDATED;
-    case ModelFileState.CORRUPT:
-      return ViewFileStatus.CORRUPT;
-    case ModelFileState.MOVE_FAILED:
-      return ViewFileStatus.MOVE_FAILED;
-    default:
-      return ViewFileStatus.DEFAULT;
+  if (state === ModelFileState.DEFAULT) {
+    return localSize > 0 && remoteSize > 0 ? ViewFileStatus.STOPPED : ViewFileStatus.DEFAULT;
   }
+  // Every other member shares its string value with ViewFileStatus.
+  const status = state as string as ViewFileStatus;
+  return Object.values(ViewFileStatus).includes(status) ? status : ViewFileStatus.DEFAULT;
 }
 
 /**

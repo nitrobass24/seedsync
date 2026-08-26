@@ -11,8 +11,6 @@ import { Localization } from '../../models/localization';
 @Injectable({ providedIn: 'root' })
 export class AutoQueueService {
   private readonly AUTOQUEUE_GET_URL = '/server/autoqueue/get';
-  private readonly AUTOQUEUE_ADD_URL = (pattern: string) => `/server/autoqueue/add/${pattern}`;
-  private readonly AUTOQUEUE_REMOVE_URL = (pattern: string) => `/server/autoqueue/remove/${pattern}`;
 
   private readonly connectedService = inject(ConnectedService);
   private readonly restService = inject(RestService);
@@ -55,7 +53,7 @@ export class AutoQueueService {
 
     // Double-encode the value
     const patternEncoded = encodeURIComponent(encodeURIComponent(pattern));
-    const url = this.AUTOQUEUE_ADD_URL(patternEncoded);
+    const url = `/server/autoqueue/add/${patternEncoded}`;
     // Update the subject inside the returned pipeline (tap) per the mutating-
     // service contract: the store updates exactly when the caller subscribes,
     // with no second internal subscribe. sendRequest already recovers HTTP
@@ -85,7 +83,7 @@ export class AutoQueueService {
 
     // Double-encode the value
     const patternEncoded = encodeURIComponent(encodeURIComponent(pattern));
-    const url = this.AUTOQUEUE_REMOVE_URL(patternEncoded);
+    const url = `/server/autoqueue/remove/${patternEncoded}`;
     // Update the subject inside the returned pipeline (tap) per the mutating-
     // service contract: the store updates exactly when the caller subscribes,
     // with no second internal subscribe. sendRequest already recovers HTTP

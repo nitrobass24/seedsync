@@ -22,10 +22,6 @@ describe("ConnectedService", () => {
     expect(mockStreamDispatch.registerHandler).toHaveBeenCalledWith(service);
   });
 
-  it("should return empty array from getEventNames()", () => {
-    expect(service.getEventNames()).toEqual([]);
-  });
-
   it("should set connected$ to true on onConnected()", () => {
     service.onConnected();
 

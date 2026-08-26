@@ -9,9 +9,9 @@ import os
 import queue
 import time
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
-from common import AppProcess, PipeStream, escape_remote_path_double, escape_remote_path_single, overrides
+from common import AppProcess, PipeStream, escape_remote_path_double, escape_remote_path_single
 
 if TYPE_CHECKING:
     from ssh import Sshcp
@@ -117,15 +117,15 @@ class ValidateProcess(AppProcess):
         self.__failed_result_queue = PipeStream()
         self.__active_validations: dict[tuple[str | None, str], ValidateRequest] = {}
 
-    @overrides(AppProcess)
+    @override
     def run_init(self):
         pass
 
-    @overrides(AppProcess)
+    @override
     def run_cleanup(self):
         pass
 
-    @overrides(AppProcess)
+    @override
     def run_loop(self):
         # Pick up new validation requests
         try:
@@ -375,7 +375,7 @@ class ValidateProcess(AppProcess):
             raise ValueError(f"Empty or unexpected output from remote hash command for {rel_path}: {decoded!r}")
         return parts[0]
 
-    @overrides(AppProcess)
+    @override
     def close_queues(self):
         self.__command_queue.close()
         self.__command_queue.join_thread()

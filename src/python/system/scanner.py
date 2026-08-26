@@ -45,25 +45,8 @@ class SystemScanner:
         :param path_to_scan: path to file or directory to scan
         """
         self.path_to_scan = path_to_scan
-        self.exclude_prefixes: list[str] = []
         self.exclude_suffixes: list[str] = [SystemScanner.__LFTP_STATUS_FILE_SUFFIX]
         self.__lftp_temp_file_suffix: str | None = None
-
-    def add_exclude_prefix(self, prefix: str):
-        """
-        Exclude files that begin with the given prefix
-        :param prefix:
-        :return:
-        """
-        self.exclude_prefixes.append(prefix)
-
-    def add_exclude_suffix(self, suffix: str):
-        """
-        Exclude files that end with the given suffix
-        :param suffix:
-        :return:
-        """
-        self.exclude_suffixes.append(suffix)
 
     def set_lftp_temp_suffix(self, suffix: str):
         """
@@ -162,14 +145,7 @@ class SystemScanner:
         # Files may get deleted while scanning, ignore the error
         for entry in os.scandir(path):
             # Skip excluded entries
-            skip = False
-            for prefix in self.exclude_prefixes:
-                if entry.name.startswith(prefix):
-                    skip = True
-            for suffix in self.exclude_suffixes:
-                if entry.name.endswith(suffix):
-                    skip = True
-            if skip:
+            if any(entry.name.endswith(suffix) for suffix in self.exclude_suffixes):
                 continue
 
             try:

@@ -2,11 +2,11 @@
 
 import json
 import logging
-from typing import Any, cast
+from typing import Any, cast, override
 
 from bottle import HTTPResponse, request
 
-from common import IntegrationsConfig, PathPair, PathPairsConfig, overrides
+from common import IntegrationsConfig, PathPair, PathPairsConfig
 
 from ..web_app import IHandler, WebApp
 
@@ -33,7 +33,7 @@ class PathPairsHandler(IHandler):
             )
         return None
 
-    @overrides(IHandler)
+    @override
     def add_routes(self, web_app: WebApp):
         web_app.add_handler("/server/pathpairs", self.__handle_list)
         web_app.add_post_handler("/server/pathpairs", self.__handle_create)

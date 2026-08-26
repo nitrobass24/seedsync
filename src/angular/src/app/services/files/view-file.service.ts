@@ -32,9 +32,7 @@ function viewFileKey(vf: ViewFile): string {
   return fileKey(vf.pairId, vf.name);
 }
 
-export interface ViewFileFilterCriteria {
-  meetsCriteria(viewFile: ViewFile): boolean;
-}
+export type ViewFileFilterCriteria = (viewFile: ViewFile) => boolean;
 
 export type ViewFileComparator = (a: ViewFile, b: ViewFile) => number;
 
@@ -346,7 +344,7 @@ export class ViewFileService {
 
     let filteredFiles = this.files;
     if (this.filterCriteria != null) {
-      filteredFiles = this.files.filter((f) => this.filterCriteria!.meetsCriteria(f));
+      filteredFiles = this.files.filter(this.filterCriteria);
     }
 
     // Skip re-emitting the filtered list when its membership/order is unchanged
