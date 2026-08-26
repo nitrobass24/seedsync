@@ -8,6 +8,7 @@ import { PathPairsService } from '../settings/path-pairs.service';
 import { WebReaction } from '../utils/rest.service';
 import { ModelFile } from '../../models/model-file';
 import { ViewFile } from '../../models/view-file';
+import { FileAction } from '../../models/file-action';
 import { fileKey } from './file-key';
 import { mapState, deriveCapabilities } from './view-file-capabilities';
 import { ViewFileSelectionService } from './view-file-selection.service';
@@ -151,32 +152,12 @@ export class ViewFileService {
     }
   }
 
-  // Thin facades over ViewFileCommandService — kept so existing consumers (and
+  // Thin facade over ViewFileCommandService — kept so existing consumers (and
   // the existing spec) target a single service. Command dispatch lives in
   // ViewFileCommandService (issue #541); this service threads in the
   // diffing-owned ModelFile resolver.
-  queue(file: ViewFile): Observable<WebReaction> {
-    return this.commands.queue(file, this.resolveModelFile);
-  }
-
-  stop(file: ViewFile): Observable<WebReaction> {
-    return this.commands.stop(file, this.resolveModelFile);
-  }
-
-  extract(file: ViewFile): Observable<WebReaction> {
-    return this.commands.extract(file, this.resolveModelFile);
-  }
-
-  deleteLocal(file: ViewFile): Observable<WebReaction> {
-    return this.commands.deleteLocal(file, this.resolveModelFile);
-  }
-
-  deleteRemote(file: ViewFile): Observable<WebReaction> {
-    return this.commands.deleteRemote(file, this.resolveModelFile);
-  }
-
-  validate(file: ViewFile): Observable<WebReaction> {
-    return this.commands.validate(file, this.resolveModelFile);
+  command(action: FileAction, file: ViewFile): Observable<WebReaction> {
+    return this.commands.command(action, file, this.resolveModelFile);
   }
 
   toggleCheck(file: ViewFile): void {
@@ -222,22 +203,10 @@ export class ViewFileService {
     this.pushViewFiles();
   }
 
-  // Thin facades over ViewFileCommandService — thread in the current display
+  // Thin facade over ViewFileCommandService — thread in the current display
   // list so the command service can apply its checked + capability filter.
-  bulkQueue(): Observable<WebReaction[]> {
-    return this.commands.bulkQueue(this.files, this.resolveModelFile);
-  }
-
-  bulkStop(): Observable<WebReaction[]> {
-    return this.commands.bulkStop(this.files, this.resolveModelFile);
-  }
-
-  bulkDeleteLocal(): Observable<WebReaction[]> {
-    return this.commands.bulkDeleteLocal(this.files, this.resolveModelFile);
-  }
-
-  bulkDeleteRemote(): Observable<WebReaction[]> {
-    return this.commands.bulkDeleteRemote(this.files, this.resolveModelFile);
+  bulkCommand(action: FileAction): Observable<WebReaction[]> {
+    return this.commands.bulk(action, this.files, this.resolveModelFile);
   }
 
   setFilterCriteria(criteria: ViewFileFilterCriteria | null): void {

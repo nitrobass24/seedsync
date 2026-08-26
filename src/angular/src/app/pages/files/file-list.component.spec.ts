@@ -13,26 +13,19 @@ import { ViewFile, ViewFileStatus } from '../../models/view-file';
 import { ViewFileOptions, SortMethod } from '../../models/view-file-options';
 import { fileKey } from '../../services/files/file-key';
 import { FileActionEvent } from './file.component';
+import { FileAction } from '../../models/file-action';
 
 interface MockViewFileService {
   filteredFiles$: Observable<ViewFile[]>;
   checked$: Observable<Set<string>>;
   setSelected: ReturnType<typeof vi.fn>;
   unsetSelected: ReturnType<typeof vi.fn>;
-  queue: ReturnType<typeof vi.fn>;
-  stop: ReturnType<typeof vi.fn>;
-  extract: ReturnType<typeof vi.fn>;
-  validate: ReturnType<typeof vi.fn>;
-  deleteLocal: ReturnType<typeof vi.fn>;
-  deleteRemote: ReturnType<typeof vi.fn>;
+  command: ReturnType<typeof vi.fn>;
   toggleCheck: ReturnType<typeof vi.fn>;
   shiftCheck: ReturnType<typeof vi.fn>;
   checkAll: ReturnType<typeof vi.fn>;
   uncheckAll: ReturnType<typeof vi.fn>;
-  bulkQueue: ReturnType<typeof vi.fn>;
-  bulkStop: ReturnType<typeof vi.fn>;
-  bulkDeleteLocal: ReturnType<typeof vi.fn>;
-  bulkDeleteRemote: ReturnType<typeof vi.fn>;
+  bulkCommand: ReturnType<typeof vi.fn>;
 }
 
 interface MockNotificationService {
@@ -40,8 +33,8 @@ interface MockNotificationService {
   hide: ReturnType<typeof vi.fn>;
 }
 
-function makeActionEvent(file: ViewFile): FileActionEvent {
-  return { file, clearActiveAction: vi.fn() };
+function makeActionEvent(file: ViewFile, action: FileAction = FileAction.QUEUE): FileActionEvent {
+  return { action, file, clearActiveAction: vi.fn() };
 }
 
 function makeViewFile(overrides: Partial<ViewFile> = {}): ViewFile {
@@ -101,20 +94,12 @@ describe('FileListComponent', () => {
       checked$: checkedSubject.asObservable(),
       setSelected: vi.fn(),
       unsetSelected: vi.fn(),
-      queue: vi.fn().mockReturnValue(EMPTY),
-      stop: vi.fn().mockReturnValue(EMPTY),
-      extract: vi.fn().mockReturnValue(EMPTY),
-      validate: vi.fn().mockReturnValue(EMPTY),
-      deleteLocal: vi.fn().mockReturnValue(EMPTY),
-      deleteRemote: vi.fn().mockReturnValue(EMPTY),
+      command: vi.fn().mockReturnValue(EMPTY),
       toggleCheck: vi.fn(),
       shiftCheck: vi.fn(),
       checkAll: vi.fn(),
       uncheckAll: vi.fn(),
-      bulkQueue: vi.fn().mockReturnValue(EMPTY),
-      bulkStop: vi.fn().mockReturnValue(EMPTY),
-      bulkDeleteLocal: vi.fn().mockReturnValue(EMPTY),
-      bulkDeleteRemote: vi.fn().mockReturnValue(EMPTY),
+      bulkCommand: vi.fn().mockReturnValue(EMPTY),
     };
 
     mockNotifService = { show: vi.fn(), hide: vi.fn() };
@@ -349,58 +334,20 @@ describe('FileListComponent', () => {
 
   // --- Individual file actions ---
 
-  it('should call viewFileService.queue on onQueue', () => {
-    const file = makeViewFile({ name: 'queue-me.txt' });
-    mockViewFileService.queue.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
+  it.each([
+    ['QUEUE', FileAction.QUEUE],
+    ['STOP', FileAction.STOP],
+    ['EXTRACT', FileAction.EXTRACT],
+    ['VALIDATE', FileAction.VALIDATE],
+    ['DELETE_LOCAL', FileAction.DELETE_LOCAL],
+    ['DELETE_REMOTE', FileAction.DELETE_REMOTE],
+  ] as const)('should dispatch %s through viewFileService.command on onAction', (_label, action) => {
+    const file = makeViewFile({ name: 'act-on-me.txt' });
+    mockViewFileService.command.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
 
-    component.onQueue(makeActionEvent(file));
+    component.onAction(makeActionEvent(file, action));
 
-    expect(mockViewFileService.queue).toHaveBeenCalledWith(file);
-  });
-
-  it('should call viewFileService.stop on onStop', () => {
-    const file = makeViewFile({ name: 'stop-me.txt' });
-    mockViewFileService.stop.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
-
-    component.onStop(makeActionEvent(file));
-
-    expect(mockViewFileService.stop).toHaveBeenCalledWith(file);
-  });
-
-  it('should call viewFileService.extract on onExtract', () => {
-    const file = makeViewFile({ name: 'extract-me.txt' });
-    mockViewFileService.extract.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
-
-    component.onExtract(makeActionEvent(file));
-
-    expect(mockViewFileService.extract).toHaveBeenCalledWith(file);
-  });
-
-  it('should call viewFileService.validate on onValidate', () => {
-    const file = makeViewFile({ name: 'validate-me.txt' });
-    mockViewFileService.validate.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
-
-    component.onValidate(makeActionEvent(file));
-
-    expect(mockViewFileService.validate).toHaveBeenCalledWith(file);
-  });
-
-  it('should call viewFileService.deleteLocal on onDeleteLocal', () => {
-    const file = makeViewFile({ name: 'del-local.txt' });
-    mockViewFileService.deleteLocal.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
-
-    component.onDeleteLocal(makeActionEvent(file));
-
-    expect(mockViewFileService.deleteLocal).toHaveBeenCalledWith(file);
-  });
-
-  it('should call viewFileService.deleteRemote on onDeleteRemote', () => {
-    const file = makeViewFile({ name: 'del-remote.txt' });
-    mockViewFileService.deleteRemote.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
-
-    component.onDeleteRemote(makeActionEvent(file));
-
-    expect(mockViewFileService.deleteRemote).toHaveBeenCalledWith(file);
+    expect(mockViewFileService.command).toHaveBeenCalledWith(action, file);
   });
 
   // --- Single-file action error surfacing (#513) ---
@@ -408,11 +355,11 @@ describe('FileListComponent', () => {
   it('shows a DANGER banner and clears activeAction when an action fails', () => {
     const file = makeViewFile({ name: 'fail-me.txt' });
     const event = makeActionEvent(file);
-    mockViewFileService.queue.mockReturnValue(
+    mockViewFileService.command.mockReturnValue(
       of({ success: false, data: null, errorMessage: 'Boom' }),
     );
 
-    component.onQueue(event);
+    component.onAction(event);
 
     expect(mockNotifService.show).toHaveBeenCalledTimes(1);
     const notif = mockNotifService.show.mock.calls[0][0];
@@ -423,11 +370,11 @@ describe('FileListComponent', () => {
 
   it('falls back to a generic message when a failed reaction has no errorMessage', () => {
     const event = makeActionEvent(makeViewFile());
-    mockViewFileService.stop.mockReturnValue(
+    mockViewFileService.command.mockReturnValue(
       of({ success: false, data: null, errorMessage: null }),
     );
 
-    component.onStop(event);
+    component.onAction(event);
 
     expect(mockNotifService.show).toHaveBeenCalledTimes(1);
     expect(mockNotifService.show.mock.calls[0][0].text).toBe('Action failed');
@@ -437,11 +384,11 @@ describe('FileListComponent', () => {
   it('does not show a banner or clear activeAction on a successful action', () => {
     const logger = TestBed.inject(LoggerService);
     const event = makeActionEvent(makeViewFile());
-    mockViewFileService.validate.mockReturnValue(
+    mockViewFileService.command.mockReturnValue(
       of({ success: true, data: 'ok', errorMessage: null }),
     );
 
-    component.onValidate(event);
+    component.onAction(event);
 
     expect(mockNotifService.show).not.toHaveBeenCalled();
     expect(event.clearActiveAction).not.toHaveBeenCalled();
@@ -450,11 +397,11 @@ describe('FileListComponent', () => {
 
   it('shows a DANGER banner and clears activeAction when the action stream errors', () => {
     const event = makeActionEvent(makeViewFile());
-    mockViewFileService.deleteRemote.mockReturnValue(
+    mockViewFileService.command.mockReturnValue(
       throwError(() => new Error('net')),
     );
 
-    component.onDeleteRemote(event);
+    component.onAction(event);
 
     expect(mockNotifService.show).toHaveBeenCalledTimes(1);
     expect(mockNotifService.show.mock.calls[0][0].level).toBe(NotificationLevel.DANGER);
@@ -463,36 +410,17 @@ describe('FileListComponent', () => {
 
   // --- Bulk actions ---
 
-  it('should call viewFileService.bulkQueue on onBulkQueue', () => {
-    mockViewFileService.bulkQueue.mockReturnValue(of([]));
+  it.each([
+    ['QUEUE', FileAction.QUEUE],
+    ['STOP', FileAction.STOP],
+    ['DELETE_LOCAL', FileAction.DELETE_LOCAL],
+    ['DELETE_REMOTE', FileAction.DELETE_REMOTE],
+  ] as const)('should dispatch bulk %s through viewFileService.bulkCommand on onBulkAction', (_label, action) => {
+    mockViewFileService.bulkCommand.mockReturnValue(of([]));
 
-    component.onBulkQueue();
+    component.onBulkAction(action);
 
-    expect(mockViewFileService.bulkQueue).toHaveBeenCalled();
-  });
-
-  it('should call viewFileService.bulkStop on onBulkStop', () => {
-    mockViewFileService.bulkStop.mockReturnValue(of([]));
-
-    component.onBulkStop();
-
-    expect(mockViewFileService.bulkStop).toHaveBeenCalled();
-  });
-
-  it('should call viewFileService.bulkDeleteLocal on onBulkDeleteLocal', () => {
-    mockViewFileService.bulkDeleteLocal.mockReturnValue(of([]));
-
-    component.onBulkDeleteLocal();
-
-    expect(mockViewFileService.bulkDeleteLocal).toHaveBeenCalled();
-  });
-
-  it('should call viewFileService.bulkDeleteRemote on onBulkDeleteRemote', () => {
-    mockViewFileService.bulkDeleteRemote.mockReturnValue(of([]));
-
-    component.onBulkDeleteRemote();
-
-    expect(mockViewFileService.bulkDeleteRemote).toHaveBeenCalled();
+    expect(mockViewFileService.bulkCommand).toHaveBeenCalledWith(action);
   });
 
   // --- Track-by function ---
@@ -511,12 +439,12 @@ describe('FileListComponent', () => {
 
   it('should log failures and show a DANGER banner from bulk action responses', () => {
     const logger = TestBed.inject(LoggerService);
-    mockViewFileService.bulkQueue.mockReturnValue(of([
+    mockViewFileService.bulkCommand.mockReturnValue(of([
       { success: true, data: 'ok', errorMessage: null },
       { success: false, data: null, errorMessage: 'Failed' },
     ]));
 
-    component.onBulkQueue();
+    component.onBulkAction(FileAction.QUEUE);
 
     expect(logger.error).toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalled();
@@ -527,23 +455,23 @@ describe('FileListComponent', () => {
   });
 
   it('should not show a banner when all bulk items succeed', () => {
-    mockViewFileService.bulkDeleteLocal.mockReturnValue(of([
+    mockViewFileService.bulkCommand.mockReturnValue(of([
       { success: true, data: 'ok', errorMessage: null },
       { success: true, data: 'ok2', errorMessage: null },
     ]));
 
-    component.onBulkDeleteLocal();
+    component.onBulkAction(FileAction.DELETE_LOCAL);
 
     expect(mockNotifService.show).not.toHaveBeenCalled();
   });
 
   it('should log info for successful bulk items', () => {
     const logger = TestBed.inject(LoggerService);
-    mockViewFileService.bulkStop.mockReturnValue(of([
+    mockViewFileService.bulkCommand.mockReturnValue(of([
       { success: true, data: 'stopped', errorMessage: null },
     ]));
 
-    component.onBulkStop();
+    component.onBulkAction(FileAction.STOP);
 
     expect(logger.info).toHaveBeenCalledWith('stopped');
   });
