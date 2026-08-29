@@ -14,10 +14,7 @@
       @if (checked.size) {
         <app-bulk-action-bar
             [count]="checked.size"
-            (queueEvent)="onBulkQueue()"
-            (stopEvent)="onBulkStop()"
-            (deleteLocalEvent)="onBulkDeleteLocal()"
-            (deleteRemoteEvent)="onBulkDeleteRemote()"
+            (actionEvent)="onBulkAction($event)"
             (clearEvent)="onUncheckAll()">
         </app-bulk-action-bar>
       }
@@ -29,12 +26,7 @@
                 [options]="options"
                 (click)="onSelect(file)"
                 (checkEvent)="onCheck($event)"
-                (queueEvent)="onQueue($event)"
-                (stopEvent)="onStop($event)"
-                (extractEvent)="onExtract($event)"
-                (validateEvent)="onValidate($event)"
-                (deleteLocalEvent)="onDeleteLocal($event)"
-                (deleteRemoteEvent)="onDeleteRemote($event)">
+                (actionEvent)="onAction($event)">
             </app-file>
         </div>
     </ng-template>

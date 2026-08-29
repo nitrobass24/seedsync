@@ -9,6 +9,7 @@ import { LoggerService } from '../utils/logger.service';
 import { ModelFile, ModelFileState } from '../../models/model-file';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
 import { WebReaction } from '../utils/rest.service';
+import { FileAction } from '../../models/file-action';
 import { fileKey } from './file-key';
 
 function makeModelFile(overrides: Partial<ModelFile> & { name: string }): ModelFile {
@@ -66,22 +67,12 @@ describe('ViewFileCommandService', () => {
   let service: ViewFileCommandService;
   let selection: ViewFileSelectionService;
   let mockModelFileService: {
-    queue: ReturnType<typeof vi.fn>;
-    stop: ReturnType<typeof vi.fn>;
-    extract: ReturnType<typeof vi.fn>;
-    deleteLocal: ReturnType<typeof vi.fn>;
-    deleteRemote: ReturnType<typeof vi.fn>;
-    validate: ReturnType<typeof vi.fn>;
+    command: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
     mockModelFileService = {
-      queue: vi.fn().mockReturnValue(of(OK)),
-      stop: vi.fn().mockReturnValue(of(OK)),
-      extract: vi.fn().mockReturnValue(of(OK)),
-      deleteLocal: vi.fn().mockReturnValue(of(OK)),
-      deleteRemote: vi.fn().mockReturnValue(of(OK)),
-      validate: vi.fn().mockReturnValue(of(OK)),
+      command: vi.fn().mockReturnValue(of(OK)),
     };
     TestBed.configureTestingModule({
       providers: [
@@ -109,47 +100,47 @@ describe('ViewFileCommandService', () => {
 
   // --- single dispatch: resolves ViewFile -> ModelFile ---
 
-  it('queue() resolves the ViewFile to its ModelFile and dispatches it', () => {
+  it('command(QUEUE) resolves the ViewFile to its ModelFile and dispatches it', () => {
     const mf = makeModelFile({ name: 'file1', remote_size: 100 });
     const vf = makeViewFile({ name: 'file1', remoteSize: 100 });
 
     let result: WebReaction | undefined;
-    service.queue(vf, resolverFor([mf])).subscribe((r) => (result = r));
+    service.command(FileAction.QUEUE, vf, resolverFor([mf])).subscribe((r) => (result = r));
 
-    expect(mockModelFileService.queue).toHaveBeenCalledWith(mf);
+    expect(mockModelFileService.command).toHaveBeenCalledWith(FileAction.QUEUE, mf);
     expect(result).toEqual(OK);
   });
 
-  it('queue() resolves the correct ModelFile when same-name files differ by pairId', () => {
+  it('command() resolves the correct ModelFile when same-name files differ by pairId', () => {
     const mfA = makeModelFile({ name: 'movie.mkv', pair_id: 'pair-a', remote_size: 100 });
     const mfB = makeModelFile({ name: 'movie.mkv', pair_id: 'pair-b', remote_size: 200 });
     const vfB = makeViewFile({ name: 'movie.mkv', pairId: 'pair-b', remoteSize: 200 });
 
-    service.queue(vfB, resolverFor([mfA, mfB])).subscribe();
+    service.command(FileAction.QUEUE, vfB, resolverFor([mfA, mfB])).subscribe();
 
-    expect(mockModelFileService.queue).toHaveBeenCalledWith(mfB);
-    expect(mockModelFileService.queue).not.toHaveBeenCalledWith(mfA);
+    expect(mockModelFileService.command).toHaveBeenCalledWith(FileAction.QUEUE, mfB);
+    expect(mockModelFileService.command).not.toHaveBeenCalledWith(FileAction.QUEUE, mfA);
   });
 
   it('returns a failure reaction (without dispatching) when the ModelFile cannot be resolved', () => {
     const vf = makeViewFile({ name: 'missing' });
 
     let result: WebReaction | undefined;
-    service.queue(vf, resolverFor([])).subscribe((r) => (result = r));
+    service.command(FileAction.QUEUE, vf, resolverFor([])).subscribe((r) => (result = r));
 
     expect(result!.success).toBe(false);
     expect(result!.errorMessage).toBe("File 'missing' not found");
-    expect(mockModelFileService.queue).not.toHaveBeenCalled();
+    expect(mockModelFileService.command).not.toHaveBeenCalled();
   });
 
   it('maps an action error to a failure reaction rather than erroring the observable', () => {
     const mf = makeModelFile({ name: 'file1' });
     const vf = makeViewFile({ name: 'file1' });
-    mockModelFileService.stop.mockReturnValue(throwError(() => new Error('boom')));
+    mockModelFileService.command.mockReturnValue(throwError(() => new Error('boom')));
 
     let result: WebReaction | undefined;
     let errored = false;
-    service.stop(vf, resolverFor([mf])).subscribe({
+    service.command(FileAction.STOP, vf, resolverFor([mf])).subscribe({
       next: (r) => (result = r),
       error: () => (errored = true),
     });
@@ -159,27 +150,29 @@ describe('ViewFileCommandService', () => {
     expect(result!.errorMessage).toBe('boom');
   });
 
-  it('each single command delegates to the matching ModelFileService method', () => {
+  it('each action is threaded through to ModelFileService.command', () => {
     const mf = makeModelFile({ name: 'file1' });
     const vf = makeViewFile({ name: 'file1' });
     const resolve = resolverFor([mf]);
+    const actions = [
+      FileAction.QUEUE,
+      FileAction.STOP,
+      FileAction.EXTRACT,
+      FileAction.VALIDATE,
+      FileAction.DELETE_LOCAL,
+      FileAction.DELETE_REMOTE,
+    ];
 
-    service.stop(vf, resolve).subscribe();
-    service.extract(vf, resolve).subscribe();
-    service.deleteLocal(vf, resolve).subscribe();
-    service.deleteRemote(vf, resolve).subscribe();
-    service.validate(vf, resolve).subscribe();
-
-    expect(mockModelFileService.stop).toHaveBeenCalledWith(mf);
-    expect(mockModelFileService.extract).toHaveBeenCalledWith(mf);
-    expect(mockModelFileService.deleteLocal).toHaveBeenCalledWith(mf);
-    expect(mockModelFileService.deleteRemote).toHaveBeenCalledWith(mf);
-    expect(mockModelFileService.validate).toHaveBeenCalledWith(mf);
+    for (const action of actions) {
+      service.command(action, vf, resolve).subscribe();
+      expect(mockModelFileService.command).toHaveBeenCalledWith(action, mf);
+    }
+    expect(mockModelFileService.command).toHaveBeenCalledTimes(actions.length);
   });
 
   // --- bulk dispatch: checked + capability filter ---
 
-  it('bulkQueue() dispatches only files that are both checked AND queueable', () => {
+  it('bulk(QUEUE) dispatches only files that are both checked AND queueable', () => {
     const queueableChecked = makeViewFile({ name: 'a', remoteSize: 100, isQueueable: true });
     const queueableUnchecked = makeViewFile({ name: 'b', remoteSize: 100, isQueueable: true });
     const notQueueableChecked = makeViewFile({ name: 'c', remoteSize: 100, isQueueable: false });
@@ -196,17 +189,18 @@ describe('ViewFileCommandService', () => {
     ];
 
     let results: WebReaction[] = [];
-    service.bulkQueue(files, resolverFor(models)).subscribe((r) => (results = r));
+    service.bulk(FileAction.QUEUE, files, resolverFor(models)).subscribe((r) => (results = r));
 
     // Only 'a' satisfies checked AND queueable.
-    expect(mockModelFileService.queue).toHaveBeenCalledTimes(1);
-    expect(mockModelFileService.queue).toHaveBeenCalledWith(
+    expect(mockModelFileService.command).toHaveBeenCalledTimes(1);
+    expect(mockModelFileService.command).toHaveBeenCalledWith(
+      FileAction.QUEUE,
       models.find((m) => m.name === 'a'),
     );
     expect(results).toEqual([OK]);
   });
 
-  it('bulkStop() applies the isStoppable capability filter', () => {
+  it('bulk(STOP) applies the isStoppable capability filter', () => {
     const stoppableChecked = makeViewFile({ name: 'dl', isStoppable: true });
     const stoppedChecked = makeViewFile({ name: 'st', isStoppable: false });
     const files = [stoppableChecked, stoppedChecked];
@@ -216,10 +210,11 @@ describe('ViewFileCommandService', () => {
 
     const models = [makeModelFile({ name: 'dl' }), makeModelFile({ name: 'st' })];
 
-    service.bulkStop(files, resolverFor(models)).subscribe();
+    service.bulk(FileAction.STOP, files, resolverFor(models)).subscribe();
 
-    expect(mockModelFileService.stop).toHaveBeenCalledTimes(1);
-    expect(mockModelFileService.stop).toHaveBeenCalledWith(
+    expect(mockModelFileService.command).toHaveBeenCalledTimes(1);
+    expect(mockModelFileService.command).toHaveBeenCalledWith(
+      FileAction.STOP,
       models.find((m) => m.name === 'dl'),
     );
   });
@@ -229,15 +224,15 @@ describe('ViewFileCommandService', () => {
     // 'a' is queueable but NOT checked.
 
     let results: WebReaction[] | undefined;
-    service.bulkQueue(files, resolverFor([makeModelFile({ name: 'a' })])).subscribe(
+    service.bulk(FileAction.QUEUE, files, resolverFor([makeModelFile({ name: 'a' })])).subscribe(
       (r) => (results = r),
     );
 
     expect(results).toEqual([]);
-    expect(mockModelFileService.queue).not.toHaveBeenCalled();
+    expect(mockModelFileService.command).not.toHaveBeenCalled();
   });
 
-  it('bulkDeleteRemote() applies the isRemotelyDeletable filter', () => {
+  it('bulk(DELETE_REMOTE) applies the isRemotelyDeletable filter', () => {
     const deletable = makeViewFile({ name: 'r', remoteSize: 100, isRemotelyDeletable: true });
     const notDeletable = makeViewFile({ name: 'x', isRemotelyDeletable: false });
     const files = [deletable, notDeletable];
@@ -249,10 +244,11 @@ describe('ViewFileCommandService', () => {
       makeModelFile({ name: 'x' }),
     ];
 
-    service.bulkDeleteRemote(files, resolverFor(models)).subscribe();
+    service.bulk(FileAction.DELETE_REMOTE, files, resolverFor(models)).subscribe();
 
-    expect(mockModelFileService.deleteRemote).toHaveBeenCalledTimes(1);
-    expect(mockModelFileService.deleteRemote).toHaveBeenCalledWith(
+    expect(mockModelFileService.command).toHaveBeenCalledTimes(1);
+    expect(mockModelFileService.command).toHaveBeenCalledWith(
+      FileAction.DELETE_REMOTE,
       models.find((m) => m.name === 'r'),
     );
   });
