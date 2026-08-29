@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { SimpleChange } from '@angular/core';
-import { FileComponent, FileAction } from './file.component';
+import { FileComponent } from './file.component';
+import { FileAction } from '../../models/file-action';
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
 import { of } from 'rxjs';
 
@@ -160,36 +161,36 @@ describe('FileComponent inline delete confirmation', () => {
   });
 
   it('first click on delete local sets confirming state', () => {
-    component.onDeleteLocal(makeViewFile());
+    component.onAction(FileAction.DELETE_LOCAL, makeViewFile());
     expect(component.confirmingDelete).toBe('local');
     expect(component.activeAction).toBeNull();
   });
 
   it('second click on delete local emits event and clears state', () => {
     const file = makeViewFile();
-    const spy = vi.spyOn(component.deleteLocalEvent, 'emit');
+    const spy = vi.spyOn(component.actionEvent, 'emit');
 
-    component.onDeleteLocal(file);
+    component.onAction(FileAction.DELETE_LOCAL, file);
     expect(component.confirmingDelete).toBe('local');
 
-    component.onDeleteLocal(file);
+    component.onAction(FileAction.DELETE_LOCAL, file);
     expect(component.confirmingDelete).toBeNull();
     expect(component.activeAction).toBe(FileAction.DELETE_LOCAL);
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ file }));
   });
 
   it('first click on delete remote sets confirming state', () => {
-    component.onDeleteRemote(makeViewFile());
+    component.onAction(FileAction.DELETE_REMOTE, makeViewFile());
     expect(component.confirmingDelete).toBe('remote');
     expect(component.activeAction).toBeNull();
   });
 
   it('second click on delete remote emits event and clears state', () => {
     const file = makeViewFile();
-    const spy = vi.spyOn(component.deleteRemoteEvent, 'emit');
+    const spy = vi.spyOn(component.actionEvent, 'emit');
 
-    component.onDeleteRemote(file);
-    component.onDeleteRemote(file);
+    component.onAction(FileAction.DELETE_REMOTE, file);
+    component.onAction(FileAction.DELETE_REMOTE, file);
 
     expect(component.confirmingDelete).toBeNull();
     expect(component.activeAction).toBe(FileAction.DELETE_REMOTE);
@@ -197,7 +198,7 @@ describe('FileComponent inline delete confirmation', () => {
   });
 
   it('confirming state auto-resets after 3 seconds', () => {
-    component.onDeleteLocal(makeViewFile());
+    component.onAction(FileAction.DELETE_LOCAL, makeViewFile());
     expect(component.confirmingDelete).toBe('local');
 
     vi.advanceTimersByTime(3000);
@@ -205,15 +206,15 @@ describe('FileComponent inline delete confirmation', () => {
   });
 
   it('clicking delete local while confirming remote switches to local', () => {
-    component.onDeleteRemote(makeViewFile());
+    component.onAction(FileAction.DELETE_REMOTE, makeViewFile());
     expect(component.confirmingDelete).toBe('remote');
 
-    component.onDeleteLocal(makeViewFile());
+    component.onAction(FileAction.DELETE_LOCAL, makeViewFile());
     expect(component.confirmingDelete).toBe('local');
   });
 
   it('should reset confirmingDelete when bound file changes', () => {
-    component.onDeleteLocal(makeViewFile());
+    component.onAction(FileAction.DELETE_LOCAL, makeViewFile());
     expect(component.confirmingDelete).toBe('local');
 
     const oldFile = makeViewFile({ status: ViewFileStatus.DOWNLOADED });
@@ -232,7 +233,7 @@ describe('FileComponent inline delete confirmation', () => {
   });
 
   it('should reset confirmingDelete when file name changes', () => {
-    component.onDeleteRemote(makeViewFile());
+    component.onAction(FileAction.DELETE_REMOTE, makeViewFile());
     expect(component.confirmingDelete).toBe('remote');
 
     const oldFile = makeViewFile({ name: 'file-a.txt' });
@@ -247,7 +248,7 @@ describe('FileComponent inline delete confirmation', () => {
   });
 
   it('ngOnDestroy clears the confirm timer', () => {
-    component.onDeleteLocal(makeViewFile());
+    component.onAction(FileAction.DELETE_LOCAL, makeViewFile());
     expect(component.confirmingDelete).toBe('local');
 
     component.ngOnDestroy();
@@ -280,20 +281,21 @@ describe('FileComponent action events', () => {
   });
 
   it.each([
-    ['onQueue', 'queueEvent'],
-    ['onStop', 'stopEvent'],
-    ['onExtract', 'extractEvent'],
-    ['onValidate', 'validateEvent'],
+    ['QUEUE', FileAction.QUEUE],
+    ['STOP', FileAction.STOP],
+    ['EXTRACT', FileAction.EXTRACT],
+    ['VALIDATE', FileAction.VALIDATE],
   ] as const)(
-    '%s emits an event carrying the file and a clearActiveAction callback',
-    (method, eventName) => {
+    'onAction(%s) emits an event carrying the action, file and a clearActiveAction callback',
+    (_label, action) => {
       const file = makeViewFile();
-      const spy = vi.spyOn(component[eventName], 'emit');
+      const spy = vi.spyOn(component.actionEvent, 'emit');
 
-      component[method](file);
+      component.onAction(action, file);
 
       expect(spy).toHaveBeenCalledTimes(1);
       const payload = spy.mock.calls[0][0];
+      expect(payload.action).toBe(action);
       expect(payload.file).toBe(file);
       expect(typeof payload.clearActiveAction).toBe('function');
 
@@ -306,11 +308,11 @@ describe('FileComponent action events', () => {
 
   it('delete emits a clearActiveAction callback that resets activeAction', () => {
     const file = makeViewFile();
-    const spy = vi.spyOn(component.deleteLocalEvent, 'emit');
+    const spy = vi.spyOn(component.actionEvent, 'emit');
 
     // Double-click to confirm and emit.
-    component.onDeleteLocal(file);
-    component.onDeleteLocal(file);
+    component.onAction(FileAction.DELETE_LOCAL, file);
+    component.onAction(FileAction.DELETE_LOCAL, file);
 
     expect(component.activeAction).toBe(FileAction.DELETE_LOCAL);
     const payload = spy.mock.calls[0][0];

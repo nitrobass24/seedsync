@@ -141,41 +141,41 @@
     <!-- actions div, visible on selection -->
     <div class="actions">
         <button type="button" class="button" appClickStopPropagation
-             [disabled]="!isQueueable()"
-             (click)="onQueue(file())"
+             [disabled]="!canDo(FileAction.QUEUE)"
+             (click)="onAction(FileAction.QUEUE, file())"
              [class.loading]="activeAction === FileAction.QUEUE">
             <span class="loader"></span>
             <img src="assets/icons/queue.svg" alt="" aria-hidden="true" />
             <span class="text">Queue</span>
         </button>
         <button type="button" class="button" appClickStopPropagation
-             [disabled]="!isStoppable()"
-             (click)="onStop(file())"
+             [disabled]="!canDo(FileAction.STOP)"
+             (click)="onAction(FileAction.STOP, file())"
              [class.loading]="activeAction === FileAction.STOP">
             <span class="loader"></span>
             <img src="assets/icons/stop.svg" alt="" aria-hidden="true" />
             <span class="text">Stop</span>
         </button>
         <button type="button" class="button" appClickStopPropagation
-             [disabled]="!isExtractable()"
-             (click)="onExtract(file())"
+             [disabled]="!canDo(FileAction.EXTRACT)"
+             (click)="onAction(FileAction.EXTRACT, file())"
              [class.loading]="activeAction === FileAction.EXTRACT">
             <span class="loader"></span>
             <img src="assets/icons/extract.svg" alt="" aria-hidden="true" />
             <span class="text">Extract</span>
         </button>
         <button type="button" class="button" appClickStopPropagation
-             [disabled]="!isValidatable()"
+             [disabled]="!canDo(FileAction.VALIDATE)"
              [title]="file().validateTooltip ?? ''"
-             (click)="onValidate(file())"
+             (click)="onAction(FileAction.VALIDATE, file())"
              [class.loading]="activeAction === FileAction.VALIDATE">
             <span class="loader"></span>
             <img src="assets/icons/validate.svg" alt="" aria-hidden="true" />
             <span class="text">Validate</span>
         </button>
         <button type="button" class="button" appClickStopPropagation
-             [disabled]="!isLocallyDeletable()"
-             (click)="onDeleteLocal(file())"
+             [disabled]="!canDo(FileAction.DELETE_LOCAL)"
+             (click)="onAction(FileAction.DELETE_LOCAL, file())"
              [class.loading]="activeAction === FileAction.DELETE_LOCAL"
              [class.confirming]="confirmingDelete === 'local'">
             <span class="loader"></span>
@@ -183,8 +183,8 @@
             <span class="text">{{ confirmingDelete === 'local' ? 'Confirm?' : 'Delete Local' }}</span>
         </button>
         <button type="button" class="button" appClickStopPropagation
-             [disabled]="!isRemotelyDeletable()"
-             (click)="onDeleteRemote(file())"
+             [disabled]="!canDo(FileAction.DELETE_REMOTE)"
+             (click)="onAction(FileAction.DELETE_REMOTE, file())"
              [class.loading]="activeAction === FileAction.DELETE_REMOTE"
              [class.confirming]="confirmingDelete === 'remote'">
             <span class="loader"></span>

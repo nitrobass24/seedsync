@@ -2,8 +2,8 @@ import json
 import logging
 import os
 import threading
-import time
 import urllib.request
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 
 from common import ArrInstance, IntegrationsConfig, PathPair, PathPairsConfig
 from model import IModelListener, ModelFile
@@ -32,9 +32,9 @@ class ArrNotifier(IModelListener):
         self._integrations_config = integrations_config
         self._path_pairs_config = path_pairs_config
         self._logger = logger.getChild("ArrNotifier")
-        self._shutdown_flag = False
-        self._active_threads: set[threading.Thread] = set()
-        self._lock = threading.Lock()
+        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ArrNotifier")
+        self._pending: set[Future[None]] = set()
+        self._pending_lock = threading.Lock()
 
     def file_added(self, file: ModelFile):
         pass
@@ -79,32 +79,25 @@ class ArrNotifier(IModelListener):
             )
 
     def shutdown(self, timeout: float = 5):
-        """Drain in-flight threads and prevent new ones."""
-        with self._lock:
-            self._shutdown_flag = True
-            threads = list(self._active_threads)
+        """Drain in-flight sends and prevent new ones."""
+        self._executor.shutdown(wait=False, cancel_futures=True)
+        with self._pending_lock:
+            pending = [f for f in self._pending if not f.done()]
 
-        if not threads:
-            self._logger.debug("Arr notifier shutdown: no in-flight threads")
+        if not pending:
+            self._logger.debug("Arr notifier shutdown: no in-flight sends")
             return
 
-        self._logger.info("Arr notifier shutting down, waiting for %d in-flight thread(s)", len(threads))
-        deadline = time.monotonic() + timeout
-        for thread in threads:
-            remaining = max(0, deadline - time.monotonic())
-            thread.join(timeout=remaining)
-
-        with self._lock:
-            still_alive = [t for t in self._active_threads if t.is_alive()]
-
-        if still_alive:
+        self._logger.info("Arr notifier shutting down, waiting for %d in-flight send(s)", len(pending))
+        not_done = wait(pending, timeout=timeout).not_done
+        if not_done:
             self._logger.warning(
-                "Arr notifier shutdown: %d thread(s) did not complete within %.1fs timeout",
-                len(still_alive),
+                "Arr notifier shutdown: %d send(s) did not complete within %.1fs timeout",
+                len(not_done),
                 timeout,
             )
         else:
-            self._logger.info("Arr notifier shutdown: all threads completed")
+            self._logger.info("Arr notifier shutdown: all sends completed")
 
     @staticmethod
     def _resolve_local_path(pair: PathPair, file: ModelFile) -> str:
@@ -112,27 +105,21 @@ class ArrNotifier(IModelListener):
         return os.path.join(base, file.full_path) if base else file.full_path
 
     def _fire_scan(self, service: str, base_url: str, api_key: str, command_name: str, path: str):
-        """Fire-and-forget POST in a daemon thread."""
+        """Fire-and-forget POST on the executor."""
         url = base_url.rstrip("/") + "/api/v3/command"
         payload = {"name": command_name, "path": path}
-        thread = threading.Thread(
-            target=self._thread_wrapper,
-            args=(service, url, api_key, payload),
-            daemon=True,
-        )
-        with self._lock:
-            if self._shutdown_flag:
-                self._logger.debug("%s scan suppressed during shutdown: %s", service, path)
-                return
-            thread.start()
-            self._active_threads.add(thread)
-
-    def _thread_wrapper(self, service: str, url: str, api_key: str, payload: dict[str, str]) -> None:
         try:
-            self._send_post(service, url, api_key, payload)
-        finally:
-            with self._lock:
-                self._active_threads.discard(threading.current_thread())
+            future = self._executor.submit(self._send_post, service, url, api_key, payload)
+        except RuntimeError:
+            self._logger.debug("%s scan suppressed during shutdown: %s", service, path)
+            return
+        with self._pending_lock:
+            self._pending.add(future)
+        future.add_done_callback(self._discard_pending)
+
+    def _discard_pending(self, future: Future[None]) -> None:
+        with self._pending_lock:
+            self._pending.discard(future)
 
     def _send_post(self, service: str, url: str, api_key: str, payload: dict[str, str]) -> None:
         if not url.startswith(("http://", "https://")):
