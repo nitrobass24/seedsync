@@ -41,6 +41,27 @@ class TestStatusComponent(unittest.TestCase):
         d.b = 22
         listener.assert_not_called()
 
+    def test_bound_method_listener_removable_via_fresh_reference(self):
+        # StatusStreamHandler registers `self.status_listener.notify` and later
+        # removes a freshly created bound method for the same target — removal
+        # must work through bound-method equality, not object identity.
+        class Sink:
+            def __init__(self):
+                self.names: list[str] = []
+
+            def notify(self, name: str) -> None:
+                self.names.append(name)
+
+        sink = Sink()
+        d = DummyStatusComponent()
+        d.add_listener(sink.notify)
+        d.a = "hello"
+        self.assertEqual(["a"], sink.names)
+
+        d.remove_listener(sink.notify)  # fresh bound method, equal but not identical
+        d.b = 44
+        self.assertEqual(["a"], sink.names)
+
     def test_copy_values(self):
         d = DummyStatusComponent()
         d.a = "hello world"

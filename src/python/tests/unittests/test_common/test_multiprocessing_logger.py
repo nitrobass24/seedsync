@@ -2,6 +2,7 @@
 
 import logging
 import multiprocessing
+import os
 import sys
 import threading
 import time
@@ -105,10 +106,13 @@ class TestMultiprocessingLogger(unittest.TestCase):
         # which would hang pytest at interpreter exit.
         real_sleep = time.sleep
         main_thread = threading.main_thread()
+        parent_pid = os.getpid()
 
         def raise_in_main_thread(secs: float):
-            # SIGALRM-driven timeouts only interrupt the main thread
-            if threading.current_thread() is main_thread:
+            # SIGALRM-driven timeouts only interrupt the parent's main thread.
+            # On fork-start platforms the child inherits this mock and must not
+            # raise in its own main thread — guard on the parent PID too.
+            if os.getpid() == parent_pid and threading.current_thread() is main_thread:
                 raise RuntimeError("simulated timeout")
             real_sleep(secs)
 
