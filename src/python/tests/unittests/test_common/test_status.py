@@ -1,33 +1,18 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import unittest
+from dataclasses import dataclass
 from datetime import datetime
-from typing import override
+from typing import Any
 from unittest.mock import MagicMock
 
-from common import IStatusComponentListener, IStatusListener, Status, StatusComponent
+from common import Status, StatusComponent
 
 
+@dataclass(eq=False)
 class DummyStatusComponent(StatusComponent):
-    a = StatusComponent._create_property("a")
-    b = StatusComponent._create_property("b")
-
-    def __init__(self):
-        super().__init__()
-        self.a = None
-        self.b = None
-
-
-class DummyStatusComponentListener(IStatusComponentListener):
-    @override
-    def notify(self, name):
-        pass
-
-
-class DummyStatusListener(IStatusListener):
-    @override
-    def notify(self):
-        pass
+    a: Any = None
+    b: Any = None
 
 
 class TestStatusComponent(unittest.TestCase):
@@ -39,23 +24,43 @@ class TestStatusComponent(unittest.TestCase):
         self.assertEqual(33, d.b)
 
     def test_listeners(self):
-        listener = DummyStatusComponentListener()
-        listener.notify = MagicMock()
+        listener = MagicMock()
         d = DummyStatusComponent()
         d.add_listener(listener)
         d.a = "hello world"
-        listener.notify.assert_called_once_with("a")
-        listener.notify.reset_mock()
+        listener.assert_called_once_with("a")
+        listener.reset_mock()
         d.b = 44
-        listener.notify.assert_called_once_with("b")
+        listener.assert_called_once_with("b")
 
         # remove listener
-        listener.notify.reset_mock()
+        listener.reset_mock()
         d.remove_listener(listener)
         d.a = "bye world"
-        listener.notify.assert_not_called()
+        listener.assert_not_called()
         d.b = 22
-        listener.notify.assert_not_called()
+        listener.assert_not_called()
+
+    def test_bound_method_listener_removable_via_fresh_reference(self):
+        # StatusStreamHandler registers `self.status_listener.notify` and later
+        # removes a freshly created bound method for the same target — removal
+        # must work through bound-method equality, not object identity.
+        class Sink:
+            def __init__(self):
+                self.names: list[str] = []
+
+            def notify(self, name: str) -> None:
+                self.names.append(name)
+
+        sink = Sink()
+        d = DummyStatusComponent()
+        d.add_listener(sink.notify)
+        d.a = "hello"
+        self.assertEqual(["a"], sink.names)
+
+        d.remove_listener(sink.notify)  # fresh bound method, equal but not identical
+        d.b = 44
+        self.assertEqual(["a"], sink.names)
 
     def test_copy_values(self):
         d = DummyStatusComponent()
@@ -87,19 +92,18 @@ class TestStatusComponent(unittest.TestCase):
         d = DummyStatusComponent()
         d.a = "hello world"
         d.b = 55
-        listener = DummyStatusComponentListener()
-        listener.notify = MagicMock()
+        listener = MagicMock()
         d.add_listener(listener)
 
         e = DummyStatusComponent()
         DummyStatusComponent.copy(d, e)
 
         d.a = "bye world"
-        listener.notify.assert_called_once_with("a")
-        listener.notify.reset_mock()
+        listener.assert_called_once_with("a")
+        listener.reset_mock()
 
         e.a = "copied world"
-        listener.notify.assert_not_called()
+        listener.assert_not_called()
 
 
 class TestStatus(unittest.TestCase):
@@ -111,15 +115,14 @@ class TestStatus(unittest.TestCase):
         self.assertEqual("Everything's good", status.server.error_msg)
 
     def test_listeners(self):
-        listener = DummyStatusListener()
-        listener.notify = MagicMock()
+        listener = MagicMock()
         status = Status()
         status.add_listener(listener)
         status.server.up = False
-        listener.notify.assert_called_once_with()
-        listener.notify.reset_mock()
+        listener.assert_called_once_with()
+        listener.reset_mock()
         status.server.error_msg = "Everything's good"
-        listener.notify.assert_called_once_with()
+        listener.assert_called_once_with()
 
     def test_cannot_replace_component(self):
         status = Status()
@@ -181,14 +184,13 @@ class TestStatus(unittest.TestCase):
 
     def test_copy_doesnt_copy_listeners(self):
         status = Status()
-        listener = DummyStatusListener()
-        listener.notify = MagicMock()
+        listener = MagicMock()
         status.add_listener(listener)
         copy = status.copy()
 
         status.server.error_msg = "a"
-        listener.notify.assert_called_once_with()
-        listener.notify.reset_mock()
+        listener.assert_called_once_with()
+        listener.reset_mock()
 
         copy.server.error_msg = "b"
-        listener.notify.assert_not_called()
+        listener.assert_not_called()
