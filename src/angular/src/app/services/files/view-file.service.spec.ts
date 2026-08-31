@@ -378,6 +378,24 @@ describe("ViewFileService", () => {
     expect(latestFiles()[0].isCleanupLocalable).toBe(false);
   });
 
+  it("should not set isCleanupLocalable when the folder no longer exists remotely", () => {
+    // Mirrors the backend's "folder no longer exists remotely" guard: with an
+    // empty/failed remote listing every child reads as local-only, so cleanup
+    // would gut a folder that is actually still mirrored (#663 review).
+    const children = [makeModelFile({ name: "child", local_size: 10, remote_size: null })];
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, state: ModelFileState.DEFAULT, remote_size: null, children }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(false);
+
+    // Same tree with the folder present remotely is cleanupable, so the
+    // assertion above is not passing on the status gate.
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, state: ModelFileState.DEFAULT, remote_size: 10, children }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(true);
+  });
+
   it("should update isCleanupLocalable when only a child's remote_size changes, with identical parent fields", () => {
     // A remote rename replaces a same-size mirrored child with a local-only one;
     // every scalar field on the parent dir stays the same (#663 review).
