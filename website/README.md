@@ -28,4 +28,5 @@ npm run build
 ## Deploy
 
 Deployment is automated: the `docs-pages.yml` GitHub Actions workflow builds
-the site and publishes it to GitHub Pages whenever `website/` changes.
+the site and publishes it to GitHub Pages when changes under `website/` are
+pushed to `master`.

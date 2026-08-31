@@ -8,6 +8,7 @@ import { LoggerService } from "../utils/logger.service";
 import { ModelFile, ModelFileState } from "../../models/model-file";
 import { PathPair } from "../../models/path-pair";
 import { ViewFile, ViewFileStatus } from "../../models/view-file";
+import { FileAction } from "../../models/file-action";
 import { WebReaction } from "../utils/rest.service";
 import { fileKey } from "./file-key";
 
@@ -39,11 +40,7 @@ describe("ViewFileService", () => {
   let pairsSubject: BehaviorSubject<PathPair[]>;
   let mockModelFileService: {
     files$: ReturnType<BehaviorSubject<Map<string, ModelFile>>["asObservable"]>;
-    queue: ReturnType<typeof vi.fn>;
-    stop: ReturnType<typeof vi.fn>;
-    extract: ReturnType<typeof vi.fn>;
-    deleteLocal: ReturnType<typeof vi.fn>;
-    deleteRemote: ReturnType<typeof vi.fn>;
+    command: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -51,11 +48,7 @@ describe("ViewFileService", () => {
     pairsSubject = new BehaviorSubject<PathPair[]>([]);
     mockModelFileService = {
       files$: modelFilesSubject.asObservable(),
-      queue: vi.fn(),
-      stop: vi.fn(),
-      extract: vi.fn(),
-      deleteLocal: vi.fn(),
-      deleteRemote: vi.fn(),
+      command: vi.fn(),
     };
     TestBed.configureTestingModule({
       providers: [
@@ -623,29 +616,29 @@ describe("ViewFileService", () => {
 
   // --- Action delegation ---
 
-  it("should delegate queue() to ModelFileService", () => {
+  it("should delegate command() to ModelFileService", () => {
     const mf = makeModelFile({ name: "file1", remote_size: 100 });
     emitModelFiles([mf]);
-    mockModelFileService.queue.mockReturnValue(
+    mockModelFileService.command.mockReturnValue(
       of({ success: true, data: null, errorMessage: null }),
     );
 
     const vf = latestFiles()[0];
     let result: WebReaction | undefined;
-    service.queue(vf).subscribe((r) => (result = r));
+    service.command(FileAction.QUEUE, vf).subscribe((r) => (result = r));
 
-    expect(mockModelFileService.queue).toHaveBeenCalledWith(mf);
+    expect(mockModelFileService.command).toHaveBeenCalledWith(FileAction.QUEUE, mf);
     expect(result!.success).toBe(true);
   });
 
-  it("should return error reaction when file not found for queue()", () => {
+  it("should return error reaction when file not found for command()", () => {
     emitModelFiles([]);
 
     const fakeVf = {
       name: "nonexistent",
     } as ViewFile;
     let result: WebReaction | undefined;
-    service.queue(fakeVf).subscribe((r) => (result = r));
+    service.command(FileAction.QUEUE, fakeVf).subscribe((r) => (result = r));
 
     expect(result!.success).toBe(false);
   });
@@ -692,19 +685,19 @@ describe("ViewFileService", () => {
     expect(files.find((f) => f.pairId === "pair-b")!.isChecked).toBe(false);
   });
 
-  it("should delegate queue() to the correct model file when same-name files have different pair_ids", () => {
+  it("should delegate command() to the correct model file when same-name files have different pair_ids", () => {
     const mfA = makeModelFile({ name: "movie.mkv", pair_id: "pair-a", remote_size: 100 });
     const mfB = makeModelFile({ name: "movie.mkv", pair_id: "pair-b", remote_size: 200 });
     emitModelFiles([mfA, mfB]);
-    mockModelFileService.queue.mockReturnValue(
+    mockModelFileService.command.mockReturnValue(
       of({ success: true, data: null, errorMessage: null }),
     );
 
     const vfB = latestFiles().find((f) => f.pairId === "pair-b")!;
-    service.queue(vfB).subscribe();
+    service.command(FileAction.QUEUE, vfB).subscribe();
 
-    expect(mockModelFileService.queue).toHaveBeenCalledWith(mfB);
-    expect(mockModelFileService.queue).not.toHaveBeenCalledWith(mfA);
+    expect(mockModelFileService.command).toHaveBeenCalledWith(FileAction.QUEUE, mfB);
+    expect(mockModelFileService.command).not.toHaveBeenCalledWith(FileAction.QUEUE, mfA);
   });
 
   it("should remove the correct file when same-name files have different pair_ids", () => {

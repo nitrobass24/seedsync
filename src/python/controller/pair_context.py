@@ -8,6 +8,8 @@ Extracted from controller.py as part of the controller decomposition
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 from common import AppError, Config, Constants, Context
 from lftp import Lftp
 
@@ -23,53 +25,38 @@ class ControllerError(AppError):
     pass
 
 
+@dataclass
 class PairContext:
     """
     Holds all per-pair state: LFTP instance, scanners, scanner processes,
     model builder, and download tracking.
     """
 
-    def __init__(
-        self,
-        pair_id: str | None,
-        name: str,
-        remote_path: str,
-        local_path: str,
-        effective_local_path: str,
-        lftp: Lftp,
-        active_scanner: ActiveScanner,
-        local_scanner: LocalScanner,
-        remote_scanner: RemoteScanner,
-        active_scan_process: ScannerProcess,
-        local_scan_process: ScannerProcess,
-        remote_scan_process: ScannerProcess,
-        model_builder: ModelBuilder,
-    ):
-        self.pair_id = pair_id
-        self.name = name
-        self.remote_path = remote_path
-        self.local_path = local_path
-        self.effective_local_path = effective_local_path
-        self.lftp = lftp
-        self.active_scanner = active_scanner
-        self.local_scanner = local_scanner
-        self.remote_scanner = remote_scanner
-        self.active_scan_process = active_scan_process
-        self.local_scan_process = local_scan_process
-        self.remote_scan_process = remote_scan_process
-        self.model_builder = model_builder
+    pair_id: str | None
+    name: str
+    remote_path: str
+    local_path: str
+    effective_local_path: str
+    lftp: Lftp
+    active_scanner: ActiveScanner
+    local_scanner: LocalScanner
+    remote_scanner: RemoteScanner
+    active_scan_process: ScannerProcess
+    local_scan_process: ScannerProcess
+    remote_scan_process: ScannerProcess
+    model_builder: ModelBuilder
 
-        # Per-pair tracking state
-        self.active_downloading_file_names: list[str] = []
-        self.active_extracting_file_names: list[str] = []
-        self.prev_downloading_file_names: set[str] = set()
-        self.pending_completion: set[str] = set()
-        self.remote_scan_received: bool = False
-        self.local_scan_received: bool = False
+    # Per-pair tracking state
+    active_downloading_file_names: list[str] = field(default_factory=list[str])
+    active_extracting_file_names: list[str] = field(default_factory=list[str])
+    prev_downloading_file_names: set[str] = field(default_factory=set[str])
+    pending_completion: set[str] = field(default_factory=set[str])
+    remote_scan_received: bool = False
+    local_scan_received: bool = False
 
-        # Temporary storage for latest scan results (set during ModelUpdater._update_pair_model_state)
-        self.latest_remote_scan: ScannerResult | None = None
-        self.latest_local_scan: ScannerResult | None = None
+    # Temporary storage for latest scan results (set during ModelUpdater._update_pair_model_state)
+    latest_remote_scan: ScannerResult | None = None
+    latest_local_scan: ScannerResult | None = None
 
 
 def validate_config(context: Context) -> None:
@@ -95,9 +82,9 @@ def validate_config(context: Context) -> None:
         "num_max_total_connections",
         "protocol",
     ]
-    for field in lftp_fields:
-        if getattr(config.lftp, field) is None:
-            missing.append(f"Lftp.{field}")
+    for name in lftp_fields:
+        if getattr(config.lftp, name) is None:
+            missing.append(f"Lftp.{name}")
 
     # FTP port: when protocol is ftps, remote_ftp_port must be set
     if config.lftp.protocol == "ftps" and config.lftp.remote_ftp_port is None:
@@ -109,9 +96,9 @@ def validate_config(context: Context) -> None:
         "interval_ms_local_scan",
         "interval_ms_downloading_scan",
     ]
-    for field in controller_fields:
-        if getattr(config.controller, field) is None:
-            missing.append(f"Controller.{field}")
+    for name in controller_fields:
+        if getattr(config.controller, name) is None:
+            missing.append(f"Controller.{name}")
 
     # Extract path: when use_local_path_as_extract_path is False, extract_path must be set
     if config.controller.use_local_path_as_extract_path is None:
