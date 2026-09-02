@@ -102,6 +102,7 @@ class ControllerHandler(IHandler):
         ("delete_local", Controller.Command.Action.DELETE_LOCAL, "Requested local delete for file '{}'"),
         ("delete_remote", Controller.Command.Action.DELETE_REMOTE, "Requested remote delete for file '{}'"),
         ("validate", Controller.Command.Action.VALIDATE, "Requested validation for file '{}'"),
+        ("cleanup_local", Controller.Command.Action.CLEANUP_LOCAL, "Requested local cleanup for file '{}'"),
     )
 
     @override

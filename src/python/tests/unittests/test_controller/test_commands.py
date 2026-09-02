@@ -17,7 +17,8 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(3, Command.Action.DELETE_LOCAL.value)
         self.assertEqual(4, Command.Action.DELETE_REMOTE.value)
         self.assertEqual(5, Command.Action.VALIDATE.value)
-        self.assertEqual(6, len(list(Command.Action)))
+        self.assertEqual(6, Command.Action.CLEANUP_LOCAL.value)
+        self.assertEqual(7, len(list(Command.Action)))
 
     def test_command_init_defaults(self):
         command = Command(Command.Action.QUEUE, "file.txt")
@@ -47,9 +48,10 @@ class TestCommandProcessWrapper(unittest.TestCase):
     def test_stores_process_and_callback(self):
         process = MagicMock()
         post_callback = MagicMock()
-        wrapper = CommandProcessWrapper(process=process, post_callback=post_callback)
+        wrapper = CommandProcessWrapper(process=process, post_callback=post_callback, filename="file.txt")
         self.assertIs(process, wrapper.process)
         self.assertIs(post_callback, wrapper.post_callback)
+        self.assertEqual("file.txt", wrapper.filename)
 
 
 class TestConcurrencyCap(unittest.TestCase):

@@ -27,6 +27,7 @@ function makeModelFile(overrides: Partial<ModelFile> & { name: string }): ModelF
     local_modified_timestamp: null,
     remote_created_timestamp: null,
     remote_modified_timestamp: null,
+    children: [],
     ...overrides,
   };
 }
@@ -51,6 +52,7 @@ function makeViewFile(overrides: Partial<ViewFile> & { name: string }): ViewFile
     isExtractable: false,
     isLocallyDeletable: false,
     isRemotelyDeletable: false,
+    isCleanupLocalable: false,
     isValidatable: false,
     validateTooltip: null,
     localCreatedTimestamp: null,
@@ -68,11 +70,13 @@ describe('ViewFileCommandService', () => {
   let selection: ViewFileSelectionService;
   let mockModelFileService: {
     command: ReturnType<typeof vi.fn>;
+    cleanupLocal: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
     mockModelFileService = {
       command: vi.fn().mockReturnValue(of(OK)),
+      cleanupLocal: vi.fn().mockReturnValue(of(OK)),
     };
     TestBed.configureTestingModule({
       providers: [
@@ -168,6 +172,9 @@ describe('ViewFileCommandService', () => {
       expect(mockModelFileService.command).toHaveBeenCalledWith(action, mf);
     }
     expect(mockModelFileService.command).toHaveBeenCalledTimes(actions.length);
+
+    service.cleanupLocal(vf, resolve).subscribe();
+    expect(mockModelFileService.cleanupLocal).toHaveBeenCalledWith(mf);
   });
 
   // --- bulk dispatch: checked + capability filter ---

@@ -21,6 +21,7 @@ interface MockViewFileService {
   setSelected: ReturnType<typeof vi.fn>;
   unsetSelected: ReturnType<typeof vi.fn>;
   command: ReturnType<typeof vi.fn>;
+  cleanupLocal: ReturnType<typeof vi.fn>;
   toggleCheck: ReturnType<typeof vi.fn>;
   shiftCheck: ReturnType<typeof vi.fn>;
   checkAll: ReturnType<typeof vi.fn>;
@@ -58,6 +59,7 @@ function makeViewFile(overrides: Partial<ViewFile> = {}): ViewFile {
     isExtractable: false,
     isLocallyDeletable: false,
     isRemotelyDeletable: true,
+    isCleanupLocalable: false,
     isValidatable: false,
     validateTooltip: null,
     localCreatedTimestamp: null,
@@ -95,6 +97,7 @@ describe('FileListComponent', () => {
       setSelected: vi.fn(),
       unsetSelected: vi.fn(),
       command: vi.fn().mockReturnValue(EMPTY),
+      cleanupLocal: vi.fn().mockReturnValue(EMPTY),
       toggleCheck: vi.fn(),
       shiftCheck: vi.fn(),
       checkAll: vi.fn(),
@@ -348,6 +351,15 @@ describe('FileListComponent', () => {
     component.onAction(makeActionEvent(file, action));
 
     expect(mockViewFileService.command).toHaveBeenCalledWith(action, file);
+  });
+
+  it('should call viewFileService.cleanupLocal on onCleanupLocal', () => {
+    const file = makeViewFile({ name: 'cleanup-me', isDir: true });
+    mockViewFileService.cleanupLocal.mockReturnValue(of({ success: true, data: 'ok', errorMessage: null }));
+
+    component.onCleanupLocal(makeActionEvent(file));
+
+    expect(mockViewFileService.cleanupLocal).toHaveBeenCalledWith(file);
   });
 
   // --- Single-file action error surfacing (#513) ---

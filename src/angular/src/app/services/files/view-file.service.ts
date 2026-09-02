@@ -10,7 +10,7 @@ import { ModelFile } from '../../models/model-file';
 import { ViewFile } from '../../models/view-file';
 import { FileAction } from '../../models/file-action';
 import { fileKey } from './file-key';
-import { mapState, deriveCapabilities } from './view-file-capabilities';
+import { mapState, deriveCapabilities, LOCAL_ACTION_STATUSES } from './view-file-capabilities';
 import { ViewFileSelectionService } from './view-file-selection.service';
 import { ViewFileCommandService } from './view-file-command.service';
 
@@ -158,6 +158,10 @@ export class ViewFileService {
   // diffing-owned ModelFile resolver.
   command(action: FileAction, file: ViewFile): Observable<WebReaction> {
     return this.commands.command(action, file, this.resolveModelFile);
+  }
+
+  cleanupLocal(file: ViewFile): Observable<WebReaction> {
+    return this.commands.cleanupLocal(file, this.resolveModelFile);
   }
 
   toggleCheck(file: ViewFile): void {
@@ -350,8 +354,22 @@ function modelFilesEqual(a: ModelFile, b: ModelFile): boolean {
     a.downloading_speed === b.downloading_speed &&
     a.eta === b.eta &&
     a.full_path === b.full_path &&
-    a.is_extractable === b.is_extractable
+    a.is_extractable === b.is_extractable &&
+    hasLocalOnlyContent(a) === hasLocalOnlyContent(b)
   );
+}
+
+/**
+ * Recursively checks whether a folder contains any content that exists locally
+ * but not remotely (i.e. content that "Cleanup Local" would remove).
+ */
+function hasLocalOnlyContent(modelFile: ModelFile): boolean {
+  return modelFile.children.some((child) => {
+    if (child.remote_size == null) {
+      return true;
+    }
+    return child.is_dir && hasLocalOnlyContent(child);
+  });
 }
 
 function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, isSelected = false): ViewFile {
@@ -372,6 +390,11 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     modelFile.local_size,
     modelFile.remote_size,
   );
+  const isCleanupLocalable =
+    LOCAL_ACTION_STATUSES.includes(status) &&
+    modelFile.is_dir &&
+    modelFile.remote_size !== null &&
+    hasLocalOnlyContent(modelFile);
 
   return {
     name: modelFile.name,
@@ -389,6 +412,7 @@ function createViewFile(modelFile: ModelFile, pairNameMap: Map<string, string>, 
     isSelected,
     isChecked: false,
     ...capabilities,
+    isCleanupLocalable,
     localCreatedTimestamp: modelFile.local_created_timestamp,
     localModifiedTimestamp: modelFile.local_modified_timestamp,
     remoteCreatedTimestamp: modelFile.remote_created_timestamp,
