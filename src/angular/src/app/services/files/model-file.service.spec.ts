@@ -23,6 +23,7 @@ function makeFileJson(name: string, state = "DEFAULT") {
     local_modified_timestamp: null,
     remote_created_timestamp: null,
     remote_modified_timestamp: null,
+    children: [],
   };
 }
 
@@ -204,6 +205,27 @@ describe("ModelFileService", () => {
 
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
       "/server/command/queue/file1?pair_id=" + encodeURIComponent("pair a"),
+    );
+  });
+
+  it("should call RestService.sendRequest with double-encoded filename for cleanupLocal", () => {
+    mockRestService.sendRequest.mockReturnValue(of({}));
+    const file = { name: "my file/test" } as ModelFile;
+    service.cleanupLocal(file);
+
+    const encoded = encodeURIComponent(encodeURIComponent("my file/test"));
+    expect(mockRestService.sendRequest).toHaveBeenCalledWith(
+      "/server/command/cleanup_local/" + encoded,
+    );
+  });
+
+  it("should include pair_id query param for cleanupLocal when set", () => {
+    mockRestService.sendRequest.mockReturnValue(of({}));
+    const file = { name: "test", pair_id: "pair-1" } as ModelFile;
+    service.cleanupLocal(file);
+
+    expect(mockRestService.sendRequest).toHaveBeenCalledWith(
+      "/server/command/cleanup_local/test?pair_id=pair-1",
     );
   });
 

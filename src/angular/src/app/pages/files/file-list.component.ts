@@ -25,7 +25,7 @@ import { NotificationService } from '../../services/utils/notification.service';
 import { NotificationLevel, createNotification } from '../../models/notification';
 import { fileKey } from '../../services/files/file-key';
 import { FileAction } from '../../models/file-action';
-import { FileComponent, FileActionEvent } from './file.component';
+import { FileComponent, FileActionEvent, FileCleanupEvent } from './file.component';
 import { BulkActionBarComponent } from './bulk-action-bar.component';
 
 const MOBILE_FILE_LIST_QUERY = '(max-width: 600px)';
@@ -154,7 +154,16 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  private handleActionResponse(reaction: WebReaction, event: FileActionEvent): void {
+  onCleanupLocal(event: FileCleanupEvent): void {
+    this.viewFileService.cleanupLocal(event.file).pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
+      next: (data) => this.handleActionResponse(data, event),
+      error: (err) => this.handleActionError(err, event),
+    });
+  }
+
+  private handleActionResponse(reaction: WebReaction, event: Pick<FileActionEvent, 'clearActiveAction'>): void {
     if (reaction.success) {
       this.logger.info(reaction.data);
     } else {
@@ -162,7 +171,7 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private handleActionError(err: unknown, event: FileActionEvent): void {
+  private handleActionError(err: unknown, event: Pick<FileActionEvent, 'clearActiveAction'>): void {
     this.failAction('Action failed', event);
     this.logger.error('Action failed:', err);
   }
@@ -170,7 +179,7 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   // A backend rejection leaves the file model unchanged, so the child's
   // ngOnChanges can't recover the row. Surface the error and clear the child's
   // activeAction so the buttons re-enable and the spinner stops without a reload.
-  private failAction(text: string, event: FileActionEvent): void {
+  private failAction(text: string, event: Pick<FileActionEvent, 'clearActiveAction'>): void {
     this.notifService.show(createNotification(NotificationLevel.DANGER, text, true));
     event.clearActiveAction();
     this.logger.error(text);

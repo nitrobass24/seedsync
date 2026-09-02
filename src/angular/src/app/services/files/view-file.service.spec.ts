@@ -29,6 +29,7 @@ function makeModelFile(
     local_modified_timestamp: null,
     remote_created_timestamp: null,
     remote_modified_timestamp: null,
+    children: [],
     ...overrides,
   };
 }
@@ -277,6 +278,145 @@ describe("ViewFileService", () => {
       }),
     ]);
     expect(latestFiles()[0].isRemotelyDeletable).toBe(true);
+  });
+
+  // --- isCleanupLocalable ---
+
+  it("should not set isCleanupLocalable when not a directory, even with local-only content", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "file",
+        is_dir: false,
+        state: ModelFileState.DEFAULT,
+        children: [makeModelFile({ name: "child", local_size: 10, remote_size: null })],
+      }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(false);
+  });
+
+  it("should not set isCleanupLocalable for a directory with no children", () => {
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, state: ModelFileState.DEFAULT, children: [] }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(false);
+  });
+
+  it("should not set isCleanupLocalable when the only child is mirrored remotely", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.DEFAULT,
+        children: [makeModelFile({ name: "child", local_size: 10, remote_size: 10 })],
+      }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(false);
+  });
+
+  it("should set isCleanupLocalable when a child exists locally but not remotely", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.DEFAULT,
+        children: [makeModelFile({ name: "child", local_size: 10, remote_size: null })],
+      }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(true);
+  });
+
+  it("should set isCleanupLocalable when a nested descendant is local-only", () => {
+    const localOnlyChild = makeModelFile({ name: "stray", local_size: 10, remote_size: null });
+    const nestedDir = makeModelFile({
+      name: "nested",
+      is_dir: true,
+      local_size: 10,
+      remote_size: 10,
+      children: [localOnlyChild],
+    });
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.DEFAULT,
+        children: [nestedDir],
+      }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(true);
+  });
+
+  it("should not set isCleanupLocalable when the only child is a mirrored empty directory", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.DEFAULT,
+        children: [
+          makeModelFile({ name: "child", is_dir: true, local_size: 0, remote_size: 0, children: [] }),
+        ],
+      }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(false);
+  });
+
+  it("should not set isCleanupLocalable when status does not allow local actions", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.QUEUED,
+        children: [makeModelFile({ name: "child", local_size: 10, remote_size: null })],
+      }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(false);
+  });
+
+  it("should not set isCleanupLocalable when the folder no longer exists remotely", () => {
+    // Mirrors the backend's "folder no longer exists remotely" guard: with an
+    // empty/failed remote listing every child reads as local-only, so cleanup
+    // would gut a folder that is actually still mirrored (#663 review).
+    const children = [makeModelFile({ name: "child", local_size: 10, remote_size: null })];
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, state: ModelFileState.DEFAULT, remote_size: null, children }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(false);
+
+    // Same tree with the folder present remotely is cleanupable, so the
+    // assertion above is not passing on the status gate.
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, state: ModelFileState.DEFAULT, remote_size: 10, children }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(true);
+  });
+
+  it("should update isCleanupLocalable when only a child's remote_size changes, with identical parent fields", () => {
+    // A remote rename replaces a same-size mirrored child with a local-only one;
+    // every scalar field on the parent dir stays the same (#663 review).
+    const mirroredChild = makeModelFile({ name: "x.mkv", local_size: 100, remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        local_size: 100,
+        remote_size: 100,
+        state: ModelFileState.DEFAULT,
+        children: [mirroredChild],
+      }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(false);
+
+    const orphanedChild = makeModelFile({ name: "x.mkv", local_size: 100, remote_size: null });
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        local_size: 100,
+        remote_size: 100,
+        state: ModelFileState.DEFAULT,
+        children: [orphanedChild],
+      }),
+    ]);
+    expect(latestFiles()[0].isCleanupLocalable).toBe(true);
   });
 
   // --- isValidatable and validateTooltip ---

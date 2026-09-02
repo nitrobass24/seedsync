@@ -31,6 +31,7 @@ function makeViewFile(overrides: Partial<ViewFile> = {}): ViewFile {
     isExtractable: false,
     isLocallyDeletable: false,
     isRemotelyDeletable: true,
+    isCleanupLocalable: false,
     isValidatable: false,
     validateTooltip: null,
     localCreatedTimestamp: null,

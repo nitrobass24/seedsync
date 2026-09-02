@@ -12,7 +12,14 @@ import { EtaPipe } from '../../common/eta.pipe';
 import { CapitalizePipe } from '../../common/capitalize.pipe';
 import { ClickStopPropagationDirective } from '../../common/click-stop-propagation.directive';
 import { DoubleClickConfirm } from '../../common/double-click-confirm';
+
+type DeleteKind = 'local' | 'remote' | 'cleanup';
 import { Observable } from 'rxjs';
+
+// CLEANUP_LOCAL isn't part of the shared FileAction enum (it's not one of the
+// backend's six per-file commands — see models/file-action.ts), so activeAction
+// tracks it via this sentinel alongside the shared enum's values.
+type ActiveAction = FileAction | 'cleanup';
 
 // Payload emitted for each single-file action. Carries the action, the target
 // file, plus a callback the parent invokes to clear this child's activeAction
@@ -23,6 +30,12 @@ import { Observable } from 'rxjs';
 // file.
 export interface FileActionEvent {
   action: FileAction;
+  file: ViewFile;
+  clearActiveAction: () => void;
+}
+
+// Cleanup Local has no backend FileAction of its own, so its event omits `action`.
+export interface FileCleanupEvent {
   file: ViewFile;
   clearActiveAction: () => void;
 }
@@ -55,13 +68,14 @@ export class FileComponent implements OnChanges, OnDestroy {
 
   checkEvent = output<{file: ViewFile, shiftKey: boolean}>();
   actionEvent = output<FileActionEvent>();
+  cleanupLocalEvent = output<FileCleanupEvent>();
 
-  activeAction: FileAction | null = null;
+  activeAction: ActiveAction | null = null;
 
   // Inline double-click delete confirmation state
-  private readonly deleteConfirm = new DoubleClickConfirm<'local' | 'remote'>(() => this.cdr.markForCheck());
+  private readonly deleteConfirm = new DoubleClickConfirm<DeleteKind>(() => this.cdr.markForCheck());
 
-  get confirmingDelete(): 'local' | 'remote' | null {
+  get confirmingDelete(): DeleteKind | null {
     return this.deleteConfirm.confirming;
   }
 
@@ -88,6 +102,10 @@ export class FileComponent implements OnChanges, OnDestroy {
         } else if (this.activeAction === FileAction.VALIDATE &&
                    oldFile.isValidatable && !newFile.isValidatable) {
           this.activeAction = null;
+        } else if (this.activeAction === 'cleanup' &&
+                   oldFile.isCleanupLocalable && !newFile.isCleanupLocalable) {
+          this.activeAction = null;
+          this.deleteConfirm.reset();
         }
 
         if (!oldFile.isSelected && newFile.isSelected && this.fileElement &&
@@ -112,13 +130,17 @@ export class FileComponent implements OnChanges, OnDestroy {
     return this.activeAction == null && FILE_ACTIONS[action].isAllowed(this.file());
   }
 
+  isCleanupLocalable(): boolean {
+    return this.activeAction == null && this.file().isCleanupLocalable;
+  }
+
   // Cleared by the parent when an action's backend request fails or errors.
   // Runs inside the parent's async subscribe callback, so OnPush needs an
   // explicit markForCheck to re-enable the buttons and stop the spinner.
   // <app-file> is recycled by *cdkVirtualFor, so a late failure callback may
   // target an instance now bound to a different file/action; only clear when
   // this instance still represents the same file and the same in-flight action.
-  clearActiveAction(forFile?: ViewFile, forAction?: FileAction | null): void {
+  clearActiveAction(forFile?: ViewFile, forAction?: ActiveAction | null): void {
     if (forFile !== undefined) {
       const current = this.file();
       if (
@@ -142,6 +164,13 @@ export class FileComponent implements OnChanges, OnDestroy {
     }
     this.activeAction = action;
     this.actionEvent.emit({ action, file, clearActiveAction: () => this.clearActiveAction(file, action) });
+  }
+
+  onCleanupLocal(file: ViewFile): void {
+    if (this.deleteConfirm.confirm('cleanup')) {
+      this.activeAction = 'cleanup';
+      this.cleanupLocalEvent.emit({ file, clearActiveAction: () => this.clearActiveAction(file, 'cleanup') });
+    }
   }
 
   private static isElementInViewport(el: HTMLElement): boolean {

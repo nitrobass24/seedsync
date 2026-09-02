@@ -46,6 +46,11 @@ export class ViewFileCommandService {
     return this.createAction(file, resolve, (f) => this.modelFileService.command(action, f));
   }
 
+  cleanupLocal(file: ViewFile, resolve: ModelFileResolver): Observable<WebReaction> {
+    this.logger.debug('Clean up local-only contents of view file: ' + file.name);
+    return this.createAction(file, resolve, (f) => this.modelFileService.cleanupLocal(f));
+  }
+
   bulk(action: FileAction, files: readonly ViewFile[], resolve: ModelFileResolver): Observable<WebReaction[]> {
     const spec = FILE_ACTIONS[action];
     const checked = files.filter((f) => this.selection.isChecked(viewFileKey(f)) && spec.isAllowed(f));

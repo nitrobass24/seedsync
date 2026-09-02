@@ -2236,6 +2236,204 @@ class TestController(unittest.TestCase):
 
         self.assertFalse(os.path.exists(file_path))
 
+    @timeout_decorator.timeout(30)
+    def test_command_cleanup_local_removes_local_only_content(self):
+        self.controller = Controller(self.context, self.controller_persist)
+        self.controller.start()
+        # wait for initial scan
+        self.__wait_for_initial_model()
+
+        # Ignore the initial state
+        listener = DummyListener()
+        self.controller.add_model_listener(listener)
+        self.controller.process()
+
+        # Setup mock
+        listener.file_added = MagicMock()
+        listener.file_updated = MagicMock()
+        listener.file_removed = MagicMock()
+        callback = DummyCommandCallback()
+        callback.on_success = MagicMock()
+        callback.on_failure = MagicMock()
+
+        # Fully download "ra" so it exists identically on both sides
+        command = Controller.Command(Controller.Command.Action.QUEUE, "ra")
+        command.add_callback(callback)
+        self.controller.queue_command(command)
+        while True:
+            self.controller.process()
+            call = listener.file_updated.call_args
+            if call:
+                new_file = call[0][1]
+                if new_file.name == "ra" and new_file.local_size == 8 * 1024:
+                    break
+        callback.on_success.assert_called_once_with()
+        callback.on_failure.assert_not_called()
+
+        # Reset mocks for the cleanup command
+        listener.file_added.reset_mock()
+        listener.file_updated.reset_mock()
+        listener.file_removed.reset_mock()
+        callback.on_success.reset_mock()
+        callback.on_failure.reset_mock()
+
+        # Add a stray file locally under "ra" that doesn't exist remotely
+        stray_path = os.path.join(TestController.temp_dir, "local", "ra", "stray")
+        with open(stray_path, "wb") as f:
+            f.write(bytearray([0xFF] * 512))
+
+        # Wait for the local scan to pick up the stray file
+        while True:
+            self.controller.process()
+            files_dict = {f.name: f for f in self.controller.get_model_files()}
+            ra = files_dict.get("ra")
+            if ra is not None and any(c.name == "stray" for c in ra.get_children()):
+                break
+
+        # Send cleanup command
+        command = Controller.Command(Controller.Command.Action.CLEANUP_LOCAL, "ra")
+        command.add_callback(callback)
+        self.controller.queue_command(command)
+        while True:
+            self.controller.process()
+            if not os.path.exists(stray_path):
+                break
+        callback.on_success.assert_called_once_with()
+        callback.on_failure.assert_not_called()
+
+        # Verify the remotely-mirrored contents were untouched
+        dcmp = dircmp(
+            os.path.join(TestController.temp_dir, "remote", "ra"), os.path.join(TestController.temp_dir, "local", "ra")
+        )
+        self.assertFalse(dcmp.left_only)
+        self.assertFalse(dcmp.right_only)
+        self.assertFalse(dcmp.diff_files)
+
+    @timeout_decorator.timeout(20)
+    def test_command_cleanup_local_fails_on_file(self):
+        self.controller = Controller(self.context, self.controller_persist)
+        self.controller.start()
+        # wait for initial scan
+        self.__wait_for_initial_model()
+
+        # Ignore the initial state
+        listener = DummyListener()
+        self.controller.add_model_listener(listener)
+        self.controller.process()
+
+        # Setup mock
+        listener.file_added = MagicMock()
+        listener.file_updated = MagicMock()
+        listener.file_removed = MagicMock()
+        callback = DummyCommandCallback()
+        callback.on_success = MagicMock()
+        callback.on_failure = MagicMock()
+
+        # "rc" is a file, not a directory
+        command = Controller.Command(Controller.Command.Action.CLEANUP_LOCAL, "rc")
+        command.add_callback(callback)
+        self.controller.queue_command(command)
+        while callback.on_failure.call_count < 1:
+            self.controller.process()
+
+        listener.file_updated.assert_not_called()
+        listener.file_added.assert_not_called()
+        listener.file_removed.assert_not_called()
+        callback.on_success.assert_not_called()
+        self.assertEqual(1, len(callback.on_failure.call_args_list))
+        error = callback.on_failure.call_args[0][0]
+        self.assertEqual("File 'rc' is not a directory", error)
+
+    @timeout_decorator.timeout(20)
+    def test_command_cleanup_local_fails_on_remote_only_dir(self):
+        self.controller = Controller(self.context, self.controller_persist)
+        self.controller.start()
+        # wait for initial scan
+        self.__wait_for_initial_model()
+
+        # Ignore the initial state
+        listener = DummyListener()
+        self.controller.add_model_listener(listener)
+        self.controller.process()
+
+        # Setup mock
+        listener.file_added = MagicMock()
+        listener.file_updated = MagicMock()
+        listener.file_removed = MagicMock()
+        callback = DummyCommandCallback()
+        callback.on_success = MagicMock()
+        callback.on_failure = MagicMock()
+
+        # "ra" does not exist locally at all yet
+        command = Controller.Command(Controller.Command.Action.CLEANUP_LOCAL, "ra")
+        command.add_callback(callback)
+        self.controller.queue_command(command)
+        while callback.on_failure.call_count < 1:
+            self.controller.process()
+
+        listener.file_updated.assert_not_called()
+        listener.file_added.assert_not_called()
+        listener.file_removed.assert_not_called()
+        callback.on_success.assert_not_called()
+        self.assertEqual(1, len(callback.on_failure.call_args_list))
+        error = callback.on_failure.call_args[0][0]
+        self.assertEqual("File 'ra' does not exist locally", error)
+
+    @timeout_decorator.timeout(30)
+    def test_command_cleanup_local_fails_when_nothing_to_clean(self):
+        self.controller = Controller(self.context, self.controller_persist)
+        self.controller.start()
+        # wait for initial scan
+        self.__wait_for_initial_model()
+
+        # Ignore the initial state
+        listener = DummyListener()
+        self.controller.add_model_listener(listener)
+        self.controller.process()
+
+        # Setup mock
+        listener.file_added = MagicMock()
+        listener.file_updated = MagicMock()
+        listener.file_removed = MagicMock()
+        callback = DummyCommandCallback()
+        callback.on_success = MagicMock()
+        callback.on_failure = MagicMock()
+
+        # Fully download "ra" so it exists identically on both sides, with nothing local-only
+        command = Controller.Command(Controller.Command.Action.QUEUE, "ra")
+        command.add_callback(callback)
+        self.controller.queue_command(command)
+        while True:
+            self.controller.process()
+            call = listener.file_updated.call_args
+            if call:
+                new_file = call[0][1]
+                if new_file.name == "ra" and new_file.local_size == 8 * 1024:
+                    break
+        callback.on_success.assert_called_once_with()
+        callback.on_failure.assert_not_called()
+
+        # Reset mocks for the cleanup command
+        listener.file_added.reset_mock()
+        listener.file_updated.reset_mock()
+        listener.file_removed.reset_mock()
+        callback.on_success.reset_mock()
+        callback.on_failure.reset_mock()
+
+        command = Controller.Command(Controller.Command.Action.CLEANUP_LOCAL, "ra")
+        command.add_callback(callback)
+        self.controller.queue_command(command)
+        while callback.on_failure.call_count < 1:
+            self.controller.process()
+
+        listener.file_updated.assert_not_called()
+        listener.file_added.assert_not_called()
+        listener.file_removed.assert_not_called()
+        callback.on_success.assert_not_called()
+        self.assertEqual(1, len(callback.on_failure.call_args_list))
+        error = callback.on_failure.call_args[0][0]
+        self.assertEqual("No local-only content found in 'ra'", error)
+
     @timeout_decorator.timeout(20)
     @unittest.skip("Crashes dbus on some systems - see sudo systemctl restart systemd-logind")
     def test_download_with_excessive_connections(self):

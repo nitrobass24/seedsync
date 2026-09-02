@@ -5,7 +5,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from common import AppError
-from controller.command_pipeline import CommandPipeline
+from controller.command_pipeline import CommandPipeline, _find_local_only_paths
+from controller.commands import MAX_CONCURRENT_COMMAND_PROCESSES, Command
 from controller.persist_keys import persist_key
 from lftp import LftpError
 from model import ModelFile
@@ -415,3 +416,221 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         with self.assertRaises(AppError):
             pipeline.propagate_exceptions()
+
+
+class TestFindLocalOnlyPaths(unittest.TestCase):
+    @staticmethod
+    def _make_file(name: str, is_dir: bool, remote_size, local_size=1):
+        f = ModelFile(name, is_dir)
+        f.remote_size = remote_size
+        f.local_size = local_size
+        return f
+
+    def test_no_children_returns_empty(self):
+        folder = self._make_file("folder", True, remote_size=10)
+        self.assertEqual([], _find_local_only_paths(folder))
+
+    def test_child_mirrored_remotely_excluded(self):
+        folder = self._make_file("folder", True, remote_size=10)
+        folder.add_child(self._make_file("child", False, remote_size=5))
+        self.assertEqual([], _find_local_only_paths(folder))
+
+    def test_local_only_file_child_included(self):
+        folder = self._make_file("folder", True, remote_size=10)
+        folder.add_child(self._make_file("stray", False, remote_size=None))
+        self.assertEqual(["stray"], _find_local_only_paths(folder))
+
+    def test_local_only_dir_child_included_without_recursing(self):
+        folder = self._make_file("folder", True, remote_size=10)
+        stray_dir = self._make_file("stray_dir", True, remote_size=None)
+        stray_dir.add_child(self._make_file("nested", False, remote_size=None))
+        folder.add_child(stray_dir)
+        # The stray directory itself is reported; its children are not examined
+        # since deleting it removes them too.
+        self.assertEqual(["stray_dir"], _find_local_only_paths(folder))
+
+    def test_nested_local_only_descendant_uses_relative_path(self):
+        folder = self._make_file("folder", True, remote_size=10)
+        mirrored_subdir = self._make_file("mirrored", True, remote_size=10)
+        mirrored_subdir.add_child(self._make_file("stray", False, remote_size=None))
+        folder.add_child(mirrored_subdir)
+        self.assertEqual([os.path.join("mirrored", "stray")], _find_local_only_paths(folder))
+
+
+class TestHandleCleanupLocal(unittest.TestCase):
+    """Unit tests for CommandPipeline._handle_cleanup_local's own branches (#663 review).
+
+    Integration coverage (happy path + three failure strings) lives in
+    tests/integration/test_controller/test_controller.py; these tests cover the
+    branches that only run through the handler itself: the state gate, the
+    remote-scan guard, start failure, the staging path, and the concurrency cap.
+    """
+
+    def _make_pipeline(self, pair_contexts):
+        registry = MagicMock()
+        pipeline = CommandPipeline(
+            pair_contexts=pair_contexts,
+            registry=registry,
+            persist=MagicMock(),
+            context=MagicMock(),
+            password=None,
+            mp_logger=MagicMock(),
+            extract_process=MagicMock(),
+            validate_process=MagicMock(),
+            logger=MagicMock(),
+            sync_persist_callback=MagicMock(),
+        )
+        pipeline._context.config.controller.use_staging = False
+        return pipeline
+
+    def _make_pair_context(self, pair_id, local_path="/local"):
+        pc = MagicMock()
+        pc.pair_id = pair_id
+        pc.local_path = local_path
+        pc.remote_scan_received = True
+        pc.latest_remote_scan = None
+        return pc
+
+    def _make_cleanable_folder(self):
+        folder = ModelFile("dir", True)
+        folder.state = ModelFile.State.DOWNLOADED
+        folder.local_size = 10
+        folder.remote_size = 10
+        stray = ModelFile("stray", False)
+        stray.local_size = 5
+        stray.remote_size = None
+        folder.add_child(stray)
+        return folder
+
+    def test_rejects_folder_in_downloading_state(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+        folder = self._make_cleanable_folder()
+        folder.state = ModelFile.State.DOWNLOADING
+        command = Command(Command.Action.CLEANUP_LOCAL, "dir")
+        notify_failure = MagicMock()
+
+        result = pipeline._handle_cleanup_local(command, folder, pc, [], notify_failure)
+
+        self.assertFalse(result)
+        notify_failure.assert_called_once()
+        self.assertIn("cannot be cleaned up in state", notify_failure.call_args[0][1])
+        self.assertEqual([], pipeline.active_command_processes)
+
+    def test_rejects_when_remote_scan_not_yet_received(self):
+        pc = self._make_pair_context("pair-1")
+        pc.remote_scan_received = False
+        pipeline = self._make_pipeline([pc])
+        folder = self._make_cleanable_folder()
+        command = Command(Command.Action.CLEANUP_LOCAL, "dir")
+        notify_failure = MagicMock()
+
+        result = pipeline._handle_cleanup_local(command, folder, pc, [], notify_failure)
+
+        self.assertFalse(result)
+        notify_failure.assert_called_once()
+        self.assertIn("remote listing unavailable", notify_failure.call_args[0][1])
+        self.assertEqual([], pipeline.active_command_processes)
+
+    def test_rejects_when_latest_remote_scan_failed(self):
+        pc = self._make_pair_context("pair-1")
+        pc.latest_remote_scan = MagicMock(failed=True)
+        pipeline = self._make_pipeline([pc])
+        folder = self._make_cleanable_folder()
+        command = Command(Command.Action.CLEANUP_LOCAL, "dir")
+        notify_failure = MagicMock()
+
+        result = pipeline._handle_cleanup_local(command, folder, pc, [], notify_failure)
+
+        self.assertFalse(result)
+        notify_failure.assert_called_once()
+        self.assertIn("remote listing unavailable", notify_failure.call_args[0][1])
+
+    def test_rejects_when_folder_no_longer_exists_remotely(self):
+        pc = self._make_pair_context("pair-1")
+        pc.latest_remote_scan = MagicMock(failed=False)
+        pipeline = self._make_pipeline([pc])
+        folder = self._make_cleanable_folder()
+        folder.remote_size = None
+        command = Command(Command.Action.CLEANUP_LOCAL, "dir")
+        notify_failure = MagicMock()
+
+        result = pipeline._handle_cleanup_local(command, folder, pc, [], notify_failure)
+
+        self.assertFalse(result)
+        notify_failure.assert_called_once()
+        self.assertIn("no longer exists remotely", notify_failure.call_args[0][1])
+
+    @patch("controller.command_pipeline.CleanupLocalProcess")
+    def test_start_failure_notifies_and_leaves_no_stale_state(self, mock_cleanup_cls):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+        folder = self._make_cleanable_folder()
+        mock_cleanup_cls.return_value.start.side_effect = OSError("cannot fork")
+        command = Command(Command.Action.CLEANUP_LOCAL, "dir")
+        notify_failure = MagicMock()
+
+        result = pipeline._handle_cleanup_local(command, folder, pc, [], notify_failure)
+
+        self.assertFalse(result)
+        notify_failure.assert_called_once()
+        self.assertIn("Failed to start local cleanup", notify_failure.call_args[0][1])
+        self.assertEqual([], pipeline.active_command_processes)
+        mock_cleanup_cls.return_value.close_queues.assert_called_once()
+
+    @patch("controller.command_pipeline.os.path.exists", return_value=True)
+    @patch("controller.command_pipeline.CleanupLocalProcess")
+    def test_staging_file_present_uses_staging_path_and_forces_both_scans(self, mock_cleanup_cls, _mock_exists):
+        pc = self._make_pair_context("pair-1", local_path="/local/pair-1")
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+        folder = self._make_cleanable_folder()
+        command = Command(Command.Action.CLEANUP_LOCAL, "dir")
+        notify_failure = MagicMock()
+
+        result = pipeline._handle_cleanup_local(command, folder, pc, [], notify_failure)
+
+        self.assertTrue(result)
+        staging_dir = os.path.join("/tmp/staging", "pair-1")
+        self.assertEqual(staging_dir, mock_cleanup_cls.call_args.kwargs["local_path"])
+
+        pipeline.active_command_processes[0].post_callback()
+        pc.local_scan_process.force_scan.assert_called_once()
+        pc.active_scan_process.force_scan.assert_called_once()
+
+    @patch("controller.command_pipeline.os.path.exists", return_value=False)
+    @patch("controller.command_pipeline.CleanupLocalProcess")
+    def test_staging_file_absent_uses_local_path_and_forces_only_local_scan(self, mock_cleanup_cls, _mock_exists):
+        pc = self._make_pair_context("pair-1", local_path="/local/pair-1")
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+        folder = self._make_cleanable_folder()
+        command = Command(Command.Action.CLEANUP_LOCAL, "dir")
+        notify_failure = MagicMock()
+
+        result = pipeline._handle_cleanup_local(command, folder, pc, [], notify_failure)
+
+        self.assertTrue(result)
+        self.assertEqual("/local/pair-1", mock_cleanup_cls.call_args.kwargs["local_path"])
+
+        pipeline.active_command_processes[0].post_callback()
+        pc.local_scan_process.force_scan.assert_called_once()
+        pc.active_scan_process.force_scan.assert_not_called()
+
+    def test_defers_when_at_concurrency_cap(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc])
+        pipeline.active_command_processes = [MagicMock() for _ in range(MAX_CONCURRENT_COMMAND_PROCESSES)]
+        folder = self._make_cleanable_folder()
+        command = Command(Command.Action.CLEANUP_LOCAL, "dir")
+        notify_failure = MagicMock()
+        deferred = []
+
+        result = pipeline._handle_cleanup_local(command, folder, pc, deferred, notify_failure)
+
+        self.assertFalse(result)
+        notify_failure.assert_not_called()
+        self.assertEqual([command], deferred)
+        self.assertEqual(MAX_CONCURRENT_COMMAND_PROCESSES, len(pipeline.active_command_processes))

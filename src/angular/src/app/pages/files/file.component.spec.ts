@@ -27,6 +27,7 @@ function makeViewFile(overrides: Partial<ViewFile> = {}): ViewFile {
     isExtractable: false,
     isLocallyDeletable: true,
     isRemotelyDeletable: true,
+    isCleanupLocalable: true,
     isValidatable: false,
     validateTooltip: null,
     localCreatedTimestamp: null,
@@ -125,6 +126,30 @@ describe('FileComponent.ngOnChanges', () => {
     expect(component.activeAction).toBe(FileAction.QUEUE);
   });
 
+  it('should clear activeAction for CLEANUP_LOCAL when isCleanupLocalable becomes false', () => {
+    component.activeAction = 'cleanup';
+    const oldFile = makeViewFile({ isCleanupLocalable: true });
+    const newFile = makeViewFile({ isCleanupLocalable: false });
+
+    component.ngOnChanges({
+      file: new SimpleChange(oldFile, newFile, false),
+    });
+
+    expect(component.activeAction).toBeNull();
+  });
+
+  it('should NOT clear activeAction for CLEANUP_LOCAL when isCleanupLocalable stays true', () => {
+    component.activeAction = 'cleanup';
+    const oldFile = makeViewFile({ isCleanupLocalable: true });
+    const newFile = makeViewFile({ isCleanupLocalable: true });
+
+    component.ngOnChanges({
+      file: new SimpleChange(oldFile, newFile, false),
+    });
+
+    expect(component.activeAction).toBe('cleanup');
+  });
+
   it('should clear activeAction for VALIDATE when status changes', () => {
     component.activeAction = FileAction.VALIDATE;
     const oldFile = makeViewFile({ status: ViewFileStatus.DOWNLOADED });
@@ -194,6 +219,24 @@ describe('FileComponent inline delete confirmation', () => {
 
     expect(component.confirmingDelete).toBeNull();
     expect(component.activeAction).toBe(FileAction.DELETE_REMOTE);
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ file }));
+  });
+
+  it('first click on cleanup local sets confirming state', () => {
+    component.onCleanupLocal(makeViewFile());
+    expect(component.confirmingDelete).toBe('cleanup');
+    expect(component.activeAction).toBeNull();
+  });
+
+  it('second click on cleanup local emits event and clears state', () => {
+    const file = makeViewFile();
+    const spy = vi.spyOn(component.cleanupLocalEvent, 'emit');
+
+    component.onCleanupLocal(file);
+    component.onCleanupLocal(file);
+
+    expect(component.confirmingDelete).toBeNull();
+    expect(component.activeAction).toBe('cleanup');
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ file }));
   });
 

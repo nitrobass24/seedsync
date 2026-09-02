@@ -22,6 +22,8 @@ export interface ViewFile {
   isExtractable: boolean;
   isLocallyDeletable: boolean;
   isRemotelyDeletable: boolean;
+  /** Whether folder has local-only content (exists locally but not remotely) that can be cleaned up. */
+  isCleanupLocalable: boolean;
   isValidatable: boolean;
   validateTooltip: string | null;
   localCreatedTimestamp: Date | null;
