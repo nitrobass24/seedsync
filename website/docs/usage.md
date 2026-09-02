@@ -38,13 +38,32 @@ This setup also solves the common problem of setting up SeedSync on a seedbox th
 
 ## Dashboard
 
-The Dashboard lists files and folders on the remote server and the local machine. From here you can:
+The Dashboard lists files and folders on the remote server and the local machine. Select a row to reveal its action buttons:
 
-- Queue items for transfer
-- Extract archives after download
-- Delete local or remote files
-- Track progress and status
-- **Multi-select** files using checkboxes, then apply bulk actions (queue, stop, delete)
+- **Queue** — start transferring the item from the seedbox.
+- **Stop** — stop a queued or in-progress transfer.
+- **Extract** — extract a downloaded archive.
+- **Validate** — checksum-compare the local copy against the remote (needs the file on both sides).
+- **Delete Local** — remove the item **entirely** from the local machine. The remote copy is untouched, so it can be re-queued later.
+- **Cleanup Local** *(folders only)* — remove only **local-only content** inside a folder: files and subfolders that exist on the local machine but no longer exist on the seedbox (extraction leftovers, samples the remote reaped, stray files). Everything still mirrored on the remote is kept, and the folder itself is never removed.
+- **Delete Remote** — remove the item from the seedbox.
+- **Multi-select** files using checkboxes, then apply bulk actions (queue, stop, delete).
+
+### Cleanup Local vs Delete Local
+
+| | Delete Local | Cleanup Local |
+|---|---|---|
+| Removes | the whole local folder | only content missing from the remote |
+| Mirrored files | deleted | kept |
+| Works on | files and folders | folders only |
+
+Cleanup Local decides what is "local-only" by comparing against the seedbox listing, so it is deliberately unavailable when that comparison can't be trusted:
+
+- the folder itself no longer exists on the remote (everything would count as local-only — use Delete Local instead), or
+- the remote scan is failing (seedbox unreachable), or
+- the folder simply has no local-only content.
+
+In those cases the button is disabled. Deletions are double-click confirmed, like the delete buttons.
 
 ## AutoQueue
 
