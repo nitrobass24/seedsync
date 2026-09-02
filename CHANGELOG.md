@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0] - 2026-09-01
+
+### Added
+
+- **Cleanup Local** - New per-folder dashboard action that removes only *local-only* content (files and subfolders no longer present on the seedbox — extraction leftovers, reaped samples, stray files) while keeping everything still mirrored. Folders only, double-click confirmed, and deliberately disabled when the folder has no remote counterpart or the remote listing is unavailable, so a transient scan failure can never turn cleanup into a full delete. Contributed by @JAAdventurer. (#663)
+
+### Changed
+
+- **Over-engineering audit cleanup (phases 1–3)** - Repo-wide cleanup tracked in #682 with no user-visible behavior change: dead code and files removed across frontend, backend, and infra (#675, #678, #680, #673); Font Awesome replaced by three inline SVGs — global CSS 325 → 234 kB, no webfonts (#677); custom `overrides()` decorator replaced by `typing.override` (#668); Makefile/Dockerfile/pyproject/e2e-fixture shrink (#681); Angular dedup — shared `CollectionService`, `DoubleClickConfirm`, predicate filters (#676); Python data/result classes, notifier thread pool, and status module converted to dataclasses/`ThreadPoolExecutor` (#667, #669, #671); Angular six-action fan-out threaded through one `command(action)` path (#674).
+- **CI: manual dispatch images tagged by branch** - `workflow_dispatch` builds publish `ghcr.io/nitrobass24/seedsync:<branch>` (or the tag name on tag refs) instead of overwriting `latest`, so PR builds can be tested live safely.
+- **Agent rules** - `AGENTS.md` is now the master contributor-rules file; `CLAUDE.md` is a symlink to it.
+- **Docs** - Dashboard action reference including Cleanup Local vs Delete Local; deploy-workflow note corrected.
+- **Dependency updates** - Angular group, ESLint/typescript-eslint, Vitest, jsdom, webob, GitHub Actions.
+
+### Fixed
+
+- **Pin-filter accessibility** - The dashboard pin filter now exposes `aria-label` and `aria-pressed`.
+- **Flaky logger test** - MPLogger listener is stopped on timeout in logger tests. (#703)
+
 ## [1.0.3] - 2026-08-10
 
 ### Fixed
