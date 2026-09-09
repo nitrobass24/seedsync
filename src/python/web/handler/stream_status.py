@@ -3,14 +3,14 @@
 
 from typing import override
 
-from common import IStatusListener, Status
+from common import Status
 
 from ..serialize import SerializeStatus
 from ..utils import StreamQueue
 from ..web_app import IStreamHandler
 
 
-class StatusListener(IStatusListener, StreamQueue[Status]):
+class StatusListener(StreamQueue[Status]):
     """
     Status listener used by status streams to listen to status updates
     """
@@ -19,7 +19,6 @@ class StatusListener(IStatusListener, StreamQueue[Status]):
         super().__init__()
         self.__status = status
 
-    @override
     def notify(self):
         self.put(self.__status.copy())
 
@@ -33,7 +32,7 @@ class StatusStreamHandler(IStreamHandler):
 
     @override
     def setup(self):
-        self.status.add_listener(self.status_listener)
+        self.status.add_listener(self.status_listener.notify)
 
     @override
     def get_value(self) -> str | None:
@@ -49,4 +48,4 @@ class StatusStreamHandler(IStreamHandler):
     @override
     def cleanup(self):
         if self.status_listener:
-            self.status.remove_listener(self.status_listener)
+            self.status.remove_listener(self.status_listener.notify)

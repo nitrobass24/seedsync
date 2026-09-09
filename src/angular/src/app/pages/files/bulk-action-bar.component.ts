@@ -2,6 +2,7 @@ import {
     Component, ChangeDetectionStrategy, ChangeDetectorRef, OnDestroy, input, output, inject
 } from '@angular/core';
 import { DoubleClickConfirm } from '../../common/double-click-confirm';
+import { FileAction } from '../../models/file-action';
 
 @Component({
     selector: 'app-bulk-action-bar',
@@ -9,8 +10,8 @@ import { DoubleClickConfirm } from '../../common/double-click-confirm';
     template: `
         <div class="bulk-bar">
             <span class="count">{{ count() }} selected</span>
-            <button class="btn btn-sm btn-outline-primary" (click)="queueEvent.emit()">Queue</button>
-            <button class="btn btn-sm btn-outline-warning" (click)="stopEvent.emit()">Stop</button>
+            <button class="btn btn-sm btn-outline-primary" (click)="actionEvent.emit(FileAction.QUEUE)">Queue</button>
+            <button class="btn btn-sm btn-outline-warning" (click)="actionEvent.emit(FileAction.STOP)">Stop</button>
             <button class="btn btn-sm btn-outline-danger"
                     [class.confirming]="confirmingDelete === 'local'"
                     (click)="onDeleteLocal()">
@@ -46,13 +47,11 @@ import { DoubleClickConfirm } from '../../common/double-click-confirm';
 })
 export class BulkActionBarComponent implements OnDestroy {
     private readonly cdr = inject(ChangeDetectorRef);
+    FileAction = FileAction;
 
     count = input.required<number>();
 
-    queueEvent = output<void>();
-    stopEvent = output<void>();
-    deleteLocalEvent = output<void>();
-    deleteRemoteEvent = output<void>();
+    actionEvent = output<FileAction>();
     clearEvent = output<void>();
 
     private readonly deleteConfirm = new DoubleClickConfirm<'local' | 'remote'>(() => this.cdr.markForCheck());
@@ -67,13 +66,13 @@ export class BulkActionBarComponent implements OnDestroy {
 
     onDeleteLocal(): void {
         if (this.deleteConfirm.confirm('local')) {
-            this.deleteLocalEvent.emit();
+            this.actionEvent.emit(FileAction.DELETE_LOCAL);
         }
     }
 
     onDeleteRemote(): void {
         if (this.deleteConfirm.confirm('remote')) {
-            this.deleteRemoteEvent.emit();
+            this.actionEvent.emit(FileAction.DELETE_REMOTE);
         }
     }
 }

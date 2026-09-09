@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime
 from typing import override
 
@@ -39,18 +40,16 @@ class IScanner(ABC):
         pass
 
 
+@dataclass
 class ScannerResult:
     """
     Results of a system scan
     """
 
-    def __init__(
-        self, timestamp: datetime, files: list[SystemFile], failed: bool = False, error_message: str | None = None
-    ):
-        self.timestamp = timestamp
-        self.files = files
-        self.failed = failed
-        self.error_message = error_message
+    timestamp: datetime
+    files: list[SystemFile]
+    failed: bool = False
+    error_message: str | None = None
 
 
 class ScannerProcess(AppProcess):

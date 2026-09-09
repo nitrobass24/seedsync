@@ -6,6 +6,7 @@ import { AsyncPipe, DatePipe } from '@angular/common';
 
 import { ViewFile, ViewFileStatus } from '../../models/view-file';
 import { ViewFileOptions } from '../../models/view-file-options';
+import { FileAction, FILE_ACTIONS } from '../../models/file-action';
 import { FileSizePipe } from '../../common/file-size.pipe';
 import { EtaPipe } from '../../common/eta.pipe';
 import { CapitalizePipe } from '../../common/capitalize.pipe';
@@ -15,23 +16,26 @@ import { DoubleClickConfirm } from '../../common/double-click-confirm';
 type DeleteKind = 'local' | 'remote' | 'cleanup';
 import { Observable } from 'rxjs';
 
-export enum FileAction {
-  QUEUE,
-  STOP,
-  EXTRACT,
-  VALIDATE,
-  DELETE_LOCAL,
-  DELETE_REMOTE,
-  CLEANUP_LOCAL
+// CLEANUP_LOCAL isn't part of the shared FileAction enum (it's not one of the
+// backend's six per-file commands — see models/file-action.ts), so activeAction
+// tracks it via this sentinel alongside the shared enum's values.
+type ActiveAction = FileAction | 'cleanup';
+
+// Payload emitted for each single-file action. Carries the action, the target
+// file, plus a callback the parent invokes to clear this child's activeAction
+// when the backend rejects the request — the file model never changes on
+// failure, so ngOnChanges cannot recover the row on its own. The callback is
+// necessary because <app-file> is rendered inside *cdkVirtualFor, which
+// recycles instances and prevents the parent from keying a @ViewChildren to a
+// file.
+export interface FileActionEvent {
+  action: FileAction;
+  file: ViewFile;
+  clearActiveAction: () => void;
 }
 
-// Payload emitted for each single-file action. Carries the target file plus a
-// callback the parent invokes to clear this child's activeAction when the
-// backend rejects the request — the file model never changes on failure, so
-// ngOnChanges cannot recover the row on its own. The callback is necessary
-// because <app-file> is rendered inside *cdkVirtualFor, which recycles
-// instances and prevents the parent from keying a @ViewChildren to a file.
-export interface FileActionEvent {
+// Cleanup Local has no backend FileAction of its own, so its event omits `action`.
+export interface FileCleanupEvent {
   file: ViewFile;
   clearActiveAction: () => void;
 }
@@ -63,15 +67,10 @@ export class FileComponent implements OnChanges, OnDestroy {
   options = input.required<Observable<ViewFileOptions>>();
 
   checkEvent = output<{file: ViewFile, shiftKey: boolean}>();
-  queueEvent = output<FileActionEvent>();
-  stopEvent = output<FileActionEvent>();
-  extractEvent = output<FileActionEvent>();
-  deleteLocalEvent = output<FileActionEvent>();
-  validateEvent = output<FileActionEvent>();
-  deleteRemoteEvent = output<FileActionEvent>();
-  cleanupLocalEvent = output<FileActionEvent>();
+  actionEvent = output<FileActionEvent>();
+  cleanupLocalEvent = output<FileCleanupEvent>();
 
-  activeAction: FileAction | null = null;
+  activeAction: ActiveAction | null = null;
 
   // Inline double-click delete confirmation state
   private readonly deleteConfirm = new DoubleClickConfirm<DeleteKind>(() => this.cdr.markForCheck());
@@ -103,7 +102,7 @@ export class FileComponent implements OnChanges, OnDestroy {
         } else if (this.activeAction === FileAction.VALIDATE &&
                    oldFile.isValidatable && !newFile.isValidatable) {
           this.activeAction = null;
-        } else if (this.activeAction === FileAction.CLEANUP_LOCAL &&
+        } else if (this.activeAction === 'cleanup' &&
                    oldFile.isCleanupLocalable && !newFile.isCleanupLocalable) {
           this.activeAction = null;
           this.deleteConfirm.reset();
@@ -127,28 +126,8 @@ export class FileComponent implements OnChanges, OnDestroy {
     this.checkEvent.emit({file, shiftKey});
   }
 
-  isQueueable(): boolean {
-    return this.activeAction == null && this.file().isQueueable;
-  }
-
-  isStoppable(): boolean {
-    return this.activeAction == null && this.file().isStoppable;
-  }
-
-  isExtractable(): boolean {
-    return this.activeAction == null && this.file().isExtractable && this.file().isArchive;
-  }
-
-  isValidatable(): boolean {
-    return this.activeAction == null && this.file().isValidatable;
-  }
-
-  isLocallyDeletable(): boolean {
-    return this.activeAction == null && this.file().isLocallyDeletable;
-  }
-
-  isRemotelyDeletable(): boolean {
-    return this.activeAction == null && this.file().isRemotelyDeletable;
+  canDo(action: FileAction): boolean {
+    return this.activeAction == null && FILE_ACTIONS[action].isAllowed(this.file());
   }
 
   isCleanupLocalable(): boolean {
@@ -161,7 +140,7 @@ export class FileComponent implements OnChanges, OnDestroy {
   // <app-file> is recycled by *cdkVirtualFor, so a late failure callback may
   // target an instance now bound to a different file/action; only clear when
   // this instance still represents the same file and the same in-flight action.
-  clearActiveAction(forFile?: ViewFile, forAction?: FileAction | null): void {
+  clearActiveAction(forFile?: ViewFile, forAction?: ActiveAction | null): void {
     if (forFile !== undefined) {
       const current = this.file();
       if (
@@ -176,49 +155,21 @@ export class FileComponent implements OnChanges, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  private actionEvent(file: ViewFile): FileActionEvent {
-    const action = this.activeAction;
-    return { file, clearActiveAction: () => this.clearActiveAction(file, action) };
-  }
-
-  onQueue(file: ViewFile): void {
-    this.activeAction = FileAction.QUEUE;
-    this.queueEvent.emit(this.actionEvent(file));
-  }
-
-  onStop(file: ViewFile): void {
-    this.activeAction = FileAction.STOP;
-    this.stopEvent.emit(this.actionEvent(file));
-  }
-
-  onExtract(file: ViewFile): void {
-    this.activeAction = FileAction.EXTRACT;
-    this.extractEvent.emit(this.actionEvent(file));
-  }
-
-  onValidate(file: ViewFile): void {
-    this.activeAction = FileAction.VALIDATE;
-    this.validateEvent.emit(this.actionEvent(file));
-  }
-
-  onDeleteLocal(file: ViewFile): void {
-    if (this.deleteConfirm.confirm('local')) {
-      this.activeAction = FileAction.DELETE_LOCAL;
-      this.deleteLocalEvent.emit(this.actionEvent(file));
+  onAction(action: FileAction, file: ViewFile): void {
+    if (action === FileAction.DELETE_LOCAL && !this.deleteConfirm.confirm('local')) {
+      return;
     }
-  }
-
-  onDeleteRemote(file: ViewFile): void {
-    if (this.deleteConfirm.confirm('remote')) {
-      this.activeAction = FileAction.DELETE_REMOTE;
-      this.deleteRemoteEvent.emit(this.actionEvent(file));
+    if (action === FileAction.DELETE_REMOTE && !this.deleteConfirm.confirm('remote')) {
+      return;
     }
+    this.activeAction = action;
+    this.actionEvent.emit({ action, file, clearActiveAction: () => this.clearActiveAction(file, action) });
   }
 
   onCleanupLocal(file: ViewFile): void {
     if (this.deleteConfirm.confirm('cleanup')) {
-      this.activeAction = FileAction.CLEANUP_LOCAL;
-      this.cleanupLocalEvent.emit(this.actionEvent(file));
+      this.activeAction = 'cleanup';
+      this.cleanupLocalEvent.emit({ file, clearActiveAction: () => this.clearActiveAction(file, 'cleanup') });
     }
   }
 

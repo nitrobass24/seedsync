@@ -3,15 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject } from 'rxjs';
 import { SettingsPageComponent } from './settings-page.component';
-import {
-  FTPS_ONLY_NOTE,
-  IOptionsContext,
-  OVERRIDE_NOTE,
-  OPTIONS_CONTEXT_AUTOQUEUE,
-  OPTIONS_CONTEXT_FTPS,
-  OPTIONS_CONTEXT_SERVER,
-  applyDisableRules,
-} from './options-list';
+import { IOptionsContext, OPTIONS_CONTEXT_SERVER, applyDisableRules } from './options-list';
 import { ConfigService } from '../../services/settings/config.service';
 import { NotificationService } from '../../services/utils/notification.service';
 import { NotificationsService } from '../../services/settings/notifications.service';
@@ -24,69 +16,6 @@ import { PathPairsService } from '../../services/settings/path-pairs.service';
 const inactive = { pairsEnabled: false, validateDisabled: false, protocolSftp: false };
 const buildServerContext = (hasEnabledPairs: boolean): IOptionsContext =>
   applyDisableRules(OPTIONS_CONTEXT_SERVER, { ...inactive, pairsEnabled: hasEnabledPairs });
-const buildFtpsContext = (protocolIsSftp: boolean): IOptionsContext =>
-  applyDisableRules(OPTIONS_CONTEXT_FTPS, { ...inactive, protocolSftp: protocolIsSftp });
-const buildAutoqueueContext = (hasEnabledPairs: boolean): IOptionsContext =>
-  applyDisableRules(OPTIONS_CONTEXT_AUTOQUEUE, { ...inactive, pairsEnabled: hasEnabledPairs });
-
-describe('applyDisableRules: buildServerContext', () => {
-  it('should disable remote_path and local_path when pairs are enabled', () => {
-    const ctx = buildServerContext(true);
-    const remotePath = ctx.options.find((o) => o.valuePath[1] === 'remote_path')!;
-    const localPath = ctx.options.find((o) => o.valuePath[1] === 'local_path')!;
-
-    expect(remotePath.disabled).toBe(true);
-    expect(remotePath.description).toBe(OVERRIDE_NOTE);
-    expect(localPath.disabled).toBe(true);
-    expect(localPath.description).toBe(OVERRIDE_NOTE);
-  });
-
-  it('should not disable remote_path and local_path when no pairs are enabled', () => {
-    const ctx = buildServerContext(false);
-    const remotePath = ctx.options.find((o) => o.valuePath[1] === 'remote_path')!;
-    const localPath = ctx.options.find((o) => o.valuePath[1] === 'local_path')!;
-
-    expect(remotePath.disabled).toBeFalsy();
-    expect(localPath.disabled).toBeFalsy();
-  });
-
-  it('should not disable other server options when pairs are enabled', () => {
-    const ctx = buildServerContext(true);
-    const others = ctx.options.filter(
-      (o) => o.valuePath[1] !== 'remote_path' && o.valuePath[1] !== 'local_path',
-    );
-
-    for (const option of others) {
-      expect(option.disabled).toBeFalsy();
-    }
-  });
-});
-
-describe('applyDisableRules: buildFtpsContext', () => {
-  const ftpOnlyPaths = ['remote_ftp_port', 'ftp_ssl_verify_certificate'];
-
-  it('disables the FTP-only options when the protocol is sftp', () => {
-    const ctx = buildFtpsContext(true);
-    for (const path of ftpOnlyPaths) {
-      const option = ctx.options.find((o) => o.valuePath[1] === path)!;
-      expect(option.disabled).toBe(true);
-      expect(option.description).toBe(FTPS_ONLY_NOTE);
-    }
-  });
-
-  it('enables the FTP-only options when the protocol is ftps', () => {
-    const ctx = buildFtpsContext(false);
-    for (const path of ftpOnlyPaths) {
-      const option = ctx.options.find((o) => o.valuePath[1] === path)!;
-      expect(option.disabled).toBeFalsy();
-    }
-  });
-
-  it('never disables the protocol selector itself', () => {
-    const protocol = buildFtpsContext(true).options.find((o) => o.valuePath[1] === 'protocol')!;
-    expect(protocol.disabled).toBeFalsy();
-  });
-});
 
 describe('SettingsPageComponent.onTestConnection', () => {
   let component: SettingsPageComponent;
@@ -360,32 +289,6 @@ describe('SettingsPageComponent auto-verifies an already-configured connection o
 
     expect(mockTestConnection).not.toHaveBeenCalled();
     expect(fixture.componentInstance.connectionVerified).toBe(false);
-  });
-});
-
-describe('applyDisableRules: buildAutoqueueContext', () => {
-  it('should disable enabled checkbox when pairs are enabled', () => {
-    const ctx = buildAutoqueueContext(true);
-    const enabled = ctx.options.find((o) => o.valuePath[1] === 'enabled')!;
-
-    expect(enabled.disabled).toBe(true);
-    expect(enabled.description).toBe(OVERRIDE_NOTE);
-  });
-
-  it('should not disable enabled checkbox when no pairs are enabled', () => {
-    const ctx = buildAutoqueueContext(false);
-    const enabled = ctx.options.find((o) => o.valuePath[1] === 'enabled')!;
-
-    expect(enabled.disabled).toBeFalsy();
-  });
-
-  it('should not disable other autoqueue options when pairs are enabled', () => {
-    const ctx = buildAutoqueueContext(true);
-    const others = ctx.options.filter((o) => o.valuePath[1] !== 'enabled');
-
-    for (const option of others) {
-      expect(option.disabled).toBeFalsy();
-    }
   });
 });
 

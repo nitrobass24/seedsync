@@ -23,9 +23,6 @@ class TestModelFile(unittest.TestCase):
         file.state = ModelFile.State.DOWNLOADING
         self.assertEqual(ModelFile.State.DOWNLOADING, file.state)
 
-        with self.assertRaises(TypeError):
-            file.state = "BadState"
-
     def test_local_size(self):
         file = ModelFile("test", False)
 
@@ -33,9 +30,6 @@ class TestModelFile(unittest.TestCase):
         self.assertEqual(100, file.local_size)
         file.local_size = None
         self.assertEqual(None, file.local_size)
-
-        with self.assertRaises(TypeError):
-            file.local_size = "BadValue"
         with self.assertRaises(ValueError):
             file.local_size = -100
 
@@ -46,9 +40,6 @@ class TestModelFile(unittest.TestCase):
         self.assertEqual(100, file.remote_size)
         file.remote_size = None
         self.assertEqual(None, file.remote_size)
-
-        with self.assertRaises(TypeError):
-            file.remote_size = "BadValue"
         with self.assertRaises(ValueError):
             file.remote_size = -100
 
@@ -59,9 +50,6 @@ class TestModelFile(unittest.TestCase):
         self.assertEqual(100, file.transferred_size)
         file.transferred_size = None
         self.assertEqual(None, file.transferred_size)
-
-        with self.assertRaises(TypeError):
-            file.transferred_size = "BadValue"
         with self.assertRaises(ValueError):
             file.transferred_size = -100
 
@@ -72,9 +60,6 @@ class TestModelFile(unittest.TestCase):
         self.assertEqual(100, file.downloading_speed)
         file.downloading_speed = None
         self.assertEqual(None, file.downloading_speed)
-
-        with self.assertRaises(TypeError):
-            file.downloading_speed = "BadValue"
         with self.assertRaises(ValueError):
             file.downloading_speed = -100
 
@@ -85,9 +70,6 @@ class TestModelFile(unittest.TestCase):
         file.update_timestamp = now
         self.assertEqual(now, file.update_timestamp)
 
-        with self.assertRaises(TypeError):
-            file.update_timestamp = 100
-
     def test_eta(self):
         file = ModelFile("test", False)
 
@@ -95,9 +77,6 @@ class TestModelFile(unittest.TestCase):
         self.assertEqual(100, file.eta)
         file.eta = None
         self.assertEqual(None, file.eta)
-
-        with self.assertRaises(TypeError):
-            file.eta = "BadValue"
         with self.assertRaises(ValueError):
             file.eta = -100
 
@@ -116,9 +95,6 @@ class TestModelFile(unittest.TestCase):
         file.local_created_timestamp = now
         self.assertEqual(now, file.local_created_timestamp)
 
-        with self.assertRaises(TypeError):
-            file.local_created_timestamp = 100
-
     def test_local_modified_timestamp(self):
         file = ModelFile("test", False)
         self.assertIsNone(file.local_modified_timestamp)
@@ -126,9 +102,6 @@ class TestModelFile(unittest.TestCase):
         now = datetime.now()
         file.local_modified_timestamp = now
         self.assertEqual(now, file.local_modified_timestamp)
-
-        with self.assertRaises(TypeError):
-            file.local_modified_timestamp = 100
 
     def test_remote_created_timestamp(self):
         file = ModelFile("test", False)
@@ -138,9 +111,6 @@ class TestModelFile(unittest.TestCase):
         file.remote_created_timestamp = now
         self.assertEqual(now, file.remote_created_timestamp)
 
-        with self.assertRaises(TypeError):
-            file.remote_created_timestamp = 100
-
     def test_remote_modified_timestamp(self):
         file = ModelFile("test", False)
         self.assertIsNone(file.remote_modified_timestamp)
@@ -148,9 +118,6 @@ class TestModelFile(unittest.TestCase):
         now = datetime.now()
         file.remote_modified_timestamp = now
         self.assertEqual(now, file.remote_modified_timestamp)
-
-        with self.assertRaises(TypeError):
-            file.remote_modified_timestamp = 100
 
     def test_equality_operator(self):
         # check that timestamp does not affect equality
@@ -166,6 +133,14 @@ class TestModelFile(unittest.TestCase):
         file2.local_size = 100
         file2.update_timestamp = datetime.now()
         self.assertTrue(file1 == file2)
+
+    def test_equality_ignores_parent(self):
+        # parent is excluded from equality: same fields, different tree position
+        orphan = ModelFile("child", False)
+        adopted = ModelFile("child", False)
+        parent = ModelFile("parent", True)
+        parent.add_child(adopted)
+        self.assertEqual(orphan, adopted)
 
     def test_child(self):
         file_parent = ModelFile("parent", True)

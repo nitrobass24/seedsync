@@ -19,12 +19,12 @@ class SystemFile:
     ):
         if size < 0:
             raise ValueError("File size must be non-negative")
-        self.__name = name
-        self.__size = size  # in bytes
-        self.__is_dir = is_dir
-        self.__timestamp_created = time_created
-        self.__timestamp_modified = time_modified
-        self.__children: list[SystemFile] = []
+        self.name = name
+        self.size = size  # in bytes
+        self.is_dir = is_dir
+        self.timestamp_created = time_created
+        self.timestamp_modified = time_modified
+        self.children: list[SystemFile] = []
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, SystemFile):
@@ -34,43 +34,19 @@ class SystemFile:
     def __repr__(self) -> str:
         return str(self.__dict__)
 
-    @property
-    def name(self) -> str:
-        return self.__name
-
-    @property
-    def size(self) -> int:
-        return self.__size
-
-    @property
-    def is_dir(self) -> bool:
-        return self.__is_dir
-
-    @property
-    def timestamp_created(self) -> datetime | None:
-        return self.__timestamp_created
-
-    @property
-    def timestamp_modified(self) -> datetime | None:
-        return self.__timestamp_modified
-
-    @property
-    def children(self) -> list["SystemFile"]:
-        return self.__children
-
     def add_child(self, file: "SystemFile"):
-        if not self.__is_dir:
+        if not self.is_dir:
             raise TypeError("Cannot add children to a file")
-        self.__children.append(file)
+        self.children.append(file)
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "name": self.__name,
-            "size": self.__size,
-            "is_dir": self.__is_dir,
-            "time_created": self.__timestamp_created.isoformat() if self.__timestamp_created else None,
-            "time_modified": self.__timestamp_modified.isoformat() if self.__timestamp_modified else None,
-            "children": [child.to_dict() for child in self.__children],
+            "name": self.name,
+            "size": self.size,
+            "is_dir": self.is_dir,
+            "time_created": self.timestamp_created.isoformat() if self.timestamp_created else None,
+            "time_modified": self.timestamp_modified.isoformat() if self.timestamp_modified else None,
+            "children": [child.to_dict() for child in self.children],
         }
 
     @staticmethod

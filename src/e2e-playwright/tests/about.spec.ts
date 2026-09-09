@@ -8,18 +8,19 @@ test.describe("About Page", () => {
   });
 
   test("version number is displayed and matches format vX.Y.Z", async ({ page }) => {
-    const versionText = page.locator("text=/v\\d+\\.\\d+\\.\\d+/");
-    await expect(versionText).toBeVisible();
-    expect(await versionText.textContent()).toMatch(/v\d+\.\d+\.\d+/);
+    const version = page.locator("#version");
+    await expect(version).toBeVisible();
+    expect((await version.textContent())?.trim()).toMatch(/^v\d+\.\d+\.\d+$/);
   });
 
   test("GitHub link is present and points to correct URL", async ({ page }) => {
-    const githubLink = page.locator('a[href*="github.com/nitrobass24/seedsync"]');
+    const githubLink = page.locator("#github a");
     await expect(githubLink).toBeVisible();
-    expect(await githubLink.getAttribute("href")).toContain("github.com/nitrobass24/seedsync");
+    expect(await githubLink.getAttribute("href")).toBe("https://github.com/nitrobass24/seedsync");
   });
 
   test('page renders with app name "SeedSync"', async ({ page }) => {
-    await expect(page.locator("text=SeedSync").first()).toBeVisible();
+    await expect(page.locator("#banner span")).toBeVisible();
+    await expect(page.locator("#banner span")).toHaveText("SeedSync");
   });
 });
