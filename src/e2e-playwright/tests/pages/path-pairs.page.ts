@@ -70,11 +70,13 @@ export class PathPairsPage {
       await nameInput.fill(fields.name);
     }
     if (fields.remotePath !== undefined) {
-      const remoteInput = form.locator('label:has-text("Remote Path") input');
+      // Remote Path's label and input are siblings, linked via for/id, not
+      // nested (a label can't contain both the input and the Browse button).
+      const remoteInput = form.locator('#pair-remote-path');
       await remoteInput.fill(fields.remotePath);
     }
     if (fields.localPath !== undefined) {
-      const localInput = form.locator('label:has-text("Local Path") input');
+      const localInput = form.locator('#pair-local-path');
       await localInput.fill(fields.localPath);
     }
   }

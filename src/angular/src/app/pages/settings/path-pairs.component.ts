@@ -100,6 +100,7 @@ export class PathPairsComponent implements OnInit, OnDestroy {
 
   onSaveAdd(): void {
     if (!this.addForm.name.trim()) return;
+    const formAtSave = this.addForm;
     this.errorMessage = null;
     this.pathPairsService.create(this.addForm).pipe(
       catchError(() => {
@@ -116,6 +117,12 @@ export class PathPairsComponent implements OnInit, OnDestroy {
       }
       this.adding = false;
       this.addForm = this.emptyForm();
+      // The directory picker (open behind a click-blocking backdrop) can
+      // still be pointed at the old form if it was opened after Save fired
+      // but before this async response arrived.
+      if (this.directoryPickerTarget === formAtSave) {
+        this.directoryPickerTarget = null;
+      }
       this.cdr.markForCheck();
     });
   }
@@ -144,6 +151,7 @@ export class PathPairsComponent implements OnInit, OnDestroy {
 
   onSaveEdit(): void {
     if (!this.editingId || !this.editForm.name.trim()) return;
+    const formAtSave = this.editForm;
     this.errorMessage = null;
     this.pathPairsService.update({ id: this.editingId, ...this.editForm }).pipe(
       catchError(() => {
@@ -160,6 +168,11 @@ export class PathPairsComponent implements OnInit, OnDestroy {
       }
       this.editingId = null;
       this.editForm = this.emptyForm();
+      // See onSaveAdd: the picker can still target the old form if it was
+      // opened after Save fired but before this async response arrived.
+      if (this.directoryPickerTarget === formAtSave) {
+        this.directoryPickerTarget = null;
+      }
       this.cdr.markForCheck();
     });
   }

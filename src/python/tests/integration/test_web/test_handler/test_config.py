@@ -305,6 +305,21 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertIn("remote_username", json_dict["error"])
         self.assertIn("remote_port", json_dict["error"])
 
+    def test_test_connection_missing_password_reports_missing_setting_not_credential_error(self):
+        # Password auth (use_ssh_key False, the default) with no password set
+        # must surface as a config problem, not attempt an empty-password
+        # login and report a misleading credential failure.
+        self.context.config.lftp.remote_address = "example.com"
+        self.context.config.lftp.remote_username = "user"
+        self.context.config.lftp.remote_port = 22
+        with patch("web.lftp_ssh.Sshcp") as mock_sshcp:
+            resp = self._post_test_connection(expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+        json_dict = json.loads(resp.text)
+        self.assertIn("remote_password", json_dict["error"])
+        self.assertNotIn("credential_error", json_dict)
+        mock_sshcp.assert_not_called()
+
     def test_test_connection_success(self):
         self.context.config.lftp.remote_address = "example.com"
         self.context.config.lftp.remote_username = "user"

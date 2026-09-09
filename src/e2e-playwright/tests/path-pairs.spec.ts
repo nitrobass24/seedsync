@@ -148,8 +148,8 @@ test.describe("Path Pairs", () => {
     // Verify the form contains the existing values
     const formEl = form.first();
     await expect(formEl.locator('label:has-text("Name") input')).toHaveValue("edit-me");
-    await expect(formEl.locator('label:has-text("Remote Path") input')).toHaveValue("/remote/edit");
-    await expect(formEl.locator('label:has-text("Local Path") input')).toHaveValue("/local/edit");
+    await expect(formEl.locator('#pair-remote-path')).toHaveValue("/remote/edit");
+    await expect(formEl.locator('#pair-local-path')).toHaveValue("/local/edit");
   });
 
   test("edit and save updates the pair via API", async ({ apiFetch }) => {

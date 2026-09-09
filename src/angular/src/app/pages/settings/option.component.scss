@@ -20,6 +20,17 @@ label {
     align-items: center;
 }
 
+// The Directory case can't put the Browse button inside its label (a label
+// may only contain the one labelable element it's associated with), so it
+// uses a for/id-linked label plus this wrapper to match the same row layout.
+.option-directory-row {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
 span.description {
     color: var(--ss-text-description);
     font-size: 80%;
