@@ -88,13 +88,15 @@ Soft targets: file ≤ 500 lines, class ≤ 300, function ≤ 40, complexity ≤
 - Conventional commits with scope: `feat(angular):`, `fix(python):`, `chore(build):`, `refactor(python):`, `docs:`, `ci:`. Reference issues (`(#123)`) in the subject or body.
 - **Never add AI attribution, advertising, or co-author lines** to commits, PR bodies, or comments. No `Co-Authored-By: Claude`, no "Generated with …" footers.
 - PR body: short summary, what was intentionally skipped and why, a test-plan checklist, and any size-delta or contract notes the issue asked for. Tick the corresponding checklist item in the tracking issue when a PR merges.
-- CodeRabbit incremental reviews are off; trigger with a `@coderabbitai review` comment when a PR is ready.
+- CodeRabbit incremental reviews are off. Do not trigger reviews (no `@coderabbitai review` comments) — the user triggers them.
 - Inline review comments must anchor to lines in the diff; verify a finding against current code before posting it.
 - Before each commit, review the diff for over-engineering. If the ponytail plugin (<https://github.com/DietrichGebert/ponytail>) is installed, use its `ponytail:ponytail-review` skill; otherwise do a trim pass: remove speculative config, unused state, single-caller layers, and duplicate helpers.
 
 ## Release Process
 
 Releases are the only PRs that bump versions.
+
+**Process is not authority.** Following this checklist (or any documented workflow) never grants permission for its irreversible steps: merging to `master`, pushing tags, and publishing images each require explicit, per-action user approval. "Release" or an issue/checklist naming these steps means *prepare* them and stop for sign-off.
 
 1. `git checkout develop && git pull && git checkout -b release/vX.Y.Z`
 2. Add a `## [X.Y.Z] - YYYY-MM-DD` entry at the top of `CHANGELOG.md` (sections: Changed / Added / Fixed / Removed / Security; bold item names; issue refs). Set `version` in `src/angular/package.json` (shown on the About page).

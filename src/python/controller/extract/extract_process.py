@@ -7,6 +7,7 @@ import multiprocessing
 import queue
 import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from typing import override
 
@@ -16,26 +17,26 @@ from .dispatch import ExtractDispatch, ExtractDispatchError, ExtractListener, Ex
 from .extract_request import ExtractRequest
 
 
+@dataclass
 class ExtractStatusResult:
-    def __init__(self, timestamp: datetime, statuses: list[ExtractStatus]):
-        self.timestamp = timestamp
-        self.statuses = statuses
+    timestamp: datetime
+    statuses: list[ExtractStatus]
 
 
+@dataclass
 class ExtractCompletedResult:
-    def __init__(self, timestamp: datetime, name: str, is_dir: bool, pair_id: str | None = None):
-        self.timestamp = timestamp
-        self.name = name
-        self.is_dir = is_dir
-        self.pair_id = pair_id
+    timestamp: datetime
+    name: str
+    is_dir: bool
+    pair_id: str | None = None
 
 
+@dataclass
 class ExtractFailedResult:
-    def __init__(self, timestamp: datetime, name: str, is_dir: bool, pair_id: str | None = None):
-        self.timestamp = timestamp
-        self.name = name
-        self.is_dir = is_dir
-        self.pair_id = pair_id
+    timestamp: datetime
+    name: str
+    is_dir: bool
+    pair_id: str | None = None
 
 
 class ExtractProcess(AppProcess):

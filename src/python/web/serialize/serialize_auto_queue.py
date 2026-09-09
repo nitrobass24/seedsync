@@ -6,12 +6,6 @@ from controller import AutoQueuePattern
 
 
 class SerializeAutoQueue:
-    __KEY_PATTERN = "pattern"
-
     @staticmethod
     def patterns(patterns: list[AutoQueuePattern]) -> str:
-        patterns_list: list[dict[str, str]] = []
-        for pattern in patterns:
-            patterns_list.append({SerializeAutoQueue.__KEY_PATTERN: pattern.pattern})
-
-        return json.dumps(patterns_list)
+        return json.dumps([{"pattern": p.pattern} for p in patterns])

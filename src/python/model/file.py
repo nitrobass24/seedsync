@@ -3,11 +3,20 @@
 import copy
 import os
 from collections.abc import Iterator
+from dataclasses import dataclass, field, fields
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
+
+# Fields that hold byte/second counts and must never go negative.
+_NON_NEGATIVE_FIELDS = frozenset({"remote_size", "local_size", "transferred_size", "downloading_speed", "eta"})
+
+# Excluded from __eq__ (in addition to _children/_parent, which are not
+# dataclass fields): we don't care about the update timestamp in comparisons.
+_EQ_EXCLUDED_FIELDS = frozenset({"update_timestamp"})
 
 
+@dataclass(eq=False, repr=False)
 class ModelFile:
     """
     Represents a file or directory
@@ -32,51 +41,50 @@ class ModelFile:
         CORRUPT = 10
         MOVE_FAILED = 11
 
-    def __init__(self, name: str, is_dir: bool, pair_id: str | None = None):
-        self.__name = name  # file or folder name
-        self.__is_dir = is_dir  # True if this is a dir, False if file
-        self.__pair_id = pair_id  # which path pair this file belongs to
-        self.__state = ModelFile.State.DEFAULT  # status
-        self.__remote_size: int | None = None  # remote size in bytes, None if file does not exist
-        self.__local_size: int | None = None  # local size in bytes, None if file does not exist
-        self.__transferred_size: int | None = None  # transferred size in bytes, None if file does not exist
-        self.__downloading_speed: int | None = None  # in bytes / sec, None if not downloading
-        self.__eta: int | None = None  # est. time remaining in seconds, None if not available
-        self.__is_extractable = False  # whether file is an archive or dir contains archives
-        self.__local_created_timestamp: datetime | None = None
-        self.__local_modified_timestamp: datetime | None = None
-        self.__remote_created_timestamp: datetime | None = None
-        self.__remote_modified_timestamp: datetime | None = None
-        # timestamp of the latest update
-        # Note: timestamp is not part of equality operator
-        self.__update_timestamp = datetime.now()
-        self.__children: list[ModelFile] = []  # children files
-        self.__parent: ModelFile | None = None  # direct predecessor
+    name: str  # file or folder name
+    is_dir: bool  # True if this is a dir, False if file
+    pair_id: str | None = None  # which path pair this file belongs to
+    state: State = State.DEFAULT  # status
+    remote_size: int | None = None  # remote size in bytes, None if file does not exist
+    local_size: int | None = None  # local size in bytes, None if file does not exist
+    transferred_size: int | None = None  # transferred size in bytes, None if file does not exist
+    downloading_speed: int | None = None  # in bytes / sec, None if not downloading
+    eta: int | None = None  # est. time remaining in seconds, None if not available
+    is_extractable: bool = False  # whether file is an archive or dir contains archives
+    local_created_timestamp: datetime | None = None
+    local_modified_timestamp: datetime | None = None
+    remote_created_timestamp: datetime | None = None
+    remote_modified_timestamp: datetime | None = None
+    # timestamp of the latest update; not part of the equality operator
+    update_timestamp: datetime = field(default_factory=datetime.now)
+
+    def __post_init__(self):
+        self._children: list[ModelFile] = []  # children files
+        self._parent: ModelFile | None = None  # direct predecessor
+
+    def __setattr__(self, key: str, value: Any):
+        if key in _NON_NEGATIVE_FIELDS and value is not None and value < 0:
+            raise ValueError(f"{key} must be non-negative")
+        super().__setattr__(key, value)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ModelFile):
             return NotImplemented
         # disregard in comparisons:
-        #   timestamp: we don't care about it
+        #   update_timestamp: we don't care about it
         #   parent: semantics are to check self and children only
         #   children: check these manually for easier debugging
-        ka = set(self.__dict__).difference(
-            {"_ModelFile__update_timestamp", "_ModelFile__parent", "_ModelFile__children"}
-        )
-        kb = set(other.__dict__).difference(
-            {"_ModelFile__update_timestamp", "_ModelFile__parent", "_ModelFile__children"}
-        )
-        # Check self properties
-        if ka != kb:
-            return False
-        if not all(self.__dict__[k] == other.__dict__[k] for k in ka):
-            return False
+        for f in fields(self):
+            if f.name in _EQ_EXCLUDED_FIELDS:
+                continue
+            if getattr(self, f.name) != getattr(other, f.name):
+                return False
 
         # Check children's properties
-        if len(self.__children) != len(other.__children):
+        if len(self._children) != len(other._children):
             return False
-        my_children_dict = {f.name: f for f in self.__children}
-        other_children_dict = {f.name: f for f in other.__children}
+        my_children_dict = {f.name: f for f in self._children}
+        other_children_dict = {f.name: f for f in other._children}
         if my_children_dict.keys() != other_children_dict.keys():
             return False
         return all(my_children_dict[name] == other_children_dict[name] for name in my_children_dict)
@@ -85,169 +93,10 @@ class ModelFile:
         return str(self.__dict__)
 
     @property
-    def name(self) -> str:
-        return self.__name
-
-    @property
-    def pair_id(self) -> str | None:
-        return self.__pair_id
-
-    @pair_id.setter
-    def pair_id(self, pair_id: str | None):
-        self.__pair_id = pair_id
-
-    @property
-    def is_dir(self) -> bool:
-        return self.__is_dir
-
-    @property
-    def state(self) -> State:
-        return self.__state
-
-    @state.setter
-    def state(self, state: State):
-        if type(state) != ModelFile.State:
-            raise TypeError
-        self.__state = state
-
-    @property
-    def remote_size(self) -> int | None:
-        return self.__remote_size
-
-    @remote_size.setter
-    def remote_size(self, remote_size: int | None):
-        if type(remote_size) == int:
-            if remote_size < 0:
-                raise ValueError
-            self.__remote_size = remote_size
-        elif remote_size is None:
-            self.__remote_size = remote_size
-        else:
-            raise TypeError
-
-    @property
-    def local_size(self) -> int | None:
-        return self.__local_size
-
-    @local_size.setter
-    def local_size(self, local_size: int | None):
-        if type(local_size) == int:
-            if local_size < 0:
-                raise ValueError
-            self.__local_size = local_size
-        elif local_size is None:
-            self.__local_size = local_size
-        else:
-            raise TypeError
-
-    @property
-    def transferred_size(self) -> int | None:
-        return self.__transferred_size
-
-    @transferred_size.setter
-    def transferred_size(self, transferred_size: int | None):
-        if type(transferred_size) == int:
-            if transferred_size < 0:
-                raise ValueError
-            self.__transferred_size = transferred_size
-        elif transferred_size is None:
-            self.__transferred_size = transferred_size
-        else:
-            raise TypeError
-
-    @property
-    def downloading_speed(self) -> int | None:
-        return self.__downloading_speed
-
-    @downloading_speed.setter
-    def downloading_speed(self, downloading_speed: int | None):
-        if type(downloading_speed) == int:
-            if downloading_speed < 0:
-                raise ValueError
-            self.__downloading_speed = downloading_speed
-        elif downloading_speed is None:
-            self.__downloading_speed = downloading_speed
-        else:
-            raise TypeError
-
-    @property
-    def update_timestamp(self) -> datetime:
-        return self.__update_timestamp
-
-    @update_timestamp.setter
-    def update_timestamp(self, update_timestamp: datetime):
-        if type(update_timestamp) != datetime:
-            raise TypeError
-        self.__update_timestamp = update_timestamp
-
-    @property
-    def eta(self) -> int | None:
-        return self.__eta
-
-    @eta.setter
-    def eta(self, eta: int | None):
-        if type(eta) == int:
-            if eta < 0:
-                raise ValueError
-            self.__eta = eta
-        elif eta is None:
-            self.__eta = eta
-        else:
-            raise TypeError
-
-    @property
-    def is_extractable(self) -> bool:
-        return self.__is_extractable
-
-    @is_extractable.setter
-    def is_extractable(self, is_extractable: bool):
-        self.__is_extractable = is_extractable
-
-    @property
-    def local_created_timestamp(self) -> datetime | None:
-        return self.__local_created_timestamp
-
-    @local_created_timestamp.setter
-    def local_created_timestamp(self, local_created_timestamp: datetime):
-        if type(local_created_timestamp) != datetime:
-            raise TypeError
-        self.__local_created_timestamp = local_created_timestamp
-
-    @property
-    def local_modified_timestamp(self) -> datetime | None:
-        return self.__local_modified_timestamp
-
-    @local_modified_timestamp.setter
-    def local_modified_timestamp(self, local_modified_timestamp: datetime):
-        if type(local_modified_timestamp) != datetime:
-            raise TypeError
-        self.__local_modified_timestamp = local_modified_timestamp
-
-    @property
-    def remote_created_timestamp(self) -> datetime | None:
-        return self.__remote_created_timestamp
-
-    @remote_created_timestamp.setter
-    def remote_created_timestamp(self, remote_created_timestamp: datetime):
-        if type(remote_created_timestamp) != datetime:
-            raise TypeError
-        self.__remote_created_timestamp = remote_created_timestamp
-
-    @property
-    def remote_modified_timestamp(self) -> datetime | None:
-        return self.__remote_modified_timestamp
-
-    @remote_modified_timestamp.setter
-    def remote_modified_timestamp(self, remote_modified_timestamp: datetime):
-        if type(remote_modified_timestamp) != datetime:
-            raise TypeError
-        self.__remote_modified_timestamp = remote_modified_timestamp
-
-    @property
     def full_path(self) -> str:
         """Full path including all predecessors"""
-        if self.__parent:
-            return os.path.join(self.__parent.full_path, self.name)
+        if self._parent:
+            return os.path.join(self._parent.full_path, self.name)
         return self.name
 
     def add_child(self, child_file: "ModelFile"):
@@ -255,20 +104,20 @@ class ModelFile:
             raise TypeError("Cannot add child to a non-directory")
         if child_file is self:
             raise ValueError("Cannot add parent as a child")
-        if child_file.name in (f.name for f in self.__children):
+        if child_file.name in (f.name for f in self._children):
             raise ValueError("Cannot add child more than once")
-        self.__children.append(child_file)
-        child_file.__parent = self
+        self._children.append(child_file)
+        child_file._parent = self
 
     def get_children(self) -> list["ModelFile"]:
-        return copy.copy(self.__children)
+        return copy.copy(self._children)
 
     def iter_children(self) -> Iterator["ModelFile"]:
         # Read-only iterator over the live child list, avoiding the defensive
         # copy that get_children() makes. Callers MUST NOT mutate the child
         # list while iterating. Use get_children() if a snapshot is needed.
-        return iter(self.__children)
+        return iter(self._children)
 
     @property
     def parent(self) -> Optional["ModelFile"]:
-        return self.__parent
+        return self._parent

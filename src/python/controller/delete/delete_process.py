@@ -18,6 +18,31 @@ def _is_contained(base_path: str, target_path: str) -> bool:
     return common == real_base and real_target != real_base
 
 
+def _resolve_child_path(base_path: str, relative_path: str) -> str | None:
+    """Resolve relative_path under base_path without following a final symlink.
+
+    Ancestor components are resolved, so a symlinked directory cannot be used to
+    reach outside base_path. The final component is deliberately left unresolved:
+    a local-only symlink must be unlinked where it sits, not followed to its
+    target (resolving it would flag a link pointing outside as traversal and
+    leave it undeletable).
+
+    Returns the resolved path, or None if it escapes base_path.
+    """
+    name = os.path.basename(relative_path)
+    if name in ("", ".", ".."):
+        return None
+    real_base = os.path.realpath(base_path)
+    real_parent = os.path.realpath(os.path.join(real_base, os.path.dirname(relative_path)))
+    try:
+        common = os.path.commonpath([real_base, real_parent])
+    except ValueError:
+        return None
+    if common != real_base:
+        return None
+    return os.path.join(real_parent, name)
+
+
 class DeleteLocalProcess(AppOneShotProcess):
     def __init__(self, local_path: str, file_name: str):
         super().__init__(name=self.__class__.__name__)
@@ -43,8 +68,10 @@ class CleanupLocalProcess(AppOneShotProcess):
     """
     Deletes each of ``relative_paths`` beneath ``<local_path>/<file_name>``. Each
     path is containment-checked against that base and skipped (with an error log)
-    if it escapes. The folder itself is never removed. The caller is responsible
-    for choosing only local-only paths; ``local_path`` may be a staging dir.
+    if it escapes. Symlinks are unlinked, never followed, so a link is removed
+    without touching whatever it points at. The folder itself is never removed.
+    The caller is responsible for choosing only local-only paths; ``local_path``
+    may be a staging dir.
 
     Raises RuntimeError if any path fails to delete, so the caller never treats
     a partial cleanup as a full success.
@@ -61,16 +88,19 @@ class CleanupLocalProcess(AppOneShotProcess):
         self.logger.debug(f"Cleaning up local-only contents of {self.__file_name}")
         failures: list[str] = []
         for relative_path in self.__relative_paths:
-            file_path = os.path.join(base_path, relative_path)
-            if not _is_contained(base_path, file_path):
-                self.logger.error(f"Path traversal blocked: {file_path} escapes {base_path}")
+            file_path = _resolve_child_path(base_path, relative_path)
+            if file_path is None:
+                self.logger.error(f"Path traversal blocked: {relative_path} escapes {base_path}")
                 failures.append(f"{relative_path}: escapes base path")
                 continue
-            if not os.path.exists(file_path):
+            # lexists, not exists: a dangling symlink is still ours to remove.
+            if not os.path.lexists(file_path):
                 self.logger.error(f"Failed to delete non-existing file: {file_path}")
                 failures.append(f"{relative_path}: does not exist")
                 continue
             try:
+                # islink first, so a symlink to a directory is unlinked rather
+                # than handed to rmtree (which refuses it).
                 if os.path.islink(file_path) or os.path.isfile(file_path):
                     os.unlink(file_path)
                 else:

@@ -330,3 +330,42 @@ class TestSerializeModel(unittest.TestCase):
         self.assertEqual("c/ca/caa", data[2]["children"][0]["children"][0]["full_path"])
         self.assertEqual("c/ca/cab", data[2]["children"][0]["children"][1]["full_path"])
         self.assertEqual("c/cb", data[2]["children"][1]["full_path"])
+
+
+GOLDEN_MODEL_INIT = 'event: model-init\ndata: [{"name": "Parent.Dir", "pair_id": "11111111-2222-3333-4444-555555555555", "is_dir": true, "state": "downloading", "remote_size": 1048576, "local_size": 524288, "downloading_speed": 4096, "eta": 128, "is_extractable": true, "local_created_timestamp": "1700000000.25", "local_modified_timestamp": "1700000100.5", "remote_created_timestamp": "1700000200.75", "remote_modified_timestamp": "1700000300.0", "full_path": "Parent.Dir", "children": [{"name": "child file.mkv", "pair_id": "11111111-2222-3333-4444-555555555555", "is_dir": false, "state": "default", "remote_size": 1048576, "local_size": null, "downloading_speed": null, "eta": null, "is_extractable": false, "local_created_timestamp": null, "local_modified_timestamp": null, "remote_created_timestamp": null, "remote_modified_timestamp": null, "full_path": "Parent.Dir/child file.mkv", "children": []}]}]\n\n'  # noqa: E501
+GOLDEN_MODEL_UPDATED = 'event: model-updated\ndata: {"old_file": {"name": "Parent.Dir", "pair_id": "11111111-2222-3333-4444-555555555555", "is_dir": true, "state": "downloading", "remote_size": 1048576, "local_size": 524288, "downloading_speed": 4096, "eta": 128, "is_extractable": true, "local_created_timestamp": "1700000000.25", "local_modified_timestamp": "1700000100.5", "remote_created_timestamp": "1700000200.75", "remote_modified_timestamp": "1700000300.0", "full_path": "Parent.Dir", "children": [{"name": "child file.mkv", "pair_id": "11111111-2222-3333-4444-555555555555", "is_dir": false, "state": "default", "remote_size": 1048576, "local_size": null, "downloading_speed": null, "eta": null, "is_extractable": false, "local_created_timestamp": null, "local_modified_timestamp": null, "remote_created_timestamp": null, "remote_modified_timestamp": null, "full_path": "Parent.Dir/child file.mkv", "children": []}]}, "new_file": null}\n\n'  # noqa: E501
+
+
+class TestSerializeModelGolden(unittest.TestCase):
+    """Byte-exact wire-format contract. Captured from the pre-dataclass
+    serializer (v1.1.0); the Angular frontend parses these exact keys and
+    value formats. If this test fails, the frontend contract changed."""
+
+    @staticmethod
+    def _build() -> ModelFile:
+        f = ModelFile("Parent.Dir", True, pair_id="11111111-2222-3333-4444-555555555555")
+        f.state = ModelFile.State.DOWNLOADING
+        f.remote_size = 1048576
+        f.local_size = 524288
+        f.transferred_size = 524288
+        f.downloading_speed = 4096
+        f.eta = 128
+        f.is_extractable = True
+        f.local_created_timestamp = datetime.fromtimestamp(1700000000.25)
+        f.local_modified_timestamp = datetime.fromtimestamp(1700000100.5)
+        f.remote_created_timestamp = datetime.fromtimestamp(1700000200.75)
+        f.remote_modified_timestamp = datetime.fromtimestamp(1700000300.0)
+        c = ModelFile("child file.mkv", False, pair_id="11111111-2222-3333-4444-555555555555")
+        c.state = ModelFile.State.DEFAULT
+        c.remote_size = 1048576
+        f.add_child(c)
+        return f
+
+    def test_model_init_golden(self):
+        self.assertEqual(GOLDEN_MODEL_INIT, SerializeModel().model([self._build()]))
+
+    def test_update_event_golden(self):
+        event = SerializeModel.UpdateEvent(
+            SerializeModel.UpdateEvent.Change.UPDATED, old_file=self._build(), new_file=None
+        )
+        self.assertEqual(GOLDEN_MODEL_UPDATED, SerializeModel().update_event(event))

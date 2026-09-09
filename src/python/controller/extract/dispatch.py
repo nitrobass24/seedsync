@@ -7,6 +7,7 @@ import re
 import threading
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from enum import Enum
 
 from common import AppError
@@ -29,6 +30,7 @@ class ExtractListener(ABC):
         pass
 
 
+@dataclass(frozen=True)
 class ExtractStatus:
     """
     Represents the status of a single extraction request
@@ -37,43 +39,21 @@ class ExtractStatus:
     class State(Enum):
         EXTRACTING = 0
 
-    def __init__(self, name: str, is_dir: bool, state: State, pair_id: str | None = None):
-        self.__name = name
-        self.__is_dir = is_dir
-        self.__state = state
-        self.__pair_id = pair_id
-
-    @property
-    def name(self) -> str:
-        return self.__name
-
-    @property
-    def is_dir(self) -> bool:
-        return self.__is_dir
-
-    @property
-    def state(self) -> State:
-        return self.__state
-
-    @property
-    def pair_id(self) -> str | None:
-        return self.__pair_id
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ExtractStatus):
-            return NotImplemented
-        return self.__dict__ == other.__dict__
+    name: str
+    is_dir: bool
+    state: State
+    pair_id: str | None = None
 
 
 class ExtractDispatch:
     __WORKER_SLEEP_INTERVAL_IN_SECS = 0.5
 
+    @dataclass
     class _Task:
-        def __init__(self, root_name: str, root_is_dir: bool, pair_id: str | None = None):
-            self.root_name = root_name
-            self.root_is_dir = root_is_dir
-            self.pair_id = pair_id
-            self.archive_paths: list[tuple[str, str]] = []
+        root_name: str
+        root_is_dir: bool
+        pair_id: str | None = None
+        archive_paths: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
 
         def add_archive(self, archive_path: str, out_dir_path: str):
             self.archive_paths.append((archive_path, out_dir_path))
@@ -156,7 +136,8 @@ class ExtractDispatch:
                             curr_file.full_path, req.local_path, req.local_path_fallback
                         )
                         if archive_full_path:
-                            base_out = req.out_dir_path_fallback if is_fallback else req.out_dir_path
+                            fallback_out = req.out_dir_path_fallback or req.out_dir_path
+                            base_out = fallback_out if is_fallback else req.out_dir_path
                             out_dir_path = os.path.join(base_out, os.path.dirname(curr_file.full_path))
                             task.add_archive(archive_path=archive_full_path, out_dir_path=out_dir_path)
 
@@ -177,7 +158,7 @@ class ExtractDispatch:
             )
             if not archive_full_path:
                 raise ExtractDispatchError(f"File is not an archive: {model_file.name}")
-            base_out = req.out_dir_path_fallback if is_fallback else req.out_dir_path
+            base_out = (req.out_dir_path_fallback or req.out_dir_path) if is_fallback else req.out_dir_path
             task.add_archive(archive_path=archive_full_path, out_dir_path=base_out)
             self.__task_queue.put(task)
 

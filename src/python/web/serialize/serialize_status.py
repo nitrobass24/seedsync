@@ -1,7 +1,6 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import json
-from typing import Any
 
 from common import Status
 
@@ -9,52 +8,30 @@ from .serialize import Serialize
 
 
 class SerializeStatusJson:
-    # Data keys
-    __KEY_SERVER = "server"
-    __KEY_SERVER_UP = "up"
-    __KEY_SERVER_ERROR_MSG = "error_msg"
-    __KEY_CONTROLLER = "controller"
-    __KEY_CONTROLLER_LATEST_LOCAL_SCAN_TIME = "latest_local_scan_time"
-    __KEY_CONTROLLER_LATEST_REMOTE_SCAN_TIME = "latest_remote_scan_time"
-    __KEY_CONTROLLER_LATEST_REMOTE_SCAN_FAILED = "latest_remote_scan_failed"
-    __KEY_CONTROLLER_LATEST_REMOTE_SCAN_ERROR = "latest_remote_scan_error"
-    __KEY_CONTROLLER_NO_ENABLED_PAIRS = "no_enabled_pairs"
-
     @staticmethod
     def status(status: Status) -> str:
-        json_dict: dict[str, Any] = {}
-
-        json_dict[SerializeStatusJson.__KEY_SERVER] = {}
-        json_dict[SerializeStatusJson.__KEY_SERVER][SerializeStatusJson.__KEY_SERVER_UP] = status.server.up
-        json_dict[SerializeStatusJson.__KEY_SERVER][SerializeStatusJson.__KEY_SERVER_ERROR_MSG] = (
-            status.server.error_msg
-        )
-
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER] = {}
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_LATEST_LOCAL_SCAN_TIME] = (
-            str(status.controller.latest_local_scan_time.timestamp())
-            if status.controller.latest_local_scan_time
-            else None
-        )
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER][
-            SerializeStatusJson.__KEY_CONTROLLER_LATEST_REMOTE_SCAN_TIME
-        ] = (
-            str(status.controller.latest_remote_scan_time.timestamp())
-            if status.controller.latest_remote_scan_time
-            else None
-        )
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER][
-            SerializeStatusJson.__KEY_CONTROLLER_LATEST_REMOTE_SCAN_FAILED
-        ] = status.controller.latest_remote_scan_failed
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER][
-            SerializeStatusJson.__KEY_CONTROLLER_LATEST_REMOTE_SCAN_ERROR
-        ] = status.controller.latest_remote_scan_error
-        json_dict[SerializeStatusJson.__KEY_CONTROLLER][SerializeStatusJson.__KEY_CONTROLLER_NO_ENABLED_PAIRS] = (
-            status.controller.no_enabled_pairs
-        )
-
-        status_json = json.dumps(json_dict)
-        return status_json
+        json_dict = {
+            "server": {
+                "up": status.server.up,
+                "error_msg": status.server.error_msg,
+            },
+            "controller": {
+                "latest_local_scan_time": (
+                    str(status.controller.latest_local_scan_time.timestamp())
+                    if status.controller.latest_local_scan_time
+                    else None
+                ),
+                "latest_remote_scan_time": (
+                    str(status.controller.latest_remote_scan_time.timestamp())
+                    if status.controller.latest_remote_scan_time
+                    else None
+                ),
+                "latest_remote_scan_failed": status.controller.latest_remote_scan_failed,
+                "latest_remote_scan_error": status.controller.latest_remote_scan_error,
+                "no_enabled_pairs": status.controller.no_enabled_pairs,
+            },
+        }
+        return json.dumps(json_dict)
 
 
 class SerializeStatus(Serialize):
@@ -63,9 +40,6 @@ class SerializeStatus(Serialize):
     and the EventSource client frontend for the status stream.
     """
 
-    # Event keys
-    __EVENT_STATUS = "status"
-
     def status(self, status: Status) -> str:
         status_json = SerializeStatusJson.status(status)
-        return self._sse_pack(event=SerializeStatus.__EVENT_STATUS, data=status_json)
+        return self._sse_pack(event="status", data=status_json)

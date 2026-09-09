@@ -1,8 +1,8 @@
 import json
 import logging
 import threading
-import time
 import urllib.request
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from datetime import UTC, datetime
 
 from common import Config
@@ -16,9 +16,9 @@ class WebhookNotifier(IModelListener):
     def __init__(self, config: Config, logger: logging.Logger):
         self._config = config
         self._logger = logger.getChild("WebhookNotifier")
-        self._shutdown_flag = False
-        self._active_threads: set[threading.Thread] = set()
-        self._lock = threading.Lock()
+        self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="WebhookNotifier")
+        self._pending: set[Future[None]] = set()
+        self._pending_lock = threading.Lock()
 
     def file_added(self, file: ModelFile):
         pass
@@ -61,32 +61,25 @@ class WebhookNotifier(IModelListener):
         return None
 
     def shutdown(self, timeout: float = 5):
-        """Drain in-flight webhook threads and prevent new ones from being queued."""
-        with self._lock:
-            self._shutdown_flag = True
-            threads = list(self._active_threads)
+        """Drain in-flight webhook sends and prevent new ones from being queued."""
+        self._executor.shutdown(wait=False, cancel_futures=True)
+        with self._pending_lock:
+            pending = [f for f in self._pending if not f.done()]
 
-        if not threads:
-            self._logger.debug("Webhook notifier shutdown: no in-flight threads")
+        if not pending:
+            self._logger.debug("Webhook notifier shutdown: no in-flight sends")
             return
 
-        self._logger.info("Webhook notifier shutting down, waiting for %d in-flight thread(s)", len(threads))
-        deadline = time.monotonic() + timeout
-        for thread in threads:
-            remaining = max(0, deadline - time.monotonic())
-            thread.join(timeout=remaining)
-
-        with self._lock:
-            still_alive = [t for t in self._active_threads if t.is_alive()]
-
-        if still_alive:
+        self._logger.info("Webhook notifier shutting down, waiting for %d in-flight send(s)", len(pending))
+        not_done = wait(pending, timeout=timeout).not_done
+        if not_done:
             self._logger.warning(
-                "Webhook notifier shutdown: %d thread(s) did not complete within %.1fs timeout",
-                len(still_alive),
+                "Webhook notifier shutdown: %d send(s) did not complete within %.1fs timeout",
+                len(not_done),
                 timeout,
             )
         else:
-            self._logger.info("Webhook notifier shutdown: all threads completed")
+            self._logger.info("Webhook notifier shutdown: all sends completed")
 
     def _fire_webhook(
         self,
@@ -141,26 +134,19 @@ class WebhookNotifier(IModelListener):
         self._fire_raw("Telegram", url, headers, body)
 
     def _fire_raw(self, label: str, url: str, headers: dict[str, str], body: bytes):
-        """Fire-and-forget POST in a daemon thread."""
-        thread = threading.Thread(target=self._thread_wrapper, args=(label, url, headers, body), daemon=True)
-        with self._lock:
-            if self._shutdown_flag:
-                self._logger.debug("%s notification suppressed during shutdown", label)
-                return
-            self._active_threads.add(thread)
+        """Fire-and-forget POST on the executor."""
         try:
-            thread.start()
+            future = self._executor.submit(self._send_post, label, url, headers, body)
         except RuntimeError:
-            with self._lock:
-                self._active_threads.discard(thread)
-            self._logger.exception("%s notification thread failed to start", label)
+            self._logger.debug("%s notification suppressed during shutdown", label)
+            return
+        with self._pending_lock:
+            self._pending.add(future)
+        future.add_done_callback(self._discard_pending)
 
-    def _thread_wrapper(self, label: str, url: str, headers: dict[str, str], body: bytes) -> None:
-        try:
-            self._send_post(label, url, headers, body)
-        finally:
-            with self._lock:
-                self._active_threads.discard(threading.current_thread())
+    def _discard_pending(self, future: Future[None]) -> None:
+        with self._pending_lock:
+            self._pending.discard(future)
 
     def _send_post(self, label: str, url: str, headers: dict[str, str], body: bytes) -> None:
         if not url.startswith(("http://", "https://")):

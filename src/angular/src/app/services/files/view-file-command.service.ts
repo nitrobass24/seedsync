@@ -7,6 +7,7 @@ import { ModelFileService } from './model-file.service';
 import { WebReaction } from '../utils/rest.service';
 import { ModelFile } from '../../models/model-file';
 import { ViewFile } from '../../models/view-file';
+import { FileAction, FILE_ACTIONS } from '../../models/file-action';
 import { fileKey } from './file-key';
 import { ViewFileSelectionService } from './view-file-selection.service';
 
@@ -40,34 +41,9 @@ export class ViewFileCommandService {
   private readonly modelFileService = inject(ModelFileService);
   private readonly selection = inject(ViewFileSelectionService);
 
-  queue(file: ViewFile, resolve: ModelFileResolver): Observable<WebReaction> {
-    this.logger.debug('Queue view file: ' + file.name);
-    return this.createAction(file, resolve, (f) => this.modelFileService.queue(f));
-  }
-
-  stop(file: ViewFile, resolve: ModelFileResolver): Observable<WebReaction> {
-    this.logger.debug('Stop view file: ' + file.name);
-    return this.createAction(file, resolve, (f) => this.modelFileService.stop(f));
-  }
-
-  extract(file: ViewFile, resolve: ModelFileResolver): Observable<WebReaction> {
-    this.logger.debug('Extract view file: ' + file.name);
-    return this.createAction(file, resolve, (f) => this.modelFileService.extract(f));
-  }
-
-  deleteLocal(file: ViewFile, resolve: ModelFileResolver): Observable<WebReaction> {
-    this.logger.debug('Locally delete view file: ' + file.name);
-    return this.createAction(file, resolve, (f) => this.modelFileService.deleteLocal(f));
-  }
-
-  deleteRemote(file: ViewFile, resolve: ModelFileResolver): Observable<WebReaction> {
-    this.logger.debug('Remotely delete view file: ' + file.name);
-    return this.createAction(file, resolve, (f) => this.modelFileService.deleteRemote(f));
-  }
-
-  validate(file: ViewFile, resolve: ModelFileResolver): Observable<WebReaction> {
-    this.logger.debug('Validate view file: ' + file.name);
-    return this.createAction(file, resolve, (f) => this.modelFileService.validate(f));
+  command(action: FileAction, file: ViewFile, resolve: ModelFileResolver): Observable<WebReaction> {
+    this.logger.debug(FILE_ACTIONS[action].logNoun + ' view file: ' + file.name);
+    return this.createAction(file, resolve, (f) => this.modelFileService.command(action, f));
   }
 
   cleanupLocal(file: ViewFile, resolve: ModelFileResolver): Observable<WebReaction> {
@@ -75,34 +51,14 @@ export class ViewFileCommandService {
     return this.createAction(file, resolve, (f) => this.modelFileService.cleanupLocal(f));
   }
 
-  bulkQueue(files: readonly ViewFile[], resolve: ModelFileResolver): Observable<WebReaction[]> {
-    return this.bulkAction(files, (f) => f.isQueueable, (f) => this.queue(f, resolve));
-  }
-
-  bulkStop(files: readonly ViewFile[], resolve: ModelFileResolver): Observable<WebReaction[]> {
-    return this.bulkAction(files, (f) => f.isStoppable, (f) => this.stop(f, resolve));
-  }
-
-  bulkDeleteLocal(files: readonly ViewFile[], resolve: ModelFileResolver): Observable<WebReaction[]> {
-    return this.bulkAction(files, (f) => f.isLocallyDeletable, (f) => this.deleteLocal(f, resolve), 4);
-  }
-
-  bulkDeleteRemote(files: readonly ViewFile[], resolve: ModelFileResolver): Observable<WebReaction[]> {
-    return this.bulkAction(files, (f) => f.isRemotelyDeletable, (f) => this.deleteRemote(f, resolve), 4);
-  }
-
-  private bulkAction(
-    files: readonly ViewFile[],
-    filter: (f: ViewFile) => boolean,
-    action: (f: ViewFile) => Observable<WebReaction>,
-    concurrency = Infinity,
-  ): Observable<WebReaction[]> {
-    const checked = files.filter((f) => this.selection.isChecked(viewFileKey(f)) && filter(f));
+  bulk(action: FileAction, files: readonly ViewFile[], resolve: ModelFileResolver): Observable<WebReaction[]> {
+    const spec = FILE_ACTIONS[action];
+    const checked = files.filter((f) => this.selection.isChecked(viewFileKey(f)) && spec.isAllowed(f));
     if (checked.length === 0) {
       return of([]);
     }
     return from(checked).pipe(
-      mergeMap((f) => action(f), concurrency),
+      mergeMap((f) => this.command(action, f, resolve), spec.bulkConcurrency),
       toArray(),
     );
   }

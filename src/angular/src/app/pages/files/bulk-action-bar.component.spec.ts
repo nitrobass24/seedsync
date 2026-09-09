@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { BulkActionBarComponent } from './bulk-action-bar.component';
+import { FileAction } from '../../models/file-action';
 
 describe('BulkActionBarComponent', () => {
   let fixture: ComponentFixture<BulkActionBarComponent>;
@@ -45,52 +46,52 @@ describe('BulkActionBarComponent', () => {
     expect(countSpan.textContent).toContain('7 selected');
   });
 
-  it('should emit queueEvent when Queue button is clicked', () => {
-    let emitted = false;
-    component.queueEvent.subscribe(() => (emitted = true));
+  it('should emit QUEUE when Queue button is clicked', () => {
+    let emitted: FileAction | null = null;
+    component.actionEvent.subscribe((a) => (emitted = a));
 
     const btn = findButtonByText('Queue');
     btn.click();
 
-    expect(emitted).toBe(true);
+    expect(emitted).toBe(FileAction.QUEUE);
   });
 
-  it('should emit stopEvent when Stop button is clicked', () => {
-    let emitted = false;
-    component.stopEvent.subscribe(() => (emitted = true));
+  it('should emit STOP when Stop button is clicked', () => {
+    let emitted: FileAction | null = null;
+    component.actionEvent.subscribe((a) => (emitted = a));
 
     const btn = findButtonByText('Stop');
     btn.click();
 
-    expect(emitted).toBe(true);
+    expect(emitted).toBe(FileAction.STOP);
   });
 
-  it('should emit deleteLocalEvent only on the second Delete Local click', () => {
-    let emitCount = 0;
-    component.deleteLocalEvent.subscribe(() => (emitCount += 1));
+  it('should emit DELETE_LOCAL only on the second Delete Local click', () => {
+    const emitted: FileAction[] = [];
+    component.actionEvent.subscribe((a) => emitted.push(a));
 
     // First click arms the confirm, does NOT emit
     findButtonByText('Delete Local').click();
-    expect(emitCount).toBe(0);
+    expect(emitted).toEqual([]);
 
     // Second click emits
     fixture.detectChanges();
     findButtonByText('Confirm?').click();
-    expect(emitCount).toBe(1);
+    expect(emitted).toEqual([FileAction.DELETE_LOCAL]);
   });
 
-  it('should emit deleteRemoteEvent only on the second Delete Remote click', () => {
-    let emitCount = 0;
-    component.deleteRemoteEvent.subscribe(() => (emitCount += 1));
+  it('should emit DELETE_REMOTE only on the second Delete Remote click', () => {
+    const emitted: FileAction[] = [];
+    component.actionEvent.subscribe((a) => emitted.push(a));
 
     // First click arms the confirm, does NOT emit
     findButtonByText('Delete Remote').click();
-    expect(emitCount).toBe(0);
+    expect(emitted).toEqual([]);
 
     // Second click emits
     fixture.detectChanges();
     findButtonByText('Confirm?').click();
-    expect(emitCount).toBe(1);
+    expect(emitted).toEqual([FileAction.DELETE_REMOTE]);
   });
 
   it('should emit clearEvent when Clear button is clicked', () => {
@@ -140,7 +141,7 @@ describe('BulkActionBarComponent inline bulk delete confirmation', () => {
   }
 
   it('first click on Delete Local sets confirming state and does not emit', () => {
-    const spy = vi.spyOn(component.deleteLocalEvent, 'emit');
+    const spy = vi.spyOn(component.actionEvent, 'emit');
 
     component.onDeleteLocal();
 
@@ -149,7 +150,7 @@ describe('BulkActionBarComponent inline bulk delete confirmation', () => {
   });
 
   it('second click on Delete Local emits event and clears state', () => {
-    const spy = vi.spyOn(component.deleteLocalEvent, 'emit');
+    const spy = vi.spyOn(component.actionEvent, 'emit');
 
     component.onDeleteLocal();
     expect(component.confirmingDelete).toBe('local');
@@ -160,7 +161,7 @@ describe('BulkActionBarComponent inline bulk delete confirmation', () => {
   });
 
   it('first click on Delete Remote sets confirming state and does not emit', () => {
-    const spy = vi.spyOn(component.deleteRemoteEvent, 'emit');
+    const spy = vi.spyOn(component.actionEvent, 'emit');
 
     component.onDeleteRemote();
 
@@ -169,7 +170,7 @@ describe('BulkActionBarComponent inline bulk delete confirmation', () => {
   });
 
   it('second click on Delete Remote emits event and clears state', () => {
-    const spy = vi.spyOn(component.deleteRemoteEvent, 'emit');
+    const spy = vi.spyOn(component.actionEvent, 'emit');
 
     component.onDeleteRemote();
     expect(component.confirmingDelete).toBe('remote');

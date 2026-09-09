@@ -8,6 +8,7 @@ import multiprocessing
 import os
 import queue
 import time
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, override
 
@@ -17,82 +18,57 @@ if TYPE_CHECKING:
     from ssh import Sshcp
 
 
+@dataclass
 class ValidateRequest:
     """Request to validate a file by comparing local and remote checksums."""
 
-    def __init__(
-        self,
-        name: str,
-        is_dir: bool,
-        pair_id: str | None,
-        local_path: str,
-        remote_path: str,
-        algorithm: str,
-        remote_address: str,
-        remote_username: str,
-        remote_password: str | None,
-        remote_port: int,
-    ):
-        self.name = name
-        self.is_dir = is_dir
-        self.pair_id = pair_id
-        self.local_path = local_path
-        self.remote_path = remote_path
-        self.algorithm = algorithm
-        self.remote_address = remote_address
-        self.remote_username = remote_username
-        self.remote_password = remote_password
-        self.remote_port = remote_port
+    name: str
+    is_dir: bool
+    pair_id: str | None
+    local_path: str
+    remote_path: str
+    algorithm: str
+    remote_address: str
+    remote_username: str
+    remote_password: str | None
+    remote_port: int
 
 
+@dataclass
 class ValidateStatus:
     """Status of an in-progress validation."""
 
     class State(Enum):
         VALIDATING = 0
 
-    def __init__(self, name: str, is_dir: bool, state: ValidateStatus.State, pair_id: str | None = None):
-        self.name = name
-        self.is_dir = is_dir
-        self.state = state
-        self.pair_id = pair_id
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ValidateStatus):
-            return NotImplemented
-        return self.__dict__ == other.__dict__
+    name: str
+    is_dir: bool
+    state: ValidateStatus.State
+    pair_id: str | None = None
 
 
+@dataclass
 class ValidateStatusResult:
-    def __init__(self, timestamp: datetime.datetime, statuses: list[ValidateStatus]):
-        self.timestamp = timestamp
-        self.statuses = statuses
+    timestamp: datetime.datetime
+    statuses: list[ValidateStatus]
 
 
+@dataclass
 class ValidateCompletedResult:
-    def __init__(self, timestamp: datetime.datetime, name: str, is_dir: bool, pair_id: str | None = None):
-        self.timestamp = timestamp
-        self.name = name
-        self.is_dir = is_dir
-        self.pair_id = pair_id
+    timestamp: datetime.datetime
+    name: str
+    is_dir: bool
+    pair_id: str | None = None
 
 
+@dataclass
 class ValidateFailedResult:
-    def __init__(
-        self,
-        timestamp: datetime.datetime,
-        name: str,
-        is_dir: bool,
-        pair_id: str | None = None,
-        error_message: str | None = None,
-        is_checksum_mismatch: bool = False,
-    ):
-        self.timestamp = timestamp
-        self.name = name
-        self.is_dir = is_dir
-        self.pair_id = pair_id
-        self.error_message = error_message
-        self.is_checksum_mismatch = is_checksum_mismatch
+    timestamp: datetime.datetime
+    name: str
+    is_dir: bool
+    pair_id: str | None = None
+    error_message: str | None = None
+    is_checksum_mismatch: bool = False
 
 
 class ChecksumMismatchError(ValueError):

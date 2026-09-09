@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import json
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -36,66 +37,32 @@ class SerializeModel(Serialize):
     __KEY_UPDATE_OLD_FILE = "old_file"
     __KEY_UPDATE_NEW_FILE = "new_file"
 
-    # Model file keys
-    __KEY_FILE_NAME = "name"
-    __KEY_FILE_PAIR_ID = "pair_id"
-    __KEY_FILE_IS_DIR = "is_dir"
-    __KEY_FILE_STATE = "state"
-    __VALUES_FILE_STATE = {
-        ModelFile.State.DEFAULT: "default",
-        ModelFile.State.QUEUED: "queued",
-        ModelFile.State.DOWNLOADING: "downloading",
-        ModelFile.State.DOWNLOADED: "downloaded",
-        ModelFile.State.DELETED: "deleted",
-        ModelFile.State.EXTRACTING: "extracting",
-        ModelFile.State.EXTRACTED: "extracted",
-        ModelFile.State.EXTRACT_FAILED: "extract_failed",
-        ModelFile.State.VALIDATING: "validating",
-        ModelFile.State.VALIDATED: "validated",
-        ModelFile.State.CORRUPT: "corrupt",
-        ModelFile.State.MOVE_FAILED: "move_failed",
-    }
-    __KEY_FILE_REMOTE_SIZE = "remote_size"
-    __KEY_FILE_LOCAL_SIZE = "local_size"
-    __KEY_FILE_DOWNLOADING_SPEED = "downloading_speed"
-    __KEY_FILE_ETA = "eta"
-    __KEY_FILE_IS_EXTRACTABLE = "is_extractable"
-    __KEY_FILE_LOCAL_CREATED_TIMESTAMP = "local_created_timestamp"
-    __KEY_FILE_LOCAL_MODIFIED_TIMESTAMP = "local_modified_timestamp"
-    __KEY_FILE_REMOTE_CREATED_TIMESTAMP = "remote_created_timestamp"
-    __KEY_FILE_REMOTE_MODIFIED_TIMESTAMP = "remote_modified_timestamp"
-    __KEY_FILE_FULL_PATH = "full_path"
-    __KEY_FILE_CHILDREN = "children"
-
     @staticmethod
     def __model_file_to_json_dict(model_file: ModelFile) -> dict[str, Any]:
-        json_dict: dict[str, Any] = {}
-        json_dict[SerializeModel.__KEY_FILE_NAME] = model_file.name
-        json_dict[SerializeModel.__KEY_FILE_PAIR_ID] = model_file.pair_id
-        json_dict[SerializeModel.__KEY_FILE_IS_DIR] = model_file.is_dir
-        json_dict[SerializeModel.__KEY_FILE_STATE] = SerializeModel.__VALUES_FILE_STATE[model_file.state]
-        json_dict[SerializeModel.__KEY_FILE_REMOTE_SIZE] = model_file.remote_size
-        json_dict[SerializeModel.__KEY_FILE_LOCAL_SIZE] = model_file.local_size
-        json_dict[SerializeModel.__KEY_FILE_DOWNLOADING_SPEED] = model_file.downloading_speed
-        json_dict[SerializeModel.__KEY_FILE_ETA] = model_file.eta
-        json_dict[SerializeModel.__KEY_FILE_IS_EXTRACTABLE] = model_file.is_extractable
-        json_dict[SerializeModel.__KEY_FILE_LOCAL_CREATED_TIMESTAMP] = (
-            str(model_file.local_created_timestamp.timestamp()) if model_file.local_created_timestamp else None
-        )
-        json_dict[SerializeModel.__KEY_FILE_LOCAL_MODIFIED_TIMESTAMP] = (
-            str(model_file.local_modified_timestamp.timestamp()) if model_file.local_modified_timestamp else None
-        )
-        json_dict[SerializeModel.__KEY_FILE_REMOTE_CREATED_TIMESTAMP] = (
-            str(model_file.remote_created_timestamp.timestamp()) if model_file.remote_created_timestamp else None
-        )
-        json_dict[SerializeModel.__KEY_FILE_REMOTE_MODIFIED_TIMESTAMP] = (
-            str(model_file.remote_modified_timestamp.timestamp()) if model_file.remote_modified_timestamp else None
-        )
-        json_dict[SerializeModel.__KEY_FILE_FULL_PATH] = model_file.full_path
-        json_dict[SerializeModel.__KEY_FILE_CHILDREN] = []
-        for child in model_file.get_children():
-            json_dict[SerializeModel.__KEY_FILE_CHILDREN].append(SerializeModel.__model_file_to_json_dict(child))
-        return json_dict
+        """JSON dict for one file. Key order and value formats are the SSE wire
+        contract parsed by the Angular frontend — see the golden test."""
+
+        def ts(t: datetime | None) -> str | None:
+            return str(t.timestamp()) if t else None
+
+        return {
+            "name": model_file.name,
+            "pair_id": model_file.pair_id,
+            "is_dir": model_file.is_dir,
+            # State enum names lowercased are exactly the wire values
+            "state": model_file.state.name.lower(),
+            "remote_size": model_file.remote_size,
+            "local_size": model_file.local_size,
+            "downloading_speed": model_file.downloading_speed,
+            "eta": model_file.eta,
+            "is_extractable": model_file.is_extractable,
+            "local_created_timestamp": ts(model_file.local_created_timestamp),
+            "local_modified_timestamp": ts(model_file.local_modified_timestamp),
+            "remote_created_timestamp": ts(model_file.remote_created_timestamp),
+            "remote_modified_timestamp": ts(model_file.remote_modified_timestamp),
+            "full_path": model_file.full_path,
+            "children": [SerializeModel.__model_file_to_json_dict(child) for child in model_file.iter_children()],
+        }
 
     def model(self, model_files: list[ModelFile]) -> str:
         """

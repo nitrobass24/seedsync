@@ -5,6 +5,7 @@ import { StreamEventHandler, StreamDispatchService } from '../base/stream-dispat
 import { LoggerService } from '../utils/logger.service';
 import { RestService, WebReaction } from '../utils/rest.service';
 import { ModelFile, ModelFileJson, modelFileFromJson } from '../../models/model-file';
+import { FileAction, FILE_ACTIONS } from '../../models/file-action';
 import { fileKey } from './file-key';
 
 @Injectable({ providedIn: 'root' })
@@ -30,34 +31,10 @@ export class ModelFileService implements StreamEventHandler {
     return [this.EVENT_INIT, this.EVENT_ADDED, this.EVENT_UPDATED, this.EVENT_REMOVED];
   }
 
-  queue(file: ModelFile): Observable<WebReaction> {
-    this.logger.debug('Queue model file: ' + file.name);
-    return this.restService.sendRequest(this.commandUrl('queue', file));
-  }
-
-  stop(file: ModelFile): Observable<WebReaction> {
-    this.logger.debug('Stop model file: ' + file.name);
-    return this.restService.sendRequest(this.commandUrl('stop', file));
-  }
-
-  extract(file: ModelFile): Observable<WebReaction> {
-    this.logger.debug('Extract model file: ' + file.name);
-    return this.restService.sendRequest(this.commandUrl('extract', file));
-  }
-
-  deleteLocal(file: ModelFile): Observable<WebReaction> {
-    this.logger.debug('Delete locally model file: ' + file.name);
-    return this.restService.sendRequest(this.commandUrl('delete_local', file));
-  }
-
-  deleteRemote(file: ModelFile): Observable<WebReaction> {
-    this.logger.debug('Delete remotely model file: ' + file.name);
-    return this.restService.sendRequest(this.commandUrl('delete_remote', file));
-  }
-
-  validate(file: ModelFile): Observable<WebReaction> {
-    this.logger.debug('Validate model file: ' + file.name);
-    return this.restService.sendRequest(this.commandUrl('validate', file));
+  command(action: FileAction, file: ModelFile): Observable<WebReaction> {
+    const spec = FILE_ACTIONS[action];
+    this.logger.debug(spec.logNoun + ' model file: ' + file.name);
+    return this.restService.sendRequest(this.commandUrl(spec.urlSegment, file));
   }
 
   cleanupLocal(file: ModelFile): Observable<WebReaction> {

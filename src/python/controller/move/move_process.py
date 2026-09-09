@@ -6,25 +6,20 @@ import datetime
 import errno
 import os
 import shutil
+from dataclasses import dataclass
 from typing import override
 
 from common import AppOneShotProcess, Constants, PipeStream
 
 
+@dataclass
 class MoveFailedResult:
     """Result reported when a staging->final move fails."""
 
-    def __init__(
-        self,
-        timestamp: datetime.datetime,
-        name: str,
-        pair_id: str | None = None,
-        error_message: str | None = None,
-    ):
-        self.timestamp = timestamp
-        self.name = name
-        self.pair_id = pair_id
-        self.error_message = error_message
+    timestamp: datetime.datetime
+    name: str
+    pair_id: str | None = None
+    error_message: str | None = None
 
 
 class MoveProcess(AppOneShotProcess):
