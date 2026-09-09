@@ -223,10 +223,44 @@
         margin-top: 2px;
       }
 
+      .field-with-browse {
+        display: flex;
+        gap: 6px;
+        margin-top: 2px;
+
+        input[type="text"] {
+          flex: 1 1 auto;
+          margin-top: 0;
+        }
+
+        button {
+          flex: 0 0 auto;
+          white-space: nowrap;
+        }
+      }
+
       &.toggles {
         display: flex;
         gap: 15px;
         margin-top: 4px;
+      }
+
+      .connection-lock-note {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+        padding: 6px 10px;
+        font-size: 90%;
+        font-weight: 600;
+        color: var(--ss-log-warning-text);
+        background-color: var(--ss-log-warning-bg);
+        border: 1px solid var(--ss-log-warning-border);
+        border-radius: 4px;
+      }
+
+      .connection-lock-icon {
+        flex: 0 0 auto;
       }
     }
 

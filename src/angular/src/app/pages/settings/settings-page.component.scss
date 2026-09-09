@@ -111,8 +111,61 @@
     margin-bottom: 0.5rem;
 }
 
+.test-row-end {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+    margin-inline-start: 20px;
+    margin-inline-end: 20px;
+
+    .test-result {
+        margin-top: 0.35rem;
+    }
+
+    .test-result-empty {
+        height: 0;
+        margin-top: 0;
+    }
+}
+
 .test-result {
     font-size: 0.85rem;
+    overflow: hidden;
+    line-height: 1.2;
+}
+
+.option-spaced {
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.connection-lock-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    margin-inline-start: 20px;
+    margin-inline-end: 20px;
+    padding: 6px 10px;
+    font-size: 80%;
+    font-weight: 600;
+    color: var(--ss-log-warning-text);
+    background-color: var(--ss-log-warning-bg);
+    border: 1px solid var(--ss-log-warning-border);
+    border-radius: 4px;
+}
+
+.connection-lock-icon {
+    flex: 0 0 auto;
+}
+
+.connection-lockout-banner {
+    align-items: flex-start;
+    font-weight: 500;
+}
+
+.connection-lockout-text {
+    flex: 1 1 auto;
 }
 
 /* Medium and large screens */

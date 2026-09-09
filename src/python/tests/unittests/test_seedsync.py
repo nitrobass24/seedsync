@@ -452,3 +452,43 @@ class TestPersistResilience(unittest.TestCase):
         This guards the invariant the fix must preserve."""
         self.assertIsInstance(ServiceExit(), Exception)
         self.assertIsInstance(ServiceRestart(), Exception)
+
+
+class TestStopControllerAfterFatalError(unittest.TestCase):
+    """Tests for _stop_controller_after_fatal_error(): a fatal controller_job
+    error (e.g. bad credentials) must stop only the controller, not the whole
+    app -- taking the whole process down just crash-loops the container on
+    every restart attempt instead of letting the user fix the config.
+    """
+
+    def _make_bare_seedsync(self):
+        s = Seedsync.__new__(Seedsync)
+        s.context = MagicMock()
+        return s
+
+    def test_stops_and_joins_the_controller_job(self):
+        s = self._make_bare_seedsync()
+        controller_job = MagicMock()
+
+        s._stop_controller_after_fatal_error(controller_job, RuntimeError("bad password"))
+
+        controller_job.terminate.assert_called_once()
+        controller_job.join.assert_called_once()
+
+    def test_logs_loudly_so_the_failure_stays_visible(self):
+        s = self._make_bare_seedsync()
+
+        s._stop_controller_after_fatal_error(MagicMock(), RuntimeError("bad password"))
+
+        s.context.logger.exception.assert_called_once()
+
+    def test_surfaces_the_error_via_status_for_the_ui(self):
+        """This reuses the same status.server fields the "config incomplete"
+        path (and the frontend's danger banner) already use, so the error is
+        visible on Settings without any new UI plumbing."""
+        s = self._make_bare_seedsync()
+
+        s._stop_controller_after_fatal_error(MagicMock(), RuntimeError("Incorrect password"))
+
+        self.assertFalse(s.context.status.server.up)
+        self.assertEqual("Incorrect password", s.context.status.server.error_msg)

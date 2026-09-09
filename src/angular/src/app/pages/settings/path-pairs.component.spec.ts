@@ -1,8 +1,14 @@
+import '@angular/compiler';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { Observable, of, throwError } from 'rxjs';
+import { TestBed } from '@angular/core/testing';
+import { Observable, of, throwError, Subject } from 'rxjs';
 
 import { PathPair } from '../../models/path-pair';
 import { ArrInstance } from '../../models/arr-instance';
+import { PathPairsComponent } from './path-pairs.component';
+import { PathPairsService } from '../../services/settings/path-pairs.service';
+import { IntegrationsService } from '../../services/settings/integrations.service';
+import { ConnectionStatusService } from '../../services/settings/connection-status.service';
 
 interface PathPairsServiceLike {
   create(pair: Omit<PathPair, 'id'>): Observable<PathPair | null>;
@@ -50,6 +56,8 @@ class PathPairsLogic {
   arrPickerPairId: string | null = null;
   errorMessage: string | null = null;
   private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  connectionVerified = false;
 
   constructor(private service: PathPairsServiceLike) {}
 
@@ -171,6 +179,10 @@ class PathPairsLogic {
 
   destroy(): void {
     this.clearConfirmTimer();
+  }
+
+  isRemotePathLocked(field: 'remote_path' | 'local_path'): boolean {
+    return field === 'remote_path' && !this.connectionVerified;
   }
 
   private cancelEdit(): void {
@@ -407,5 +419,142 @@ describe('PathPairsComponent logic', () => {
       component.togglePicker('pair-2');
       expect(component.arrPickerPairId).toBe('pair-2');
     });
+  });
+
+  describe('isRemotePathLocked (same gate as the Server Directory field)', () => {
+    it('locks remote_path when the connection is not yet verified', () => {
+      component.connectionVerified = false;
+      expect(component.isRemotePathLocked('remote_path')).toBe(true);
+    });
+
+    it('unlocks remote_path once the connection is verified', () => {
+      component.connectionVerified = true;
+      expect(component.isRemotePathLocked('remote_path')).toBe(false);
+    });
+
+    it('never locks local_path (no SSH connection needed to browse locally)', () => {
+      component.connectionVerified = false;
+      expect(component.isRemotePathLocked('local_path')).toBe(false);
+    });
+  });
+});
+
+describe('PathPairsComponent subscribes to ConnectionStatusService (real component)', () => {
+  it('tracks connectionVerified as the shared service changes', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+        { provide: IntegrationsService, useValue: { instances$: of([]) } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PathPairsComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const connectionStatusService = TestBed.inject(ConnectionStatusService);
+
+    expect(component.connectionVerified).toBe(false);
+    expect(component.isRemotePathLocked('remote_path')).toBe(true);
+
+    connectionStatusService.setVerified(true);
+
+    expect(component.connectionVerified).toBe(true);
+    expect(component.isRemotePathLocked('remote_path')).toBe(false);
+  });
+});
+
+describe('PathPairsComponent directory picker (real component)', () => {
+  let component: PathPairsComponent;
+  let mockPathPairsService: {
+    pairs$: Observable<PathPair[]>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(() => {
+    mockPathPairsService = {
+      pairs$: of([]),
+      create: vi.fn(),
+      update: vi.fn(),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: PathPairsService, useValue: mockPathPairsService },
+        { provide: IntegrationsService, useValue: { instances$: of([]) } },
+      ],
+    });
+    const fixture = TestBed.createComponent(PathPairsComponent);
+    fixture.detectChanges();
+    component = fixture.componentInstance;
+  });
+
+  it('opens the picker for remote_path with kind "remote" and the current value', () => {
+    component.addForm.remote_path = '/remote/current';
+    component.onBrowsePairPath(component.addForm, 'remote_path');
+
+    expect(component.directoryPickerTarget).toBe(component.addForm);
+    expect(component.directoryPickerField).toBe('remote_path');
+    expect(component.directoryPickerKind).toBe('remote');
+    expect(component.directoryPickerInitialPath).toBe('/remote/current');
+  });
+
+  it('opens the picker for local_path with kind "local"', () => {
+    component.addForm.local_path = '/local/current';
+    component.onBrowsePairPath(component.addForm, 'local_path');
+
+    expect(component.directoryPickerKind).toBe('local');
+    expect(component.directoryPickerInitialPath).toBe('/local/current');
+  });
+
+  it('defaults to "/" when the field has no current value', () => {
+    component.onBrowsePairPath(component.addForm, 'remote_path');
+    expect(component.directoryPickerInitialPath).toBe('/');
+  });
+
+  it('writes the selected path back onto the target form and closes the picker', () => {
+    component.onBrowsePairPath(component.addForm, 'remote_path');
+
+    component.onDirectorySelected('/remote/chosen');
+
+    expect(component.addForm.remote_path).toBe('/remote/chosen');
+    expect(component.directoryPickerTarget).toBeNull();
+  });
+
+  it('targets the edit form independently of the add form', () => {
+    component.editForm.local_path = '/edit/local';
+    component.onBrowsePairPath(component.editForm, 'local_path');
+
+    component.onDirectorySelected('/edit/chosen');
+
+    expect(component.editForm.local_path).toBe('/edit/chosen');
+    expect(component.addForm.local_path).toBe('');
+  });
+
+  it('closes the picker without writing a path on cancel', () => {
+    component.addForm.remote_path = '/unchanged';
+    component.onBrowsePairPath(component.addForm, 'remote_path');
+
+    component.onDirectoryPickerCancel();
+
+    expect(component.addForm.remote_path).toBe('/unchanged');
+    expect(component.directoryPickerTarget).toBeNull();
+  });
+
+  it('clears a stale picker target when an in-flight Save replaces the form it pointed at', () => {
+    // The picker sits behind a click-blocking backdrop, so it can only be
+    // opened on the *previous* form if Save was clicked, the request is
+    // still in flight, and the picker was already open from before Save.
+    const createSubject = new Subject<PathPair | null>();
+    mockPathPairsService.create.mockReturnValue(createSubject.asObservable());
+    component.addForm.name = 'e2e';
+    const formAtSave = component.addForm;
+    component.onBrowsePairPath(formAtSave, 'remote_path');
+    component.onSaveAdd();
+
+    expect(component.directoryPickerTarget).toBe(formAtSave);
+    createSubject.next(makePair({ name: 'e2e' }));
+
+    expect(component.addForm).not.toBe(formAtSave);
+    expect(component.directoryPickerTarget).toBeNull();
   });
 });

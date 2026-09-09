@@ -26,6 +26,26 @@ export class PathPairsPage {
     await this.page.waitForSelector('a[href="/dashboard"]', { timeout: 10_000 });
   }
 
+  /**
+   * The Remote Path field is locked until the SSH connection is verified
+   * (see connection-status.service.ts). There's no live SSH server in the
+   * e2e environment, so mock the test-connection call and click the button
+   * in the Server section above Path Pairs; the resulting verified state is
+   * shared with PathPairsComponent via ConnectionStatusService.
+   *
+   * Scoped to #left: the Integrations card (in #right) renders its own
+   * per-instance "Test Connection" button with the same text, and its rows
+   * may exist concurrently from integrations.spec.ts sharing this backend.
+   */
+  async verifyConnection() {
+    await this.page.route("**/server/config/test-connection", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+    );
+    const responsePromise = this.page.waitForResponse("**/server/config/test-connection");
+    await this.page.locator("#left").getByRole("button", { name: "Test Connection" }).click();
+    await responsePromise;
+  }
+
   getPairRows() {
     return this.pairsList.locator(".pair-row");
   }
@@ -50,11 +70,13 @@ export class PathPairsPage {
       await nameInput.fill(fields.name);
     }
     if (fields.remotePath !== undefined) {
-      const remoteInput = form.locator('label:has-text("Remote Path") input');
+      // Remote Path's label and input are siblings, linked via for/id, not
+      // nested (a label can't contain both the input and the Browse button).
+      const remoteInput = form.locator('#pair-remote-path');
       await remoteInput.fill(fields.remotePath);
     }
     if (fields.localPath !== undefined) {
-      const localInput = form.locator('label:has-text("Local Path") input');
+      const localInput = form.locator('#pair-local-path');
       await localInput.fill(fields.localPath);
     }
   }

@@ -5,14 +5,33 @@
     </label>
   </div>
   <div class="form-row">
-    <label>Remote Path
-      <input type="text" class="form-control form-control-sm" [(ngModel)]="form.remote_path" placeholder="/remote/path" />
-    </label>
+    <label for="pair-remote-path">Remote Path</label>
+    <span class="field-with-browse">
+      <input id="pair-remote-path" type="text" class="form-control form-control-sm"
+             [(ngModel)]="form.remote_path"
+             [disabled]="isRemotePathLocked('remote_path')"
+             placeholder="/remote/path" />
+      <button type="button" class="btn btn-sm btn-outline-secondary"
+              [disabled]="isRemotePathLocked('remote_path')"
+              (click)="onBrowsePairPath(form, 'remote_path')">
+        Browse&hellip;
+      </button>
+    </span>
+    @if (isRemotePathLocked('remote_path')) {
+      <div class="connection-lock-note" role="note">
+        <span class="connection-lock-icon" aria-hidden="true">&#9888;&#65039;</span>
+        Disabled until a working connection is established. Use "Test Connection" in the Server section above.
+      </div>
+    }
   </div>
   <div class="form-row">
-    <label>Local Path
-      <input type="text" class="form-control form-control-sm" [(ngModel)]="form.local_path" placeholder="/local/path" />
-    </label>
+    <label for="pair-local-path">Local Path</label>
+    <span class="field-with-browse">
+      <input id="pair-local-path" type="text" class="form-control form-control-sm" [(ngModel)]="form.local_path" placeholder="/local/path" />
+      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="onBrowsePairPath(form, 'local_path')">
+        Browse&hellip;
+      </button>
+    </span>
   </div>
   <div class="form-row toggles">
     <label class="toggle-label">
@@ -126,5 +145,14 @@
         </div>
       }
     }
+  }
+
+  @if (directoryPickerTarget) {
+    <app-directory-picker
+      [kind]="directoryPickerKind"
+      [initialPath]="directoryPickerInitialPath"
+      (pathSelected)="onDirectorySelected($event)"
+      (cancelPick)="onDirectoryPickerCancel()">
+    </app-directory-picker>
   }
 </div>
