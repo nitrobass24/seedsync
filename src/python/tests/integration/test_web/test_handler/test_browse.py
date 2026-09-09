@@ -110,3 +110,11 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
         self.assertEqual(200, resp.status_int)
         sent_command = mock_shell.call_args[0][0]
         self.assertIn("'/remote/has space'", sent_command)
+
+    def test_path_beginning_with_dash_is_not_treated_as_an_ls_option(self):
+        self._configure_remote()
+        with patch("web.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
+            resp = self.test_app.get("/server/browse/remote", {"path": "-R"})
+        self.assertEqual(200, resp.status_int)
+        sent_command = mock_shell.call_args[0][0]
+        self.assertEqual("ls -1p -- -R", sent_command)

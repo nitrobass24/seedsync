@@ -175,7 +175,7 @@ export class SettingsPageComponent implements OnInit {
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((config) => {
       if (config.lftp?.remote_address && config.lftp?.remote_username && config.lftp?.remote_port) {
-        this.onTestConnection();
+        this.onTestConnection({ silent: true });
       }
     });
   }
@@ -277,19 +277,27 @@ export class SettingsPageComponent implements OnInit {
     });
   }
 
-  onTestConnection(): void {
-    if (this.connectionLockedOut) {
+  /** @param silent Used by the page-load probe: skip when the backend isn't
+   * connected yet, and don't touch the manual test's UI state (button text,
+   * result banner, lockout) on the probe's behalf. */
+  onTestConnection(options?: { silent?: boolean }): void {
+    const silent = options?.silent === true;
+    if (this.connectionLockedOut || (silent && !this.commandsEnabled)) {
       return;
     }
-    this.testingConnection = true;
-    this.connectionResult = null;
+    this.testingConnection = !silent;
+    if (!silent) {
+      this.connectionResult = null;
+    }
     this.connectionTestService.testConnection().pipe(
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((result) => {
       this.testingConnection = false;
-      this.connectionResult = result;
+      if (!silent) {
+        this.connectionResult = result;
+      }
       this.setConnectionVerified(result.success);
-      if (!result.success && result.credentialError) {
+      if (!silent && !result.success && result.credentialError) {
         this.connectionLockedOut = true;
       }
       this.cdr.markForCheck();

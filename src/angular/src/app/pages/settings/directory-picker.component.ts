@@ -41,7 +41,8 @@ export class DirectoryPickerComponent implements OnInit {
   errorMessage: string | null = null;
 
   ngOnInit(): void {
-    this.load(this.initialPath() || '/');
+    this.currentPath = this.initialPath() || '/';
+    this.load(this.currentPath);
   }
 
   onEnterDirectory(name: string): void {

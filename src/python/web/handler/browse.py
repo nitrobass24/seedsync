@@ -52,7 +52,7 @@ class BrowseHandler(IHandler):
         path = request.query.get("path") or lftp.remote_path or "/"
         ssh = lftp_ssh.build_sshcp(lftp)
         try:
-            raw = ssh.shell(f"ls -1p {shlex.quote(path)}")
+            raw = ssh.shell(f"ls -1p -- {shlex.quote(path)}")
         except SshcpError as e:
             return self.__error(str(e), 502)
         entries = raw.decode(errors="replace").splitlines()

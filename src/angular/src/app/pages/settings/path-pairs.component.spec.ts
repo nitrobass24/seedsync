@@ -1,7 +1,7 @@
 import '@angular/compiler';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, of, throwError, Subject } from 'rxjs';
 
 import { PathPair } from '../../models/path-pair';
 import { ArrInstance } from '../../models/arr-instance';
@@ -56,11 +56,6 @@ class PathPairsLogic {
   arrPickerPairId: string | null = null;
   errorMessage: string | null = null;
   private confirmResetTimer: ReturnType<typeof setTimeout> | null = null;
-
-  directoryPickerTarget: Omit<PathPair, 'id'> | null = null;
-  directoryPickerField: 'remote_path' | 'local_path' = 'local_path';
-  directoryPickerKind: 'local' | 'remote' = 'local';
-  directoryPickerInitialPath = '/';
 
   connectionVerified = false;
 
@@ -184,26 +179,6 @@ class PathPairsLogic {
 
   destroy(): void {
     this.clearConfirmTimer();
-  }
-
-  // --- Directory picker ---
-
-  onBrowsePairPath(form: Omit<PathPair, 'id'>, field: 'remote_path' | 'local_path'): void {
-    this.directoryPickerTarget = form;
-    this.directoryPickerField = field;
-    this.directoryPickerKind = field === 'remote_path' ? 'remote' : 'local';
-    this.directoryPickerInitialPath = form[field] || '/';
-  }
-
-  onDirectorySelected(path: string): void {
-    if (this.directoryPickerTarget) {
-      this.directoryPickerTarget[this.directoryPickerField] = path;
-    }
-    this.directoryPickerTarget = null;
-  }
-
-  onDirectoryPickerCancel(): void {
-    this.directoryPickerTarget = null;
   }
 
   isRemotePathLocked(field: 'remote_path' | 'local_path'): boolean {
@@ -446,60 +421,6 @@ describe('PathPairsComponent logic', () => {
     });
   });
 
-  describe('directory picker', () => {
-    it('opens the picker for remote_path with kind "remote" and the current value', () => {
-      component.addForm.remote_path = '/remote/current';
-      component.onBrowsePairPath(component.addForm, 'remote_path');
-
-      expect(component.directoryPickerTarget).toBe(component.addForm);
-      expect(component.directoryPickerField).toBe('remote_path');
-      expect(component.directoryPickerKind).toBe('remote');
-      expect(component.directoryPickerInitialPath).toBe('/remote/current');
-    });
-
-    it('opens the picker for local_path with kind "local"', () => {
-      component.addForm.local_path = '/local/current';
-      component.onBrowsePairPath(component.addForm, 'local_path');
-
-      expect(component.directoryPickerKind).toBe('local');
-      expect(component.directoryPickerInitialPath).toBe('/local/current');
-    });
-
-    it('defaults to "/" when the field has no current value', () => {
-      component.onBrowsePairPath(component.addForm, 'remote_path');
-      expect(component.directoryPickerInitialPath).toBe('/');
-    });
-
-    it('writes the selected path back onto the target form and closes the picker', () => {
-      component.onBrowsePairPath(component.addForm, 'remote_path');
-
-      component.onDirectorySelected('/remote/chosen');
-
-      expect(component.addForm.remote_path).toBe('/remote/chosen');
-      expect(component.directoryPickerTarget).toBeNull();
-    });
-
-    it('targets the edit form independently of the add form', () => {
-      component.editForm.local_path = '/edit/local';
-      component.onBrowsePairPath(component.editForm, 'local_path');
-
-      component.onDirectorySelected('/edit/chosen');
-
-      expect(component.editForm.local_path).toBe('/edit/chosen');
-      expect(component.addForm.local_path).toBe('');
-    });
-
-    it('closes the picker without writing a path on cancel', () => {
-      component.addForm.remote_path = '/unchanged';
-      component.onBrowsePairPath(component.addForm, 'remote_path');
-
-      component.onDirectoryPickerCancel();
-
-      expect(component.addForm.remote_path).toBe('/unchanged');
-      expect(component.directoryPickerTarget).toBeNull();
-    });
-  });
-
   describe('isRemotePathLocked (same gate as the Server Directory field)', () => {
     it('locks remote_path when the connection is not yet verified', () => {
       component.connectionVerified = false;
@@ -539,5 +460,101 @@ describe('PathPairsComponent subscribes to ConnectionStatusService (real compone
 
     expect(component.connectionVerified).toBe(true);
     expect(component.isRemotePathLocked('remote_path')).toBe(false);
+  });
+});
+
+describe('PathPairsComponent directory picker (real component)', () => {
+  let component: PathPairsComponent;
+  let mockPathPairsService: {
+    pairs$: Observable<PathPair[]>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(() => {
+    mockPathPairsService = {
+      pairs$: of([]),
+      create: vi.fn(),
+      update: vi.fn(),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: PathPairsService, useValue: mockPathPairsService },
+        { provide: IntegrationsService, useValue: { instances$: of([]) } },
+      ],
+    });
+    const fixture = TestBed.createComponent(PathPairsComponent);
+    fixture.detectChanges();
+    component = fixture.componentInstance;
+  });
+
+  it('opens the picker for remote_path with kind "remote" and the current value', () => {
+    component.addForm.remote_path = '/remote/current';
+    component.onBrowsePairPath(component.addForm, 'remote_path');
+
+    expect(component.directoryPickerTarget).toBe(component.addForm);
+    expect(component.directoryPickerField).toBe('remote_path');
+    expect(component.directoryPickerKind).toBe('remote');
+    expect(component.directoryPickerInitialPath).toBe('/remote/current');
+  });
+
+  it('opens the picker for local_path with kind "local"', () => {
+    component.addForm.local_path = '/local/current';
+    component.onBrowsePairPath(component.addForm, 'local_path');
+
+    expect(component.directoryPickerKind).toBe('local');
+    expect(component.directoryPickerInitialPath).toBe('/local/current');
+  });
+
+  it('defaults to "/" when the field has no current value', () => {
+    component.onBrowsePairPath(component.addForm, 'remote_path');
+    expect(component.directoryPickerInitialPath).toBe('/');
+  });
+
+  it('writes the selected path back onto the target form and closes the picker', () => {
+    component.onBrowsePairPath(component.addForm, 'remote_path');
+
+    component.onDirectorySelected('/remote/chosen');
+
+    expect(component.addForm.remote_path).toBe('/remote/chosen');
+    expect(component.directoryPickerTarget).toBeNull();
+  });
+
+  it('targets the edit form independently of the add form', () => {
+    component.editForm.local_path = '/edit/local';
+    component.onBrowsePairPath(component.editForm, 'local_path');
+
+    component.onDirectorySelected('/edit/chosen');
+
+    expect(component.editForm.local_path).toBe('/edit/chosen');
+    expect(component.addForm.local_path).toBe('');
+  });
+
+  it('closes the picker without writing a path on cancel', () => {
+    component.addForm.remote_path = '/unchanged';
+    component.onBrowsePairPath(component.addForm, 'remote_path');
+
+    component.onDirectoryPickerCancel();
+
+    expect(component.addForm.remote_path).toBe('/unchanged');
+    expect(component.directoryPickerTarget).toBeNull();
+  });
+
+  it('clears a stale picker target when an in-flight Save replaces the form it pointed at', () => {
+    // The picker sits behind a click-blocking backdrop, so it can only be
+    // opened on the *previous* form if Save was clicked, the request is
+    // still in flight, and the picker was already open from before Save.
+    const createSubject = new Subject<PathPair | null>();
+    mockPathPairsService.create.mockReturnValue(createSubject.asObservable());
+    component.addForm.name = 'e2e';
+    const formAtSave = component.addForm;
+    component.onBrowsePairPath(formAtSave, 'remote_path');
+    component.onSaveAdd();
+
+    expect(component.directoryPickerTarget).toBe(formAtSave);
+    createSubject.next(makePair({ name: 'e2e' }));
+
+    expect(component.addForm).not.toBe(formAtSave);
+    expect(component.directoryPickerTarget).toBeNull();
   });
 });

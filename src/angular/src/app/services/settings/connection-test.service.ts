@@ -2,10 +2,9 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
+import { TestResult } from '../utils/test-result';
 
-export interface TestResult {
-  readonly success: boolean;
-  readonly message: string;
+export interface ConnectionTestResult extends TestResult {
   /** True when the failure was a bad-credential (wrong password/key) error,
    * as opposed to a network/host-level failure. Callers use this to stop
    * offering retries until the credentials actually change, since repeated
@@ -20,7 +19,7 @@ const TEST_CONNECTION_URL = '/server/config/test-connection';
 export class ConnectionTestService {
   private readonly http = inject(HttpClient);
 
-  testConnection(): Observable<TestResult> {
+  testConnection(): Observable<ConnectionTestResult> {
     return this.http.post(TEST_CONNECTION_URL, {}).pipe(
       map(() => ({ success: true, message: 'Connection successful' })),
       catchError((err: HttpErrorResponse) => {

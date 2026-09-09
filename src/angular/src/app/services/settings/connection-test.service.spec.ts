@@ -4,7 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideHttpClient } from '@angular/common/http';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { ConnectionTestService, TestResult } from './connection-test.service';
+import { ConnectionTestService, ConnectionTestResult } from './connection-test.service';
 
 describe('ConnectionTestService', () => {
   let service: ConnectionTestService;
@@ -27,7 +27,7 @@ describe('ConnectionTestService', () => {
   });
 
   it('testConnection() returns success on HTTP 200', () => {
-    let result: TestResult | undefined;
+    let result: ConnectionTestResult | undefined;
     service.testConnection().subscribe((r) => (result = r));
 
     const req = httpMock.expectOne('/server/config/test-connection');
@@ -39,7 +39,7 @@ describe('ConnectionTestService', () => {
   });
 
   it('testConnection() surfaces server-provided error message on failure', () => {
-    let result: TestResult | undefined;
+    let result: ConnectionTestResult | undefined;
     service.testConnection().subscribe((r) => (result = r));
 
     httpMock.expectOne('/server/config/test-connection').flush(
@@ -52,7 +52,7 @@ describe('ConnectionTestService', () => {
   });
 
   it('testConnection() falls back to generic message when error body is unparsable', () => {
-    let result: TestResult | undefined;
+    let result: ConnectionTestResult | undefined;
     service.testConnection().subscribe((r) => (result = r));
 
     httpMock.expectOne('/server/config/test-connection').error(new ProgressEvent('error'));
@@ -62,7 +62,7 @@ describe('ConnectionTestService', () => {
   });
 
   it('testConnection() forwards credentialError: true from the server', () => {
-    let result: TestResult | undefined;
+    let result: ConnectionTestResult | undefined;
     service.testConnection().subscribe((r) => (result = r));
 
     httpMock.expectOne('/server/config/test-connection').flush(
@@ -74,7 +74,7 @@ describe('ConnectionTestService', () => {
   });
 
   it('testConnection() omits credentialError for a non-credential failure', () => {
-    let result: TestResult | undefined;
+    let result: ConnectionTestResult | undefined;
     service.testConnection().subscribe((r) => (result = r));
 
     httpMock.expectOne('/server/config/test-connection').flush(

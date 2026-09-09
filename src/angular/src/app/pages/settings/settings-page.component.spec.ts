@@ -7,7 +7,7 @@ import { IOptionsContext, OPTIONS_CONTEXT_SERVER, applyDisableRules } from './op
 import { ConfigService } from '../../services/settings/config.service';
 import { NotificationService } from '../../services/utils/notification.service';
 import { NotificationsService } from '../../services/settings/notifications.service';
-import { ConnectionTestService, TestResult as ConnectionTestResult } from '../../services/settings/connection-test.service';
+import { ConnectionTestService, ConnectionTestResult } from '../../services/settings/connection-test.service';
 import { ConnectionStatusService } from '../../services/settings/connection-status.service';
 import { ServerCommandService } from '../../services/server/server-command.service';
 import { ConnectedService } from '../../services/utils/connected.service';
@@ -256,7 +256,7 @@ describe('SettingsPageComponent auto-verifies an already-configured connection o
         { provide: NotificationsService, useValue: { test: vi.fn() } },
         { provide: ConnectionTestService, useValue: { testConnection: mockTestConnection } },
         { provide: ServerCommandService, useValue: { restart: vi.fn() } },
-        { provide: ConnectedService, useValue: { connected$: of(false) } },
+        { provide: ConnectedService, useValue: { connected$: of(true) } },
         { provide: PathPairsService, useValue: { pairs$: of([]) } },
       ],
     });
@@ -266,6 +266,60 @@ describe('SettingsPageComponent auto-verifies an already-configured connection o
 
     expect(mockTestConnection).toHaveBeenCalledTimes(1);
     expect(fixture.componentInstance.connectionVerified).toBe(true);
+  });
+
+  it('does not auto-test when the backend is not connected yet', () => {
+    const config = { lftp: { remote_address: 'host', remote_username: 'user', remote_port: 22 } };
+    const mockTestConnection = vi.fn().mockReturnValue(of({ success: true, message: 'Connection successful' }));
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ConfigService, useValue: { config$: of(config), configSnapshot: config } },
+        { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
+        { provide: NotificationsService, useValue: { test: vi.fn() } },
+        { provide: ConnectionTestService, useValue: { testConnection: mockTestConnection } },
+        { provide: ServerCommandService, useValue: { restart: vi.fn() } },
+        { provide: ConnectedService, useValue: { connected$: of(false) } },
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(SettingsPageComponent);
+    fixture.detectChanges();
+
+    expect(mockTestConnection).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.connectionVerified).toBe(false);
+  });
+
+  it('silently probing does not flip testingConnection, touch connectionResult, or lock out on a credential failure', () => {
+    const config = { lftp: { remote_address: 'host', remote_username: 'user', remote_port: 22 } };
+    const probeSubject = new Subject<ConnectionTestResult>();
+    const mockTestConnection = vi.fn().mockReturnValue(probeSubject.asObservable());
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: ConfigService, useValue: { config$: of(config), configSnapshot: config } },
+        { provide: NotificationService, useValue: { show: vi.fn(), hide: vi.fn() } },
+        { provide: NotificationsService, useValue: { test: vi.fn() } },
+        { provide: ConnectionTestService, useValue: { testConnection: mockTestConnection } },
+        { provide: ServerCommandService, useValue: { restart: vi.fn() } },
+        { provide: ConnectedService, useValue: { connected$: of(true) } },
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(SettingsPageComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    component.connectionResult = { success: false, message: 'stale' };
+
+    expect(component.testingConnection).toBe(false);
+
+    probeSubject.next({ success: false, message: 'Incorrect password', credentialError: true });
+
+    expect(component.testingConnection).toBe(false);
+    expect(component.connectionResult).toEqual({ success: false, message: 'stale' });
+    expect(component.connectionLockedOut).toBe(false);
   });
 
   it('does not auto-test when the connection is not yet configured', () => {

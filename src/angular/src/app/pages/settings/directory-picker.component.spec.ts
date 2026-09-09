@@ -108,6 +108,22 @@ describe('DirectoryPickerComponent', () => {
     expect(cancelled).toBe(true);
   });
 
+  it('preserves the configured initial path when the first browse fails, so Select still returns it', () => {
+    mockBrowserService.browseLocal.mockReturnValue(
+      of({ success: false, path: null, parent: null, directories: [], errorMessage: 'Permission denied' }),
+    );
+    const component = createComponent('local', '/configured/path');
+
+    expect(component.currentPath).toBe('/configured/path');
+    expect(component.errorMessage).toBe('Permission denied');
+
+    let selected: string | undefined;
+    component.pathSelected.subscribe((path) => (selected = path));
+    component.onSelect();
+
+    expect(selected).toBe('/configured/path');
+  });
+
   it('surfaces the error message and keeps the previous listing on a failed navigation', () => {
     const component = createComponent('local', '/downloads');
     mockBrowserService.browseLocal.mockReturnValue(
