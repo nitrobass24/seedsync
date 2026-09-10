@@ -1915,7 +1915,7 @@ class TestLftpJobStatusParserHelpers(unittest.TestCase):
     def test_parse_mirror_header(self):
         line = "[1] mirror -c /remote/path/show /local/path/ -- 500M/1G (50%) 10M/s"
         result = jsp._RE_MIRROR_HEADER.search(line)
-        status = LftpJobStatusParser._parse_mirror_header(result)
+        status = self.parser._parse_mirror_header(result)
         self.assertEqual(1, status.id)
         self.assertEqual("show", status.name)
         self.assertEqual(LftpJobStatus.Type.MIRROR, status.type)
@@ -1928,7 +1928,7 @@ class TestLftpJobStatusParserHelpers(unittest.TestCase):
     def test_parse_mirror_header_no_speed(self):
         line = "[2] mirror -c /remote/path/abc /local/path/ -- 0/1.1k (0%)"
         result = jsp._RE_MIRROR_HEADER.search(line)
-        status = LftpJobStatusParser._parse_mirror_header(result)
+        status = self.parser._parse_mirror_header(result)
         self.assertEqual("abc", status.name)
         self.assertEqual(LftpJobStatus.TransferState(0, 1126, 0, None, None), status.total_transfer_state)
 
@@ -1938,7 +1938,7 @@ class TestLftpJobStatusParserHelpers(unittest.TestCase):
         line = "[1] mirror -c /remote/path/show /local/path/"
         lines = ["Getting file list (25) [Receiving data]", "next"]
         result = jsp._RE_MIRROR_FL_HEADER.search(line)
-        status = LftpJobStatusParser._parse_mirror_fl_header(result, lines)
+        status = self.parser._parse_mirror_fl_header(result, lines)
         self.assertEqual("show", status.name)
         self.assertEqual(LftpJobStatus.Type.MIRROR, status.type)
         # The 'Getting file list' follow-up must be consumed
@@ -1948,14 +1948,14 @@ class TestLftpJobStatusParserHelpers(unittest.TestCase):
         line = "[2] mirror -c /remote/path/a /local/path/"
         lines = ["cd `/remote/path/a' [Connecting...]"]
         result = jsp._RE_MIRROR_FL_HEADER.search(line)
-        LftpJobStatusParser._parse_mirror_fl_header(result, lines)
+        self.parser._parse_mirror_fl_header(result, lines)
         self.assertEqual([], lines)
 
     def test_parse_mirror_fl_header_no_follow_up(self):
         line = "[2] mirror -c /remote/path/a /local/path/"
         lines = ["[3] mirror -c /remote/path/b /local/path/"]
         result = jsp._RE_MIRROR_FL_HEADER.search(line)
-        LftpJobStatusParser._parse_mirror_fl_header(result, lines)
+        self.parser._parse_mirror_fl_header(result, lines)
         # Unrelated next header must NOT be popped
         self.assertEqual(["[3] mirror -c /remote/path/b /local/path/"], lines)
 
@@ -2012,6 +2012,62 @@ class TestLftpJobStatusParserHelpers(unittest.TestCase):
         result = jsp._RE_PGET_HEADER.search(line)
         with self.assertRaises(ValueError):
             self.parser._parse_pget_header_block(result, lines)
+
+    # --- _extract_name / nested navigation name preservation ------------------
+    #
+    # A standalone job queued on a file/folder nested inside an already-tracked
+    # directory (e.g. "TopDir/leaf.rar") must report that full relative name,
+    # not just its basename - ModelBuilder routes nested jobs to their matching
+    # child by checking for "/" in the reported name (model_builder.py), so a
+    # bare basename here silently misroutes every nested job as a spurious
+    # top-level entry.
+
+    def test_extract_name_falls_back_to_basename_when_base_not_set(self):
+        self.assertEqual("leaf.rar", self.parser._extract_name("/remote/path/TopDir/leaf.rar"))
+
+    def test_extract_name_preserves_nested_path_relative_to_base(self):
+        self.parser.set_base_remote_dir_path("/remote/path")
+        self.assertEqual("TopDir/leaf.rar", self.parser._extract_name("/remote/path/TopDir/leaf.rar"))
+
+    def test_extract_name_returns_bare_name_for_top_level_job(self):
+        self.parser.set_base_remote_dir_path("/remote/path")
+        self.assertEqual("leaf.rar", self.parser._extract_name("/remote/path/leaf.rar"))
+
+    def test_extract_name_falls_back_to_basename_when_base_does_not_match(self):
+        """Defensive fallback: an echoed path that doesn't share the configured
+        base (e.g. base not yet applied to this connection) still returns
+        something usable rather than raising."""
+        self.parser.set_base_remote_dir_path("/other/base")
+        self.assertEqual("leaf.rar", self.parser._extract_name("/remote/path/TopDir/leaf.rar"))
+
+    def test_parse_pget_header_block_preserves_nested_name(self):
+        self.parser.set_base_remote_dir_path("/tmp/test_lftp/remote")
+        line = "[1] pget -c /tmp/test_lftp/remote/TopDir/leaf.rar -o /tmp/test_lftp/local/"
+        lines = ["sftp://someone:@localhost/home/someone"]
+        result = jsp._RE_PGET_HEADER.search(line)
+        status = self.parser._parse_pget_header_block(result, lines)
+        self.assertEqual("TopDir/leaf.rar", status.name)
+
+    def test_parse_mirror_header_preserves_nested_name(self):
+        self.parser.set_base_remote_dir_path("/remote/path")
+        line = "[1] mirror -c /remote/path/TopDir/Sub /local/path/ -- 500M/1G (50%) 10M/s"
+        result = jsp._RE_MIRROR_HEADER.search(line)
+        status = self.parser._parse_mirror_header(result)
+        self.assertEqual("TopDir/Sub", status.name)
+
+    def test_parse_queue_preserves_nested_name(self):
+        output = """
+        [0] queue (sftp://someone:@localhost)
+        sftp://someone:@localhost/home/someone
+        Queue is stopped.
+        Commands queued:
+         1. pget -c /tmp/test_lftp/remote/TopDir/leaf.rar -o /tmp/test_lftp/local/
+        """
+        parser = LftpJobStatusParser()
+        parser.set_base_remote_dir_path("/tmp/test_lftp/remote")
+        statuses = parser.parse(output)
+        self.assertEqual(1, len(statuses))
+        self.assertEqual("TopDir/leaf.rar", statuses[0].name)
 
     # --- _parse_filename_chunk ------------------------------------------------
 
