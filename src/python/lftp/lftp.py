@@ -261,6 +261,7 @@ class Lftp:
 
     def set_base_remote_dir_path(self, base_remote_dir_path: str):
         self.__base_remote_dir_path = base_remote_dir_path
+        self.__job_status_parser.set_base_remote_dir_path(base_remote_dir_path)
 
     def set_base_local_dir_path(self, base_local_dir_path: str):
         self.__base_local_dir_path = base_local_dir_path
@@ -615,6 +616,19 @@ class Lftp:
         if is_dir and exclude_patterns:
             exclude_flags = " ".join(f'--exclude-glob "{escape(p)}"' for p in exclude_patterns)
 
+        # `name` may be a nested relative path (e.g. "TopDir/leaf.rar") when
+        # queuing an item inside a folder independently of its parent (nested
+        # navigation). Both pget's `-o dir/` and mirror's target dir key off
+        # only the LAST path component of the source - the destination
+        # directory itself was never derived from name's parent, so a nested
+        # item landed directly under the pair's flat local root instead of
+        # mirroring the remote nesting (#671). Reproduce the nested parent
+        # directory locally; pget (unlike mirror) doesn't create it itself.
+        rel_dir = os.path.dirname(name)
+        dest_dir = os.path.join(self.__base_local_dir_path, rel_dir) if rel_dir else self.__base_local_dir_path
+        if rel_dir:
+            os.makedirs(dest_dir, exist_ok=True)
+
         parts = [
             "queue",
             "'",
@@ -627,7 +641,7 @@ class Lftp:
             [
                 f'"{escape(self.__base_remote_dir_path)}/{escape(name)}"',
                 "-o" if not is_dir else "",
-                f'"{escape(self.__base_local_dir_path)}/"',
+                f'"{escape(dest_dir)}/"',
                 "'",
             ]
         )

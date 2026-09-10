@@ -82,3 +82,65 @@ class TestLftpQueueCommand(unittest.TestCase):
         remote_pos = cmd.index("/remote/path/mydir")
         self.assertLess(c_pos, exclude_pos)
         self.assertLess(exclude_pos, remote_pos)
+
+    def test_queue_nested_file_destination_reproduces_parent_dir(self):
+        """A nested pget target must include the source's parent dir, or the
+        file lands flat under the pair root instead of mirroring the remote
+        nesting (#671)."""
+        lftp = self._make_lftp()
+        with patch("lftp.lftp.os.makedirs") as mock_makedirs:
+            lftp.queue("TopDir/leaf.rar", False)
+        cmd = lftp._Lftp__run_command.call_args[0][0]
+        self.assertIn('-o "/local/path/TopDir/"', cmd)
+        mock_makedirs.assert_called_once_with("/local/path/TopDir", exist_ok=True)
+
+    def test_queue_nested_dir_destination_reproduces_parent_dir(self):
+        lftp = self._make_lftp()
+        with patch("lftp.lftp.os.makedirs") as mock_makedirs:
+            lftp.queue("TopDir/SubDir", True)
+        cmd = lftp._Lftp__run_command.call_args[0][0]
+        self.assertIn('"/local/path/TopDir/"', cmd)
+        mock_makedirs.assert_called_once_with("/local/path/TopDir", exist_ok=True)
+
+    def test_queue_deeply_nested_file_reproduces_full_parent_path(self):
+        lftp = self._make_lftp()
+        with patch("lftp.lftp.os.makedirs") as mock_makedirs:
+            lftp.queue("A/B/C/leaf.rar", False)
+        cmd = lftp._Lftp__run_command.call_args[0][0]
+        self.assertIn('-o "/local/path/A/B/C/"', cmd)
+        mock_makedirs.assert_called_once_with("/local/path/A/B/C", exist_ok=True)
+
+    def test_queue_top_level_file_does_not_create_any_directory(self):
+        """Top-level (non-nested) jobs must keep today's behavior exactly -
+        no makedirs call, destination stays the bare pair local root."""
+        lftp = self._make_lftp()
+        with patch("lftp.lftp.os.makedirs") as mock_makedirs:
+            lftp.queue("myfile.mkv", False)
+        cmd = lftp._Lftp__run_command.call_args[0][0]
+        self.assertIn('-o "/local/path/"', cmd)
+        mock_makedirs.assert_not_called()
+
+    def test_queue_top_level_dir_does_not_create_any_directory(self):
+        lftp = self._make_lftp()
+        with patch("lftp.lftp.os.makedirs") as mock_makedirs:
+            lftp.queue("mydir", True)
+        mock_makedirs.assert_not_called()
+
+
+class TestLftpSetBaseRemoteDirPath(unittest.TestCase):
+    """Lftp.set_base_remote_dir_path() must also forward to the job status
+    parser, so it can recover a nested job's name (relative to the remote
+    base dir) instead of just its basename - see job_status_parser.py."""
+
+    def test_forwards_to_job_status_parser(self):
+        from lftp import Lftp
+        from lftp.job_status_parser import LftpJobStatusParser
+
+        with patch.object(Lftp, "__init__", lambda self, **kwargs: None):
+            lftp = Lftp.__new__(Lftp)
+        lftp._Lftp__job_status_parser = LftpJobStatusParser()
+
+        lftp.set_base_remote_dir_path("/remote/path")
+
+        parser = lftp._Lftp__job_status_parser
+        self.assertEqual("TopDir/leaf.rar", parser._extract_name("/remote/path/TopDir/leaf.rar"))
