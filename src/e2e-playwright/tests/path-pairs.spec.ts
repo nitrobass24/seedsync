@@ -44,6 +44,7 @@ test.describe("Path Pairs", () => {
   });
 
   test("fill and save creates a pair via API", async ({ apiFetch }) => {
+    await pathPairs.verifyConnection();
     await pathPairs.addButton.click();
     await pathPairs.fillForm({
       name: "e2e-test-pair",
@@ -75,6 +76,7 @@ test.describe("Path Pairs", () => {
   });
 
   test("created pair appears in the list", async () => {
+    await pathPairs.verifyConnection();
     await pathPairs.addButton.click();
     await pathPairs.fillForm({
       name: "visible-pair",
@@ -108,6 +110,7 @@ test.describe("Path Pairs", () => {
     await pathPairs.getPairByName("dup-pair").waitFor({ timeout: 10_000 });
 
     // Try to add a pair with the same name
+    await pathPairs.verifyConnection();
     await pathPairs.addButton.click();
     await pathPairs.fillForm({
       name: "dup-pair",
@@ -145,8 +148,8 @@ test.describe("Path Pairs", () => {
     // Verify the form contains the existing values
     const formEl = form.first();
     await expect(formEl.locator('label:has-text("Name") input')).toHaveValue("edit-me");
-    await expect(formEl.locator('label:has-text("Remote Path") input')).toHaveValue("/remote/edit");
-    await expect(formEl.locator('label:has-text("Local Path") input')).toHaveValue("/local/edit");
+    await expect(formEl.locator('#pair-remote-path')).toHaveValue("/remote/edit");
+    await expect(formEl.locator('#pair-local-path')).toHaveValue("/local/edit");
   });
 
   test("edit and save updates the pair via API", async ({ apiFetch }) => {
@@ -163,6 +166,7 @@ test.describe("Path Pairs", () => {
     });
 
     await pathPairs.goto();
+    await pathPairs.verifyConnection();
 
     const row = pathPairs.getPairByName("update-me");
     await row.waitFor({ timeout: 10_000 });

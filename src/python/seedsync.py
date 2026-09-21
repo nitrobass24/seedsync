@@ -233,10 +233,20 @@ class Seedsync:
                     prev_persist_timestamp = now
                     self._persist_periodic()
 
-                # Propagate exceptions from child threads
-                # Any exception here exits the main loop for clean shutdown
+                # Propagate exceptions from child threads.
+                # webapp_job exceptions still exit the main loop for a clean
+                # shutdown. A controller_job exception (e.g. a bad password)
+                # is handled locally instead: raising it here would tear down
+                # webapp_job too and exit the process, which just crash-loops
+                # the container on every restart attempt without ever letting
+                # the user reach Settings to fix the config.
                 webapp_job.propagate_exception()
-                controller_job.propagate_exception()
+                if do_start_controller:
+                    try:
+                        controller_job.propagate_exception()
+                    except Exception as e:
+                        self._stop_controller_after_fatal_error(controller_job, e)
+                        do_start_controller = False
 
                 # Check if a restart is requested
                 if web_app_builder.server_handler.is_restart_requested():
@@ -276,6 +286,23 @@ class Seedsync:
             # Note: ServiceRestart and ServiceExit will be caught and handled
             #       by outer code
             raise
+
+    def _stop_controller_after_fatal_error(self, controller_job: ControllerJob, e: BaseException) -> None:
+        """Stop just the controller after a fatal error from controller_job,
+        leaving the web app running. Mirrors the "config incomplete" state
+        set up before the loop starts: status.server.up/error_msg surface the
+        error in the UI, and the controller only restarts via an explicit
+        restart request (same as any other change requiring one), not
+        automatically. controller_job's own thread has already run its
+        cleanup (see Job.run()/ControllerJob.cleanup(), which calls
+        Controller.exit()) by the time propagate_exception() has something to
+        raise, so terminate()/join() here just formally reap it.
+        """
+        self.context.logger.exception("Controller stopped due to a fatal error; web app remains available")
+        controller_job.terminate()
+        controller_job.join()
+        self.context.status.server.up = False
+        self.context.status.server.error_msg = str(e)
 
     def persist(self):
         # Save the persists
