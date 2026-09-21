@@ -12,7 +12,7 @@
     "@docusaurus/preset-classic": "3.10.2",
     "@mdx-js/react": "^3.0.0",
     "prism-react-renderer": "^2.3.0",
-    "react": "^19.2.7",
+    "react": "^19.3.0",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
