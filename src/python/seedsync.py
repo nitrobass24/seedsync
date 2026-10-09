@@ -41,6 +41,7 @@ from controller import AutoQueue, AutoQueuePersist, Controller, ControllerJob, C
 from controller.arr_notifier import ArrNotifier
 from controller.notifier import WebhookNotifier
 from web import WebAppBuilder, WebAppJob
+from web.lftp_ssh import is_credential_error
 
 T_Persist = TypeVar("T_Persist", bound=Persist)
 
@@ -235,17 +236,14 @@ class Seedsync:
 
                 # Propagate exceptions from child threads.
                 # webapp_job exceptions still exit the main loop for a clean
-                # shutdown. A controller_job exception (e.g. a bad password)
-                # is handled locally instead: raising it here would tear down
-                # webapp_job too and exit the process, which just crash-loops
-                # the container on every restart attempt without ever letting
-                # the user reach Settings to fix the config.
+                # shutdown. A controller_job credential error is handled
+                # locally instead (see _handle_controller_failure).
                 webapp_job.propagate_exception()
                 if do_start_controller:
                     try:
                         controller_job.propagate_exception()
                     except Exception as e:
-                        self._stop_controller_after_fatal_error(controller_job, e)
+                        self._handle_controller_failure(controller_job, e)
                         do_start_controller = False
 
                 # Check if a restart is requested
@@ -287,9 +285,18 @@ class Seedsync:
             #       by outer code
             raise
 
-    def _stop_controller_after_fatal_error(self, controller_job: ControllerJob, e: BaseException) -> None:
-        """Stop just the controller after a fatal error from controller_job,
-        leaving the web app running. Mirrors the "config incomplete" state
+    def _handle_controller_failure(self, controller_job: ControllerJob, e: Exception) -> None:
+        """Handle an exception propagated from controller_job.
+
+        Re-raises (exiting the process, so Docker's restart policy retries) for
+        everything except an SSH credential error: ServiceExit/ServiceRestart
+        raised by a signal mid-check, --exit, and errors that can heal on their
+        own (e.g. a flapping local mount). A bad password never heals, and
+        exiting would just crash-loop the container without ever letting the
+        user reach Settings to fix it.
+
+        For a credential error, stop just the controller and leave the web app
+        running. Mirrors the "config incomplete" state
         set up before the loop starts: status.server.up/error_msg surface the
         error in the UI, and the controller only restarts via an explicit
         restart request (same as any other change requiring one), not
@@ -298,7 +305,9 @@ class Seedsync:
         Controller.exit()) by the time propagate_exception() has something to
         raise, so terminate()/join() here just formally reap it.
         """
-        self.context.logger.exception("Controller stopped due to a fatal error; web app remains available")
+        if isinstance(e, (ServiceExit, ServiceRestart)) or self.context.args.exit or not is_credential_error(str(e)):
+            raise e
+        self.context.logger.exception("Controller stopped due to a credential error; web app remains available")
         controller_job.terminate()
         controller_job.join()
         self.context.status.server.up = False

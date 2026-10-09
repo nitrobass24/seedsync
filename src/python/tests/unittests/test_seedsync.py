@@ -454,23 +454,25 @@ class TestPersistResilience(unittest.TestCase):
         self.assertIsInstance(ServiceRestart(), Exception)
 
 
-class TestStopControllerAfterFatalError(unittest.TestCase):
-    """Tests for _stop_controller_after_fatal_error(): a fatal controller_job
-    error (e.g. bad credentials) must stop only the controller, not the whole
-    app -- taking the whole process down just crash-loops the container on
-    every restart attempt instead of letting the user fix the config.
+class TestHandleControllerFailure(unittest.TestCase):
+    """Tests for _handle_controller_failure(): an SSH credential error from
+    controller_job must stop only the controller, not the whole app -- taking
+    the whole process down just crash-loops the container on every restart
+    attempt instead of letting the user fix the config. Everything else
+    re-raises so the process exits as before.
     """
 
-    def _make_bare_seedsync(self):
+    def _make_bare_seedsync(self, exit_on_error=False):
         s = Seedsync.__new__(Seedsync)
         s.context = MagicMock()
+        s.context.args.exit = exit_on_error
         return s
 
     def test_stops_and_joins_the_controller_job(self):
         s = self._make_bare_seedsync()
         controller_job = MagicMock()
 
-        s._stop_controller_after_fatal_error(controller_job, RuntimeError("bad password"))
+        s._handle_controller_failure(controller_job, RuntimeError("Incorrect password"))
 
         controller_job.terminate.assert_called_once()
         controller_job.join.assert_called_once()
@@ -478,7 +480,7 @@ class TestStopControllerAfterFatalError(unittest.TestCase):
     def test_logs_loudly_so_the_failure_stays_visible(self):
         s = self._make_bare_seedsync()
 
-        s._stop_controller_after_fatal_error(MagicMock(), RuntimeError("bad password"))
+        s._handle_controller_failure(MagicMock(), RuntimeError("Permission denied (publickey,password)"))
 
         s.context.logger.exception.assert_called_once()
 
@@ -488,7 +490,32 @@ class TestStopControllerAfterFatalError(unittest.TestCase):
         visible on Settings without any new UI plumbing."""
         s = self._make_bare_seedsync()
 
-        s._stop_controller_after_fatal_error(MagicMock(), RuntimeError("Incorrect password"))
+        s._handle_controller_failure(MagicMock(), RuntimeError("Incorrect password"))
 
         self.assertFalse(s.context.status.server.up)
         self.assertEqual("Incorrect password", s.context.status.server.error_msg)
+
+    def test_non_credential_error_is_reraised(self):
+        """Errors that can heal on their own (e.g. a flapping local mount)
+        keep exiting so Docker's restart policy retries them."""
+        s = self._make_bare_seedsync()
+        controller_job = MagicMock()
+
+        with self.assertRaises(RuntimeError):
+            s._handle_controller_failure(controller_job, RuntimeError("Failed to scan local directory"))
+
+        controller_job.terminate.assert_not_called()
+
+    def test_service_exit_and_restart_are_reraised(self):
+        """A signal can raise these asynchronously while the main loop is
+        inside propagate_exception(); they must still shut the process down."""
+        s = self._make_bare_seedsync()
+        for exc in (ServiceExit(), ServiceRestart()):
+            with self.subTest(exc=type(exc).__name__), self.assertRaises(type(exc)):
+                s._handle_controller_failure(MagicMock(), exc)
+
+    def test_exit_flag_reraises_credential_error(self):
+        s = self._make_bare_seedsync(exit_on_error=True)
+
+        with self.assertRaises(RuntimeError):
+            s._handle_controller_failure(MagicMock(), RuntimeError("Incorrect password"))
