@@ -4,7 +4,7 @@ import json
 import os
 import posixpath
 import shlex
-from typing import override
+from typing import cast, override
 
 from bottle import HTTPResponse, request
 
@@ -30,7 +30,7 @@ class BrowseHandler(IHandler):
         web_app.add_handler("/server/browse/remote", self.__handle_browse_remote)
 
     def __handle_browse_local(self):
-        path = os.path.abspath(request.query.getunicode("path") or "/")
+        path = os.path.abspath(self.__query_path() or "/")
         if not os.path.isdir(path):
             return self.__error(f"Not a directory: {path}", 400)
         try:
@@ -49,7 +49,7 @@ class BrowseHandler(IHandler):
         missing = lftp_ssh.missing_connection_fields(lftp)
         if missing:
             return self.__error(f"Missing required setting(s): {', '.join(missing)}", 400)
-        path = request.query.getunicode("path") or lftp.remote_path or "/"
+        path = self.__query_path() or lftp.remote_path or "/"
         ssh = lftp_ssh.build_sshcp(lftp)
         try:
             raw = ssh.shell(f"ls -1pL -- {self.__quote_remote_path(path)}")
@@ -60,6 +60,11 @@ class BrowseHandler(IHandler):
         normalized = path.rstrip("/") or "/"
         parent = (posixpath.dirname(normalized) or None) if normalized != "/" else None
         return self.__ok(normalized, parent, directories)
+
+    @staticmethod
+    def __query_path() -> str | None:
+        # getunicode re-decodes Bottle's latin-1 WSGI string as UTF-8; bottle is untyped.
+        return cast(str | None, request.query.getunicode("path"))  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
 
     @staticmethod
     def __quote_remote_path(path: str) -> str:
