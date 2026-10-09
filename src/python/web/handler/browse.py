@@ -30,7 +30,7 @@ class BrowseHandler(IHandler):
         web_app.add_handler("/server/browse/remote", self.__handle_browse_remote)
 
     def __handle_browse_local(self):
-        path = os.path.abspath(request.query.get("path") or "/")
+        path = os.path.abspath(request.query.getunicode("path") or "/")
         if not os.path.isdir(path):
             return self.__error(f"Not a directory: {path}", 400)
         try:
@@ -49,17 +49,26 @@ class BrowseHandler(IHandler):
         missing = lftp_ssh.missing_connection_fields(lftp)
         if missing:
             return self.__error(f"Missing required setting(s): {', '.join(missing)}", 400)
-        path = request.query.get("path") or lftp.remote_path or "/"
+        path = request.query.getunicode("path") or lftp.remote_path or "/"
         ssh = lftp_ssh.build_sshcp(lftp)
         try:
-            raw = ssh.shell(f"ls -1p -- {shlex.quote(path)}")
+            raw = ssh.shell(f"ls -1pL -- {self.__quote_remote_path(path)}")
         except SshcpError as e:
             return self.__error(str(e), 502)
         entries = raw.decode(errors="replace").splitlines()
         directories = sorted((entry[:-1] for entry in entries if entry.endswith("/")), key=str.lower)
         normalized = path.rstrip("/") or "/"
-        parent = posixpath.dirname(normalized) if normalized != "/" else None
+        parent = (posixpath.dirname(normalized) or None) if normalized != "/" else None
         return self.__ok(normalized, parent, directories)
+
+    @staticmethod
+    def __quote_remote_path(path: str) -> str:
+        # A leading ~ must stay outside the quotes for the remote shell to expand it.
+        if path == "~":
+            return '"$HOME"'
+        if path.startswith("~/"):
+            return '"$HOME"' + shlex.quote(path[1:])
+        return shlex.quote(path)
 
     @staticmethod
     def __ok(path: str, parent: str | None, directories: list[str]) -> HTTPResponse:
