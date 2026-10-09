@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, DestroyRef, inject, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, DestroyRef, OnDestroy, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { AsyncPipe, NgTemplateOutlet } from '@angular/common';
@@ -7,25 +7,34 @@ import { catchError } from 'rxjs/operators';
 
 import { PathPairsService } from '../../services/settings/path-pairs.service';
 import { IntegrationsService } from '../../services/settings/integrations.service';
+import { ConnectionStatusService } from '../../services/settings/connection-status.service';
 import { PathPair } from '../../models/path-pair';
 import { DoubleClickConfirm } from '../../common/double-click-confirm';
 import { ArrInstance } from '../../models/arr-instance';
+import { DirectoryPickerComponent, DirectoryBrowseKind } from './directory-picker.component';
+
+type PathPairPathField = 'remote_path' | 'local_path';
 
 @Component({
   selector: 'app-path-pairs',
   standalone: true,
-  imports: [FormsModule, AsyncPipe, NgTemplateOutlet],
+  imports: [FormsModule, AsyncPipe, NgTemplateOutlet, DirectoryPickerComponent],
   templateUrl: './path-pairs.component.html',
   styleUrls: ['./path-pairs.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PathPairsComponent implements OnDestroy {
+export class PathPairsComponent implements OnInit, OnDestroy {
   private readonly pathPairsService = inject(PathPairsService);
   private readonly integrationsService = inject(IntegrationsService);
+  private readonly connectionStatusService = inject(ConnectionStatusService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly destroyRef = inject(DestroyRef);
   readonly pairs$ = this.pathPairsService.pairs$;
   readonly instances$ = this.integrationsService.instances$;
+
+  // True once the Server section's connection has been verified. Gates
+  // remote_path the same way the top-level Server Directory field is gated.
+  connectionVerified = false;
 
   // Tracks which pair currently has the *arr-picker open. Empty when closed.
   arrPickerPairId: string | null = null;
@@ -48,8 +57,30 @@ export class PathPairsComponent implements OnDestroy {
     return this.deleteConfirm.confirming;
   }
 
+  // Directory picker state: which form/field a Browse click is targeting.
+  // Null when the picker is closed.
+  directoryPickerTarget: Omit<PathPair, 'id'> | null = null;
+  directoryPickerField: PathPairPathField = 'local_path';
+  directoryPickerKind: DirectoryBrowseKind = 'local';
+  directoryPickerInitialPath = '/';
+
+  ngOnInit(): void {
+    this.connectionStatusService.verified$.pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((verified) => {
+      this.connectionVerified = verified;
+      this.cdr.markForCheck();
+    });
+  }
+
   ngOnDestroy(): void {
     this.deleteConfirm.clearTimer();
+  }
+
+  /** The remote_path field needs the same working-connection gate as the
+   * Server section's Server Directory field; local_path never needs SSH. */
+  isRemotePathLocked(field: PathPairPathField): boolean {
+    return field === 'remote_path' && !this.connectionVerified;
   }
 
   // --- Add ---
@@ -69,6 +100,7 @@ export class PathPairsComponent implements OnDestroy {
 
   onSaveAdd(): void {
     if (!this.addForm.name.trim()) return;
+    const formAtSave = this.addForm;
     this.errorMessage = null;
     this.pathPairsService.create(this.addForm).pipe(
       catchError(() => {
@@ -85,6 +117,12 @@ export class PathPairsComponent implements OnDestroy {
       }
       this.adding = false;
       this.addForm = this.emptyForm();
+      // The directory picker (open behind a click-blocking backdrop) can
+      // still be pointed at the old form if it was opened after Save fired
+      // but before this async response arrived.
+      if (this.directoryPickerTarget === formAtSave) {
+        this.directoryPickerTarget = null;
+      }
       this.cdr.markForCheck();
     });
   }
@@ -113,6 +151,7 @@ export class PathPairsComponent implements OnDestroy {
 
   onSaveEdit(): void {
     if (!this.editingId || !this.editForm.name.trim()) return;
+    const formAtSave = this.editForm;
     this.errorMessage = null;
     this.pathPairsService.update({ id: this.editingId, ...this.editForm }).pipe(
       catchError(() => {
@@ -129,6 +168,11 @@ export class PathPairsComponent implements OnDestroy {
       }
       this.editingId = null;
       this.editForm = this.emptyForm();
+      // See onSaveAdd: the picker can still target the old form if it was
+      // opened after Save fired but before this async response arrived.
+      if (this.directoryPickerTarget === formAtSave) {
+        this.directoryPickerTarget = null;
+      }
       this.cdr.markForCheck();
     });
   }
@@ -247,6 +291,29 @@ export class PathPairsComponent implements OnDestroy {
         this.cdr.markForCheck();
       },
     });
+  }
+
+  // --- Directory picker ---
+
+  onBrowsePairPath(form: Omit<PathPair, 'id'>, field: PathPairPathField): void {
+    this.directoryPickerTarget = form;
+    this.directoryPickerField = field;
+    this.directoryPickerKind = field === 'remote_path' ? 'remote' : 'local';
+    this.directoryPickerInitialPath = form[field] || '/';
+    this.cdr.markForCheck();
+  }
+
+  onDirectorySelected(path: string): void {
+    if (this.directoryPickerTarget) {
+      this.directoryPickerTarget[this.directoryPickerField] = path;
+    }
+    this.directoryPickerTarget = null;
+    this.cdr.markForCheck();
+  }
+
+  onDirectoryPickerCancel(): void {
+    this.directoryPickerTarget = null;
+    this.cdr.markForCheck();
   }
 
   // --- Helpers ---

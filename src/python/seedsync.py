@@ -41,6 +41,7 @@ from controller import AutoQueue, AutoQueuePersist, Controller, ControllerJob, C
 from controller.arr_notifier import ArrNotifier
 from controller.notifier import WebhookNotifier
 from web import WebAppBuilder, WebAppJob
+from web.lftp_ssh import is_credential_error
 
 T_Persist = TypeVar("T_Persist", bound=Persist)
 
@@ -233,10 +234,17 @@ class Seedsync:
                     prev_persist_timestamp = now
                     self._persist_periodic()
 
-                # Propagate exceptions from child threads
-                # Any exception here exits the main loop for clean shutdown
+                # Propagate exceptions from child threads.
+                # webapp_job exceptions still exit the main loop for a clean
+                # shutdown. A controller_job credential error is handled
+                # locally instead (see _handle_controller_failure).
                 webapp_job.propagate_exception()
-                controller_job.propagate_exception()
+                if do_start_controller:
+                    try:
+                        controller_job.propagate_exception()
+                    except Exception as e:
+                        self._handle_controller_failure(controller_job, e)
+                        do_start_controller = False
 
                 # Check if a restart is requested
                 if web_app_builder.server_handler.is_restart_requested():
@@ -276,6 +284,34 @@ class Seedsync:
             # Note: ServiceRestart and ServiceExit will be caught and handled
             #       by outer code
             raise
+
+    def _handle_controller_failure(self, controller_job: ControllerJob, e: Exception) -> None:
+        """Handle an exception propagated from controller_job.
+
+        Re-raises (exiting the process, so Docker's restart policy retries) for
+        everything except an SSH credential error: ServiceExit/ServiceRestart
+        raised by a signal mid-check, --exit, and errors that can heal on their
+        own (e.g. a flapping local mount). A bad password never heals, and
+        exiting would just crash-loop the container without ever letting the
+        user reach Settings to fix it.
+
+        For a credential error, stop just the controller and leave the web app
+        running. Mirrors the "config incomplete" state
+        set up before the loop starts: status.server.up/error_msg surface the
+        error in the UI, and the controller only restarts via an explicit
+        restart request (same as any other change requiring one), not
+        automatically. controller_job's own thread has already run its
+        cleanup (see Job.run()/ControllerJob.cleanup(), which calls
+        Controller.exit()) by the time propagate_exception() has something to
+        raise, so terminate()/join() here just formally reap it.
+        """
+        if isinstance(e, (ServiceExit, ServiceRestart)) or self.context.args.exit or not is_credential_error(str(e)):
+            raise e
+        self.context.logger.exception("Controller stopped due to a credential error; web app remains available")
+        controller_job.terminate()
+        controller_job.join()
+        self.context.status.server.up = False
+        self.context.status.server.error_msg = str(e)
 
     def persist(self):
         # Save the persists

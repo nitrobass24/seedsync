@@ -1,0 +1,89 @@
+.directory-picker-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: var(--ss-overlay, rgba(0, 0, 0, 0.5));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
+}
+
+.directory-picker {
+    background-color: var(--ss-confirmation-bg, var(--ss-bg-surface, #fff));
+    border-radius: 6px;
+    padding: 16px;
+    width: 90%;
+    max-width: 480px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.directory-picker-header {
+    margin: 0 0 8px;
+    font-size: 90%;
+}
+
+.directory-picker-path {
+    font-family: monospace;
+    font-size: 85%;
+    padding: 6px 8px;
+    background-color: var(--ss-primary-lighter, #f6f6f6);
+    border-radius: 4px;
+    margin-bottom: 8px;
+    word-break: break-all;
+}
+
+.directory-picker-error {
+    color: var(--ss-option-error-text, #a94442);
+    font-size: 85%;
+    margin-bottom: 8px;
+}
+
+.directory-picker-list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    border: 1px solid var(--ss-border, #ddd);
+    border-radius: 4px;
+    min-height: 120px;
+    margin-bottom: 12px;
+}
+
+.directory-picker-entry {
+    display: block;
+    width: 100%;
+    text-align: start;
+    padding: 6px 10px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--ss-border, #ddd);
+    cursor: pointer;
+    font-size: 90%;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &:hover {
+        background-color: var(--ss-surface-hover, var(--ss-primary-lighter, #f6f6f6));
+    }
+}
+
+.directory-picker-up {
+    font-weight: bold;
+}
+
+.directory-picker-loading,
+.directory-picker-empty {
+    padding: 12px;
+    text-align: center;
+    color: var(--ss-text-description, darkgrey);
+    font-size: 85%;
+}
+
+.directory-picker-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}

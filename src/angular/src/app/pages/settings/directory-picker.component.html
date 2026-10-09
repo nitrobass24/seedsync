@@ -1,0 +1,36 @@
+<div class="directory-picker-backdrop">
+  <div class="directory-picker" role="dialog" aria-modal="true" aria-label="Choose directory">
+    <h4 class="directory-picker-header">
+      {{ kind() === 'local' ? 'Choose Local Directory' : 'Choose Server Directory' }}
+    </h4>
+    <div class="directory-picker-path">{{ currentPath }}</div>
+    @if (errorMessage) {
+      <div class="directory-picker-error">{{ errorMessage }}</div>
+    }
+    <div class="directory-picker-list">
+      @if (loading) {
+        <div class="directory-picker-loading">Loading…</div>
+      } @else {
+        @if (parentPath !== null) {
+          <button type="button" class="directory-picker-entry directory-picker-up" (click)="onGoUp()">
+            .. (up)
+          </button>
+        }
+        @for (dir of directories; track dir) {
+          <button type="button" class="directory-picker-entry" (click)="onEnterDirectory(dir)">
+            {{ dir }}
+          </button>
+        }
+        @if (directories.length === 0 && !errorMessage) {
+          <div class="directory-picker-empty">No subdirectories</div>
+        }
+      }
+    </div>
+    <div class="directory-picker-actions">
+      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="onCancel()">Cancel</button>
+      <button type="button" class="btn btn-sm btn-primary" [disabled]="loading" (click)="onSelect()">
+        Select This Folder
+      </button>
+    </div>
+  </div>
+</div>

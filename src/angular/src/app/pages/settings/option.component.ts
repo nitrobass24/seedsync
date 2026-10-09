@@ -8,6 +8,7 @@ export enum OptionType {
   Checkbox,
   Password,
   Select,
+  Directory,
 }
 
 /** Value emitted by OptionComponent — matches the possible config value types. */
@@ -19,6 +20,8 @@ export type OptionValue = string | number | boolean | null;
  */
 export const DEBOUNCE_TIME_MS = 1000;
 
+let nextDirectoryInputId = 0;
+
 @Component({
   selector: 'app-option',
   standalone: true,
@@ -28,14 +31,21 @@ export const DEBOUNCE_TIME_MS = 1000;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OptionComponent implements OnInit, OnDestroy {
+  /** Unique id linking the Directory case's label to its input via for/id,
+   * since a label can't contain both the input and the Browse button. */
+  readonly directoryInputId = `option-directory-${nextDirectoryInputId++}`;
+
   readonly type = input<OptionType>(OptionType.Text);
   readonly label = input<string>('');
   readonly value = input<OptionValue>(null);
   readonly description = input<string | null>(null);
   readonly disabled = input<boolean>(false);
+  /** Disables only the Browse button, leaving the text input editable. */
+  readonly browseDisabled = input<boolean>(false);
   readonly choices = input<string[]>([]);
 
   readonly changeEvent = output<OptionValue>();
+  readonly browseRequested = output<void>();
 
   readonly OptionType = OptionType;
 
@@ -70,5 +80,9 @@ export class OptionComponent implements OnInit, OnDestroy {
       return;
     }
     this.newValue.next(value);
+  }
+
+  onBrowseClick(): void {
+    this.browseRequested.emit();
   }
 }
