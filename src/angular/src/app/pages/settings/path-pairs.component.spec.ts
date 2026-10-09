@@ -461,6 +461,25 @@ describe('PathPairsComponent subscribes to ConnectionStatusService (real compone
     expect(component.connectionVerified).toBe(true);
     expect(component.isRemotePathLocked('remote_path')).toBe(false);
   });
+
+  it('keeps the Remote Path input editable while only Browse is locked', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: PathPairsService, useValue: { pairs$: of([]) } },
+        { provide: IntegrationsService, useValue: { instances$: of([]) } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PathPairsComponent);
+    fixture.componentInstance.adding = true;
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const input = fixture.nativeElement.querySelector('#pair-remote-path') as HTMLInputElement;
+    const browse = input.closest('.field-with-browse')!.querySelector('button') as HTMLButtonElement;
+    expect(input.disabled).toBe(false);
+    expect(browse.disabled).toBe(true);
+  });
 });
 
 describe('PathPairsComponent directory picker (real component)', () => {

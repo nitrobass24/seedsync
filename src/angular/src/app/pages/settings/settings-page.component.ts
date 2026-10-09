@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AsyncPipe, NgTemplateOutlet, TitleCasePipe } from '@angular/common';
-import { distinctUntilChanged, filter, map, take } from 'rxjs';
+import { combineLatest, distinctUntilChanged, filter, map, take } from 'rxjs';
 
 import { LoggerService } from '../../services/utils/logger.service';
 import { ConfigService } from '../../services/settings/config.service';
@@ -114,7 +114,12 @@ export class SettingsPageComponent implements OnInit {
    * Blocks further Test Connection attempts (repeated failed auth attempts
    * risk a fail2ban-style ban on the remote server) until the connection
    * settings change or the Restart button is clicked. */
-  connectionLockedOut = false;
+  get connectionLockedOut(): boolean {
+    return this.connectionStatusService.lockedOut;
+  }
+  set connectionLockedOut(lockedOut: boolean) {
+    this.connectionStatusService.lockedOut = lockedOut;
+  }
 
   directoryPickerOption: IOption | null = null;
   directoryPickerKind: DirectoryBrowseKind = 'local';
@@ -168,12 +173,15 @@ export class SettingsPageComponent implements OnInit {
     // If the connection already looks fully configured when the page loads,
     // silently verify it once so the Server Directory picker doesn't force a
     // manual "Test Connection" click every visit when the connection is
-    // already known to be good.
-    this.configService.config$.pipe(
-      filter((config): config is Config => config !== null),
+    // already known to be good. Waits for the backend to be connected too:
+    // config arrives over plain HTTP and usually beats the SSE stream.
+    combineLatest([
+      this.configService.config$.pipe(filter((config): config is Config => config !== null)),
+      this.connectedService.connected$.pipe(filter((connected) => connected)),
+    ]).pipe(
       take(1),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe((config) => {
+    ).subscribe(([config]) => {
       if (config.lftp?.remote_address && config.lftp?.remote_username && config.lftp?.remote_port) {
         this.onTestConnection({ silent: true });
       }
@@ -279,7 +287,8 @@ export class SettingsPageComponent implements OnInit {
 
   /** @param silent Used by the page-load probe: skip when the backend isn't
    * connected yet, and don't touch the manual test's UI state (button text,
-   * result banner, lockout) on the probe's behalf. */
+   * result banner) on the probe's behalf. A credential failure still locks
+   * out further attempts. */
   onTestConnection(options?: { silent?: boolean }): void {
     const silent = options?.silent === true;
     if (this.connectionLockedOut || (silent && !this.commandsEnabled)) {
@@ -297,7 +306,7 @@ export class SettingsPageComponent implements OnInit {
         this.connectionResult = result;
       }
       this.setConnectionVerified(result.success);
-      if (!silent && !result.success && result.credentialError) {
+      if (!result.success && result.credentialError) {
         this.connectionLockedOut = true;
       }
       this.cdr.markForCheck();

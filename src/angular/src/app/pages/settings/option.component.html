@@ -56,7 +56,7 @@
                  (ngModelChange)="onChange($event)" />
           <button type="button"
                   class="btn btn-sm btn-outline-secondary directory-browse-btn"
-                  [disabled]="disabled()"
+                  [disabled]="disabled() || browseDisabled()"
                   (click)="onBrowseClick()">
             Browse&hellip;
           </button>

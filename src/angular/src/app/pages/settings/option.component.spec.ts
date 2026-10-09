@@ -171,6 +171,16 @@ describe('OptionComponent — Directory type', () => {
     expect(button.disabled).toBe(true);
   });
 
+  it('browseDisabled disables only the Browse button, leaving the input editable', () => {
+    fixture.componentRef.setInput('browseDisabled', true);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('.directory-browse-btn') as HTMLButtonElement;
+    const input = fixture.nativeElement.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(button.disabled).toBe(true);
+    expect(input.disabled).toBe(false);
+  });
+
   it('renders the current value in the text input', () => {
     const input = fixture.nativeElement.querySelector('input[type="text"]') as HTMLInputElement;
     expect(input.value).toBe('/some/path');

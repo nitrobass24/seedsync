@@ -40,6 +40,8 @@ export class OptionComponent implements OnInit, OnDestroy {
   readonly value = input<OptionValue>(null);
   readonly description = input<string | null>(null);
   readonly disabled = input<boolean>(false);
+  /** Disables only the Browse button, leaving the text input editable. */
+  readonly browseDisabled = input<boolean>(false);
   readonly choices = input<string[]>([]);
 
   readonly changeEvent = output<OptionValue>();
