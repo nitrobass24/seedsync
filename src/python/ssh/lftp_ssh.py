@@ -1,7 +1,19 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import re
+
 from common import Config
 from ssh import Sshcp
+
+# Sshcp's own password-prompt error, then ssh's rejections: "Permission denied,
+# please try again." and "Permission denied (publickey,password)." -- the
+# parenthesised auth-method list tells these apart from lftp's
+# "Access failed: Permission denied (/some/file)".
+_CREDENTIAL_ERROR_RE = re.compile(
+    r"Incorrect password"
+    r"|Permission denied, please try again"
+    r"|Permission denied \((publickey|password|keyboard-interactive|hostbased|gssapi)"
+)
 
 
 def missing_connection_fields(lftp: "Config.Lftp") -> list[str]:
@@ -42,5 +54,10 @@ def is_credential_error(message: str) -> bool:
     network blip -- risks tripping fail2ban-style bans on the remote server,
     so callers use this to stop offering retries until the credentials
     actually change.
+
+    Matches only ssh's auth-failure strings: a bare "Permission denied" also
+    appears in lftp's "Access failed: Permission denied" for an unreadable
+    remote file and in local PermissionError messages, neither of which is a
+    credential problem.
     """
-    return "Incorrect password" in message or "Permission denied" in message
+    return _CREDENTIAL_ERROR_RE.search(message) is not None

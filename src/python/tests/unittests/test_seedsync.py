@@ -506,6 +506,17 @@ class TestHandleControllerFailure(unittest.TestCase):
 
         controller_job.terminate.assert_not_called()
 
+    def test_non_ssh_permission_denied_is_reraised(self):
+        """lftp's unreadable-remote-file error and a local PermissionError both
+        say "Permission denied" but are not credential errors."""
+        s = self._make_bare_seedsync()
+        for message in (
+            "mirror: Access failed: Permission denied (/remote/file)",
+            "[Errno 13] Permission denied: '/downloads/file'",
+        ):
+            with self.subTest(message=message), self.assertRaises(RuntimeError):
+                s._handle_controller_failure(MagicMock(), RuntimeError(message))
+
     def test_service_exit_and_restart_are_reraised(self):
         """A signal can raise these asynchronously while the main loop is
         inside propagate_exception(); they must still shut the process down."""
