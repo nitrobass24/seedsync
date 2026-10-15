@@ -23,7 +23,7 @@ describe('DirectoryPickerComponent', () => {
     browseRemote: ReturnType<typeof vi.fn>;
   };
 
-  function createComponent(kind: 'local' | 'remote', initialPath = '/downloads') {
+  function createFixture(kind: 'local' | 'remote', initialPath = '/downloads') {
     TestBed.configureTestingModule({
       providers: [{ provide: DirectoryBrowserService, useValue: mockBrowserService }],
     });
@@ -31,7 +31,11 @@ describe('DirectoryPickerComponent', () => {
     fixture.componentRef.setInput('kind', kind);
     fixture.componentRef.setInput('initialPath', initialPath);
     fixture.detectChanges();
-    return fixture.componentInstance;
+    return fixture;
+  }
+
+  function createComponent(kind: 'local' | 'remote', initialPath = '/downloads') {
+    return createFixture(kind, initialPath).componentInstance;
   }
 
   beforeEach(() => {
@@ -108,20 +112,51 @@ describe('DirectoryPickerComponent', () => {
     expect(cancelled).toBe(true);
   });
 
-  it('preserves the configured initial path when the first browse fails, so Select still returns it', () => {
-    mockBrowserService.browseLocal.mockReturnValue(
-      of({ success: false, path: null, parent: null, directories: [], errorMessage: 'Permission denied' }),
+  function failure(errorMessage: string): BrowseResult {
+    return { success: false, path: null, parent: null, directories: [], errorMessage };
+  }
+
+  it('falls back to the nearest listable ancestor when the initial path fails, keeping the error', () => {
+    mockBrowserService.browseRemote.mockImplementation((path: string) =>
+      of(
+        path === '/downloads'
+          ? result({ path: '/downloads', parent: '/', directories: ['other'] })
+          : failure('No such file or directory'),
+      ),
     );
-    const component = createComponent('local', '/configured/path');
+    const component = createComponent('remote', '/downloads/renamed/deeper');
 
-    expect(component.currentPath).toBe('/configured/path');
-    expect(component.errorMessage).toBe('Permission denied');
+    expect(mockBrowserService.browseRemote.mock.calls.map((c) => c[0])).toEqual([
+      '/downloads/renamed/deeper',
+      '/downloads/renamed',
+      '/downloads',
+    ]);
+    expect(component.currentPath).toBe('/downloads');
+    expect(component.parentPath).toBe('/');
+    expect(component.directories).toEqual(['other']);
+    expect(component.errorMessage).toBe('No such file or directory');
+  });
 
-    let selected: string | undefined;
-    component.pathSelected.subscribe((path) => (selected = path));
-    component.onSelect();
+  it('stops at "/" and disables Select when nothing lists', () => {
+    mockBrowserService.browseRemote.mockReturnValue(of(failure('Connection refused')));
+    const fixture = createFixture('remote', '~/gone');
 
-    expect(selected).toBe('/configured/path');
+    expect(mockBrowserService.browseRemote.mock.calls.map((c) => c[0])).toEqual(['~/gone', '~', '/']);
+    expect(fixture.componentInstance.errorMessage).toBe('Connection refused');
+    const select = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(
+      (b) => b.textContent?.includes('Select This Folder'),
+    );
+    expect(select?.disabled).toBe(true);
+  });
+
+  it('does not walk up when a later navigation fails', () => {
+    const component = createComponent('local', '/downloads');
+    mockBrowserService.browseLocal.mockClear();
+    mockBrowserService.browseLocal.mockReturnValue(of(failure('Permission denied')));
+
+    component.onEnterDirectory('locked');
+
+    expect(mockBrowserService.browseLocal).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces the error message and keeps the previous listing on a failed navigation', () => {

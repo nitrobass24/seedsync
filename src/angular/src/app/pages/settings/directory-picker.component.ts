@@ -38,11 +38,13 @@ export class DirectoryPickerComponent implements OnInit {
   parentPath: string | null = null;
   directories: string[] = [];
   loading = false;
+  /** False until some path has listed, so Select never emits an unverified path. */
+  loaded = false;
   errorMessage: string | null = null;
 
   ngOnInit(): void {
     this.currentPath = this.initialPath() || '/';
-    this.load(this.currentPath);
+    this.load(this.currentPath, { fallBackToParent: true });
   }
 
   onEnterDirectory(name: string): void {
@@ -69,21 +71,41 @@ export class DirectoryPickerComponent implements OnInit {
     this.onCancel();
   }
 
-  private load(path: string): void {
+  /** @param fallBackToParent Initial load only: if the configured path no longer
+   * lists (renamed, now a file), walk up its ancestors to the first one that
+   * does, keeping the original error visible, so the picker isn't a dead end. */
+  private load(path: string, options?: { fallBackToParent?: boolean; keepError?: string }): void {
     this.loading = true;
-    this.errorMessage = null;
+    this.errorMessage = options?.keepError ?? null;
     const browse$ =
       this.kind() === 'local' ? this.browserService.browseLocal(path) : this.browserService.browseRemote(path);
     browse$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((result) => {
       this.loading = false;
       if (result.success) {
+        this.loaded = true;
         this.currentPath = result.path ?? path;
         this.parentPath = result.parent;
         this.directories = result.directories;
       } else {
-        this.errorMessage = result.errorMessage;
+        const error = options?.keepError ?? result.errorMessage;
+        const parent = options?.fallBackToParent ? parentPathOf(path) : null;
+        if (parent !== null) {
+          this.load(parent, { fallBackToParent: true, keepError: error ?? undefined });
+          return;
+        }
+        this.errorMessage = error;
       }
       this.cdr.markForCheck();
     });
   }
+}
+
+/** POSIX dirname, or null at "/". A path with no slash (e.g. "~") falls back to "/". */
+function parentPathOf(path: string): string | null {
+  const trimmed = path.replace(/\/+$/, '');
+  if (trimmed === '') {
+    return null;
+  }
+  const slash = trimmed.lastIndexOf('/');
+  return slash <= 0 ? '/' : trimmed.slice(0, slash);
 }
