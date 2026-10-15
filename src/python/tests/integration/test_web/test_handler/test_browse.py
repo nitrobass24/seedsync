@@ -85,7 +85,7 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
     def test_lists_only_directory_entries_from_ls_dash_1p(self):
         self._configure_remote()
         raw_output = b"sub_b/\na_file.txt\nSub_a/\n"
-        with patch("web.lftp_ssh.Sshcp.shell", return_value=raw_output):
+        with patch("ssh.lftp_ssh.Sshcp.shell", return_value=raw_output):
             resp = self.test_app.get("/server/browse/remote", {"path": "/remote/dir"})
         self.assertEqual(200, resp.status_int)
         body = json.loads(resp.text)
@@ -96,21 +96,21 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
     def test_path_defaults_to_configured_remote_path(self):
         self._configure_remote()
         self.context.config.lftp.remote_path = "/configured/path"
-        with patch("web.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
+        with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
             resp = self.test_app.get("/server/browse/remote")
         self.assertEqual(200, resp.status_int)
         self.assertIn("/configured/path", mock_shell.call_args[0][0])
 
     def test_root_path_has_no_parent(self):
         self._configure_remote()
-        with patch("web.lftp_ssh.Sshcp.shell", return_value=b""):
+        with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b""):
             resp = self.test_app.get("/server/browse/remote", {"path": "/"})
         body = json.loads(resp.text)
         self.assertIsNone(body["parent"])
 
     def test_ssh_failure_surfaces_error(self):
         self._configure_remote()
-        with patch("web.lftp_ssh.Sshcp.shell", side_effect=SshcpError("Connection refused")):
+        with patch("ssh.lftp_ssh.Sshcp.shell", side_effect=SshcpError("Connection refused")):
             resp = self.test_app.get("/server/browse/remote", {"path": "/remote/dir"}, expect_errors=True)
         self.assertEqual(502, resp.status_int)
         body = json.loads(resp.text)
@@ -118,7 +118,7 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
 
     def test_path_with_spaces_is_shell_quoted(self):
         self._configure_remote()
-        with patch("web.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
+        with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
             resp = self.test_app.get("/server/browse/remote", {"path": "/remote/has space"})
         self.assertEqual(200, resp.status_int)
         sent_command = mock_shell.call_args[0][0]
@@ -126,7 +126,7 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
 
     def test_path_beginning_with_dash_is_not_treated_as_an_ls_option(self):
         self._configure_remote()
-        with patch("web.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
+        with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
             resp = self.test_app.get("/server/browse/remote", {"path": "-R"})
         self.assertEqual(200, resp.status_int)
         sent_command = mock_shell.call_args[0][0]
@@ -134,7 +134,7 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
 
     def test_non_ascii_path_is_sent_decoded(self):
         self._configure_remote()
-        with patch("web.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
+        with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
             resp = self.test_app.get("/server/browse/remote", {"path": "/remote/Música"})
         self.assertEqual(200, resp.status_int)
         self.assertEqual("/remote/Música", json.loads(resp.text)["path"])
@@ -142,7 +142,7 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
 
     def test_tilde_path_is_left_for_remote_shell_to_expand(self):
         self._configure_remote()
-        with patch("web.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
+        with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
             resp = self.test_app.get("/server/browse/remote", {"path": "~/my downloads"})
         self.assertEqual(200, resp.status_int)
         self.assertEqual("ls -1pL -- \"$HOME\"'/my downloads'", mock_shell.call_args[0][0])
@@ -150,7 +150,7 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
 
     def test_bare_tilde_has_no_parent(self):
         self._configure_remote()
-        with patch("web.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
+        with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
             resp = self.test_app.get("/server/browse/remote", {"path": "~"})
         self.assertEqual('ls -1pL -- "$HOME"', mock_shell.call_args[0][0])
         self.assertIsNone(json.loads(resp.text)["parent"])

@@ -10,9 +10,8 @@ from urllib.parse import unquote
 from bottle import HTTPResponse
 
 from common import Config, ConfigError
-from ssh import SshcpError
+from ssh import SshcpError, lftp_ssh
 
-from .. import lftp_ssh
 from ..serialize import SerializeConfig
 from ..web_app import IHandler, WebApp
 

@@ -312,7 +312,7 @@ class TestConfigHandler(BaseTestWebApp):
         self.context.config.lftp.remote_address = "example.com"
         self.context.config.lftp.remote_username = "user"
         self.context.config.lftp.remote_port = 22
-        with patch("web.lftp_ssh.Sshcp") as mock_sshcp:
+        with patch("ssh.lftp_ssh.Sshcp") as mock_sshcp:
             resp = self._post_test_connection(expect_errors=True)
         self.assertEqual(400, resp.status_int)
         json_dict = json.loads(resp.text)
@@ -325,7 +325,7 @@ class TestConfigHandler(BaseTestWebApp):
         self.context.config.lftp.remote_username = "user"
         self.context.config.lftp.remote_password = "pass"
         self.context.config.lftp.remote_port = 22
-        with patch("web.lftp_ssh.Sshcp.detect_shell", return_value="/bin/bash"):
+        with patch("ssh.lftp_ssh.Sshcp.detect_shell", return_value="/bin/bash"):
             resp = self._post_test_connection()
         self.assertEqual(200, resp.status_int)
         json_dict = json.loads(resp.text)
@@ -336,7 +336,7 @@ class TestConfigHandler(BaseTestWebApp):
         self.context.config.lftp.remote_username = "user"
         self.context.config.lftp.remote_password = "wrong-pass"
         self.context.config.lftp.remote_port = 22
-        with patch("web.lftp_ssh.Sshcp.detect_shell", side_effect=SshcpError("Incorrect password")):
+        with patch("ssh.lftp_ssh.Sshcp.detect_shell", side_effect=SshcpError("Incorrect password")):
             resp = self._post_test_connection(expect_errors=True)
         self.assertEqual(502, resp.status_int)
         json_dict = json.loads(resp.text)
@@ -347,7 +347,7 @@ class TestConfigHandler(BaseTestWebApp):
         self.context.config.lftp.remote_username = "user"
         self.context.config.lftp.remote_password = "wrong-pass"
         self.context.config.lftp.remote_port = 22
-        with patch("web.lftp_ssh.Sshcp.detect_shell", side_effect=SshcpError("Incorrect password")):
+        with patch("ssh.lftp_ssh.Sshcp.detect_shell", side_effect=SshcpError("Incorrect password")):
             resp = self._post_test_connection(expect_errors=True)
         json_dict = json.loads(resp.text)
         self.assertTrue(json_dict["credential_error"])
@@ -358,7 +358,7 @@ class TestConfigHandler(BaseTestWebApp):
         self.context.config.lftp.remote_port = 22
         self.context.config.lftp.use_ssh_key = True
         with patch(
-            "web.lftp_ssh.Sshcp.detect_shell",
+            "ssh.lftp_ssh.Sshcp.detect_shell",
             side_effect=SshcpError("user@example.com: Permission denied (publickey)."),
         ):
             resp = self._post_test_connection(expect_errors=True)
@@ -370,7 +370,7 @@ class TestConfigHandler(BaseTestWebApp):
         self.context.config.lftp.remote_username = "user"
         self.context.config.lftp.remote_password = "pass"
         self.context.config.lftp.remote_port = 22
-        with patch("web.lftp_ssh.Sshcp.detect_shell", side_effect=SshcpError("Connection refused by server")):
+        with patch("ssh.lftp_ssh.Sshcp.detect_shell", side_effect=SshcpError("Connection refused by server")):
             resp = self._post_test_connection(expect_errors=True)
         json_dict = json.loads(resp.text)
         self.assertNotIn("credential_error", json_dict)
@@ -381,7 +381,7 @@ class TestConfigHandler(BaseTestWebApp):
         self.context.config.lftp.remote_password = "should-be-ignored"
         self.context.config.lftp.remote_port = 22
         self.context.config.lftp.use_ssh_key = True
-        with patch("web.lftp_ssh.Sshcp") as mock_sshcp:
+        with patch("ssh.lftp_ssh.Sshcp") as mock_sshcp:
             mock_sshcp.return_value.detect_shell.return_value = "/bin/bash"
             resp = self._post_test_connection()
         self.assertEqual(200, resp.status_int)

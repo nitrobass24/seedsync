@@ -9,9 +9,8 @@ from typing import cast, override
 from bottle import HTTPResponse, request
 
 from common import Config
-from ssh import SshcpError
+from ssh import SshcpError, lftp_ssh
 
-from .. import lftp_ssh
 from ..web_app import IHandler, WebApp
 
 

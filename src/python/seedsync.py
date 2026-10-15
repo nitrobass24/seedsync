@@ -40,8 +40,8 @@ from common.json_formatter import JsonFormatter
 from controller import AutoQueue, AutoQueuePersist, Controller, ControllerJob, ControllerPersist
 from controller.arr_notifier import ArrNotifier
 from controller.notifier import WebhookNotifier
+from ssh.lftp_ssh import is_credential_error
 from web import WebAppBuilder, WebAppJob
-from web.lftp_ssh import is_credential_error
 
 T_Persist = TypeVar("T_Persist", bound=Persist)
 
