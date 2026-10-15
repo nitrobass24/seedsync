@@ -106,6 +106,9 @@ export class SettingsPageComponent implements OnInit {
   testing: Record<NotificationChannel, boolean> = { discord: false, telegram: false };
   results: Record<NotificationChannel, TestResult | null> = { discord: null, telegram: null };
   testingConnection = false;
+  /** Set for both manual tests and the silent page-load probe, so a click
+   * can't start a second SSH login while one is still running. */
+  connectionTestInFlight = false;
   connectionResult: TestResult | null = null;
   /** True once a Test Connection call has succeeded against the currently
    * saved lftp connection fields. Gates the Server Directory picker. */
@@ -291,9 +294,10 @@ export class SettingsPageComponent implements OnInit {
    * out further attempts. */
   onTestConnection(options?: { silent?: boolean }): void {
     const silent = options?.silent === true;
-    if (this.connectionLockedOut || (silent && !this.commandsEnabled)) {
+    if (this.connectionTestInFlight || this.connectionLockedOut || (silent && !this.commandsEnabled)) {
       return;
     }
+    this.connectionTestInFlight = true;
     this.testingConnection = !silent;
     if (!silent) {
       this.connectionResult = null;
@@ -301,6 +305,7 @@ export class SettingsPageComponent implements OnInit {
     this.connectionTestService.testConnection().pipe(
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((result) => {
+      this.connectionTestInFlight = false;
       this.testingConnection = false;
       if (!silent) {
         this.connectionResult = result;

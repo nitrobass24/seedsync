@@ -27,7 +27,7 @@
             @if (option.valuePath[1] === 'remote_port') {
               <div class="test-row test-row-end">
                 <button type="button" class="btn btn-sm btn-outline-secondary"
-                        [disabled]="testingConnection || !commandsEnabled || connectionLockedOut"
+                        [disabled]="connectionTestInFlight || !commandsEnabled || connectionLockedOut"
                         (click)="onTestConnection()">
                   {{ testingConnection ? 'Testing...' : 'Test Connection' }}
                 </button>

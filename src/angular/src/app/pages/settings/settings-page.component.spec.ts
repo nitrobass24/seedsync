@@ -92,6 +92,22 @@ describe('SettingsPageComponent.onTestConnection', () => {
     expect(component.connectionLockedOut).toBe(false);
   });
 
+  it('ignores a click while the silent probe is still in flight, then allows one after it finishes', () => {
+    component.commandsEnabled = true;
+    component.onTestConnection({ silent: true });
+    expect(component.connectionTestInFlight).toBe(true);
+
+    component.onTestConnection();
+    expect(mockConnectionTestService.testConnection).toHaveBeenCalledTimes(1);
+    expect(component.testingConnection).toBe(false);
+
+    testConnectionSubject.next({ success: false, message: 'Connection refused by server' });
+    expect(component.connectionTestInFlight).toBe(false);
+
+    component.onTestConnection();
+    expect(mockConnectionTestService.testConnection).toHaveBeenCalledTimes(2);
+  });
+
   it('does not call the service (or reset testingConnection) while locked out', () => {
     component.connectionLockedOut = true;
     component.onTestConnection();
