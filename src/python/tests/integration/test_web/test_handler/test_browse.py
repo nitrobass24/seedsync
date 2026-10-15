@@ -82,9 +82,9 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
         body = json.loads(resp.text)
         self.assertIn("remote_address", body["error"])
 
-    def test_lists_only_directory_entries_from_ls_dash_1p(self):
+    def test_lists_directory_basenames_from_find_case_insensitive_sorted(self):
         self._configure_remote()
-        raw_output = b"sub_b/\na_file.txt\nSub_a/\n"
+        raw_output = b"/remote/dir/sub_b\n/remote/dir/Sub_a\n"
         with patch("ssh.lftp_ssh.Sshcp.shell", return_value=raw_output):
             resp = self.test_app.get("/server/browse/remote", {"path": "/remote/dir"})
         self.assertEqual(200, resp.status_int)
@@ -92,6 +92,13 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
         self.assertEqual("/remote/dir", body["path"])
         self.assertEqual(["Sub_a", "sub_b"], body["directories"])
         self.assertEqual("/remote", body["parent"])
+
+    def test_lists_only_immediate_directories_following_symlinks(self):
+        """find -L skips dangling symlinks instead of failing the listing like ls -L."""
+        self._configure_remote()
+        with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
+            self.test_app.get("/server/browse/remote", {"path": "/remote/dir"})
+        self.assertEqual("find -L /remote/dir -mindepth 1 -maxdepth 1 -type d", mock_shell.call_args[0][0])
 
     def test_path_defaults_to_configured_remote_path(self):
         self._configure_remote()
@@ -124,13 +131,14 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
         sent_command = mock_shell.call_args[0][0]
         self.assertIn("'/remote/has space'", sent_command)
 
-    def test_path_beginning_with_dash_is_not_treated_as_an_ls_option(self):
+    def test_path_beginning_with_dash_is_not_treated_as_a_find_option(self):
         self._configure_remote()
         with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
             resp = self.test_app.get("/server/browse/remote", {"path": "-R"})
         self.assertEqual(200, resp.status_int)
         sent_command = mock_shell.call_args[0][0]
-        self.assertEqual("ls -1pL -- -R", sent_command)
+        self.assertEqual("find -L ./-R -mindepth 1 -maxdepth 1 -type d", sent_command)
+        self.assertEqual("-R", json.loads(resp.text)["path"])
 
     def test_non_ascii_path_is_sent_decoded(self):
         self._configure_remote()
@@ -145,12 +153,12 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
         with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
             resp = self.test_app.get("/server/browse/remote", {"path": "~/my downloads"})
         self.assertEqual(200, resp.status_int)
-        self.assertEqual("ls -1pL -- \"$HOME\"'/my downloads'", mock_shell.call_args[0][0])
+        self.assertEqual("find -L \"$HOME\"'/my downloads' -mindepth 1 -maxdepth 1 -type d", mock_shell.call_args[0][0])
         self.assertEqual("~", json.loads(resp.text)["parent"])
 
     def test_bare_tilde_has_no_parent(self):
         self._configure_remote()
         with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:
             resp = self.test_app.get("/server/browse/remote", {"path": "~"})
-        self.assertEqual('ls -1pL -- "$HOME"', mock_shell.call_args[0][0])
+        self.assertEqual('find -L "$HOME" -mindepth 1 -maxdepth 1 -type d', mock_shell.call_args[0][0])
         self.assertIsNone(json.loads(resp.text)["parent"])

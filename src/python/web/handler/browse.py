@@ -3,12 +3,11 @@
 import json
 import os
 import posixpath
-import shlex
 from typing import cast, override
 
 from bottle import HTTPResponse, request
 
-from common import Config
+from common import Config, escape_remote_path_double
 from ssh import SshcpError, lftp_ssh
 
 from ..web_app import IHandler, WebApp
@@ -51,11 +50,15 @@ class BrowseHandler(IHandler):
         path = self.__query_path() or lftp.remote_path or "/"
         ssh = lftp_ssh.build_sshcp(lftp)
         try:
-            raw = ssh.shell(f"ls -1pL -- {self.__quote_remote_path(path)}")
+            # -L lists symlinked directories and skips dangling links (busybox ls -L
+            # exits 1 on a dangling link, failing the whole listing). find has no
+            # "--", so a leading "-" gets "./" to keep it from parsing as an option.
+            start = f"./{path}" if path.startswith("-") else path
+            raw = ssh.shell(f"find -L {escape_remote_path_double(start)} -mindepth 1 -maxdepth 1 -type d")
         except SshcpError as e:
             return self.__error(str(e), 502)
-        entries = raw.decode(errors="replace").splitlines()
-        directories = sorted((entry[:-1] for entry in entries if entry.endswith("/")), key=str.lower)
+        lines = raw.decode(errors="replace").splitlines()
+        directories = sorted((posixpath.basename(line) for line in lines if line), key=str.lower)
         normalized = path.rstrip("/") or "/"
         parent = (posixpath.dirname(normalized) or None) if normalized != "/" else None
         return self.__ok(normalized, parent, directories)
@@ -64,15 +67,6 @@ class BrowseHandler(IHandler):
     def __query_path() -> str | None:
         # getunicode re-decodes Bottle's latin-1 WSGI string as UTF-8; bottle is untyped.
         return cast(str | None, request.query.getunicode("path"))  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
-
-    @staticmethod
-    def __quote_remote_path(path: str) -> str:
-        # A leading ~ must stay outside the quotes for the remote shell to expand it.
-        if path == "~":
-            return '"$HOME"'
-        if path.startswith("~/"):
-            return '"$HOME"' + shlex.quote(path[1:])
-        return shlex.quote(path)
 
     @staticmethod
     def __ok(path: str, parent: str | None, directories: list[str]) -> HTTPResponse:
