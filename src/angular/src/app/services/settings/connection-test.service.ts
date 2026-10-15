@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
-import { TestResult } from '../utils/test-result';
+import { TestResult, errorBodyFromHttpError, failureFromHttpError } from '../utils/test-result';
 
 export interface ConnectionTestResult extends TestResult {
   /** True when the failure was a bad-credential (wrong password/key) error,
@@ -22,18 +22,12 @@ export class ConnectionTestService {
   testConnection(): Observable<ConnectionTestResult> {
     return this.http.post(TEST_CONNECTION_URL, {}).pipe(
       map(() => ({ success: true, message: 'Connection successful' })),
-      catchError((err: HttpErrorResponse) => {
-        let message: string;
-        let credentialError = false;
-        try {
-          const body = typeof err.error === 'string' ? JSON.parse(err.error) : err.error;
-          message = body?.error || 'Connection failed';
-          credentialError = !!body?.credential_error;
-        } catch {
-          message = 'Connection failed';
-        }
-        return of({ success: false, message, credentialError });
-      }),
+      catchError((err: HttpErrorResponse) =>
+        of({
+          ...failureFromHttpError(err, 'Connection failed'),
+          credentialError: errorBodyFromHttpError(err)?.['credential_error'] === true,
+        }),
+      ),
     );
   }
 }

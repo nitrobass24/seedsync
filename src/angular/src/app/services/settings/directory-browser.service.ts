@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
+import { failureFromHttpError } from '../utils/test-result';
 
 export interface BrowseResult {
   readonly success: boolean;
@@ -42,16 +43,15 @@ export class DirectoryBrowserService {
         directories: body.directories,
         errorMessage: null,
       })),
-      catchError((err: HttpErrorResponse) => {
-        let message: string;
-        try {
-          const body = typeof err.error === 'string' ? JSON.parse(err.error) : err.error;
-          message = body?.error || 'Failed to browse directory';
-        } catch {
-          message = 'Failed to browse directory';
-        }
-        return of({ success: false, path: null, parent: null, directories: [], errorMessage: message });
-      }),
+      catchError((err: HttpErrorResponse) =>
+        of({
+          success: false,
+          path: null,
+          parent: null,
+          directories: [],
+          errorMessage: failureFromHttpError(err, 'Failed to browse directory').message,
+        }),
+      ),
     );
   }
 }
