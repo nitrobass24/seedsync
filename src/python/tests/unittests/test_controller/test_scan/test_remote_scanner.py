@@ -249,7 +249,7 @@ class TestRemoteScanner(unittest.TestCase):
         self.assertEqual(3, self.mock_ssh.shell.call_count)
         # When scan path has tilde, both paths use double quotes for consistent quoting
         # Tilde is converted to $HOME for shell expansion
-        self.mock_ssh.shell.assert_called_with('"python3" "/remote/path/to/scan/script" "$HOME/data/torrents"')
+        self.mock_ssh.shell.assert_called_with('python3 /remote/path/to/scan/script "$HOME"/data/torrents')
 
     def test_raises_nonrecoverable_error_on_first_failed_ssh(self):
         """Non-transient errors on first run are non-recoverable (no retry)"""

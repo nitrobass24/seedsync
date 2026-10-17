@@ -1,5 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import shlex
+
 
 def escape_remote_path_single(path: str) -> str:
     """
@@ -12,9 +14,13 @@ def escape_remote_path_single(path: str) -> str:
 
 def escape_remote_path_double(path: str) -> str:
     """
-    Escape a remote path using double quotes (allows $HOME expansion).
-    Converts ~ to $HOME for shell expansion.
+    Quote a remote path so the remote shell expands a leading ~ or ~/ to $HOME
+    and nothing else: "$HOME" stays in double quotes, the rest is shell-quoted
+    (so quotes, $ and backticks in names stay literal). Any other path,
+    including ~user, is shell-quoted as-is.
     """
-    if path.startswith("~"):
-        path = "$HOME" + path[1:]
-    return f'"{path}"'
+    if path == "~":
+        return '"$HOME"'
+    if path.startswith("~/"):
+        return '"$HOME"' + shlex.quote(path[1:])
+    return shlex.quote(path)

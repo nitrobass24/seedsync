@@ -23,20 +23,26 @@ class TestEscapeRemotePathSingle(unittest.TestCase):
 
 
 class TestEscapeRemotePathDouble(unittest.TestCase):
-    def test_wraps_path_in_double_quotes(self):
-        self.assertEqual('"/some/path"', escape_remote_path_double("/some/path"))
+    def test_plain_path_is_shell_quoted(self):
+        self.assertEqual("/some/path", escape_remote_path_double("/some/path"))
 
     def test_converts_tilde_to_home(self):
-        self.assertEqual('"$HOME/data/torrents"', escape_remote_path_double("~/data/torrents"))
+        self.assertEqual('"$HOME"/data/torrents', escape_remote_path_double("~/data/torrents"))
 
     def test_only_converts_leading_tilde(self):
-        self.assertEqual('"/some/path/~file"', escape_remote_path_double("/some/path/~file"))
+        self.assertEqual("'/some/path/~file'", escape_remote_path_double("/some/path/~file"))
 
     def test_handles_tilde_only(self):
         self.assertEqual('"$HOME"', escape_remote_path_double("~"))
 
     def test_handles_path_with_spaces(self):
-        self.assertEqual('"/some/path with spaces"', escape_remote_path_double("/some/path with spaces"))
+        self.assertEqual("'/some/path with spaces'", escape_remote_path_double("/some/path with spaces"))
 
     def test_handles_empty_path(self):
-        self.assertEqual('""', escape_remote_path_double(""))
+        self.assertEqual("''", escape_remote_path_double(""))
+
+    def test_shell_metacharacters_after_tilde_stay_literal(self):
+        self.assertEqual('"$HOME"\'/a"$b`c`\'', escape_remote_path_double('~/a"$b`c`'))
+
+    def test_tilde_user_is_not_expanded(self):
+        self.assertEqual("'~user/data'", escape_remote_path_double("~user/data"))
