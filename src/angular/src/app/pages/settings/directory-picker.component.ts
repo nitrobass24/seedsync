@@ -72,8 +72,10 @@ export class DirectoryPickerComponent implements OnInit {
   }
 
   /** @param fallBackToParent Initial load only: if the configured path no longer
-   * lists (renamed, now a file), walk up its ancestors to the first one that
-   * does, keeping the original error visible, so the picker isn't a dead end. */
+   * exists (renamed, now a file), walk up its ancestors to the first one that
+   * lists, keeping the original error visible, so the picker isn't a dead end.
+   * Connection-level failures stop immediately: each remote step is a fresh
+   * SSH login, and retrying one that just failed is what the lockout avoids. */
   private load(path: string, options?: { fallBackToParent?: boolean; keepError?: string }): void {
     this.loading = true;
     this.errorMessage = options?.keepError ?? null;
@@ -88,7 +90,7 @@ export class DirectoryPickerComponent implements OnInit {
         this.directories = result.directories;
       } else {
         const error = options?.keepError ?? result.errorMessage;
-        const parent = options?.fallBackToParent ? parentPathOf(path) : null;
+        const parent = options?.fallBackToParent && result.badPath ? parentPathOf(path) : null;
         if (parent !== null) {
           this.load(parent, { fallBackToParent: true, keepError: error ?? undefined });
           return;

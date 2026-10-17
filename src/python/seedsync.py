@@ -300,18 +300,18 @@ class Seedsync:
         set up before the loop starts: status.server.up/error_msg surface the
         error in the UI, and the controller only restarts via an explicit
         restart request (same as any other change requiring one), not
-        automatically. controller_job's own thread has already run its
-        cleanup (see Job.run()/ControllerJob.cleanup(), which calls
-        Controller.exit()) by the time propagate_exception() has something to
-        raise, so terminate()/join() here just formally reap it.
+        automatically. controller_job's thread records the exception before
+        running its cleanup (see Job.run()/ControllerJob.cleanup(), which
+        calls Controller.exit()), so join() here waits for that teardown.
         """
         if isinstance(e, (ServiceExit, ServiceRestart)) or self.context.args.exit or not is_credential_error(str(e)):
             raise e
         self.context.logger.exception("Controller stopped due to a credential error; web app remains available")
-        controller_job.terminate()
-        controller_job.join()
+        # Publish the error first: join() waits for Controller.exit() to finish.
         self.context.status.server.up = False
         self.context.status.server.error_msg = str(e)
+        controller_job.terminate()
+        controller_job.join()
 
     def persist(self):
         # Save the persists

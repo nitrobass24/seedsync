@@ -13,6 +13,7 @@ function result(overrides: Partial<BrowseResult> = {}): BrowseResult {
     parent: '/',
     directories: ['sub1', 'sub2'],
     errorMessage: null,
+    badPath: false,
     ...overrides,
   };
 }
@@ -112,8 +113,8 @@ describe('DirectoryPickerComponent', () => {
     expect(cancelled).toBe(true);
   });
 
-  function failure(errorMessage: string): BrowseResult {
-    return { success: false, path: null, parent: null, directories: [], errorMessage };
+  function failure(errorMessage: string, badPath = true): BrowseResult {
+    return { success: false, path: null, parent: null, directories: [], errorMessage, badPath };
   }
 
   it('falls back to the nearest listable ancestor when the initial path fails, keeping the error', () => {
@@ -138,15 +139,24 @@ describe('DirectoryPickerComponent', () => {
   });
 
   it('stops at "/" and disables Select when nothing lists', () => {
-    mockBrowserService.browseRemote.mockReturnValue(of(failure('Connection refused')));
+    mockBrowserService.browseRemote.mockReturnValue(of(failure('No such file or directory')));
     const fixture = createFixture('remote', '~/gone');
 
     expect(mockBrowserService.browseRemote.mock.calls.map((c) => c[0])).toEqual(['~/gone', '~', '/']);
-    expect(fixture.componentInstance.errorMessage).toBe('Connection refused');
+    expect(fixture.componentInstance.errorMessage).toBe('No such file or directory');
     const select = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(
       (b) => b.textContent?.includes('Select This Folder'),
     );
     expect(select?.disabled).toBe(true);
+  });
+
+  it('does not walk up on a connection failure, which would be one more SSH login per ancestor', () => {
+    mockBrowserService.browseRemote.mockReturnValue(of(failure('Connection refused', false)));
+    const component = createComponent('remote', '/downloads/a/b/c');
+
+    expect(mockBrowserService.browseRemote).toHaveBeenCalledTimes(1);
+    expect(component.errorMessage).toBe('Connection refused');
+    expect(component.loaded).toBe(false);
   });
 
   it('does not walk up when a later navigation fails', () => {
@@ -165,7 +175,7 @@ describe('DirectoryPickerComponent', () => {
       of(result({ success: true, errorMessage: null })).pipe(),
     );
     mockBrowserService.browseLocal.mockReturnValue(
-      of({ success: false, path: null, parent: null, directories: [], errorMessage: 'Permission denied' }),
+      of(failure('Permission denied')),
     );
 
     component.onEnterDirectory('locked');

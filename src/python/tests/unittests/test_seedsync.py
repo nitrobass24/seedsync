@@ -495,6 +495,19 @@ class TestHandleControllerFailure(unittest.TestCase):
         self.assertFalse(s.context.status.server.up)
         self.assertEqual("Incorrect password", s.context.status.server.error_msg)
 
+    def test_status_is_published_before_waiting_on_controller_teardown(self):
+        """join() blocks on Controller.exit(); the UI shouldn't wait on that."""
+        s = self._make_bare_seedsync()
+        controller_job = MagicMock()
+        seen_on_join = {}
+        controller_job.join.side_effect = lambda: seen_on_join.update(
+            up=s.context.status.server.up, error_msg=s.context.status.server.error_msg
+        )
+
+        s._handle_controller_failure(controller_job, RuntimeError("Incorrect password"))
+
+        self.assertEqual({"up": False, "error_msg": "Incorrect password"}, seen_on_join)
+
     def test_non_credential_error_is_reraised(self):
         """Errors that can heal on their own (e.g. a flapping local mount)
         keep exiting so Docker's restart policy retries them."""

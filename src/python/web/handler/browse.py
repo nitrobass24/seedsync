@@ -28,7 +28,7 @@ class BrowseHandler(IHandler):
         web_app.add_handler("/server/browse/remote", self.__handle_browse_remote)
 
     def __handle_browse_local(self):
-        path = os.path.abspath(self.__query_path() or "/")
+        path = os.path.abspath(os.path.expanduser(self.__query_path() or "/"))
         if not os.path.isdir(path):
             return self.__error(f"Not a directory: {path}", 400)
         try:
@@ -56,8 +56,14 @@ class BrowseHandler(IHandler):
             start = f"./{path}" if path.startswith("-") else path
             raw = ssh.shell(f"find -L {escape_remote_path_double(start)} -mindepth 1 -maxdepth 1 -type d")
         except SshcpError as e:
-            return self.__error(str(e), 502)
-        lines = raw.decode(errors="replace").splitlines()
+            # 400 for a bad path vs 502 for a failed connection: the picker only
+            # walks up to a parent directory on the former.
+            message = str(e)
+            is_path_error = "No such file or directory" in message or "Not a directory" in message
+            return self.__error(message, 400 if is_path_error else 502)
+        # Not splitlines(): find separates entries with \n only, and names may
+        # contain other line-break characters (\x0b, U+2028, ...).
+        lines = raw.decode(errors="replace").split("\n")
         directories = sorted((posixpath.basename(line) for line in lines if line), key=str.lower)
         normalized = path.rstrip("/") or "/"
         parent = (posixpath.dirname(normalized) or None) if normalized != "/" else None

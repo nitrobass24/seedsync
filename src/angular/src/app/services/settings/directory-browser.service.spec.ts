@@ -40,6 +40,7 @@ describe('DirectoryBrowserService', () => {
       parent: '/',
       directories: ['a', 'b'],
       errorMessage: null,
+      badPath: false,
     });
   });
 
@@ -69,6 +70,19 @@ describe('DirectoryBrowserService', () => {
     expect(result!.success).toBe(false);
     expect(result!.errorMessage).toBe('Connection refused');
     expect(result!.directories).toEqual([]);
+    expect(result!.badPath).toBe(false);
+  });
+
+  it('flags a 400 as a bad path so the picker can walk up to a parent', () => {
+    let result: BrowseResult | undefined;
+    service.browseRemote('/gone').subscribe((r) => (result = r));
+
+    httpMock.expectOne((r) => r.url === '/server/browse/remote').flush(
+      { error: 'find: /gone: No such file or directory' },
+      { status: 400, statusText: 'Bad Request' },
+    );
+
+    expect(result!.badPath).toBe(true);
   });
 
   it('falls back to a generic message when the error body is unparsable', () => {

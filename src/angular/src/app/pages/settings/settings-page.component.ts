@@ -109,6 +109,9 @@ export class SettingsPageComponent implements OnInit {
   /** Set for both manual tests and the silent page-load probe, so a click
    * can't start a second SSH login while one is still running. */
   connectionTestInFlight = false;
+  /** Bumped when a connection field changes so a test started against
+   * the old credentials can't mark the new ones verified (or locked out). */
+  private connectionTestSeq = 0;
   connectionResult: TestResult | null = null;
   /** True once a Test Connection call has succeeded against the currently
    * saved lftp connection fields. Gates the Server Directory picker. */
@@ -137,6 +140,15 @@ export class SettingsPageComponent implements OnInit {
   private badValueNotifs = new Map<string, Notification>();
 
   ngOnInit(): void {
+    // Seed from the shared flag so a revisit doesn't re-lock the Server
+    // Directory picker (and re-probe) when the connection is already verified.
+    this.connectionStatusService.verified$.pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe((verified) => {
+      this.connectionVerified = verified;
+      this.cdr.markForCheck();
+    });
+
     this.connectedService.connected$.pipe(
       takeUntilDestroyed(this.destroyRef),
     ).subscribe({
@@ -185,7 +197,8 @@ export class SettingsPageComponent implements OnInit {
       take(1),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(([config]) => {
-      if (config.lftp?.remote_address && config.lftp?.remote_username && config.lftp?.remote_port) {
+      const configured = config.lftp?.remote_address && config.lftp?.remote_username && config.lftp?.remote_port;
+      if (configured && !this.connectionVerified) {
         this.onTestConnection({ silent: true });
       }
     });
@@ -231,6 +244,9 @@ export class SettingsPageComponent implements OnInit {
           // and clears a credential-error lockout since the credentials are
           // no longer what caused it.
           if (section === 'lftp' && CONNECTION_FIELDS.has(option)) {
+            this.connectionTestSeq++;
+            this.connectionTestInFlight = false;
+            this.testingConnection = false;
             this.setConnectionVerified(false);
             this.connectionResult = null;
             this.connectionLockedOut = false;
@@ -249,6 +265,7 @@ export class SettingsPageComponent implements OnInit {
 
           this.logger.error(reaction.errorMessage);
         }
+        this.cdr.markForCheck();
       },
     });
   }
@@ -302,9 +319,14 @@ export class SettingsPageComponent implements OnInit {
     if (!silent) {
       this.connectionResult = null;
     }
+    this.cdr.markForCheck();
+    const seq = ++this.connectionTestSeq;
     this.connectionTestService.testConnection().pipe(
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((result) => {
+      if (seq !== this.connectionTestSeq) {
+        return; // credentials changed mid-flight; result is for the old ones
+      }
       this.connectionTestInFlight = false;
       this.testingConnection = false;
       if (!silent) {
