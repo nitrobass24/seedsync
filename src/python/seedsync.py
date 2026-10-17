@@ -302,16 +302,16 @@ class Seedsync:
         restart request (same as any other change requiring one), not
         automatically. controller_job's thread records the exception before
         running its cleanup (see Job.run()/ControllerJob.cleanup(), which
-        calls Controller.exit()), so join() here waits for that teardown to
-        finish before the web app resumes.
+        calls Controller.exit()), so join() here waits for that teardown.
         """
         if isinstance(e, (ServiceExit, ServiceRestart)) or self.context.args.exit or not is_credential_error(str(e)):
             raise e
         self.context.logger.exception("Controller stopped due to a credential error; web app remains available")
-        controller_job.terminate()
-        controller_job.join()
+        # Publish the error first: join() waits for Controller.exit() to finish.
         self.context.status.server.up = False
         self.context.status.server.error_msg = str(e)
+        controller_job.terminate()
+        controller_job.join()
 
     def persist(self):
         # Save the persists
