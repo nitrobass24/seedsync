@@ -67,6 +67,12 @@ class TestBrowseHandlerLocal(BaseTestWebApp):
         )
         self.assertEqual(400, resp.status_int)
 
+    def test_tilde_expands_to_home(self):
+        with patch.dict(os.environ, {"HOME": self.browse_root}):
+            resp = self.test_app.get("/server/browse/local", {"path": "~"})
+        self.assertEqual(200, resp.status_int)
+        self.assertEqual(self.browse_root, json.loads(resp.text)["path"])
+
 
 class TestBrowseHandlerRemote(BaseTestWebApp):
     def _configure_remote(self):
@@ -122,6 +128,20 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
         self.assertEqual(502, resp.status_int)
         body = json.loads(resp.text)
         self.assertEqual("Connection refused", body["error"])
+
+    def test_missing_remote_directory_is_a_bad_request_not_a_gateway_error(self):
+        self._configure_remote()
+        error = SshcpError("find: /remote/gone: No such file or directory")
+        with patch("ssh.lftp_ssh.Sshcp.shell", side_effect=error):
+            resp = self.test_app.get("/server/browse/remote", {"path": "/remote/gone"}, expect_errors=True)
+        self.assertEqual(400, resp.status_int)
+        self.assertIn("No such file or directory", json.loads(resp.text)["error"])
+
+    def test_directory_names_are_split_on_newline_only(self):
+        self._configure_remote()
+        with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"/remote/dir/Foo\x0bBar\n"):
+            resp = self.test_app.get("/server/browse/remote", {"path": "/remote/dir"})
+        self.assertEqual(["Foo\x0bBar"], json.loads(resp.text)["directories"])
 
     def test_path_with_spaces_is_shell_quoted(self):
         self._configure_remote()
