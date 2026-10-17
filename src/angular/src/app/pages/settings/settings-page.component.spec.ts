@@ -185,6 +185,25 @@ describe('SettingsPageComponent connection-field changes invalidate a verified c
 
     expect(component.connectionVerified).toBe(true);
   });
+
+  it('discards a Test Connection result that was in flight when a connection field changed', () => {
+    const resultSubject = new Subject<ConnectionTestResult>();
+    const testConnection = TestBed.inject(ConnectionTestService).testConnection as ReturnType<typeof vi.fn>;
+    testConnection.mockReturnValue(resultSubject.asObservable());
+    component.connectionVerified = false;
+    component.connectionLockedOut = false;
+
+    component.onTestConnection();
+    component.onSetConfig('lftp', 'remote_password', 'new-password');
+    setSubject.next({ success: true, data: 'lftp.remote_password updated', errorMessage: null });
+    resultSubject.next({ success: false, message: 'Incorrect password', credentialError: true });
+
+    expect(component.connectionLockedOut).toBe(false);
+    expect(component.connectionVerified).toBe(false);
+    expect(component.connectionResult).toBeNull();
+    expect(component.testingConnection).toBe(false);
+    expect(component.connectionTestInFlight).toBe(false);
+  });
 });
 
 describe('SettingsPageComponent directory picker', () => {

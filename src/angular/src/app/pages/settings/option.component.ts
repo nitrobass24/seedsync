@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, OnInit, OnDestroy, input, output, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
+import { Subject, Subscription, debounceTime, filter } from 'rxjs';
 import { REDACTED_SENTINEL } from '../../models/config';
 
 export enum OptionType {
@@ -63,8 +63,11 @@ export class OptionComponent implements OnInit, OnDestroy {
   private subscription?: Subscription;
 
   ngOnInit(): void {
+    // Compare against the bound value, not the last emission: the value can
+    // also change from outside (e.g. the directory picker), after which
+    // re-typing the previously emitted value is a real change again.
     this.subscription = this.newValue
-      .pipe(debounceTime(DEBOUNCE_TIME_MS), distinctUntilChanged())
+      .pipe(debounceTime(DEBOUNCE_TIME_MS), filter((val) => val !== this.value()))
       .subscribe({ next: (val) => this.changeEvent.emit(val) });
   }
 

@@ -10,6 +10,9 @@ export interface BrowseResult {
   readonly parent: string | null;
   readonly directories: string[];
   readonly errorMessage: string | null;
+  /** True when the server rejected the path itself (400) rather than failing
+   * to reach the filesystem (502) — the picker only walks up on the former. */
+  readonly badPath: boolean;
 }
 
 interface BrowseResponse {
@@ -42,6 +45,7 @@ export class DirectoryBrowserService {
         parent: body.parent,
         directories: body.directories,
         errorMessage: null,
+        badPath: false,
       })),
       catchError((err: HttpErrorResponse) =>
         of({
@@ -50,6 +54,7 @@ export class DirectoryBrowserService {
           parent: null,
           directories: [],
           errorMessage: failureFromHttpError(err, 'Failed to browse directory').message,
+          badPath: err.status === 400,
         }),
       ),
     );
