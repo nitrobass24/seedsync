@@ -216,7 +216,7 @@ class TestDetectLftpCompletionsNestedFiltering(unittest.TestCase):
         name slipping through here got stat'd as a literal top-level path and
         injected a phantom top-level entry distinct from the correctly nested
         row - the exact bug this class of test guards against, just at the
-        completion edge instead of the still-running edge (#671)."""
+        completion edge instead of the still-running edge."""
         pc = self._make_pair_context("pair-1")
         pc.prev_downloading_file_names = {"TopDir/nested_file.rar", "TopLevel"}
         persist = MagicMock()

@@ -622,7 +622,7 @@ class Lftp:
         # only the LAST path component of the source - the destination
         # directory itself was never derived from name's parent, so a nested
         # item landed directly under the pair's flat local root instead of
-        # mirroring the remote nesting (#671). Reproduce the nested parent
+        # mirroring the remote nesting. Reproduce the nested parent
         # directory locally; pget (unlike mirror) doesn't create it itself.
         rel_dir = os.path.dirname(name)
         dest_dir = os.path.join(self.__base_local_dir_path, rel_dir) if rel_dir else self.__base_local_dir_path

@@ -501,7 +501,7 @@ class ModelUpdater:
                 # here got stat'd as a literal top-level path (e.g.
                 # "TopDir/leaf.rar" under the local root) and injected a
                 # phantom top-level entry with the full nested name baked into
-                # it, distinct from the correctly nested row (#671). Nested
+                # it, distinct from the correctly nested row. Nested
                 # completions are still tracked via downloaded_file_names above
                 # and picked up by the regular recursive local scan.
                 pc.pending_completion.update(name for name in just_completed if "/" not in name)

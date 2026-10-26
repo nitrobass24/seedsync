@@ -86,7 +86,7 @@ class TestLftpQueueCommand(unittest.TestCase):
     def test_queue_nested_file_destination_reproduces_parent_dir(self):
         """A nested pget target must include the source's parent dir, or the
         file lands flat under the pair root instead of mirroring the remote
-        nesting (#671)."""
+        nesting."""
         lftp = self._make_lftp()
         with patch("lftp.lftp.os.makedirs") as mock_makedirs:
             lftp.queue("TopDir/leaf.rar", False)
