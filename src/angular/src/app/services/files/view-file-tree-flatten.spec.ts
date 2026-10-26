@@ -37,11 +37,10 @@ function makeViewFile(overrides: Partial<ViewFile> & { name: string; fullPath: s
 }
 
 describe('flattenVisibleRows', () => {
-  it('returns one row per top-level file with no children when nav is disabled', () => {
-    const child = makeViewFile({ name: 'child.txt', fullPath: 'Top/child.txt', isDir: false });
-    const top = makeViewFile({ name: 'Top', fullPath: 'Top', isDir: true, children: [child] });
+  it('gives a row without children no expand toggle (nested nav off builds no children)', () => {
+    const top = makeViewFile({ name: 'Top', fullPath: 'Top', isDir: true, children: [] });
 
-    const rows = flattenVisibleRows([top], new Set(), false);
+    const rows = flattenVisibleRows([top], new Set([viewFileKey(top)]));
 
     expect(rows).toEqual([{ file: top, depth: 0, hasChildren: false, isExpanded: false }]);
   });
@@ -50,7 +49,7 @@ describe('flattenVisibleRows', () => {
     const child = makeViewFile({ name: 'child.txt', fullPath: 'Top/child.txt' });
     const top = makeViewFile({ name: 'Top', fullPath: 'Top', isDir: true, children: [child] });
 
-    const rows = flattenVisibleRows([top], new Set(), true);
+    const rows = flattenVisibleRows([top], new Set());
 
     expect(rows).toEqual([{ file: top, depth: 0, hasChildren: true, isExpanded: false }]);
   });
@@ -60,7 +59,7 @@ describe('flattenVisibleRows', () => {
     const top = makeViewFile({ name: 'Top', fullPath: 'Top', isDir: true, children: [child] });
     const sibling = makeViewFile({ name: 'Sibling', fullPath: 'Sibling', isDir: false });
 
-    const rows = flattenVisibleRows([top, sibling], new Set([viewFileKey(top)]), true);
+    const rows = flattenVisibleRows([top, sibling], new Set([viewFileKey(top)]));
 
     expect(rows).toEqual([
       { file: top, depth: 0, hasChildren: true, isExpanded: true },
@@ -74,7 +73,7 @@ describe('flattenVisibleRows', () => {
     const sub = makeViewFile({ name: 'Sub', fullPath: 'Top/Sub', isDir: true, children: [leaf] });
     const top = makeViewFile({ name: 'Top', fullPath: 'Top', isDir: true, children: [sub] });
 
-    const rows = flattenVisibleRows([top], new Set([viewFileKey(top), viewFileKey(sub)]), true);
+    const rows = flattenVisibleRows([top], new Set([viewFileKey(top), viewFileKey(sub)]));
 
     expect(rows.map((r) => ({ name: r.file.name, depth: r.depth }))).toEqual([
       { name: 'Top', depth: 0 },
@@ -88,7 +87,7 @@ describe('flattenVisibleRows', () => {
     const top = makeViewFile({ name: 'Top', fullPath: 'Top', isDir: true, children: [child] });
 
     // Top is not in the expanded set - its child must not appear.
-    const rows = flattenVisibleRows([top], new Set(['unrelated-key']), true);
+    const rows = flattenVisibleRows([top], new Set(['unrelated-key']));
 
     expect(rows).toEqual([{ file: top, depth: 0, hasChildren: true, isExpanded: false }]);
   });

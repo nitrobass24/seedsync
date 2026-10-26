@@ -1,10 +1,11 @@
 import { Injectable, InjectionToken, inject } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { auditTime } from 'rxjs/operators';
+import { auditTime, distinctUntilChanged, map } from 'rxjs/operators';
 
 import { LoggerService } from '../utils/logger.service';
 import { ModelFileService } from './model-file.service';
 import { PathPairsService } from '../settings/path-pairs.service';
+import { ConfigService } from '../settings/config.service';
 import { WebReaction } from '../utils/rest.service';
 import { ModelFile, ModelFileState } from '../../models/model-file';
 import { ViewFile } from '../../models/view-file';
@@ -39,6 +40,7 @@ export class ViewFileService {
   private readonly logger = inject(LoggerService);
   private readonly modelFileService = inject(ModelFileService);
   private readonly pathPairsService = inject(PathPairsService);
+  private readonly configService = inject(ConfigService);
   private readonly coalesceMs = inject(VIEW_FILE_COALESCE_MS);
   private readonly selection = inject(ViewFileSelectionService);
   private readonly commands = inject(ViewFileCommandService);
@@ -50,6 +52,10 @@ export class ViewFileService {
   private indices = new Map<string, number>();
 
   private prevModelFiles = new Map<string, ModelFile>();
+
+  // Nested rows exist in the view only while nested navigation is enabled, so
+  // selection, select-all and bulk actions can never reach a hidden row.
+  private nestedNavEnabled = false;
 
   // Resolve a view-file key to its backing ModelFile from the diffing-owned
   // snapshot. Threaded into ViewFileCommandService so command dispatch keeps the
@@ -95,6 +101,18 @@ export class ViewFileService {
           this.files = nextFiles;
           this.pushViewFiles();
         }
+      }
+    });
+
+    // Toggling nested navigation adds or drops every nested row, so rebuild the
+    // whole view; the rebuild also prunes checked keys of rows that went away.
+    this.configService.config$.pipe(
+      map((config) => !!config?.controller.enable_nested_navigation),
+      distinctUntilChanged(),
+    ).subscribe((enabled) => {
+      this.nestedNavEnabled = enabled;
+      if (this.prevModelFiles.size > 0) {
+        this.buildViewFromModelFiles(this.prevModelFiles, true);
       }
     });
 
@@ -155,25 +173,12 @@ export class ViewFileService {
     }
 
     let targetFound = false;
-    const select = (node: ViewFile): ViewFile => {
-      if (viewFileKey(node) === key) {
-        targetFound = true;
-        return { ...node, isSelected: true };
-      }
-      if (node.children.length === 0) {
-        return node;
-      }
-      let changed = false;
-      const children = node.children.map((child) => {
-        const updated = select(child);
-        if (updated !== child) changed = true;
-        return updated;
-      });
-      return changed ? { ...node, children } : node;
-    };
-
     const cleared = this.files.map((f) => this.clearSelectionInTree(f));
-    this.files = cleared.map(select);
+    this.files = cleared.map((f) => {
+      const updated = selectInTree(f, key);
+      if (updated !== f) targetFound = true;
+      return updated;
+    });
     if (!targetFound) {
       this.logger.error("Can't find file to select: " + key);
     }
@@ -311,7 +316,9 @@ export class ViewFileService {
     this.pushViewFiles();
   }
 
-  private buildViewFromModelFiles(modelFiles: Map<string, ModelFile>): void {
+  // `rebuildAll` recreates every row even when its model is unchanged, for
+  // view-wide inputs such as the nested-navigation setting.
+  private buildViewFromModelFiles(modelFiles: Map<string, ModelFile>, rebuildAll = false): void {
     this.logger.debug('Received next model files');
 
     let newViewFiles = [...this.files];
@@ -334,7 +341,7 @@ export class ViewFileService {
       } else {
         const oldFile = this.prevModelFiles.get(key)!;
         const newFile = modelFiles.get(key)!;
-        if (!modelFilesEqual(oldFile, newFile)) {
+        if (rebuildAll || !modelFilesEqual(oldFile, newFile)) {
           updatedKeys.push(key);
         }
       }
@@ -342,13 +349,23 @@ export class ViewFileService {
 
     let reSort = false;
     let updateIndices = false;
+    // Keys of nested or top-level rows that no longer exist, so their checked
+    // state can be dropped. Only rebuilt and removed subtrees can lose rows.
+    const goneKeys: string[] = [];
 
     // Do the updates first before indices change (re-sort may be required)
     for (const key of updatedKeys) {
       const index = this.indices.get(key)!;
       const oldViewFile = newViewFiles[index];
-      const newViewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap, oldViewFile.isSelected);
+      // The selected row may be nested anywhere in this subtree; carry it over.
+      const selectedKey = findSelectedKey(oldViewFile);
+      let newViewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap, this.nestedNavEnabled);
+      if (selectedKey !== undefined) {
+        newViewFile = selectInTree(newViewFile, selectedKey);
+      }
       newViewFiles[index] = this.sortNewChildren(this.reconcileCheckedTree(newViewFile));
+      const liveKeys = new Set(collectAllKeys([newViewFile]));
+      goneKeys.push(...collectAllKeys([oldViewFile]).filter((k) => !liveKeys.has(k)));
       if (this.sortComparator != null && this.sortComparator(oldViewFile, newViewFile) !== 0) {
         reSort = true;
       }
@@ -357,7 +374,7 @@ export class ViewFileService {
     // Do the adds (requires re-sort)
     for (const key of addedKeys) {
       reSort = true;
-      const viewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap);
+      const viewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap, this.nestedNavEnabled);
       newViewFiles.push(this.sortNewChildren(this.reconcileCheckedTree(viewFile)));
       this.indices.set(viewFileKey(viewFile), newViewFiles.length - 1);
     }
@@ -368,10 +385,15 @@ export class ViewFileService {
     if (removedKeys.length > 0) {
       updateIndices = true;
       const removed = new Set(removedKeys);
-      // Drop any checked entries for removed files; the selection service
-      // re-emits checked$ iff at least one was actually present.
-      this.selection.pruneRemoved(removedKeys);
+      for (const v of newViewFiles) {
+        if (removed.has(viewFileKey(v))) goneKeys.push(...collectAllKeys([v]));
+      }
       newViewFiles = newViewFiles.filter((v) => !removed.has(viewFileKey(v)));
+    }
+    // Drop checked entries for rows that went away (at any depth); the
+    // selection service re-emits checked$ iff at least one was present.
+    if (goneKeys.length > 0) {
+      this.selection.pruneRemoved(goneKeys);
     }
 
     if (reSort && this.sortComparator != null) {
@@ -407,6 +429,34 @@ export class ViewFileService {
     }
     this.filteredFilesSubject.next(filteredFiles);
   }
+}
+
+// Selects the row with `key` anywhere in `node`'s subtree, re-spreading only
+// its ancestors so unchanged rows keep identity. Returns `node` itself if the
+// key isn't in the subtree.
+function selectInTree(node: ViewFile, key: string): ViewFile {
+  if (viewFileKey(node) === key) {
+    return { ...node, isSelected: true };
+  }
+  let changed = false;
+  const children = node.children.map((child) => {
+    const updated = selectInTree(child, key);
+    if (updated !== child) changed = true;
+    return updated;
+  });
+  return changed ? { ...node, children } : node;
+}
+
+// Key of the selected row anywhere in `node`'s subtree, if any.
+function findSelectedKey(node: ViewFile): string | undefined {
+  if (node.isSelected) {
+    return viewFileKey(node);
+  }
+  for (const child of node.children) {
+    const found = findSelectedKey(child);
+    if (found !== undefined) return found;
+  }
+  return undefined;
 }
 
 // Every key in the given forest, at any depth - used by checkAll() so "select
@@ -516,7 +566,7 @@ function childrenEqual(a: readonly ModelFile[], b: readonly ModelFile[]): boolea
 function createViewFile(
   modelFile: ModelFile,
   pairNameMap: Map<string, string>,
-  isSelected = false,
+  includeChildren: boolean,
   isTopLevel = true,
   ancestorActive = false,
 ): ViewFile {
@@ -592,8 +642,9 @@ function createViewFile(
 
   const childAncestorActive =
     ancestorActive || modelFile.state === ModelFileState.QUEUED || modelFile.state === ModelFileState.DOWNLOADING;
-  const children = modelFile.children.map((child) =>
-    createViewFile(child, pairNameMap, false, false, childAncestorActive));
+  const children = includeChildren
+    ? modelFile.children.map((child) => createViewFile(child, pairNameMap, true, false, childAncestorActive))
+    : [];
 
   return {
     name: modelFile.name,
@@ -608,7 +659,7 @@ function createViewFile(
     eta: modelFile.eta,
     fullPath: modelFile.full_path,
     isArchive: modelFile.is_extractable,
-    isSelected,
+    isSelected: false,
     isChecked: false,
     isIndeterminate: false,
     ...capabilities,

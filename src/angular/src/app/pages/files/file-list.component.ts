@@ -25,7 +25,6 @@ import { NotificationService } from '../../services/utils/notification.service';
 import { NotificationLevel, createNotification } from '../../models/notification';
 import { viewFileKey } from '../../services/files/file-key';
 import { flattenVisibleRows, FlatViewFileRow } from '../../services/files/view-file-tree-flatten';
-import { ConfigService } from '../../services/settings/config.service';
 import { FileAction } from '../../models/file-action';
 import { FileComponent, FileActionEvent, FileCleanupEvent } from './file.component';
 import { BulkActionBarComponent } from './bulk-action-bar.component';
@@ -47,7 +46,6 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   private readonly viewFileService = inject(ViewFileService);
   private readonly viewFileOptionsService = inject(ViewFileOptionsService);
   private readonly notifService = inject(NotificationService);
-  private readonly configService = inject(ConfigService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly elRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly zone = inject(NgZone);
@@ -62,9 +60,6 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   // it stays keyed correctly across an incremental model update that swaps
   // out a row's ViewFile object.
   private readonly expandedKeys = signal(new Set<string>());
-  private readonly nestedNavEnabled$: Observable<boolean> = this.configService.config$.pipe(
-    map((config) => !!config?.controller.enable_nested_navigation),
-  );
 
   options: Observable<ViewFileOptions> = this.viewFileOptionsService.options$;
   checked$ = this.viewFileService.checked$;
@@ -76,9 +71,8 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   files: Observable<FlatViewFileRow[]> = combineLatest([
     this.viewFileService.filteredFiles$,
     toObservable(this.expandedKeys),
-    this.nestedNavEnabled$,
   ]).pipe(
-    map(([files, expandedKeys, nestedNavEnabled]) => flattenVisibleRows(files, expandedKeys, nestedNavEnabled)),
+    map(([files, expandedKeys]) => flattenVisibleRows(files, expandedKeys)),
   );
 
   // Latest flattened, on-screen row keys (top-level + expanded nested rows),

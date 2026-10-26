@@ -4,6 +4,7 @@ import { BehaviorSubject, of } from "rxjs";
 import { ViewFileService, ViewFileFilterCriteria, VIEW_FILE_COALESCE_MS } from "./view-file.service";
 import { ModelFileService } from "./model-file.service";
 import { PathPairsService } from "../settings/path-pairs.service";
+import { ConfigService } from "../settings/config.service";
 import { LoggerService } from "../utils/logger.service";
 import { ModelFile, ModelFileState } from "../../models/model-file";
 import { PathPair } from "../../models/path-pair";
@@ -42,6 +43,8 @@ describe("ViewFileService", () => {
   let service: ViewFileService;
   let modelFilesSubject: BehaviorSubject<Map<string, ModelFile>>;
   let pairsSubject: BehaviorSubject<PathPair[]>;
+  // Nested navigation on by default, so nested-row specs see children.
+  let configSubject: BehaviorSubject<{ controller: { enable_nested_navigation: boolean } }>;
   let mockModelFileService: {
     files$: ReturnType<BehaviorSubject<Map<string, ModelFile>>["asObservable"]>;
     command: ReturnType<typeof vi.fn>;
@@ -50,6 +53,9 @@ describe("ViewFileService", () => {
   beforeEach(() => {
     modelFilesSubject = new BehaviorSubject<Map<string, ModelFile>>(new Map());
     pairsSubject = new BehaviorSubject<PathPair[]>([]);
+    configSubject = new BehaviorSubject<{ controller: { enable_nested_navigation: boolean } }>({
+      controller: { enable_nested_navigation: true },
+    });
     mockModelFileService = {
       files$: modelFilesSubject.asObservable(),
       command: vi.fn(),
@@ -59,6 +65,7 @@ describe("ViewFileService", () => {
         ViewFileService,
         { provide: ModelFileService, useValue: mockModelFileService },
         { provide: PathPairsService, useValue: { pairs$: pairsSubject.asObservable() } },
+        { provide: ConfigService, useValue: { config$: configSubject.asObservable() } },
         {
           provide: LoggerService,
           useValue: {
@@ -1349,6 +1356,70 @@ describe("ViewFileService", () => {
     expect(findByName(latestFiles(), "Solo")!.isChecked).toBe(true);
   });
 
+  function latestChecked(): Set<string> {
+    let result = new Set<string>();
+    service.checked$.subscribe((c) => (result = c));
+    return result;
+  }
+
+  it("keeps a nested row selected when its subtree is rebuilt by an SSE update", () => {
+    const leaf = (localSize: number) => makeModelFile({
+      name: "leaf.rar", full_path: "Top/leaf.rar", remote_size: 100, local_size: localSize,
+      state: ModelFileState.DOWNLOADING,
+    });
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [leaf(10)] })]);
+    service.setSelected(latestFiles()[0].children[0]);
+
+    // Only the nested child's progress changes.
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [leaf(60)] })]);
+
+    const nested = latestFiles()[0].children[0];
+    expect(nested.localSize).toBe(60);
+    expect(nested.isSelected).toBe(true);
+    expect(latestFiles()[0].isSelected).toBe(false);
+  });
+
+  it("prunes the checked key of a nested row removed from a folder that stays", () => {
+    const keep = makeModelFile({ name: "keep", full_path: "Top/keep", remote_size: 100 });
+    const gone = makeModelFile({ name: "gone", full_path: "Top/gone", remote_size: 100 });
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 200, children: [keep, gone] })]);
+    service.toggleCheck(findByName(latestFiles(), "gone")!);
+    expect(latestChecked().has(fileKey(null, "Top/gone"))).toBe(true);
+
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [keep] })]);
+
+    expect(latestChecked().size).toBe(0);
+  });
+
+  it("prunes the checked keys of nested rows when their top-level folder is removed", () => {
+    const child = makeModelFile({ name: "child", full_path: "Top/child", remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [child] }),
+      makeModelFile({ name: "Solo", remote_size: 100 }),
+    ]);
+    service.toggleCheck(findByName(latestFiles(), "child")!);
+
+    emitModelFiles([makeModelFile({ name: "Solo", remote_size: 100 })]);
+
+    expect(latestChecked().size).toBe(0);
+  });
+
+  it("builds no nested rows while nested navigation is off, and drops checked nested keys when it is turned off", () => {
+    const child = makeModelFile({ name: "child", full_path: "Top/child", remote_size: 100 });
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [child] })]);
+    service.toggleCheck(findByName(latestFiles(), "child")!);
+
+    configSubject.next({ controller: { enable_nested_navigation: false } });
+
+    expect(latestFiles()[0].children).toEqual([]);
+    expect(latestChecked().size).toBe(0);
+    service.checkAll();
+    expect([...latestChecked()]).toEqual([fileKey(null, "Top")]);
+
+    configSubject.next({ controller: { enable_nested_navigation: true } });
+    expect(latestFiles()[0].children.map((c) => c.name)).toEqual(["child"]);
+  });
+
   it("should preserve object identity of unchanged rows on a single-file SSE update", () => {
     emitModelFiles([
       makeModelFile({ name: "a", remote_size: 200, local_size: 50, state: ModelFileState.DOWNLOADING }),
@@ -1610,6 +1681,7 @@ describe("ViewFileService coalescing", () => {
         { provide: VIEW_FILE_COALESCE_MS, useValue: COALESCE_MS },
         { provide: ModelFileService, useValue: { files$: modelFilesSubject.asObservable() } },
         { provide: PathPairsService, useValue: { pairs$: pairsSubject.asObservable() } },
+        { provide: ConfigService, useValue: { config$: of(null) } },
         {
           provide: LoggerService,
           useValue: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },

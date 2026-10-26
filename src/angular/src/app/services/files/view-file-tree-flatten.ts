@@ -19,18 +19,16 @@ export interface FlatViewFileRow {
  * fixed height - a row that grows to contain its own nested subtree would
  * violate that and visually overlap the next virtual-scrolled row.
  *
- * When nested navigation is disabled, this degrades to the identity
- * transform (one row per top-level file, no children ever shown), matching
- * today's behavior exactly.
+ * When nested navigation is disabled, ViewFileService builds rows with no
+ * children, so this degrades to one row per top-level file.
  */
 export function flattenVisibleRows(
   files: readonly ViewFile[],
   expandedKeys: ReadonlySet<string>,
-  nestedNavEnabled: boolean,
 ): FlatViewFileRow[] {
   const rows: FlatViewFileRow[] = [];
   for (const file of files) {
-    appendRow(rows, file, 0, expandedKeys, nestedNavEnabled);
+    appendRow(rows, file, 0, expandedKeys);
   }
   return rows;
 }
@@ -40,15 +38,14 @@ function appendRow(
   file: ViewFile,
   depth: number,
   expandedKeys: ReadonlySet<string>,
-  nestedNavEnabled: boolean,
 ): void {
-  const hasChildren = nestedNavEnabled && file.children.length > 0;
+  const hasChildren = file.children.length > 0;
   const key = viewFileKey(file);
   const isExpanded = hasChildren && expandedKeys.has(key);
   rows.push({ file, depth, hasChildren, isExpanded });
   if (isExpanded) {
     for (const child of file.children) {
-      appendRow(rows, child, depth + 1, expandedKeys, nestedNavEnabled);
+      appendRow(rows, child, depth + 1, expandedKeys);
     }
   }
 }
