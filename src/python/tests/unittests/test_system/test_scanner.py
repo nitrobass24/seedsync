@@ -377,6 +377,29 @@ class TestSystemScanner(unittest.TestCase):
         self.assertEqual(0, f.size)
         self.assertEqual(True, f.is_dir)
 
+    def test_scan_skips_stale_lftp_temp_file_beside_its_finished_file(self):
+        """A leftover "<name>.lftp" next to "<name>" would otherwise be listed
+        twice under the same name; the finished file wins."""
+        tempdir = TestSystemScanner.temp_dir
+        with open(os.path.join(tempdir, "a.mkv"), "wb") as f:
+            f.write(bytearray([0xFF] * 100))
+        with open(os.path.join(tempdir, "a.mkv.lftp"), "wb") as f:
+            f.write(bytearray([0xFF] * 40))
+        os.mkdir(os.path.join(tempdir, "d"))
+        with open(os.path.join(tempdir, "d", "x.bin"), "wb") as f:
+            f.write(bytearray([0xFF] * 10))
+        with open(os.path.join(tempdir, "d", "x.bin.lftp"), "wb") as f:
+            f.write(bytearray([0xFF] * 5))
+
+        scanner = SystemScanner(tempdir)
+        scanner.set_lftp_temp_suffix(".lftp")
+        files = scanner.scan()
+
+        self.assertEqual(["a.mkv", "d"], [f.name for f in files])
+        self.assertEqual(100, files[0].size)
+        self.assertEqual(["x.bin"], [c.name for c in files[1].children])
+        self.assertEqual(10, files[1].children[0].size)
+
     def test_scan_single_lftp_temp_file(self):
         tempdir = TestSystemScanner.temp_dir
 

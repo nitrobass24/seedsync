@@ -207,12 +207,12 @@ class Controller:
         lftp.set_base_local_dir_path(effective_local_path)
         self._configure_lftp(lftp)
 
-        # Scanners
-        active_scanner = ActiveScanner(
-            effective_local_path,
-            lftp_temp_suffix=Constants.LFTP_TEMP_FILE_SUFFIX if self.__context.config.lftp.use_temp_file else None,
-        )
-        local_scanner = LocalScanner(local_path=local_path, use_temp_file=self.__context.config.lftp.use_temp_file)  # type: ignore[arg-type]
+        # Scanners. Both always recognise lftp temp files, whatever
+        # use_temp_file is set to: the setting is hot-applied to lftp
+        # (_LFTP_TUNING_KEYS), so it can change after these are built, and
+        # temp files from an earlier interrupted download can outlive it.
+        active_scanner = ActiveScanner(effective_local_path, lftp_temp_suffix=Constants.LFTP_TEMP_FILE_SUFFIX)
+        local_scanner = LocalScanner(local_path=local_path)
         remote_scanner = RemoteScanner(
             remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]
             remote_username=self.__context.config.lftp.remote_username,  # type: ignore[arg-type]
