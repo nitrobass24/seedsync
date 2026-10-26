@@ -191,14 +191,19 @@ class SystemScanner:
         total_size = int(result.group(1))
         lines.pop(0)
         while lines:
-            # There should be pairs of lines
-            if len(lines) < 2:
-                return 0
+            # There should be pairs of lines, except that a single-connection
+            # pget writes only "0.pos": that chunk runs to the end of the file
             result_pos = pos_pattern_m.search(lines[0])
-            result_limit = limit_pattern_m.search(lines[1])
-            if not result_pos or not result_limit:
+            if not result_pos:
                 return 0
             pos = int(result_pos.group(1))
+            if len(lines) == 1:
+                empty_size += total_size - pos
+                lines.pop(0)
+                continue
+            result_limit = limit_pattern_m.search(lines[1])
+            if not result_limit:
+                return 0
             limit = int(result_limit.group(1))
             empty_size += limit - pos
             lines.pop(0)

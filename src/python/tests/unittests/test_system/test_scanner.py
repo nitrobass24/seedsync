@@ -234,6 +234,13 @@ class TestSystemScanner(unittest.TestCase):
         """)
         self.assertEqual(104792064, size)
 
+    def test_lftp_status_file_size_single_chunk(self):
+        """A single-connection pget writes only "0.pos" (no "0.limit"); chunk 0
+        then runs to the end of the file. Captured from lftp on alpine:3.23."""
+        scanner = SystemScanner(TestSystemScanner.temp_dir)
+        size = scanner._lftp_status_file_size("size=20000000\n0.pos=12542836\n")
+        self.assertEqual(12542836, size)
+
     def test_scan_lftp_partial_file(self):
         tempdir = TestSystemScanner.temp_dir
 
