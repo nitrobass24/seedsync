@@ -466,7 +466,6 @@ class ModelUpdater:
         pc.active_scanner.set_active_files(active_files)
 
         pc.model_builder.set_auto_delete_remote(bool(self._context.config.autoqueue.auto_delete_remote))
-        pc.model_builder.set_nested_navigation_enabled(bool(self._context.config.controller.enable_nested_navigation))
 
         if latest_remote_scan is not None:
             remote_files = filter_excluded_files(

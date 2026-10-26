@@ -41,7 +41,6 @@ class ModelBuilder:
         self.__corrupt_files: set[str] = set()
         self.__move_failed_files: set[str] = set()
         self.__auto_delete_remote = False
-        self.__nested_navigation_enabled = False
         self.__cached_model: Model | None = None
         self.__smoothed_etas: dict[str, float] = {}
 
@@ -139,11 +138,6 @@ class ModelBuilder:
             self.__auto_delete_remote = enabled
             self.__cached_model = None
 
-    def set_nested_navigation_enabled(self, enabled: bool):
-        if self.__nested_navigation_enabled != enabled:
-            self.__nested_navigation_enabled = enabled
-            self.__cached_model = None
-
     def clear(self):
         self.__local_files.clear()
         self.__active_files.clear()
@@ -158,7 +152,6 @@ class ModelBuilder:
         self.__corrupt_files.clear()
         self.__move_failed_files.clear()
         self.__auto_delete_remote = False
-        self.__nested_navigation_enabled = False
         self.__cached_model = None
         self.__smoothed_etas.clear()
 
@@ -184,13 +177,11 @@ class ModelBuilder:
         # single file/folder inside an already-tracked directory. Nested
         # statuses don't correspond to their own top-level entry - they get
         # routed to the matching child in _build_children once the tree for
-        # their top-level ancestor is built.
-        if self.__nested_navigation_enabled:
-            top_level_statuses = {n: s for n, s in self.__lftp_statuses.items() if "/" not in n}
-            nested_statuses = {n: s for n, s in self.__lftp_statuses.items() if "/" in n}
-        else:
-            top_level_statuses = self.__lftp_statuses
-            nested_statuses = {}
+        # their top-level ancestor is built. Split regardless of the
+        # nested-navigation toggle: a nested job still running after the
+        # toggle is turned off must not show up as a phantom top-level entry.
+        top_level_statuses = {n: s for n, s in self.__lftp_statuses.items() if "/" not in n}
+        nested_statuses = {n: s for n, s in self.__lftp_statuses.items() if "/" in n}
 
         all_file_names: set[str] = set[str]().union(
             effective_local.keys(), self.__remote_files.keys(), top_level_statuses.keys()
@@ -198,7 +189,7 @@ class ModelBuilder:
         for name in all_file_names:
             remote = self.__remote_files.get(name, None)
             local = effective_local.get(name)
-            status = top_level_statuses.get(name, None)
+            status = top_level_statuses.get(name)
 
             if remote is None and local is None and status is None:
                 # this should never happen, but just in case

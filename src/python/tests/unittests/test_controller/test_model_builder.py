@@ -2125,7 +2125,6 @@ class TestModelBuilderNestedNavigation(unittest.TestCase):
         nested_status = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "Top/leaf.rar", "")
         nested_status.total_transfer_state = LftpJobStatus.TransferState(500, 1000, 50, 100, 5)
         self.model_builder.set_lftp_statuses([nested_status])
-        self.model_builder.set_nested_navigation_enabled(True)
 
         model = self.model_builder.build_model()
 
@@ -2147,7 +2146,6 @@ class TestModelBuilderNestedNavigation(unittest.TestCase):
 
         nested_status = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "Top/leaf.rar", "")
         self.model_builder.set_lftp_statuses([nested_status])
-        self.model_builder.set_nested_navigation_enabled(True)
 
         model = self.model_builder.build_model()
 
@@ -2161,7 +2159,6 @@ class TestModelBuilderNestedNavigation(unittest.TestCase):
 
         nested_status = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.QUEUED, "Top/leaf.rar", "")
         self.model_builder.set_lftp_statuses([nested_status])
-        self.model_builder.set_nested_navigation_enabled(True)
 
         model = self.model_builder.build_model()
 
@@ -2188,7 +2185,6 @@ class TestModelBuilderNestedNavigation(unittest.TestCase):
         # fully downloaded, so finalize should roll Sub up to Downloaded.
         nested_status = LftpJobStatus(0, LftpJobStatus.Type.MIRROR, LftpJobStatus.State.RUNNING, "Top/Sub", "")
         self.model_builder.set_lftp_statuses([nested_status])
-        self.model_builder.set_nested_navigation_enabled(True)
 
         model = self.model_builder.build_model()
 
@@ -2207,17 +2203,16 @@ class TestModelBuilderNestedNavigation(unittest.TestCase):
 
         nested_status = LftpJobStatus(0, LftpJobStatus.Type.MIRROR, LftpJobStatus.State.RUNNING, "Top/Sub", "")
         self.model_builder.set_lftp_statuses([nested_status])
-        self.model_builder.set_nested_navigation_enabled(True)
 
         model = self.model_builder.build_model()
 
         sub = next(c for c in model.get_file("Top").get_children() if c.name == "Sub")
         self.assertEqual(ModelFile.State.DOWNLOADING, sub.state)
 
-    def test_nested_navigation_disabled_leaves_nested_status_as_literal_top_level(self):
-        """Regression guard: with the toggle off (the default), a '/'-containing
-        status name is treated exactly like before this feature existed - as a
-        literal (if odd) top-level name, never routed into a child."""
+    def test_nested_status_never_creates_a_phantom_top_level_entry(self):
+        """A '/'-containing status name is always routed to its nested child,
+        even with nested navigation off (e.g. a nested job still running
+        after the toggle was turned off), never added as a top-level entry."""
         r_top = SystemFile("Top", 1000, True)
         r_leaf = SystemFile("leaf.rar", 1000, False)
         r_top.add_child(r_leaf)
@@ -2225,10 +2220,9 @@ class TestModelBuilderNestedNavigation(unittest.TestCase):
 
         nested_status = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "Top/leaf.rar", "")
         self.model_builder.set_lftp_statuses([nested_status])
-        # set_nested_navigation_enabled not called - defaults to disabled.
 
         model = self.model_builder.build_model()
 
-        self.assertIn("Top/leaf.rar", model.get_file_names())
+        self.assertEqual({"Top"}, model.get_file_names())
         leaf = next(c for c in model.get_file("Top").get_children() if c.name == "leaf.rar")
-        self.assertEqual(ModelFile.State.DEFAULT, leaf.state)
+        self.assertEqual(ModelFile.State.DOWNLOADING, leaf.state)
