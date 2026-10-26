@@ -713,27 +713,27 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         pipeline._registry.get_file.assert_called_once_with("TopDir/leaf.txt", pair_id="pair-1")
         pipeline._registry.resolve_full_path.assert_not_called()
 
-    # --- _find_queue_conflict ---
+    # --- _find_active_job_conflict ---
 
-    def test_find_queue_conflict_none_when_idle(self):
+    def test_find_active_job_conflict_none_when_idle(self):
         root = ModelFile("Top", True)
         child = ModelFile("child.txt", False)
         root.add_child(child)
 
-        self.assertIsNone(CommandPipeline._find_queue_conflict(child))
+        self.assertIsNone(CommandPipeline._find_active_job_conflict(child))
 
-    def test_find_queue_conflict_ancestor_active_blocks_nested_queue(self):
+    def test_find_active_job_conflict_ancestor_active_blocks_nested_queue(self):
         root = ModelFile("Top", True)
         root.state = ModelFile.State.DOWNLOADING
         child = ModelFile("child.txt", False)
         root.add_child(child)
 
-        conflict = CommandPipeline._find_queue_conflict(child)
+        conflict = CommandPipeline._find_active_job_conflict(child)
         self.assertIsNotNone(conflict)
         self.assertIn("Top", conflict)
         self.assertIn("child.txt", conflict)
 
-    def test_find_queue_conflict_descendant_active_blocks_folder_queue(self):
+    def test_find_active_job_conflict_descendant_active_blocks_folder_queue(self):
         root = ModelFile("Top", True)
         sub = ModelFile("Sub", True)
         leaf = ModelFile("leaf.txt", False)
@@ -741,14 +741,14 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         sub.add_child(leaf)
         root.add_child(sub)
 
-        conflict = CommandPipeline._find_queue_conflict(root)
+        conflict = CommandPipeline._find_active_job_conflict(root)
         self.assertIsNotNone(conflict)
         self.assertIn("leaf.txt", conflict)
 
-    def test_find_queue_conflict_none_for_file_queue_when_no_relatives_active(self):
+    def test_find_active_job_conflict_none_for_file_queue_when_no_relatives_active(self):
         # A plain file (not a dir) never checks descendants; only ancestors.
         leaf = ModelFile("leaf.txt", False)
-        self.assertIsNone(CommandPipeline._find_queue_conflict(leaf))
+        self.assertIsNone(CommandPipeline._find_active_job_conflict(leaf))
 
     # --- _handle_queue ---
 
@@ -897,7 +897,9 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         pc.lftp.kill.assert_any_call("Top/a.rar")
         pc.lftp.kill.assert_any_call("Top/b.rar")
 
-    def test_handle_stop_nested_cascade_succeeds_if_at_least_one_kill_succeeds(self):
+    def test_handle_stop_nested_cascade_treats_a_missing_job_as_finished(self):
+        """A job lftp no longer has finished on its own since the last scan,
+        so it doesn't fail the command as long as another job was stopped."""
         pc = self._make_pair_context("pair-1")
         pipeline = self._make_pipeline([pc], nested_enabled=True)
         pc.lftp.kill.side_effect = [True, False]
@@ -936,6 +938,31 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
 
         self.assertFalse(result)
         self.assertEqual(1, len(calls))
+
+    def test_handle_stop_nested_cascade_fails_when_any_kill_raises(self):
+        """Partial failure is reported, not hidden behind the jobs that did
+        stop, and the remaining jobs are still attempted."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pc.lftp.kill.side_effect = [LftpError("connection lost"), True]
+
+        root = ModelFile("Top", True)
+        leaf_a = ModelFile("a.rar", False)
+        leaf_a.state = ModelFile.State.DOWNLOADING
+        leaf_b = ModelFile("b.rar", False)
+        leaf_b.state = ModelFile.State.QUEUED
+        root.add_child(leaf_a)
+        root.add_child(leaf_b)
+        command = Command(Command.Action.STOP, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_stop(command, root, pc, notify)
+
+        self.assertFalse(result)
+        self.assertEqual(2, pc.lftp.kill.call_count)
+        self.assertEqual(1, len(calls))
+        self.assertIn("1 of 2", calls[0])
+        self.assertIn("'Top/a.rar': connection lost", calls[0])
 
     def test_handle_stop_nested_cascade_fails_when_all_kills_raise(self):
         pc = self._make_pair_context("pair-1")
@@ -1047,6 +1074,133 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         self.assertTrue(result)
         _, kwargs = mock_delete_cls.call_args
         self.assertEqual("Top/leaf.rar", kwargs["file_name"])
+
+    @patch("controller.command_pipeline.CleanupLocalProcess")
+    def test_handle_cleanup_local_nested_uses_full_path(self, mock_cleanup_cls):
+        """Cleanup on a nested folder must target that folder, not a top-level
+        folder that happens to share its leaf name."""
+        pc = self._make_pair_context("pair-1")
+        pc.local_path = "/local"
+        pc.latest_remote_scan = None
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.controller.use_staging = False
+
+        root = ModelFile("Top", True)
+        sub = ModelFile("Extras", True)
+        sub.state = ModelFile.State.DOWNLOADED
+        sub.local_size = 10
+        sub.remote_size = 5
+        stray = ModelFile("stray.nfo", False)
+        stray.local_size = 5
+        root.add_child(sub)
+        sub.add_child(stray)
+        command = Command(Command.Action.CLEANUP_LOCAL, "Top/Extras", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_cleanup_local(command, sub, pc, [], notify)
+
+        self.assertTrue(result, calls)
+        mock_cleanup_cls.assert_called_once_with(
+            local_path="/local", file_name="Top/Extras", relative_paths=["stray.nfo"]
+        )
+
+    # --- delete/cleanup guards against in-flight jobs ---
+
+    @staticmethod
+    def _make_tree_with_active_parent():
+        root = ModelFile("Top", True)
+        root.state = ModelFile.State.DOWNLOADING
+        leaf = ModelFile("leaf.rar", False)
+        leaf.state = ModelFile.State.DOWNLOADED
+        leaf.local_size = 100
+        leaf.remote_size = 100
+        root.add_child(leaf)
+        return leaf
+
+    @staticmethod
+    def _make_folder_with_active_descendant():
+        root = ModelFile("Top", True)
+        root.state = ModelFile.State.DEFAULT
+        root.local_size = 100
+        root.remote_size = 100
+        sub = ModelFile("Sub", True)
+        leaf = ModelFile("leaf.rar", False)
+        leaf.state = ModelFile.State.DOWNLOADING
+        root.add_child(sub)
+        sub.add_child(leaf)
+        return root
+
+    @patch("controller.command_pipeline.DeleteLocalProcess")
+    def test_handle_delete_local_rejects_file_inside_an_active_folder_job(self, mock_delete_cls):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        leaf = self._make_tree_with_active_parent()
+        command = Command(Command.Action.DELETE_LOCAL, "Top/leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_delete_local(command, leaf, pc, [], notify)
+
+        self.assertFalse(result)
+        self.assertEqual(1, len(calls))
+        self.assertIn("'Top' is already queued/downloading", calls[0])
+        mock_delete_cls.assert_not_called()
+
+    @patch("controller.command_pipeline.DeleteLocalProcess")
+    def test_handle_delete_local_rejects_folder_with_an_active_descendant(self, mock_delete_cls):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        root = self._make_folder_with_active_descendant()
+        command = Command(Command.Action.DELETE_LOCAL, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_delete_local(command, root, pc, [], notify)
+
+        self.assertFalse(result)
+        self.assertIn("'Top/Sub/leaf.rar' inside this folder", calls[0])
+        mock_delete_cls.assert_not_called()
+
+    @patch("controller.command_pipeline.DeleteRemoteProcess")
+    def test_handle_delete_remote_rejects_file_inside_an_active_folder_job(self, mock_delete_cls):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        leaf = self._make_tree_with_active_parent()
+        command = Command(Command.Action.DELETE_REMOTE, "Top/leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_delete_remote(command, leaf, pc, [], notify)
+
+        self.assertFalse(result)
+        self.assertIn("'Top' is already queued/downloading", calls[0])
+        mock_delete_cls.assert_not_called()
+
+    @patch("controller.command_pipeline.DeleteRemoteProcess")
+    def test_handle_delete_remote_rejects_folder_with_an_active_descendant(self, mock_delete_cls):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        root = self._make_folder_with_active_descendant()
+        command = Command(Command.Action.DELETE_REMOTE, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_delete_remote(command, root, pc, [], notify)
+
+        self.assertFalse(result)
+        self.assertIn("'Top/Sub/leaf.rar' inside this folder", calls[0])
+        mock_delete_cls.assert_not_called()
+
+    @patch("controller.command_pipeline.CleanupLocalProcess")
+    def test_handle_cleanup_local_rejects_folder_with_an_active_descendant(self, mock_cleanup_cls):
+        pc = self._make_pair_context("pair-1")
+        pc.latest_remote_scan = None
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        root = self._make_folder_with_active_descendant()
+        command = Command(Command.Action.CLEANUP_LOCAL, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_cleanup_local(command, root, pc, [], notify)
+
+        self.assertFalse(result)
+        self.assertIn("'Top/Sub/leaf.rar' inside this folder", calls[0])
+        mock_cleanup_cls.assert_not_called()
 
     # --- _dispatch_command: nested EXTRACT/VALIDATE scope cut ---
 
