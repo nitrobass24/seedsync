@@ -306,8 +306,23 @@ describe('FileComponent inline delete confirmation', () => {
     component.onAction(FileAction.DELETE_REMOTE, makeViewFile());
     expect(component.confirmingDelete).toBe('remote');
 
-    const oldFile = makeViewFile({ name: 'file-a.txt' });
-    const newFile = makeViewFile({ name: 'file-b.txt' });
+    const oldFile = makeViewFile({ name: 'file-a.txt', fullPath: 'file-a.txt' });
+    const newFile = makeViewFile({ name: 'file-b.txt', fullPath: 'file-b.txt' });
+
+    component.ngOnChanges({
+      file: new SimpleChange(oldFile, newFile, false),
+    });
+
+    expect(component.confirmingDelete).toBeNull();
+    expect(component.activeAction).toBeNull();
+  });
+
+  it('should reset confirmingDelete when recycled to a nested row with the same leaf name', () => {
+    component.onAction(FileAction.DELETE_LOCAL, makeViewFile());
+    expect(component.confirmingDelete).toBe('local');
+
+    const oldFile = makeViewFile({ name: 'video.mkv', fullPath: 'Disc1/video.mkv' });
+    const newFile = makeViewFile({ name: 'video.mkv', fullPath: 'Disc2/video.mkv' });
 
     component.ngOnChanges({
       file: new SimpleChange(oldFile, newFile, false),
@@ -414,8 +429,8 @@ describe('FileComponent.clearActiveAction recycle guard (#540)', () => {
   });
 
   it('does NOT clear when recycled to a different file (stale failure callback)', () => {
-    const fileA = makeViewFile({ name: 'a.txt' });
-    const fileB = makeViewFile({ name: 'b.txt' });
+    const fileA = makeViewFile({ name: 'a.txt', fullPath: 'a.txt' });
+    const fileB = makeViewFile({ name: 'b.txt', fullPath: 'b.txt' });
     fixture.componentRef.setInput('file', fileB); // instance recycled to file B
     fixture.detectChanges();
     component.activeAction = FileAction.DELETE_LOCAL; // B started its own action
@@ -423,6 +438,17 @@ describe('FileComponent.clearActiveAction recycle guard (#540)', () => {
     // A late failure callback captured for file A must not clear B's action.
     component.clearActiveAction(fileA, FileAction.QUEUE);
     expect(component.activeAction).toBe(FileAction.DELETE_LOCAL);
+  });
+
+  it('does NOT clear when recycled to a nested row with the same leaf name', () => {
+    const fileA = makeViewFile({ name: 'video.mkv', fullPath: 'Disc1/video.mkv' });
+    const fileB = makeViewFile({ name: 'video.mkv', fullPath: 'Disc2/video.mkv' });
+    fixture.componentRef.setInput('file', fileB);
+    fixture.detectChanges();
+    component.activeAction = FileAction.QUEUE;
+
+    component.clearActiveAction(fileA, FileAction.QUEUE);
+    expect(component.activeAction).toBe(FileAction.QUEUE);
   });
 
   it('does NOT clear when the same file started a different action since', () => {

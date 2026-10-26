@@ -91,7 +91,7 @@ export class FileComponent implements OnChanges, OnDestroy {
       const oldFile: ViewFile | undefined = fileChange.previousValue;
       const newFile: ViewFile | undefined = fileChange.currentValue;
       if (oldFile != null && newFile != null) {
-        if (oldFile.pairId !== newFile.pairId || oldFile.name !== newFile.name) {
+        if (oldFile.pairId !== newFile.pairId || oldFile.fullPath !== newFile.fullPath) {
           this.activeAction = null;
           this.deleteConfirm.reset();
         } else if (oldFile.status !== newFile.status) {
@@ -159,7 +159,7 @@ export class FileComponent implements OnChanges, OnDestroy {
       const current = this.file();
       if (
         current.pairId !== forFile.pairId ||
-        current.name !== forFile.name ||
+        current.fullPath !== forFile.fullPath ||
         this.activeAction !== forAction
       ) {
         return;
