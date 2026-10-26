@@ -2069,6 +2069,31 @@ class TestLftpJobStatusParserHelpers(unittest.TestCase):
         self.assertEqual(1, len(statuses))
         self.assertEqual("TopDir/leaf.rar", statuses[0].name)
 
+    def test_parse_preserves_nested_names_under_a_tilde_base(self):
+        """`jobs -v` output captured from lftp 4.9 on alpine:3.23 with a
+        `~`-prefixed remote_path: lftp echoes `~` unexpanded, so the nested
+        name is recovered relative to the configured base."""
+        output = (
+            "[0] queue (sftp://u:pw@localhost)  -- 293.5 KiB/s\n"
+            "\tsftp://u:pw@localhost/home/u\n"
+            "\tNow executing: [1] pget -c ~/dl/Top/leaf.rar -o /tmp/out/Top/ -- 195.7 KiB/s\n"
+            "\t\t-[2] mirror -c ~/dl/Top/Sub /tmp/out/Top/ -- 469k/3.0M (15%) 97.8 KiB/s\n"
+            " [1] pget -c ~/dl/Top/leaf.rar -o /tmp/out/Top/  -- 195.7 KiB/s\n"
+            "\tsftp://u:pw@localhost/home/u\n"
+            "\t`~/dl/Top/leaf.rar', got 915702 of 3000000 (30%) 195.7K/s eta:15s \n"
+            "  \\chunk 0-1951424\n"
+            "\t`~/dl/Top/leaf.rar' at 470410 (15%) 97.9K/s eta:15s [Receiving data]\n"
+            "  \\chunk 1951424-2999999 \n"
+            "\t`~/dl/Top/leaf.rar' at 2396716 (42%) 97.7K/s eta:6s [Receiving data]\n"
+            " [2] mirror -c ~/dl/Top/Sub /tmp/out/Top/  -- 469k/3.0M (15%) 97.8 KiB/s\n"
+            "  \\transfer `a.bin' \n"
+            "\t`a.bin' at 462644 (15%) 97.8K/s eta:25s [Receiving data]\n"
+        )
+        parser = LftpJobStatusParser()
+        parser.set_base_remote_dir_path("~/dl")
+        statuses = parser.parse(output)
+        self.assertEqual(["Top/leaf.rar", "Top/Sub"], [s.name for s in statuses])
+
     # --- _parse_filename_chunk ------------------------------------------------
 
     def test_parse_filename_chunk_registers_active_file(self):
