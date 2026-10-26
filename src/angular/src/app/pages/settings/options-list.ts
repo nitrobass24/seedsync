@@ -310,6 +310,14 @@ export const OPTIONS_CONTEXT_OTHER: IOptionsContext = {
       description: 'Require this key for API access. Leave empty to disable.',
       requiresRestart: true,
     },
+    {
+      type: OptionType.Checkbox,
+      label: 'Enable nested folder navigation',
+      valuePath: ['controller', 'enable_nested_navigation'],
+      description:
+        'Browse into subfolders of a tracked directory and queue, stop, or delete ' +
+        'individual nested files and folders as independent jobs.',
+    },
   ],
 };
 

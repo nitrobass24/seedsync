@@ -4,7 +4,7 @@ import logging
 import unittest
 
 from controller.model_registry import ModelRegistry
-from model import IModelListener, Model, ModelDiff, ModelFile
+from model import IModelListener, Model, ModelDiff, ModelError, ModelFile
 
 
 class _TestListener(IModelListener):
@@ -159,3 +159,53 @@ class TestModelRegistry(unittest.TestCase):
         # Verify model is updated
         result = self.registry.get_file("update_me.txt")
         self.assertEqual(ModelFile.State.DOWNLOADED, result.state)
+
+    # --- resolve_full_path (nested folder navigation) ---
+
+    def test_resolve_full_path_top_level(self):
+        f = ModelFile("Top.rar", False)
+        self.model.add_file(f)
+
+        result = self.registry.resolve_full_path("Top.rar")
+        self.assertIs(f, result)
+
+    def test_resolve_full_path_one_level_nested(self):
+        root = ModelFile("Top", True)
+        child = ModelFile("child.txt", False)
+        root.add_child(child)
+        self.model.add_file(root)
+
+        result = self.registry.resolve_full_path("Top/child.txt")
+        self.assertIs(child, result)
+
+    def test_resolve_full_path_two_levels_nested(self):
+        root = ModelFile("Top", True)
+        sub = ModelFile("Sub", True)
+        leaf = ModelFile("leaf.rar", False)
+        sub.add_child(leaf)
+        root.add_child(sub)
+        self.model.add_file(root)
+
+        result = self.registry.resolve_full_path("Top/Sub/leaf.rar")
+        self.assertIs(leaf, result)
+
+    def test_resolve_full_path_missing_top_level_raises(self):
+        with self.assertRaises(ModelError):
+            self.registry.resolve_full_path("NoSuchTop/child.txt")
+
+    def test_resolve_full_path_missing_nested_segment_raises(self):
+        root = ModelFile("Top", True)
+        root.add_child(ModelFile("actual_child.txt", False))
+        self.model.add_file(root)
+
+        with self.assertRaises(ModelError):
+            self.registry.resolve_full_path("Top/no_such_child.txt")
+
+    def test_resolve_full_path_is_pair_aware(self):
+        f_a = ModelFile("Top.rar", False, pair_id="pair-a")
+        f_b = ModelFile("Top.rar", False, pair_id="pair-b")
+        self.model.add_file(f_a)
+        self.model.add_file(f_b)
+
+        result = self.registry.resolve_full_path("Top.rar", pair_id="pair-b")
+        self.assertIs(f_b, result)

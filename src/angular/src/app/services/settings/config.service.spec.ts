@@ -49,6 +49,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
       use_local_path_as_extract_path: true,
       staging_path: null,
       use_staging: false,
+      enable_nested_navigation: false,
     },
     web: { port: 8080, api_key: "test-key" },
     autoqueue: {

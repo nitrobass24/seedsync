@@ -138,7 +138,7 @@ class CommandPipeline:
                 continue
 
             try:
-                file = self._registry.get_file(command.filename, pair_id=pc.pair_id)
+                file = self._resolve_command_file(command.filename, pc.pair_id)
             except ModelError:
                 _notify_failure(command, f"File '{command.filename}' not found")
                 continue
@@ -154,6 +154,19 @@ class CommandPipeline:
         for cmd in deferred:
             self.command_queue.put(cmd)
 
+    def _resolve_command_file(self, filename: str, pair_id: str | None) -> ModelFile:
+        """Resolve a command's filename to a ModelFile.
+
+        Falls back to the plain top-level lookup unless nested navigation is
+        enabled AND the filename looks nested (contains '/'), so behavior is
+        byte-for-byte identical to before this feature when the toggle is off
+        (no top-level name ever contains '/', so the plain lookup already
+        raises "not found" for a nested-looking name).
+        """
+        if "/" not in filename or not self._context.config.controller.enable_nested_navigation:
+            return self._registry.get_file(filename, pair_id=pair_id)
+        return self._registry.resolve_full_path(filename, pair_id=pair_id)
+
     def _dispatch_command(
         self,
         command: Command,
@@ -164,6 +177,9 @@ class CommandPipeline:
     ) -> bool:
         """Dispatch a command to the appropriate handler. Returns True on success."""
         Action = Command.Action
+        if command.action in (Action.EXTRACT, Action.VALIDATE) and file.parent is not None:
+            _notify_failure(command, f"Nested {command.action.name} is not supported")
+            return False
         handlers = {
             Action.QUEUE: lambda: self._handle_queue(command, file, pc, _notify_failure),
             Action.STOP: lambda: self._handle_stop(command, file, pc, _notify_failure),
@@ -186,16 +202,68 @@ class CommandPipeline:
         _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the QUEUE action. Returns True on success, False on failure."""
+        conflict = self._find_active_job_conflict(file)
+        if conflict is not None:
+            _notify_failure(command, conflict)
+            return False
         if file.remote_size is None:
             _notify_failure(command, f"File '{command.filename}' does not exist remotely")
             return False
         try:
             exclude = parse_exclude_patterns(self._context.config.general.exclude_patterns)
-            pc.lftp.queue(file.name, file.is_dir, exclude_patterns=exclude)
+            pc.lftp.queue(command.filename, file.is_dir, exclude_patterns=exclude)
         except LftpError as e:
             _notify_failure(command, f"Lftp error: {e!s}")
             return False
         return True
+
+    @staticmethod
+    def _find_active_job_conflict(file: ModelFile) -> str | None:
+        """Check for ancestor/descendant job conflicts before queuing or
+        deleting `file`.
+
+        If any ancestor is already queued/downloading, its mirror job owns
+        `file`: a new nested job would race it, and a delete would pull files
+        out from under it. Conversely, if anything inside a directory is
+        queued/downloading, a new job on the directory would race it and a
+        delete would remove an in-flight download. Returns a failure message,
+        or None if there's no conflict.
+        """
+        active_states = (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING)
+        ancestor = file.parent
+        while ancestor is not None:
+            if ancestor.state in active_states:
+                return f"'{ancestor.full_path}' is already queued/downloading, which includes '{file.full_path}'"
+            ancestor = ancestor.parent
+        if file.is_dir:
+            frontier = list(file.get_children())
+            while frontier:
+                descendant = frontier.pop(0)
+                if descendant.state in active_states:
+                    return f"'{descendant.full_path}' inside this folder is already queued/downloading"
+                frontier.extend(descendant.get_children())
+        return None
+
+    @staticmethod
+    def _find_active_nested_descendants(file: ModelFile) -> list[ModelFile]:
+        """Find independently active (Queued/Downloading) descendants of `file`.
+
+        Each result is the root of one independently active subtree (a
+        standalone nested job); its own children aren't independently active
+        for the same invariant _find_active_job_conflict relies on (no new job can
+        start under an already-active node), so we don't descend past it -
+        stopping it stops everything beneath it via the same lftp job.
+        """
+        active_states = (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING)
+        result: list[ModelFile] = []
+        frontier = list(file.get_children())
+        while frontier:
+            descendant = frontier.pop(0)
+            if descendant.state in active_states:
+                result.append(descendant)
+                continue
+            frontier.extend(descendant.get_children())
+        return result
 
     def _handle_stop(
         self,
@@ -205,13 +273,63 @@ class CommandPipeline:
         _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the STOP action. Returns True on success, False on failure."""
-        if file.state not in (ModelFile.State.DOWNLOADING, ModelFile.State.QUEUED):
-            _notify_failure(command, f"File '{command.filename}' is not Queued or Downloading")
+        if file.state in (ModelFile.State.DOWNLOADING, ModelFile.State.QUEUED):
+            try:
+                killed = pc.lftp.kill(command.filename)
+            except LftpError as e:
+                _notify_failure(command, f"Lftp error: {e!s}")
+                return False
+            if not killed:
+                _notify_failure(
+                    command,
+                    f"File '{command.filename}' has no independent download job to stop "
+                    "(it may be downloading as part of its parent folder)",
+                )
+                return False
+            return True
+
+        # "Stop Nested Downloads": a folder (top-level or nested) whose own
+        # job isn't active but has independently active nested descendants.
+        if self._context.config.controller.enable_nested_navigation and file.is_dir:
+            nested_active = self._find_active_nested_descendants(file)
+            if nested_active:
+                return self._handle_stop_nested_descendants(command, nested_active, pc, _notify_failure)
+
+        _notify_failure(command, f"File '{command.filename}' is not Queued or Downloading")
+        return False
+
+    def _handle_stop_nested_descendants(
+        self,
+        command: Command,
+        nested_active: list[ModelFile],
+        pc: PairContext,
+        _notify_failure: Callable[[Command, str], None],
+    ) -> bool:
+        """Stop every independently-active nested job under a folder whose own
+        job isn't active. Tries every job even if one fails, and fails the
+        command if any kill raised. A job lftp no longer has (it finished on
+        its own since the last scan) counts as stopped, unless none of the
+        jobs could be found at all.
+        """
+        any_killed = False
+        errors: list[str] = []
+        for descendant in nested_active:
+            try:
+                killed = pc.lftp.kill(descendant.full_path)
+            except LftpError as e:
+                errors.append(f"'{descendant.full_path}': {e!s}")
+                continue
+            any_killed = any_killed or killed
+        if errors:
+            message = (
+                f"Failed to stop {len(errors)} of {len(nested_active)} nested downloads "
+                f"in '{command.filename}': " + "; ".join(errors)
+            )
+            self._logger.error(message)
+            _notify_failure(command, message)
             return False
-        try:
-            pc.lftp.kill(file.name)
-        except LftpError as e:
-            _notify_failure(command, f"Lftp error: {e!s}")
+        if not any_killed:
+            _notify_failure(command, f"No nested download jobs found to stop in '{command.filename}'")
             return False
         return True
 
@@ -274,16 +392,20 @@ class CommandPipeline:
                 f"Local file '{command.filename}' cannot be deleted in state {file.state!s}",
             )
             return False
+        conflict = self._find_active_job_conflict(file)
+        if conflict is not None:
+            _notify_failure(command, conflict)
+            return False
         if file.local_size is None:
             _notify_failure(command, f"File '{command.filename}' does not exist locally")
             return False
         delete_path = pc.local_path
         pair_staging = self._pair_staging_dir(pc)
         if pair_staging:
-            staging_file = os.path.join(pair_staging, file.name)
+            staging_file = os.path.join(pair_staging, command.filename)
             if os.path.exists(staging_file):
                 delete_path = pair_staging
-        process = DeleteLocalProcess(local_path=delete_path, file_name=file.name)
+        process = DeleteLocalProcess(local_path=delete_path, file_name=command.filename)
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
 
         def post_callback(delete_path: str = delete_path, _pc: PairContext = pc) -> None:
@@ -291,7 +413,7 @@ class CommandPipeline:
             if delete_path != _pc.local_path:
                 _pc.active_scan_process.force_scan()
 
-        command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback, filename=file.name)
+        command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback, filename=command.filename)
         self.active_command_processes.append(command_wrapper)
         command_wrapper.process.start()
         return True
@@ -328,6 +450,10 @@ class CommandPipeline:
                 f"Remote file '{command.filename}' cannot be deleted in state {file.state!s}",
             )
             return False
+        conflict = self._find_active_job_conflict(file)
+        if conflict is not None:
+            _notify_failure(command, conflict)
+            return False
         if file.remote_size is None:
             _notify_failure(command, f"File '{command.filename}' does not exist remotely")
             return False
@@ -337,11 +463,11 @@ class CommandPipeline:
             remote_password=self._password,
             remote_port=self._context.config.lftp.remote_port,  # type: ignore[arg-type]
             remote_path=pc.remote_path,
-            file_name=file.name,
+            file_name=command.filename,
         )
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
         command_wrapper = CommandProcessWrapper(
-            process=process, post_callback=pc.remote_scan_process.force_scan, filename=file.name
+            process=process, post_callback=pc.remote_scan_process.force_scan, filename=command.filename
         )
         self.active_command_processes.append(command_wrapper)
         command_wrapper.process.start()
@@ -389,9 +515,9 @@ class CommandPipeline:
         if file.local_size is None:
             _notify_failure(command, f"File '{command.filename}' does not exist locally")
             return False
-        remote_failure_reason = _remote_listing_failure_reason(pc, file)
-        if remote_failure_reason is not None:
-            _notify_failure(command, f"Cannot clean up '{command.filename}': {remote_failure_reason}")
+        blocked_reason = self._cleanup_blocked_reason(command, file, pc)
+        if blocked_reason is not None:
+            _notify_failure(command, blocked_reason)
             return False
         local_only_paths = _find_local_only_paths(file)
         if not local_only_paths:
@@ -400,12 +526,12 @@ class CommandPipeline:
         cleanup_path = pc.local_path
         pair_staging = self._pair_staging_dir(pc)
         if pair_staging:
-            staging_file = os.path.join(pair_staging, file.name)
+            staging_file = os.path.join(pair_staging, command.filename)
             if os.path.exists(staging_file):
                 cleanup_path = pair_staging
         process = CleanupLocalProcess(
             local_path=cleanup_path,
-            file_name=file.name,
+            file_name=command.filename,
             relative_paths=local_only_paths,
         )
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
@@ -415,7 +541,7 @@ class CommandPipeline:
             if cleanup_path != _pc.local_path:
                 _pc.active_scan_process.force_scan()
 
-        command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback, filename=file.name)
+        command_wrapper = CommandProcessWrapper(process=process, post_callback=post_callback, filename=command.filename)
         try:
             command_wrapper.process.start()
         except OSError as exc:
@@ -425,6 +551,21 @@ class CommandPipeline:
             return False
         self.active_command_processes.append(command_wrapper)
         return True
+
+    def _cleanup_blocked_reason(self, command: Command, file: ModelFile, pc: PairContext) -> str | None:
+        """Why cleanup of `file` must be rejected right now, or None.
+
+        Blocked while a job inside or above the folder is active (an
+        in-flight download's partial files look local-only), and while the
+        remote listing can't be trusted.
+        """
+        conflict = self._find_active_job_conflict(file)
+        if conflict is not None:
+            return conflict
+        remote_failure_reason = _remote_listing_failure_reason(pc, file)
+        if remote_failure_reason is not None:
+            return f"Cannot clean up '{command.filename}': {remote_failure_reason}"
+        return None
 
     def _handle_validate(
         self,

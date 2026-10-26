@@ -381,6 +381,7 @@ class TestConfig(unittest.TestCase):
             "use_local_path_as_extract_path": "True",
             "use_staging": "False",
             "staging_path": "/staging/path",
+            "enable_nested_navigation": "False",
         }
         controller = Config.Controller.from_dict(good_dict)
         self.assertEqual(30000, controller.interval_ms_remote_scan)
@@ -390,6 +391,7 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(True, controller.use_local_path_as_extract_path)
         self.assertEqual(False, controller.use_staging)
         self.assertEqual("/staging/path", controller.staging_path)
+        self.assertEqual(False, controller.enable_nested_navigation)
 
         self.check_common(
             Config.Controller,
@@ -402,6 +404,7 @@ class TestConfig(unittest.TestCase):
                 "use_local_path_as_extract_path",
                 "use_staging",
                 "staging_path",
+                "enable_nested_navigation",
             },
         )
 
@@ -416,6 +419,8 @@ class TestConfig(unittest.TestCase):
         self.check_bad_value_error(Config.Controller, good_dict, "use_local_path_as_extract_path", "-1")
         self.check_bad_value_error(Config.Controller, good_dict, "use_staging", "SomeString")
         self.check_bad_value_error(Config.Controller, good_dict, "use_staging", "-1")
+        self.check_bad_value_error(Config.Controller, good_dict, "enable_nested_navigation", "SomeString")
+        self.check_bad_value_error(Config.Controller, good_dict, "enable_nested_navigation", "-1")
 
     def test_web(self):
         good_dict = {
@@ -626,6 +631,7 @@ class TestConfig(unittest.TestCase):
         config.controller.use_local_path_as_extract_path = True
         config.controller.use_staging = False
         config.controller.staging_path = "/staging"
+        config.controller.enable_nested_navigation = False
         config.web.port = 13
         config.autoqueue.enabled = True
         config.autoqueue.patterns_only = True
@@ -678,6 +684,7 @@ class TestConfig(unittest.TestCase):
         use_local_path_as_extract_path = True
         use_staging = False
         staging_path = /staging
+        enable_nested_navigation = False
 
         [Web]
         port = 13

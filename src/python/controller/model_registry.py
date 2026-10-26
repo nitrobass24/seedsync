@@ -11,7 +11,7 @@ from __future__ import annotations
 import copy
 from threading import RLock
 
-from model import IModelListener, Model, ModelDiff, ModelDiffUtil, ModelFile
+from model import IModelListener, Model, ModelDiff, ModelDiffUtil, ModelError, ModelFile
 
 
 class ModelRegistry:
@@ -85,3 +85,22 @@ class ModelRegistry:
     def get_all_files(self) -> list[ModelFile]:
         """Get all files (no copy). Not thread-safe — controller thread only."""
         return self._model.get_all_files()
+
+    def resolve_full_path(self, full_path: str, pair_id: str | None = None) -> ModelFile:
+        """Resolve a '/'-joined full_path (e.g. 'TopDir/Sub/file.rar') to its ModelFile.
+
+        The first segment is looked up as a top-level name via the pair-aware
+        model; each subsequent segment is matched against the current file's
+        children by name. Not thread-safe — controller thread only, like
+        get_file/get_all_files.
+
+        Raises ModelError if any segment cannot be found.
+        """
+        segments = full_path.split("/")
+        file = self._model.get_file(segments[0], pair_id=pair_id)
+        for segment in segments[1:]:
+            child = next((c for c in file.get_children() if c.name == segment), None)
+            if child is None:
+                raise ModelError(f"File does not exist in the model: {full_path}")
+            file = child
+        return file
