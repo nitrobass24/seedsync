@@ -627,7 +627,10 @@ class Lftp:
         rel_dir = os.path.dirname(name)
         dest_dir = os.path.join(self.__base_local_dir_path, rel_dir) if rel_dir else self.__base_local_dir_path
         if rel_dir:
-            os.makedirs(dest_dir, exist_ok=True)
+            try:
+                os.makedirs(dest_dir, exist_ok=True)
+            except OSError as e:
+                raise LftpError(f"Cannot create local directory '{dest_dir}': {e}") from e
 
         parts = [
             "queue",

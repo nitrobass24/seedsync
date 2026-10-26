@@ -102,6 +102,17 @@ class TestLftpQueueCommand(unittest.TestCase):
         self.assertIn('"/local/path/TopDir/"', cmd)
         mock_makedirs.assert_called_once_with("/local/path/TopDir", exist_ok=True)
 
+    def test_queue_nested_raises_lftp_error_when_parent_dir_cannot_be_created(self):
+        """A local mkdir failure surfaces as LftpError, which the command
+        pipeline reports to the user, and nothing is queued."""
+        from lftp import LftpError
+
+        lftp = self._make_lftp()
+        with patch("lftp.lftp.os.makedirs", side_effect=PermissionError("denied")):
+            with self.assertRaises(LftpError):
+                lftp.queue("TopDir/leaf.rar", False)
+        lftp._Lftp__run_command.assert_not_called()
+
     def test_queue_deeply_nested_file_reproduces_full_parent_path(self):
         lftp = self._make_lftp()
         with patch("lftp.lftp.os.makedirs") as mock_makedirs:
