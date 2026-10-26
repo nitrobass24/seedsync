@@ -21,7 +21,9 @@ function makeModelFile(overrides: Partial<ModelFile> & { name: string }): ModelF
     state: ModelFileState.DEFAULT,
     downloading_speed: 0,
     eta: 0,
-    full_path: '/path/' + overrides.name,
+    // Matches the real backend invariant: a top-level ModelFile's full_path
+    // always equals its name.
+    full_path: overrides.name,
     is_extractable: false,
     local_created_timestamp: null,
     local_modified_timestamp: null,
@@ -43,22 +45,27 @@ function makeViewFile(overrides: Partial<ViewFile> & { name: string }): ViewFile
     status: ViewFileStatus.DEFAULT,
     downloadingSpeed: 0,
     eta: 0,
-    fullPath: '/path/' + overrides.name,
+    // Matches the real backend invariant: a top-level ViewFile's fullPath
+    // always equals its name.
+    fullPath: overrides.name,
     isArchive: false,
     isSelected: false,
     isChecked: false,
+    isIndeterminate: false,
     isQueueable: false,
     isStoppable: false,
     isExtractable: false,
     isLocallyDeletable: false,
     isRemotelyDeletable: false,
     isCleanupLocalable: false,
+    hasDownloadingDescendant: false,
     isValidatable: false,
     validateTooltip: null,
     localCreatedTimestamp: null,
     localModifiedTimestamp: null,
     remoteCreatedTimestamp: null,
     remoteModifiedTimestamp: null,
+    children: [],
     ...overrides,
   };
 }
@@ -258,5 +265,29 @@ describe('ViewFileCommandService', () => {
       FileAction.DELETE_REMOTE,
       models.find((m) => m.name === 'r'),
     );
+  });
+
+  it('bulk() reaches a checked nested descendant even though only the top-level array is passed in', () => {
+    const nestedChecked = makeViewFile({ name: 'child', fullPath: 'Top/child', remoteSize: 100, isQueueable: true });
+    const top = makeViewFile({
+      name: 'Top', isDir: true, remoteSize: 100, isQueueable: true, children: [nestedChecked],
+    });
+
+    // Only the nested child is checked, not the top-level folder itself.
+    selection.toggle(fileKey(null, 'Top/child'));
+
+    const childModel = makeModelFile({ name: 'child', full_path: 'Top/child', remote_size: 100 });
+    // fullPath-keyed, mirroring ViewFileService's real nested resolver
+    // (resolveNestedModelFile) rather than the shared resolverFor()'s
+    // name-only keying, which only holds for top-level (fullPath === name)
+    // fixtures like the rest of this file's tests.
+    const resolve: ModelFileResolver = (key) => (key === 'Top/child' ? childModel : undefined);
+
+    let results: WebReaction[] = [];
+    service.bulk(FileAction.QUEUE, [top], resolve).subscribe((r) => (results = r));
+
+    expect(mockModelFileService.command).toHaveBeenCalledTimes(1);
+    expect(mockModelFileService.command).toHaveBeenCalledWith(FileAction.QUEUE, childModel);
+    expect(results).toEqual([OK]);
   });
 });

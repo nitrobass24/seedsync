@@ -27,6 +27,12 @@
 /* width */
 .content .checkbox {width: 30px; min-width: 30px; display: flex; align-items: center; justify-content: center;}
 .content .checkbox input[type="checkbox"] {width: 16px; height: 16px; cursor: pointer; pointer-events: none;}
+.content .expand-toggle {
+  width: 20px; min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; padding: 0; cursor: pointer;
+}
+.content .expand-toggle .chevron {display: inline-block; transition: transform 0.15s ease;}
+.content .expand-toggle .chevron.expanded {transform: rotate(90deg);}
 .content .status   {width: 100px; min-width: 100px;}
 .content .pair     {display: none;}
 .content .name     {flex-grow: 1; flex-basis: calc(100% - 100px);}
@@ -98,6 +104,13 @@
     }
     img.stopped {
         width: 30px;
+    }
+    // Taller than the other status icons (cloud + arrow + folder stacked
+    // vertically) - fixed height/width keeps its 100:140 viewBox aspect
+    // ratio instead of the square default squashing it.
+    img.nested-downloading {
+        width: 32px;
+        height: 45px;
     }
 
     .text {
@@ -348,6 +361,7 @@
         img.extracted    { filter: $tint-green; }
         img.stopped      { filter: $tint-muted; }
         img.default-remote { filter: $tint-subtle; }
+        img.nested-downloading { filter: $tint-blue; }
         img.deleted      { filter: $tint-pink; }
         img.extracting   { filter: $tint-blue; }
         img.extract-failed { filter: $tint-red; }

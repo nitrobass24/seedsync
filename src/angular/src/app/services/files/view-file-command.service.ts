@@ -8,15 +8,24 @@ import { WebReaction } from '../utils/rest.service';
 import { ModelFile } from '../../models/model-file';
 import { ViewFile } from '../../models/view-file';
 import { FileAction, FILE_ACTIONS } from '../../models/file-action';
-import { fileKey } from './file-key';
+import { viewFileKey } from './file-key';
 import { ViewFileSelectionService } from './view-file-selection.service';
-
-function viewFileKey(vf: ViewFile): string {
-  return fileKey(vf.pairId, vf.name);
-}
 
 /** Resolves a view-file key back to its backing {@link ModelFile}, or undefined. */
 export type ModelFileResolver = (key: string) => ModelFile | undefined;
+
+// Every node in the given forest, at any depth - so a bulk action reaches a
+// checked nested row even when its parent folder is currently collapsed.
+function flattenTree(files: readonly ViewFile[]): ViewFile[] {
+  const result: ViewFile[] = [];
+  for (const file of files) {
+    result.push(file);
+    if (file.children.length > 0) {
+      result.push(...flattenTree(file.children));
+    }
+  }
+  return result;
+}
 
 /**
  * Owns command dispatch (single + bulk) for view files.
@@ -53,7 +62,8 @@ export class ViewFileCommandService {
 
   bulk(action: FileAction, files: readonly ViewFile[], resolve: ModelFileResolver): Observable<WebReaction[]> {
     const spec = FILE_ACTIONS[action];
-    const checked = files.filter((f) => this.selection.isChecked(viewFileKey(f)) && spec.isAllowed(f));
+    const allFiles = flattenTree(files);
+    const checked = allFiles.filter((f) => this.selection.isChecked(viewFileKey(f)) && spec.isAllowed(f));
     if (checked.length === 0) {
       return of([]);
     }

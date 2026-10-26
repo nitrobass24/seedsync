@@ -1,17 +1,28 @@
-<div class="file" [class.selected]="file().isSelected" #fileElement>
+<div class="file" [class.selected]="file().isSelected" [style.marginLeft.px]="depth() * 24" #fileElement>
     <div class="content">
         <div class="checkbox"
              role="checkbox"
              tabindex="0"
-             [attr.aria-checked]="file().isChecked"
+             [attr.aria-checked]="file().isIndeterminate ? 'mixed' : file().isChecked"
              [attr.aria-label]="'Toggle selection for ' + file().name"
              (click)="onCheck($event, file())"
              (keyup.enter)="onCheck($event, file())"
              (keydown.space)="$event.preventDefault(); onCheck($event, file())">
-            <input type="checkbox" tabindex="-1" aria-hidden="true" [checked]="file().isChecked" />
+            <input type="checkbox" tabindex="-1" aria-hidden="true"
+                   [checked]="file().isChecked" [indeterminate]="file().isIndeterminate" />
         </div>
+        @if (hasChildren()) {
+            <button type="button" class="expand-toggle" appClickStopPropagation
+                    [attr.aria-expanded]="isExpanded()"
+                    [attr.aria-label]="(isExpanded() ? 'Collapse ' : 'Expand ') + file().name"
+                    (click)="onToggleExpand($event, file())">
+                <span class="chevron" [class.expanded]="isExpanded()">&#9656;</span>
+            </button>
+        }
         <div class="status">
-            @if (file().status === ViewFileStatus.DEFAULT && file().remoteSize > 0) {
+            @if (file().hasDownloadingDescendant) {
+                <img src="assets/icons/nested-downloading.svg" class="nested-downloading" alt="" aria-hidden="true" />
+            } @else if (file().status === ViewFileStatus.DEFAULT && file().remoteSize > 0) {
                 <img src="assets/icons/default-remote.svg" class="default-remote" alt="" aria-hidden="true" />
             }
             @if (file().status === ViewFileStatus.QUEUED) {
@@ -51,7 +62,9 @@
                 <img src="assets/icons/downloaded.svg" class="move-failed" alt="" aria-hidden="true" />
             }
             <!-- don't show text for default status -->
-            @if (file().status !== ViewFileStatus.DEFAULT) {
+            @if (file().hasDownloadingDescendant) {
+                <span class="text">Nested Files<br>Downloading</span>
+            } @else if (file().status !== ViewFileStatus.DEFAULT) {
                 <span class="text">{{file().status | capitalize}}</span>
             }
         </div>
@@ -154,7 +167,7 @@
              [class.loading]="activeAction === FileAction.STOP">
             <span class="loader"></span>
             <img src="assets/icons/stop.svg" alt="" aria-hidden="true" />
-            <span class="text">Stop</span>
+            <span class="text">{{ file().hasDownloadingDescendant ? 'Stop Nested Downloads' : 'Stop' }}</span>
         </button>
         <button type="button" class="button" appClickStopPropagation
              [disabled]="!canDo(FileAction.EXTRACT)"

@@ -65,8 +65,14 @@ export class FileComponent implements OnChanges, OnDestroy {
 
   file = input.required<ViewFile>();
   options = input.required<Observable<ViewFileOptions>>();
+  /** Nesting depth in the flattened, expansion-aware display list (0 = top-level). */
+  depth = input<number>(0);
+  /** Whether this row has nested children to expand (only true when nested nav is enabled). */
+  hasChildren = input<boolean>(false);
+  isExpanded = input<boolean>(false);
 
   checkEvent = output<{file: ViewFile, shiftKey: boolean}>();
+  toggleExpandEvent = output<ViewFile>();
   actionEvent = output<FileActionEvent>();
   cleanupLocalEvent = output<FileCleanupEvent>();
 
@@ -106,6 +112,9 @@ export class FileComponent implements OnChanges, OnDestroy {
                    oldFile.isCleanupLocalable && !newFile.isCleanupLocalable) {
           this.activeAction = null;
           this.deleteConfirm.reset();
+        } else if (this.activeAction === FileAction.STOP &&
+                   oldFile.hasDownloadingDescendant && !newFile.hasDownloadingDescendant) {
+          this.activeAction = null;
         }
 
         if (!oldFile.isSelected && newFile.isSelected && this.fileElement &&
@@ -124,6 +133,11 @@ export class FileComponent implements OnChanges, OnDestroy {
     event.stopPropagation();
     const shiftKey = (event as MouseEvent | KeyboardEvent).shiftKey ?? false;
     this.checkEvent.emit({file, shiftKey});
+  }
+
+  onToggleExpand(event: Event, file: ViewFile): void {
+    event.stopPropagation();
+    this.toggleExpandEvent.emit(file);
   }
 
   canDo(action: FileAction): boolean {

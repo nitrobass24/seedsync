@@ -43,7 +43,9 @@ export class ModelFileService implements StreamEventHandler {
   }
 
   private commandUrl(action: string, file: ModelFile): string {
-    const fileNameEncoded = encodeURIComponent(encodeURIComponent(file.name));
+    // full_path (not name) so a nested file/folder resolves against its full
+    // relative path on the backend; equals name for top-level files.
+    const fileNameEncoded = encodeURIComponent(encodeURIComponent(file.full_path));
     let url = `/server/command/${action}/${fileNameEncoded}`;
     if (file.pair_id) {
       url += `?pair_id=${encodeURIComponent(file.pair_id)}`;

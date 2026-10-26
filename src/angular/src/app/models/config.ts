@@ -57,6 +57,7 @@ export interface Controller {
   use_local_path_as_extract_path: boolean | null;
   staging_path: string | null;
   use_staging: boolean | null;
+  enable_nested_navigation: boolean | null;
 }
 
 export interface Web {
@@ -150,6 +151,7 @@ export const DEFAULT_CONFIG: Config = {
     use_local_path_as_extract_path: null,
     staging_path: null,
     use_staging: null,
+    enable_nested_navigation: null,
   },
   web: {
     port: null,

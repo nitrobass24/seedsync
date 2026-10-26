@@ -23,7 +23,11 @@ function makeModelFile(
     state: ModelFileState.DEFAULT,
     downloading_speed: 0,
     eta: 0,
-    full_path: "/path/" + overrides.name,
+    // Matches the real backend invariant: a top-level ModelFile's full_path
+    // always equals its name (ModelFile.full_path returns self.name when
+    // parent is None). ViewFileService's diffing keys off fullPath, so tests
+    // must uphold this or the indices/prevModelFiles key spaces diverge.
+    full_path: overrides.name,
     is_extractable: false,
     local_created_timestamp: null,
     local_modified_timestamp: null,
@@ -419,6 +423,178 @@ describe("ViewFileService", () => {
     expect(latestFiles()[0].isCleanupLocalable).toBe(true);
   });
 
+  // --- hasDownloadingDescendant ---
+
+  it("should not set hasDownloadingDescendant when not a directory, even with an active child", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "file",
+        is_dir: false,
+        children: [makeModelFile({ name: "child", state: ModelFileState.DOWNLOADING })],
+      }),
+    ]);
+    expect(latestFiles()[0].hasDownloadingDescendant).toBe(false);
+  });
+
+  it("should not set hasDownloadingDescendant for a directory with no children", () => {
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, state: ModelFileState.DEFAULT, children: [] }),
+    ]);
+    expect(latestFiles()[0].hasDownloadingDescendant).toBe(false);
+  });
+
+  it("should not set hasDownloadingDescendant when all children are Default/Downloaded", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.DEFAULT,
+        children: [
+          makeModelFile({ name: "a", state: ModelFileState.DOWNLOADED }),
+          makeModelFile({ name: "b", state: ModelFileState.DEFAULT }),
+        ],
+      }),
+    ]);
+    expect(latestFiles()[0].hasDownloadingDescendant).toBe(false);
+  });
+
+  it("should set hasDownloadingDescendant when a direct child is Queued", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.DEFAULT,
+        children: [makeModelFile({ name: "child", state: ModelFileState.QUEUED })],
+      }),
+    ]);
+    expect(latestFiles()[0].hasDownloadingDescendant).toBe(true);
+  });
+
+  it("should set hasDownloadingDescendant when a direct child is Downloading", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.DEFAULT,
+        children: [makeModelFile({ name: "child", state: ModelFileState.DOWNLOADING })],
+      }),
+    ]);
+    expect(latestFiles()[0].hasDownloadingDescendant).toBe(true);
+  });
+
+  it("should set hasDownloadingDescendant when a deeply nested (grandchild) descendant is Downloading", () => {
+    const grandchild = makeModelFile({ name: "leaf.rar", state: ModelFileState.DOWNLOADING });
+    const child = makeModelFile({ name: "Sub", is_dir: true, state: ModelFileState.DEFAULT, children: [grandchild] });
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, state: ModelFileState.DEFAULT, children: [child] }),
+    ]);
+    expect(latestFiles()[0].hasDownloadingDescendant).toBe(true);
+  });
+
+  it("sets hasDownloadingDescendant on every folder in the stack, not just the top-level one", () => {
+    // Mirrors NestedTest/Extras/bonus.bin: downloading the leaf should flag
+    // BOTH the top-level folder and the intermediate nested folder.
+    const bonus = makeModelFile({ name: "bonus.bin", full_path: "NestedTest/Extras/bonus.bin", state: ModelFileState.DOWNLOADING });
+    const extras = makeModelFile({
+      name: "Extras", full_path: "NestedTest/Extras", is_dir: true, state: ModelFileState.DEFAULT, children: [bonus],
+    });
+    emitModelFiles([
+      makeModelFile({ name: "NestedTest", is_dir: true, state: ModelFileState.DEFAULT, children: [extras] }),
+    ]);
+
+    expect(findByName(latestFiles(), "NestedTest")!.hasDownloadingDescendant).toBe(true);
+    expect(findByName(latestFiles(), "Extras")!.hasDownloadingDescendant).toBe(true);
+  });
+
+  it("widens isStoppable to true for an intermediate nested folder with hasDownloadingDescendant", () => {
+    const bonus = makeModelFile({ name: "bonus.bin", full_path: "NestedTest/Extras/bonus.bin", state: ModelFileState.DOWNLOADING });
+    const extras = makeModelFile({
+      name: "Extras", full_path: "NestedTest/Extras", is_dir: true, state: ModelFileState.DEFAULT, children: [bonus],
+    });
+    emitModelFiles([
+      makeModelFile({ name: "NestedTest", is_dir: true, state: ModelFileState.DEFAULT, children: [extras] }),
+    ]);
+
+    expect(findByName(latestFiles(), "Extras")!.isStoppable).toBe(true);
+  });
+
+  it("should NOT set hasDownloadingDescendant when the folder's own state is Downloading", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.DOWNLOADING,
+        children: [makeModelFile({ name: "child", state: ModelFileState.DOWNLOADING })],
+      }),
+    ]);
+    expect(latestFiles()[0].hasDownloadingDescendant).toBe(false);
+  });
+
+  it("should NOT set hasDownloadingDescendant when the folder's own state is Queued", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.QUEUED,
+        children: [makeModelFile({ name: "child", state: ModelFileState.QUEUED })],
+      }),
+    ]);
+    expect(latestFiles()[0].hasDownloadingDescendant).toBe(false);
+  });
+
+  it("should widen isStoppable to true when hasDownloadingDescendant is true even though status is Default", () => {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.DEFAULT,
+        children: [makeModelFile({ name: "child", state: ModelFileState.DOWNLOADING })],
+      }),
+    ]);
+    const file = latestFiles()[0];
+    expect(file.status).toBe(ViewFileStatus.DEFAULT);
+    expect(file.isStoppable).toBe(true);
+  });
+
+  it("should update hasDownloadingDescendant when only a nested descendant's state changes, with identical parent scalar fields", () => {
+    const idleChild = makeModelFile({ name: "leaf.rar", state: ModelFileState.DEFAULT });
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, state: ModelFileState.DEFAULT, children: [idleChild] }),
+    ]);
+    expect(latestFiles()[0].hasDownloadingDescendant).toBe(false);
+
+    const activeChild = makeModelFile({ name: "leaf.rar", state: ModelFileState.DOWNLOADING });
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, state: ModelFileState.DEFAULT, children: [activeChild] }),
+    ]);
+    expect(latestFiles()[0].hasDownloadingDescendant).toBe(true);
+  });
+
+  // --- Disabling Queue/Stop on nested descendants under an active ancestor ---
+
+  it("forces isQueueable/isStoppable false for a nested child when its parent's own state is active", () => {
+    const child = makeModelFile({ name: "leaf.rar", full_path: "Top/leaf.rar", state: ModelFileState.QUEUED });
+    emitModelFiles([
+      makeModelFile({ name: "Top", is_dir: true, state: ModelFileState.DOWNLOADING, children: [child] }),
+    ]);
+    const nested = latestFiles()[0].children[0];
+    expect(nested.isQueueable).toBe(false);
+    expect(nested.isStoppable).toBe(false);
+  });
+
+  it("leaves isQueueable/isStoppable derived normally for a nested child when no ancestor is active", () => {
+    const child = makeModelFile({
+      name: "leaf.rar", full_path: "Top/leaf.rar", state: ModelFileState.DEFAULT,
+      local_size: 0, remote_size: 100,
+    });
+    emitModelFiles([
+      makeModelFile({ name: "Top", is_dir: true, state: ModelFileState.DEFAULT, children: [child] }),
+    ]);
+    const nested = latestFiles()[0].children[0];
+    expect(nested.isQueueable).toBe(true);
+    expect(nested.isStoppable).toBe(false);
+  });
+
   // --- isValidatable and validateTooltip ---
 
   it("should set isValidatable when status allows and both sizes are non-null", () => {
@@ -523,6 +699,86 @@ describe("ViewFileService", () => {
     expect(files[1].name).toBe("banana");
   });
 
+  it("should sort nested children the same way as the top level when a comparator is set", () => {
+    const child1 = makeModelFile({ name: "banana.txt", remote_size: 100 });
+    const child2 = makeModelFile({ name: "apple.txt", remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, remote_size: 100, children: [child1, child2] }),
+    ]);
+
+    service.setComparator((a, b) => a.name.localeCompare(b.name));
+
+    const children = latestFiles()[0].children;
+    expect(children.map((c) => c.name)).toEqual(["apple.txt", "banana.txt"]);
+  });
+
+  it("should sort children at every depth, not just direct children", () => {
+    const grandchild1 = makeModelFile({ name: "zebra.txt", remote_size: 100 });
+    const grandchild2 = makeModelFile({ name: "aardvark.txt", remote_size: 100 });
+    const sub = makeModelFile({
+      name: "Sub", is_dir: true, remote_size: 100, children: [grandchild1, grandchild2],
+    });
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, remote_size: 100, children: [sub] }),
+    ]);
+
+    service.setComparator((a, b) => a.name.localeCompare(b.name));
+
+    const grandchildren = latestFiles()[0].children[0].children;
+    expect(grandchildren.map((c) => c.name)).toEqual(["aardvark.txt", "zebra.txt"]);
+  });
+
+  it("re-sorts a folder's freshly rebuilt children on an SSE update, not just on setComparator", () => {
+    const child1 = makeModelFile({ name: "banana.txt", remote_size: 100, local_size: 0 });
+    const child2 = makeModelFile({ name: "apple.txt", remote_size: 100, local_size: 0 });
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, remote_size: 100, children: [child1, child2] }),
+    ]);
+    service.setComparator((a, b) => a.name.localeCompare(b.name));
+    expect(latestFiles()[0].children.map((c) => c.name)).toEqual(["apple.txt", "banana.txt"]);
+
+    // Only child1's state changes (still constructed in the same raw
+    // "banana, apple" backend order) - the parent "dir" gets fully rebuilt
+    // by childrenEqual's diffing, so its children must be re-sorted again.
+    const updatedChild1 = makeModelFile({
+      name: "banana.txt", remote_size: 100, local_size: 100, state: ModelFileState.DOWNLOADED,
+    });
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, remote_size: 100, children: [updatedChild1, child2] }),
+    ]);
+
+    expect(latestFiles()[0].children.map((c) => c.name)).toEqual(["apple.txt", "banana.txt"]);
+  });
+
+  it("sorts a newly added top-level folder's children immediately using the active comparator", () => {
+    emitModelFiles([]);
+    service.setComparator((a, b) => a.name.localeCompare(b.name));
+
+    const child1 = makeModelFile({ name: "banana.txt", remote_size: 100 });
+    const child2 = makeModelFile({ name: "apple.txt", remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, remote_size: 100, children: [child1, child2] }),
+    ]);
+
+    expect(latestFiles()[0].children.map((c) => c.name)).toEqual(["apple.txt", "banana.txt"]);
+  });
+
+  it("preserves unchanged child object identity when re-sorting after setComparator", () => {
+    const child1 = makeModelFile({ name: "apple.txt", remote_size: 100 });
+    const child2 = makeModelFile({ name: "banana.txt", remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({ name: "dir", is_dir: true, remote_size: 100, children: [child1, child2] }),
+    ]);
+    const beforeChild = latestFiles()[0].children.find((c) => c.name === "apple.txt")!;
+
+    // Already in ascending-name order, so setting the same-order comparator
+    // shouldn't reorder anything.
+    service.setComparator((a, b) => a.name.localeCompare(b.name));
+
+    const afterChild = latestFiles()[0].children.find((c) => c.name === "apple.txt")!;
+    expect(afterChild).toBe(beforeChild);
+  });
+
   // --- Selection ---
 
   it("should select a file via setSelected", () => {
@@ -563,6 +819,88 @@ describe("ViewFileService", () => {
     const files = latestFiles();
     expect(files.find((f) => f.name === "file1")!.isSelected).toBe(false);
     expect(files.find((f) => f.name === "file2")!.isSelected).toBe(true);
+  });
+
+  // --- Selection: nested rows ---
+  //
+  // A nested ViewFile's key is never in `indices` (built only from the
+  // top-level array), so selection has to walk the whole tree instead of
+  // doing a flat top-level lookup - a nested row's action buttons only
+  // render when `isSelected`, so without this, nested rows could never be
+  // selected and their Queue/Stop/etc. buttons were permanently unreachable.
+
+  it("should select a nested (depth > 0) file", () => {
+    const leaf = makeModelFile({ name: "leaf.rar", full_path: "Top/leaf.rar", remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [leaf] }),
+    ]);
+
+    const nested = latestFiles()[0].children[0];
+    service.setSelected(nested);
+
+    const top = latestFiles()[0];
+    expect(top.isSelected).toBe(false);
+    expect(top.children[0].isSelected).toBe(true);
+  });
+
+  it("should deselect a top-level file when a nested one is selected", () => {
+    const leaf = makeModelFile({ name: "leaf.rar", full_path: "Top/leaf.rar", remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [leaf] }),
+      makeModelFile({ name: "other", remote_size: 100 }),
+    ]);
+
+    service.setSelected(latestFiles().find((f) => f.name === "other")!);
+    expect(latestFiles().find((f) => f.name === "other")!.isSelected).toBe(true);
+
+    const nested = latestFiles().find((f) => f.name === "Top")!.children[0];
+    service.setSelected(nested);
+
+    const files = latestFiles();
+    expect(files.find((f) => f.name === "other")!.isSelected).toBe(false);
+    expect(files.find((f) => f.name === "Top")!.children[0].isSelected).toBe(true);
+  });
+
+  it("should move selection between nested files in different top-level subtrees", () => {
+    const leafA = makeModelFile({ name: "a.rar", full_path: "TopA/a.rar", remote_size: 100 });
+    const leafB = makeModelFile({ name: "b.rar", full_path: "TopB/b.rar", remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({ name: "TopA", is_dir: true, remote_size: 100, children: [leafA] }),
+      makeModelFile({ name: "TopB", is_dir: true, remote_size: 100, children: [leafB] }),
+    ]);
+
+    service.setSelected(latestFiles().find((f) => f.name === "TopA")!.children[0]);
+    service.setSelected(latestFiles().find((f) => f.name === "TopB")!.children[0]);
+
+    const files = latestFiles();
+    expect(files.find((f) => f.name === "TopA")!.children[0].isSelected).toBe(false);
+    expect(files.find((f) => f.name === "TopB")!.children[0].isSelected).toBe(true);
+  });
+
+  it("should clear a nested selection via unsetSelected", () => {
+    const leaf = makeModelFile({ name: "leaf.rar", full_path: "Top/leaf.rar", remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [leaf] }),
+    ]);
+
+    service.setSelected(latestFiles()[0].children[0]);
+    expect(latestFiles()[0].children[0].isSelected).toBe(true);
+
+    service.unsetSelected();
+    expect(latestFiles()[0].children[0].isSelected).toBe(false);
+  });
+
+  it("should be a no-op when re-selecting an already-selected nested file", () => {
+    const leaf = makeModelFile({ name: "leaf.rar", full_path: "Top/leaf.rar", remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [leaf] }),
+    ]);
+
+    service.setSelected(latestFiles()[0].children[0]);
+    const selected = latestFiles()[0].children[0];
+    service.setSelected(selected);
+
+    expect(latestFiles()[0].children[0]).toBe(selected);
   });
 
   // --- Add / update / remove diffs ---
@@ -636,6 +974,8 @@ describe("ViewFileService", () => {
 
     const fakeVf = {
       name: "nonexistent",
+      pairId: null,
+      fullPath: "nonexistent",
     } as ViewFile;
     let result: WebReaction | undefined;
     service.command(FileAction.QUEUE, fakeVf).subscribe((r) => (result = r));
@@ -866,6 +1206,112 @@ describe("ViewFileService", () => {
     expect(after.find((f) => f.name === "c")!).toBe(before.find((f) => f.name === "c")!);
   });
 
+  // --- Nested checkbox reconciliation (isChecked/isIndeterminate at any depth) ---
+
+  function findByName(files: readonly ViewFile[], name: string): ViewFile | undefined {
+    for (const f of files) {
+      if (f.name === name) return f;
+      const found = findByName(f.children, name);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  it("toggling a nested child's checkbox sets only its own isChecked, not the parent's", () => {
+    const child = makeModelFile({ name: "child", remote_size: 100 });
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [child] })]);
+
+    const childVf = findByName(latestFiles(), "child")!;
+    service.toggleCheck(childVf);
+
+    expect(findByName(latestFiles(), "child")!.isChecked).toBe(true);
+    expect(findByName(latestFiles(), "Top")!.isChecked).toBe(false);
+  });
+
+  it("sets a folder's isIndeterminate when a nested child is checked but the folder itself isn't", () => {
+    const child = makeModelFile({ name: "child", remote_size: 100 });
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [child] })]);
+
+    service.toggleCheck(findByName(latestFiles(), "child")!);
+
+    expect(findByName(latestFiles(), "Top")!.isIndeterminate).toBe(true);
+  });
+
+  it("propagates isIndeterminate up through a deeply nested (grandchild) checked descendant", () => {
+    const grandchild = makeModelFile({ name: "grandchild", remote_size: 100 });
+    const child = makeModelFile({ name: "child", is_dir: true, remote_size: 100, children: [grandchild] });
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [child] })]);
+
+    service.toggleCheck(findByName(latestFiles(), "grandchild")!);
+
+    expect(findByName(latestFiles(), "child")!.isIndeterminate).toBe(true);
+    expect(findByName(latestFiles(), "Top")!.isIndeterminate).toBe(true);
+  });
+
+  it("does not set isIndeterminate when no descendant is checked", () => {
+    const child = makeModelFile({ name: "child", remote_size: 100 });
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [child] })]);
+
+    expect(findByName(latestFiles(), "Top")!.isIndeterminate).toBe(false);
+  });
+
+  it("shows a folder as plainly checked (not indeterminate) when checked directly, even with a checked descendant", () => {
+    const child = makeModelFile({ name: "child", remote_size: 100 });
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [child] })]);
+
+    service.toggleCheck(findByName(latestFiles(), "child")!);
+    service.toggleCheck(findByName(latestFiles(), "Top")!);
+
+    const top = findByName(latestFiles(), "Top")!;
+    expect(top.isChecked).toBe(true);
+    expect(top.isIndeterminate).toBe(false);
+  });
+
+  it("clears isIndeterminate once the checked descendant is unchecked", () => {
+    const child = makeModelFile({ name: "child", remote_size: 100 });
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [child] })]);
+
+    const childVf = findByName(latestFiles(), "child")!;
+    service.toggleCheck(childVf);
+    expect(findByName(latestFiles(), "Top")!.isIndeterminate).toBe(true);
+
+    service.toggleCheck(findByName(latestFiles(), "child")!);
+    expect(findByName(latestFiles(), "Top")!.isIndeterminate).toBe(false);
+  });
+
+  it("re-derives isIndeterminate for a nested folder when only a deeper descendant's state changes via SSE", () => {
+    const grandchild = makeModelFile({ name: "grandchild", remote_size: 100, local_size: 0 });
+    const child = makeModelFile({ name: "child", is_dir: true, remote_size: 100, children: [grandchild] });
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [child] })]);
+    service.toggleCheck(findByName(latestFiles(), "grandchild")!);
+    expect(findByName(latestFiles(), "child")!.isIndeterminate).toBe(true);
+
+    // Re-emit with only the grandchild's local_size advancing - child/Top's own
+    // ModelFile fields are unchanged, so childrenEqual must still trigger a
+    // rebuild for isIndeterminate to survive on the new tree.
+    const grandchild2 = makeModelFile({ name: "grandchild", remote_size: 100, local_size: 50 });
+    const child2 = makeModelFile({ name: "child", is_dir: true, remote_size: 100, children: [grandchild2] });
+    emitModelFiles([makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [child2] })]);
+
+    expect(findByName(latestFiles(), "grandchild")!.isChecked).toBe(true);
+    expect(findByName(latestFiles(), "child")!.isIndeterminate).toBe(true);
+    expect(findByName(latestFiles(), "Top")!.isIndeterminate).toBe(true);
+  });
+
+  it("checkAll() checks every top-level and nested descendant key", () => {
+    const child = makeModelFile({ name: "child", remote_size: 100 });
+    emitModelFiles([
+      makeModelFile({ name: "Top", is_dir: true, remote_size: 100, children: [child] }),
+      makeModelFile({ name: "Solo", remote_size: 100 }),
+    ]);
+
+    service.checkAll();
+
+    expect(findByName(latestFiles(), "Top")!.isChecked).toBe(true);
+    expect(findByName(latestFiles(), "child")!.isChecked).toBe(true);
+    expect(findByName(latestFiles(), "Solo")!.isChecked).toBe(true);
+  });
+
   it("should preserve object identity of unchanged rows on a single-file SSE update", () => {
     emitModelFiles([
       makeModelFile({ name: "a", remote_size: 200, local_size: 50, state: ModelFileState.DOWNLOADING }),
@@ -1041,6 +1487,68 @@ describe("ViewFileService", () => {
       makeModelFile({ name: "a", remote_size: 200, local_size: 50, state: ModelFileState.DOWNLOADING }),
     ]);
     expect(latestFilteredFiles().map((f) => f.name)).toEqual(["a"]);
+  });
+
+  // --- Nested navigation: createViewFile's recursive children mapping ---
+
+  it("maps a top-level ModelFile's nested children recursively into ViewFile.children", () => {
+    const leaf = makeModelFile({ name: "leaf.txt", full_path: "Top/Sub/leaf.txt" });
+    const sub = makeModelFile({
+      name: "Sub", full_path: "Top/Sub", is_dir: true, children: [leaf],
+    });
+    const top = makeModelFile({
+      name: "Top", full_path: "Top", is_dir: true, children: [sub],
+    });
+    emitModelFiles([top]);
+
+    const files = latestFiles();
+    expect(files.length).toBe(1);
+    expect(files[0].children.length).toBe(1);
+    expect(files[0].children[0].name).toBe("Sub");
+    expect(files[0].children[0].fullPath).toBe("Top/Sub");
+    expect(files[0].children[0].children.length).toBe(1);
+    expect(files[0].children[0].children[0].name).toBe("leaf.txt");
+    expect(files[0].children[0].children[0].fullPath).toBe("Top/Sub/leaf.txt");
+  });
+
+  it("a top-level file with no children maps to an empty children array", () => {
+    emitModelFiles([makeModelFile({ name: "flat.txt" })]);
+
+    expect(latestFiles()[0].children).toEqual([]);
+  });
+
+  it("forces isExtractable/isValidatable false for nested children regardless of derived capabilities", () => {
+    // A state/size combo that would normally derive isExtractable/isValidatable
+    // true for a top-level file (Downloaded, local+remote sizes known).
+    const leaf = makeModelFile({
+      name: "leaf.rar",
+      full_path: "Top/leaf.rar",
+      state: ModelFileState.DOWNLOADED,
+      local_size: 100,
+      remote_size: 100,
+    });
+    const top = makeModelFile({
+      name: "Top", full_path: "Top", is_dir: true, children: [leaf],
+    });
+    emitModelFiles([top]);
+
+    const child = latestFiles()[0].children[0];
+    expect(child.isExtractable).toBe(false);
+    expect(child.isValidatable).toBe(false);
+    expect(child.validateTooltip).toBeNull();
+  });
+
+  it("does not force isExtractable/isValidatable false for the top-level row itself", () => {
+    const top = makeModelFile({
+      name: "Top.rar",
+      state: ModelFileState.DOWNLOADED,
+      local_size: 100,
+      remote_size: 100,
+    });
+    emitModelFiles([top]);
+
+    // Top-level capability derivation is untouched by the nested-only override.
+    expect(latestFiles()[0].isExtractable).toBe(true);
   });
 });
 
