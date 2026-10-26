@@ -595,6 +595,43 @@ describe("ViewFileService", () => {
     expect(nested.isStoppable).toBe(false);
   });
 
+  // --- Disabling delete/cleanup where it would hit an in-flight download ---
+
+  it("disables delete for a downloaded nested file while its parent's own job is active", () => {
+    const child = makeModelFile({
+      name: "leaf.rar", full_path: "Top/leaf.rar", state: ModelFileState.DOWNLOADED,
+      local_size: 100, remote_size: 100,
+    });
+    emitModelFiles([
+      makeModelFile({
+        name: "Top", is_dir: true, state: ModelFileState.DOWNLOADING,
+        local_size: 100, remote_size: 200, children: [child],
+      }),
+    ]);
+    const nested = latestFiles()[0].children[0];
+    expect(nested.isLocallyDeletable).toBe(false);
+    expect(nested.isRemotelyDeletable).toBe(false);
+  });
+
+  it("disables delete and cleanup for a folder with an independently active descendant", () => {
+    const active = makeModelFile({
+      name: "leaf.rar", full_path: "Top/leaf.rar", state: ModelFileState.DOWNLOADING,
+      local_size: 50, remote_size: 100,
+    });
+    const stray = makeModelFile({ name: "stray.nfo", full_path: "Top/stray.nfo", local_size: 5, remote_size: null });
+    emitModelFiles([
+      makeModelFile({
+        name: "Top", is_dir: true, state: ModelFileState.DEFAULT,
+        local_size: 55, remote_size: 100, children: [active, stray],
+      }),
+    ]);
+    const top = latestFiles()[0];
+    expect(top.hasDownloadingDescendant).toBe(true);
+    expect(top.isLocallyDeletable).toBe(false);
+    expect(top.isRemotelyDeletable).toBe(false);
+    expect(top.isCleanupLocalable).toBe(false);
+  });
+
   // --- isValidatable and validateTooltip ---
 
   it("should set isValidatable when status allows and both sizes are non-null", () => {

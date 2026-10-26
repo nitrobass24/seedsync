@@ -537,17 +537,11 @@ function createViewFile(
     modelFile.local_size,
     modelFile.remote_size,
   );
-  const isCleanupLocalable =
-    LOCAL_ACTION_STATUSES.includes(status) &&
-    modelFile.is_dir &&
-    modelFile.remote_size !== null &&
-    hasLocalOnlyContent(modelFile);
-
   // Applies at any depth - a folder anywhere in the stack (top-level or
   // nested) shows this whenever something independently active exists
   // beneath it, so e.g. downloading "NestedTest/Extras/bonus.bin" flags both
   // "NestedTest" and "Extras". Never true simultaneously with the folder's
-  // own state being active - see CommandPipeline._find_queue_conflict, which
+  // own state being active - see CommandPipeline._find_active_job_conflict, which
   // blocks a new independent nested job while any ancestor (at any depth) is
   // already Queued/Downloading. The state guard here is defense-in-depth for
   // that invariant.
@@ -558,6 +552,10 @@ function createViewFile(
     hasActiveDescendant(modelFile);
   if (hasDownloadingDescendant) {
     capabilities.isStoppable = true; // enables "Stop Nested Downloads"
+    // Deleting the folder would remove an in-flight download; the backend
+    // rejects it (CommandPipeline._find_active_job_conflict).
+    capabilities.isLocallyDeletable = false;
+    capabilities.isRemotelyDeletable = false;
   }
 
   // Nested EXTRACT/VALIDATE are out of scope for this feature (they interact
@@ -575,10 +573,22 @@ function createViewFile(
   // parent's mirror job (ModelBuilder._determine_child_state) would show as
   // individually stoppable, and clicking Stop would hit the backend's
   // "no independent job to stop" failure instead of being disabled up front.
+  // Deleting it would pull files out from under that job, so the backend
+  // rejects deletes too (CommandPipeline._find_active_job_conflict).
   if (ancestorActive) {
     capabilities.isQueueable = false;
     capabilities.isStoppable = false;
+    capabilities.isLocallyDeletable = false;
+    capabilities.isRemotelyDeletable = false;
   }
+
+  const isCleanupLocalable =
+    LOCAL_ACTION_STATUSES.includes(status) &&
+    modelFile.is_dir &&
+    modelFile.remote_size !== null &&
+    !hasDownloadingDescendant &&
+    !ancestorActive &&
+    hasLocalOnlyContent(modelFile);
 
   const childAncestorActive =
     ancestorActive || modelFile.state === ModelFileState.QUEUED || modelFile.state === ModelFileState.DOWNLOADING;
