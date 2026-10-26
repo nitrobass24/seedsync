@@ -242,6 +242,27 @@ class CommandPipeline:
                 frontier.extend(descendant.get_children())
         return None
 
+    @staticmethod
+    def _find_active_nested_descendants(file: ModelFile) -> list[ModelFile]:
+        """Find independently active (Queued/Downloading) descendants of `file`.
+
+        Each result is the root of one independently active subtree (a
+        standalone nested job); its own children aren't independently active
+        for the same invariant _find_queue_conflict relies on (no new job can
+        start under an already-active node), so we don't descend past it -
+        stopping it stops everything beneath it via the same lftp job.
+        """
+        active_states = (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING)
+        result: list[ModelFile] = []
+        frontier = list(file.get_children())
+        while frontier:
+            descendant = frontier.pop(0)
+            if descendant.state in active_states:
+                result.append(descendant)
+                continue
+            frontier.extend(descendant.get_children())
+        return result
+
     def _handle_stop(
         self,
         command: Command,
@@ -250,19 +271,59 @@ class CommandPipeline:
         _notify_failure: Callable[[Command, str], None],
     ) -> bool:
         """Handle the STOP action. Returns True on success, False on failure."""
-        if file.state not in (ModelFile.State.DOWNLOADING, ModelFile.State.QUEUED):
-            _notify_failure(command, f"File '{command.filename}' is not Queued or Downloading")
-            return False
-        try:
-            killed = pc.lftp.kill(command.filename)
-        except LftpError as e:
-            _notify_failure(command, f"Lftp error: {e!s}")
-            return False
-        if not killed:
+        if file.state in (ModelFile.State.DOWNLOADING, ModelFile.State.QUEUED):
+            try:
+                killed = pc.lftp.kill(command.filename)
+            except LftpError as e:
+                _notify_failure(command, f"Lftp error: {e!s}")
+                return False
+            if not killed:
+                _notify_failure(
+                    command,
+                    f"File '{command.filename}' has no independent download job to stop "
+                    "(it may be downloading as part of its parent folder)",
+                )
+                return False
+            return True
+
+        # "Stop Nested Downloads": a folder (top-level or nested) whose own
+        # job isn't active but has independently active nested descendants.
+        if self._context.config.controller.enable_nested_navigation and file.is_dir:
+            nested_active = self._find_active_nested_descendants(file)
+            if nested_active:
+                return self._handle_stop_nested_descendants(command, nested_active, pc, _notify_failure)
+
+        _notify_failure(command, f"File '{command.filename}' is not Queued or Downloading")
+        return False
+
+    def _handle_stop_nested_descendants(
+        self,
+        command: Command,
+        nested_active: list[ModelFile],
+        pc: PairContext,
+        _notify_failure: Callable[[Command, str], None],
+    ) -> bool:
+        """Stop every independently-active nested job under a folder whose own
+        job isn't active. Aggregates partial failures: succeeds if at least
+        one kill actually stopped a job; only fails if every one either raised
+        or found no independent job (e.g. it finished on its own this cycle).
+        """
+        any_success = False
+        errors: list[str] = []
+        for descendant in nested_active:
+            try:
+                killed = pc.lftp.kill(descendant.full_path)
+            except LftpError as e:
+                errors.append(f"'{descendant.full_path}': {e!s}")
+                continue
+            if killed:
+                any_success = True
+            else:
+                errors.append(f"'{descendant.full_path}': no independent job to stop")
+        if not any_success:
             _notify_failure(
                 command,
-                f"File '{command.filename}' has no independent download job to stop "
-                "(it may be downloading as part of its parent folder)",
+                f"Failed to stop nested downloads in '{command.filename}': " + "; ".join(errors),
             )
             return False
         return True

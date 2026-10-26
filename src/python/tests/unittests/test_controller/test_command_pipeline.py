@@ -825,6 +825,191 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(1, len(calls))
 
+    # --- _find_active_nested_descendants ---
+
+    def test_find_active_nested_descendants_none_when_idle(self):
+        root = ModelFile("Top", True)
+        child = ModelFile("child.txt", False)
+        root.add_child(child)
+
+        self.assertEqual([], CommandPipeline._find_active_nested_descendants(root))
+
+    def test_find_active_nested_descendants_finds_nested_file_job(self):
+        root = ModelFile("Top", True)
+        leaf = ModelFile("leaf.rar", False)
+        leaf.state = ModelFile.State.DOWNLOADING
+        root.add_child(leaf)
+
+        self.assertEqual([leaf], CommandPipeline._find_active_nested_descendants(root))
+
+    def test_find_active_nested_descendants_finds_nested_dir_job_without_descending_further(self):
+        root = ModelFile("Top", True)
+        sub = ModelFile("Sub", True)
+        sub.state = ModelFile.State.DOWNLOADING
+        leaf = ModelFile("leaf.rar", False)
+        leaf.state = ModelFile.State.DOWNLOADING
+        sub.add_child(leaf)
+        root.add_child(sub)
+
+        # sub's own job covers leaf too - only sub itself is returned.
+        self.assertEqual([sub], CommandPipeline._find_active_nested_descendants(root))
+
+    def test_find_active_nested_descendants_finds_multiple_independent_jobs_at_different_branches(self):
+        root = ModelFile("Top", True)
+        branch_a = ModelFile("A", True)
+        branch_b = ModelFile("B", True)
+        leaf_a = ModelFile("a.rar", False)
+        leaf_a.state = ModelFile.State.QUEUED
+        leaf_b = ModelFile("b.rar", False)
+        leaf_b.state = ModelFile.State.DOWNLOADING
+        branch_a.add_child(leaf_a)
+        branch_b.add_child(leaf_b)
+        root.add_child(branch_a)
+        root.add_child(branch_b)
+
+        result = CommandPipeline._find_active_nested_descendants(root)
+        self.assertEqual(2, len(result))
+        self.assertIn(leaf_a, result)
+        self.assertIn(leaf_b, result)
+
+    # --- _handle_stop: "Stop Nested Downloads" cascade ---
+
+    def test_handle_stop_top_level_cascades_to_nested_active_descendants(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pc.lftp.kill.return_value = True
+
+        root = ModelFile("Top", True)
+        leaf_a = ModelFile("a.rar", False)
+        leaf_a.state = ModelFile.State.DOWNLOADING
+        leaf_b = ModelFile("b.rar", False)
+        leaf_b.state = ModelFile.State.QUEUED
+        root.add_child(leaf_a)
+        root.add_child(leaf_b)
+        command = Command(Command.Action.STOP, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_stop(command, root, pc, notify)
+
+        self.assertTrue(result)
+        self.assertEqual([], calls)
+        self.assertEqual(2, pc.lftp.kill.call_count)
+        pc.lftp.kill.assert_any_call("Top/a.rar")
+        pc.lftp.kill.assert_any_call("Top/b.rar")
+
+    def test_handle_stop_nested_cascade_succeeds_if_at_least_one_kill_succeeds(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pc.lftp.kill.side_effect = [True, False]
+
+        root = ModelFile("Top", True)
+        leaf_a = ModelFile("a.rar", False)
+        leaf_a.state = ModelFile.State.DOWNLOADING
+        leaf_b = ModelFile("b.rar", False)
+        leaf_b.state = ModelFile.State.QUEUED
+        root.add_child(leaf_a)
+        root.add_child(leaf_b)
+        command = Command(Command.Action.STOP, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_stop(command, root, pc, notify)
+
+        self.assertTrue(result)
+        self.assertEqual([], calls)
+
+    def test_handle_stop_nested_cascade_fails_when_all_kills_fail(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pc.lftp.kill.side_effect = [False, False]
+
+        root = ModelFile("Top", True)
+        leaf_a = ModelFile("a.rar", False)
+        leaf_a.state = ModelFile.State.DOWNLOADING
+        leaf_b = ModelFile("b.rar", False)
+        leaf_b.state = ModelFile.State.QUEUED
+        root.add_child(leaf_a)
+        root.add_child(leaf_b)
+        command = Command(Command.Action.STOP, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_stop(command, root, pc, notify)
+
+        self.assertFalse(result)
+        self.assertEqual(1, len(calls))
+
+    def test_handle_stop_nested_cascade_fails_when_all_kills_raise(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pc.lftp.kill.side_effect = LftpError("connection lost")
+
+        root = ModelFile("Top", True)
+        leaf = ModelFile("a.rar", False)
+        leaf.state = ModelFile.State.DOWNLOADING
+        root.add_child(leaf)
+        command = Command(Command.Action.STOP, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_stop(command, root, pc, notify)
+
+        self.assertFalse(result)
+        self.assertEqual(1, len(calls))
+
+    def test_handle_stop_top_level_no_own_job_and_no_active_descendants_fails_with_original_message(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+
+        root = ModelFile("Top", True)
+        child = ModelFile("child.txt", False)
+        root.add_child(child)
+        command = Command(Command.Action.STOP, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_stop(command, root, pc, notify)
+
+        self.assertFalse(result)
+        self.assertEqual(["File 'Top' is not Queued or Downloading"], calls)
+        pc.lftp.kill.assert_not_called()
+
+    def test_handle_stop_nested_cascade_skipped_when_nested_navigation_disabled(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=False)
+
+        root = ModelFile("Top", True)
+        leaf = ModelFile("a.rar", False)
+        leaf.state = ModelFile.State.DOWNLOADING
+        root.add_child(leaf)
+        command = Command(Command.Action.STOP, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_stop(command, root, pc, notify)
+
+        self.assertFalse(result)
+        self.assertEqual(1, len(calls))
+        pc.lftp.kill.assert_not_called()
+
+    def test_handle_stop_cascades_for_non_top_level_dir(self):
+        """The cascade applies at any depth in the stack, not just top-level -
+        stopping an intermediate folder whose own job isn't active should kill
+        its own independently active nested descendants."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pc.lftp.kill.return_value = True
+
+        root = ModelFile("Top", True)
+        sub = ModelFile("Sub", True)
+        leaf = ModelFile("a.rar", False)
+        leaf.state = ModelFile.State.DOWNLOADING
+        sub.add_child(leaf)
+        root.add_child(sub)
+        command = Command(Command.Action.STOP, "Top/Sub", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_stop(command, sub, pc, notify)
+
+        self.assertTrue(result)
+        self.assertEqual([], calls)
+        pc.lftp.kill.assert_called_once_with("Top/Sub/a.rar")
+
     # --- _handle_delete_local / _handle_delete_remote use full_path ---
 
     @patch("controller.command_pipeline.DeleteLocalProcess")

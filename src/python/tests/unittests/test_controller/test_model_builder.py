@@ -2135,6 +2135,24 @@ class TestModelBuilderNestedNavigation(unittest.TestCase):
         self.assertEqual(100, leaf.downloading_speed)
         self.assertEqual(5, leaf.eta)
 
+    def test_nested_active_child_leaves_top_level_own_state_default(self):
+        """A top-level folder's own state must stay Default while only a
+        nested descendant is independently downloading - the frontend's
+        "nested downloading" indicator relies on this to never coexist with
+        the folder's own state being active."""
+        r_top = SystemFile("Top", 1000, True)
+        r_leaf = SystemFile("leaf.rar", 1000, False)
+        r_top.add_child(r_leaf)
+        self.model_builder.set_remote_files([r_top])
+
+        nested_status = LftpJobStatus(0, LftpJobStatus.Type.PGET, LftpJobStatus.State.RUNNING, "Top/leaf.rar", "")
+        self.model_builder.set_lftp_statuses([nested_status])
+        self.model_builder.set_nested_navigation_enabled(True)
+
+        model = self.model_builder.build_model()
+
+        self.assertEqual(ModelFile.State.DEFAULT, model.get_file("Top").state)
+
     def test_nested_queued_file_job(self):
         r_top = SystemFile("Top", 1000, True)
         r_leaf = SystemFile("leaf.rar", 1000, False)
