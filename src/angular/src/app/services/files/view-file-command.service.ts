@@ -14,14 +14,21 @@ import { ViewFileSelectionService } from './view-file-selection.service';
 /** Resolves a view-file key back to its backing {@link ModelFile}, or undefined. */
 export type ModelFileResolver = (key: string) => ModelFile | undefined;
 
-// Every node in the given forest, at any depth - so a bulk action reaches a
-// checked nested row even when its parent folder is currently collapsed.
-function flattenTree(files: readonly ViewFile[]): ViewFile[] {
-  const result: ViewFile[] = [];
+// The checked rows the action applies to, at any depth - so a bulk action
+// reaches a checked nested row even when its parent folder is collapsed. A
+// row under a checked folder the action also applies to is skipped: the
+// folder's command already covers it, and a second command for it would only
+// fail (already deleted, or blocked by the folder's own job).
+function collectBulkTargets(
+  files: readonly ViewFile[],
+  isTarget: (f: ViewFile) => boolean,
+  result: ViewFile[] = [],
+): ViewFile[] {
   for (const file of files) {
-    result.push(file);
-    if (file.children.length > 0) {
-      result.push(...flattenTree(file.children));
+    if (isTarget(file)) {
+      result.push(file);
+    } else {
+      collectBulkTargets(file.children, isTarget, result);
     }
   }
   return result;
@@ -62,8 +69,7 @@ export class ViewFileCommandService {
 
   bulk(action: FileAction, files: readonly ViewFile[], resolve: ModelFileResolver): Observable<WebReaction[]> {
     const spec = FILE_ACTIONS[action];
-    const allFiles = flattenTree(files);
-    const checked = allFiles.filter((f) => this.selection.isChecked(viewFileKey(f)) && spec.isAllowed(f));
+    const checked = collectBulkTargets(files, (f) => this.selection.isChecked(viewFileKey(f)) && spec.isAllowed(f));
     if (checked.length === 0) {
       return of([]);
     }

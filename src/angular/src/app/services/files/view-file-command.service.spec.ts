@@ -290,4 +290,38 @@ describe('ViewFileCommandService', () => {
     expect(mockModelFileService.command).toHaveBeenCalledWith(FileAction.QUEUE, childModel);
     expect(results).toEqual([OK]);
   });
+
+  it('bulk() skips a checked row whose checked ancestor the action already covers', () => {
+    const child = makeViewFile({ name: 'child', fullPath: 'Top/child', localSize: 100, isLocallyDeletable: true });
+    const top = makeViewFile({
+      name: 'Top', fullPath: 'Top', isDir: true, localSize: 100, isLocallyDeletable: true, children: [child],
+    });
+    selection.toggle(fileKey(null, 'Top'));
+    selection.toggle(fileKey(null, 'Top/child'));
+
+    const topModel = makeModelFile({ name: 'Top', is_dir: true, local_size: 100 });
+    const resolve: ModelFileResolver = (key) => (key === 'Top' ? topModel : undefined);
+
+    service.bulk(FileAction.DELETE_LOCAL, [top], resolve).subscribe();
+
+    expect(mockModelFileService.command).toHaveBeenCalledTimes(1);
+    expect(mockModelFileService.command).toHaveBeenCalledWith(FileAction.DELETE_LOCAL, topModel);
+  });
+
+  it('bulk() still dispatches a checked row when its checked ancestor does not allow the action', () => {
+    const child = makeViewFile({ name: 'child', fullPath: 'Top/child', remoteSize: 100, isQueueable: true });
+    const top = makeViewFile({
+      name: 'Top', fullPath: 'Top', isDir: true, remoteSize: 100, isQueueable: false, children: [child],
+    });
+    selection.toggle(fileKey(null, 'Top'));
+    selection.toggle(fileKey(null, 'Top/child'));
+
+    const childModel = makeModelFile({ name: 'child', full_path: 'Top/child', remote_size: 100 });
+    const resolve: ModelFileResolver = (key) => (key === 'Top/child' ? childModel : undefined);
+
+    service.bulk(FileAction.QUEUE, [top], resolve).subscribe();
+
+    expect(mockModelFileService.command).toHaveBeenCalledTimes(1);
+    expect(mockModelFileService.command).toHaveBeenCalledWith(FileAction.QUEUE, childModel);
+  });
 });
