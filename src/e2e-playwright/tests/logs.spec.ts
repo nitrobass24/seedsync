@@ -14,6 +14,14 @@ test.describe("Logs Page", () => {
     expect(page.url()).toContain("/logs");
   });
 
+  test("file logging is on by default, so the log API serves records (#792)", async ({ page }) => {
+    const response = await page.request.get("/server/logs?limit=5");
+    expect(response.status()).toBe(200);
+    const records = await response.json();
+    expect(Array.isArray(records)).toBe(true);
+    expect(records.length).toBeGreaterThan(0);
+  });
+
   test("search input is present", async () => {
     await expect(logs.searchInput).toBeVisible();
   });
@@ -54,10 +62,10 @@ test.describe("Logs Page", () => {
     expect(text).toMatch(/DEBUG|INFO|WARNING|ERROR|CRITICAL/i);
   });
 
-  test("search filter narrows displayed records", async () => {
-    const records = logs.getLogRecords();
+  test("search filter narrows displayed history records", async () => {
+    const records = logs.getHistoryRecords();
+    await expect(records.first()).toBeVisible();
     const count = await records.count();
-    test.skip(count === 0, "No log records to search through");
 
     // Get text from the first record to use as a valid search term
     const firstText = await records.first().textContent();

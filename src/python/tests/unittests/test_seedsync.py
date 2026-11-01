@@ -1,9 +1,11 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import json
+import logging
 import os
 import tempfile
 import unittest
+from logging.handlers import RotatingFileHandler
 from unittest.mock import MagicMock
 
 from common import Config, IntegrationsConfig, PathPairsConfig, ServiceExit, ServiceRestart
@@ -452,6 +454,28 @@ class TestPersistResilience(unittest.TestCase):
         This guards the invariant the fix must preserve."""
         self.assertIsInstance(ServiceExit(), Exception)
         self.assertIsInstance(ServiceRestart(), Exception)
+
+
+class TestCreateLogger(unittest.TestCase):
+    """#792: a logdir adds the rotating file the Logs page reads; stdout
+    (docker logs) must keep working either way."""
+
+    def _handler_types(self, logdir):
+        logger = Seedsync._create_logger("test-create-logger", "INFO", logdir)
+        try:
+            return {type(h) for h in logger.handlers}
+        finally:
+            for h in logger.handlers[:]:
+                h.close()
+                logger.removeHandler(h)
+
+    def test_without_logdir_logs_to_stdout_only(self):
+        self.assertEqual({logging.StreamHandler}, self._handler_types(None))
+
+    def test_with_logdir_logs_to_stdout_and_file(self):
+        with tempfile.TemporaryDirectory() as logdir:
+            self.assertEqual({logging.StreamHandler, RotatingFileHandler}, self._handler_types(logdir))
+            self.assertTrue(os.path.exists(os.path.join(logdir, "test-create-logger.log")))
 
 
 class TestHandleControllerFailure(unittest.TestCase):

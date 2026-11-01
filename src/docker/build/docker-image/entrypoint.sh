@@ -98,5 +98,14 @@ if [ -n "$UMASK" ]; then
     echo "Setting umask: $UMASK"
 fi
 
+# File logging for the web UI's log viewer. LOGDIR="" disables it; a
+# --logdir already in the command wins.
+if [ -n "$LOGDIR" ] && ! printf '%s\n' "$@" | grep -qx -- '--logdir'; then
+    mkdir -p "$LOGDIR"
+    chown "$USER_ID:$GROUP_ID" "$LOGDIR"
+    set -- "$@" --logdir "$LOGDIR"
+    echo "Logging to: $LOGDIR"
+fi
+
 # Execute the command as the resolved user
 exec setpriv --reuid="$USERNAME" --regid="$GROUPNAME" --init-groups -- "$@"
