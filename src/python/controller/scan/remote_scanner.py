@@ -11,6 +11,7 @@ from common import Localization
 from common import escape_remote_path_double as _escape_remote_path_double
 from common import escape_remote_path_single as _escape_remote_path_single
 from ssh import Sshcp, SshcpError
+from ssh.lftp_ssh import is_credential_error
 from system import SystemFile
 
 from .scanner_process import IScanner, ScannerError
@@ -69,7 +70,7 @@ class RemoteScanner(IScanner):
         except (json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError) as err:
             self.logger.error(f"JSON parse error: {err!s}\n{out[:500]}")
             raise ScannerError(
-                Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"), recoverable=False
+                Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"), recoverable=True
             ) from err
 
         self.__first_run = False
@@ -118,13 +119,12 @@ class RemoteScanner(IScanner):
                         Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()), recoverable=False
                     ) from e
 
-                # Config errors on first run are non-recoverable
-                if self.__first_run and not self._is_transient_error(error_str):
+                if self._is_fatal_error(error_str):
                     raise ScannerError(
                         Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()), recoverable=False
                     ) from e
 
-                # Retry transient errors
+                # Retry everything else
                 if attempt < self._SCAN_MAX_RETRIES:
                     self.logger.info(f"Retrying in {self._SCAN_RETRY_DELAY_SECS}s...")
                     time.sleep(self._SCAN_RETRY_DELAY_SECS)
@@ -134,10 +134,14 @@ class RemoteScanner(IScanner):
         raise ScannerError(Localization.Error.REMOTE_SERVER_SCAN.format(str(last_error).strip()), recoverable=True)
 
     @staticmethod
-    def _is_transient_error(error_str: str) -> bool:
-        """Timeouts and connection drops are transient and worth retrying."""
-        transient_patterns = ["Timed out", "lost connection", "Connection refused", "Connection timed out"]
-        return any(p in error_str for p in transient_patterns)
+    def _is_fatal_error(error_str: str) -> bool:
+        """Only errors that need a settings change are fatal: bad credentials
+        and a missing login shell. Everything else (host down, DNS, timeouts,
+        connection resets, ...) is treated as transient and retried on the
+        normal scan interval, so an offline seedbox doesn't crash-loop the
+        process (#770). Retrying bad credentials would risk a fail2ban ban.
+        """
+        return is_credential_error(error_str) or "login shell not found" in error_str
 
     def _install_scanfs(self):
         # Detect available shell on first run to provide clear errors
@@ -146,7 +150,7 @@ class RemoteScanner(IScanner):
             self.__ssh.detect_shell()
         except SshcpError as e:
             self.logger.exception("Shell detection failed")
-            recoverable = self._is_transient_error(str(e))
+            recoverable = not self._is_fatal_error(str(e))
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
             ) from e
@@ -180,7 +184,7 @@ class RemoteScanner(IScanner):
                 return
         except SshcpError as e:
             self.logger.exception("Caught SSH exception during md5sum check")
-            recoverable = self._is_transient_error(str(e))
+            recoverable = not self._is_fatal_error(str(e))
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
             ) from e
@@ -227,7 +231,7 @@ class RemoteScanner(IScanner):
                 self._install_scanfs_with_home_fallback(str(e))
             else:
                 self.logger.exception("Caught scp exception")
-                recoverable = self._is_transient_error(str(e))
+                recoverable = not self._is_fatal_error(str(e))
                 raise ScannerError(
                     Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
                 ) from e
