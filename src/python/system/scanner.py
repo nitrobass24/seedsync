@@ -147,6 +147,11 @@ class SystemScanner:
             # Skip excluded entries
             if any(entry.name.endswith(suffix) for suffix in self.exclude_suffixes):
                 continue
+            # Skip a stale lftp temp file whose finished file sits beside it;
+            # both would otherwise be listed under the same name.
+            final_path = self.__lftp_temp_final_path(entry)
+            if final_path is not None and os.path.lexists(final_path):
+                continue
 
             try:
                 sys_file = self.__create_system_file(entry)
@@ -155,6 +160,13 @@ class SystemScanner:
             children.append(sys_file)
         children.sort(key=lambda fl: fl.name)
         return children
+
+    def __lftp_temp_final_path(self, entry: os.DirEntry[str]) -> str | None:
+        """The path lftp will rename this temp file to, or None if it isn't one."""
+        suffix = self.__lftp_temp_file_suffix
+        if suffix is None or entry.name == suffix or not entry.name.endswith(suffix) or entry.is_dir():
+            return None
+        return entry.path[: -len(suffix)]
 
     @staticmethod
     def _lftp_status_file_size(status: str) -> int:
@@ -179,14 +191,19 @@ class SystemScanner:
         total_size = int(result.group(1))
         lines.pop(0)
         while lines:
-            # There should be pairs of lines
-            if len(lines) < 2:
-                return 0
+            # There should be pairs of lines, except that a single-connection
+            # pget writes only "0.pos": that chunk runs to the end of the file
             result_pos = pos_pattern_m.search(lines[0])
-            result_limit = limit_pattern_m.search(lines[1])
-            if not result_pos or not result_limit:
+            if not result_pos:
                 return 0
             pos = int(result_pos.group(1))
+            if len(lines) == 1:
+                empty_size += total_size - pos
+                lines.pop(0)
+                continue
+            result_limit = limit_pattern_m.search(lines[1])
+            if not result_limit:
+                return 0
             limit = int(result_limit.group(1))
             empty_size += limit - pos
             lines.pop(0)

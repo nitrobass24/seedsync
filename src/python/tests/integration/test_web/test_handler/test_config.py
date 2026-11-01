@@ -23,6 +23,20 @@ class TestConfigHandler(BaseTestWebApp):
         self.assertEqual(5678, json_dict["controller"]["interval_ms_local_scan"])
         self.assertEqual(8080, json_dict["web"]["port"])
 
+    def test_get_set_nested_navigation_toggle(self):
+        self.context.config.controller.enable_nested_navigation = False
+        resp = self.test_app.get("/server/config/get")
+        json_dict = json.loads(str(resp.html))
+        self.assertEqual(False, json_dict["controller"]["enable_nested_navigation"])
+
+        resp = self.test_app.get("/server/config/set/controller/enable_nested_navigation/True")
+        self.assertEqual(200, resp.status_int)
+        self.assertEqual(True, self.context.config.controller.enable_nested_navigation)
+
+        resp = self.test_app.get("/server/config/get")
+        json_dict = json.loads(str(resp.html))
+        self.assertEqual(True, json_dict["controller"]["enable_nested_navigation"])
+
     def test_set_good(self):
         self.assertEqual("INFO", self.context.config.general.log_level)
         resp = self.test_app.get("/server/config/set/general/log_level/DEBUG")

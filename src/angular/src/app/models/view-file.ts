@@ -16,6 +16,8 @@ export interface ViewFile {
   isArchive: boolean;
   isSelected: boolean;
   isChecked: boolean;
+  /** Whether some (but not all) of this folder's descendants (any depth) are checked. */
+  isIndeterminate: boolean;
   isQueueable: boolean;
   isStoppable: boolean;
   /** Whether file can be queued for extraction (independent of isArchive). */
@@ -24,12 +26,16 @@ export interface ViewFile {
   isRemotelyDeletable: boolean;
   /** Whether folder has local-only content (exists locally but not remotely) that can be cleaned up. */
   isCleanupLocalable: boolean;
+  /** Whether this folder (at any depth) has a descendant independently Queued/Downloading. */
+  hasDownloadingDescendant: boolean;
   isValidatable: boolean;
   validateTooltip: string | null;
   localCreatedTimestamp: Date | null;
   localModifiedTimestamp: Date | null;
   remoteCreatedTimestamp: Date | null;
   remoteModifiedTimestamp: Date | null;
+  /** Nested children, only populated/rendered when nested navigation is enabled. */
+  children: ViewFile[];
 }
 
 export enum ViewFileStatus {

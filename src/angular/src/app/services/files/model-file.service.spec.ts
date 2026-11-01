@@ -188,7 +188,7 @@ describe("ModelFileService", () => {
   for (const [label, action, verb] of urlVerbCases) {
     it(`should call RestService.sendRequest with double-encoded filename for ${label}`, () => {
       mockRestService.sendRequest.mockReturnValue(of({}));
-      const file = { name: "my file/test" } as ModelFile;
+      const file = { name: "test", full_path: "my file/test" } as ModelFile;
       service.command(action, file);
 
       const encoded = encodeURIComponent(encodeURIComponent("my file/test"));
@@ -200,7 +200,7 @@ describe("ModelFileService", () => {
 
   it("should append pair_id as a query param when the file has one", () => {
     mockRestService.sendRequest.mockReturnValue(of({}));
-    const file = { name: "file1", pair_id: "pair a" } as ModelFile;
+    const file = { name: "file1", full_path: "file1", pair_id: "pair a" } as ModelFile;
     service.command(FileAction.QUEUE, file);
 
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(
@@ -208,9 +208,20 @@ describe("ModelFileService", () => {
     );
   });
 
+  it("should send full_path (not name) for a nested file", () => {
+    mockRestService.sendRequest.mockReturnValue(of({}));
+    const file = { name: "leaf.rar", full_path: "TopDir/Sub/leaf.rar", pair_id: null } as ModelFile;
+    service.command(FileAction.QUEUE, file);
+
+    const encoded = encodeURIComponent(encodeURIComponent("TopDir/Sub/leaf.rar"));
+    expect(mockRestService.sendRequest).toHaveBeenCalledWith(
+      "/server/command/queue/" + encoded,
+    );
+  });
+
   it("should call RestService.sendRequest with double-encoded filename for cleanupLocal", () => {
     mockRestService.sendRequest.mockReturnValue(of({}));
-    const file = { name: "my file/test" } as ModelFile;
+    const file = { name: "test", full_path: "my file/test" } as ModelFile;
     service.cleanupLocal(file);
 
     const encoded = encodeURIComponent(encodeURIComponent("my file/test"));
@@ -221,7 +232,7 @@ describe("ModelFileService", () => {
 
   it("should include pair_id query param for cleanupLocal when set", () => {
     mockRestService.sendRequest.mockReturnValue(of({}));
-    const file = { name: "test", pair_id: "pair-1" } as ModelFile;
+    const file = { name: "test", full_path: "test", pair_id: "pair-1" } as ModelFile;
     service.cleanupLocal(file);
 
     expect(mockRestService.sendRequest).toHaveBeenCalledWith(

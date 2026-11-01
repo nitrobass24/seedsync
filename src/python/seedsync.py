@@ -450,6 +450,7 @@ class Seedsync:
         config.controller.use_local_path_as_extract_path = True
         config.controller.use_staging = False
         config.controller.staging_path = "/staging"
+        config.controller.enable_nested_navigation = False
 
         config.web.port = 8800
 

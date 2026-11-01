@@ -185,9 +185,37 @@ class LftpJobStatusParser:
 
     def __init__(self):
         self.logger = logging.getLogger("LftpJobStatusParser")
+        self.__base_remote_dir_path = ""
 
     def set_base_logger(self, base_logger: logging.Logger):
         self.logger = base_logger.getChild("LftpJobStatusParser")
+
+    def set_base_remote_dir_path(self, base_remote_dir_path: str):
+        """The remote directory jobs are queued relative to (Lftp's own
+        base_remote_dir_path). Needed to recover a nested job's name (e.g.
+        "TopDir/leaf.rar") from the absolute remote path lftp echoes in
+        `jobs -v` output - without it, every job's name collapses to its bare
+        basename, and nested navigation can never distinguish a standalone
+        nested job from a top-level one (issue: nested job names always
+        reported as a bare basename, breaking ModelBuilder's "/" in name
+        routing check).
+        """
+        self.__base_remote_dir_path = base_remote_dir_path
+
+    def _extract_name(self, remote: str) -> str:
+        """Extract a job's name from the raw remote path lftp echoes in
+        `jobs -v` output: the path relative to base_remote_dir_path when it's
+        a prefix of `remote` (preserving any nested subdirectory), or the
+        bare basename otherwise (matches prior behavior - e.g. before
+        set_base_remote_dir_path is called, or if the echoed path doesn't
+        share the configured base for any reason)."""
+        normalized = os.path.normpath(remote)
+        if self.__base_remote_dir_path:
+            base = os.path.normpath(self.__base_remote_dir_path)
+            prefix = base + os.sep
+            if normalized.startswith(prefix):
+                return normalized[len(prefix) :]
+        return os.path.basename(normalized)
 
     @staticmethod
     def _size_to_bytes(size: str) -> int:
@@ -352,7 +380,7 @@ class LftpJobStatusParser:
             result_got = _RE_CHUNK_GOT.search(line)
 
         id_ = int(result.group("id"))
-        name = os.path.basename(os.path.normpath(result.group("remote")))
+        name = self._extract_name(result.group("remote"))
         flags = result.group("flags")
         status = LftpJobStatus(
             job_id=id_, job_type=LftpJobStatus.Type.PGET, state=LftpJobStatus.State.RUNNING, name=name, flags=flags
@@ -368,9 +396,9 @@ class LftpJobStatusParser:
                     "Mismatch between pget names '{}' vs '{}'".format(result.group("remote"), result_at2.group("name"))
                 )
         elif result_got:
-            got_group_basename = os.path.basename(os.path.normpath(result_got.group("name")))
-            if got_group_basename != name:
-                raise ValueError(f"Mismatch: filename '{name}' but chunk data for '{got_group_basename}'")
+            got_group_name = self._extract_name(result_got.group("name"))
+            if got_group_name != name:
+                raise ValueError(f"Mismatch: filename '{name}' but chunk data for '{got_group_name}'")
 
         if result_at or result_at2 or result_got:
             transfer_state = LftpJobStatusParser._build_chunk_transfer_state(result_at, result_at2, result_got)
@@ -381,12 +409,11 @@ class LftpJobStatusParser:
         status.total_transfer_state = transfer_state
         return status
 
-    @staticmethod
-    def _parse_mirror_header(result: "re.Match[str]") -> LftpJobStatus:
+    def _parse_mirror_header(self, result: "re.Match[str]") -> LftpJobStatus:
         """Parse a downloading mirror header line (already matched) into a
         RUNNING mirror LftpJobStatus with size/speed totals."""
         id_ = int(result.group("id"))
-        name = os.path.basename(os.path.normpath(result.group("remote")))
+        name = self._extract_name(result.group("remote"))
         flags = result.group("flags")
         status = LftpJobStatus(
             job_id=id_, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.RUNNING, name=name, flags=flags
@@ -406,8 +433,7 @@ class LftpJobStatusParser:
         )
         return status
 
-    @staticmethod
-    def _parse_mirror_fl_header(result: "re.Match[str]", lines: list[str]) -> LftpJobStatus:
+    def _parse_mirror_fl_header(self, result: "re.Match[str]", lines: list[str]) -> LftpJobStatus:
         """Parse a connecting / receiving-file-list mirror header (already
         matched) into a RUNNING mirror LftpJobStatus, popping the optional
         'Getting file list'/'cd ' follow-up line."""
@@ -415,7 +441,7 @@ class LftpJobStatusParser:
         if lines and (lines[0].startswith("Getting file list") or lines[0].startswith("cd ")):
             lines.pop(0)  # pop the connecting line
         id_ = int(result.group("id"))
-        name = os.path.basename(os.path.normpath(result.group("remote")))
+        name = self._extract_name(result.group("remote"))
         flags = result.group("flags")
         return LftpJobStatus(
             job_id=id_, job_type=LftpJobStatus.Type.MIRROR, state=LftpJobStatus.State.RUNNING, name=name, flags=flags
@@ -561,13 +587,13 @@ class LftpJobStatusParser:
         # Search for mirror header
         result = _RE_MIRROR_HEADER.search(line)
         if result:
-            return LftpJobStatusParser._parse_mirror_header(result)
+            return self._parse_mirror_header(result)
 
         # Search for mirror connecting header
         # Note: this must be after the more restrictive mirror header above
         result = _RE_MIRROR_FL_HEADER.search(line)
         if result:
-            return LftpJobStatusParser._parse_mirror_fl_header(result, lines)
+            return self._parse_mirror_fl_header(result, lines)
 
         # Search for filename
         result = _RE_FILENAME.search(line)
@@ -609,8 +635,7 @@ class LftpJobStatusParser:
                 prev_job = status
         return jobs
 
-    @staticmethod
-    def __parse_queue(lines: list[str]) -> list[LftpJobStatus]:  # noqa: C901 — complexity 19, lftp output parser
+    def __parse_queue(self, lines: list[str]) -> list[LftpJobStatus]:  # noqa: C901 — complexity 19, lftp output parser
         queue: list[LftpJobStatus] = []
 
         queue_done_m = re.compile(_QUEUE_DONE_REGEX)
@@ -697,7 +722,7 @@ class LftpJobStatusParser:
                         else:
                             raise ValueError(f"Failed to parse queue line: {line}")
                         id_ = int(result.group("id"))
-                        name = os.path.basename(os.path.normpath(result.group("remote")))
+                        name = self._extract_name(result.group("remote"))
                         flags = result.group("flags")
                         status = LftpJobStatus(
                             job_id=id_, job_type=type_, state=LftpJobStatus.State.QUEUED, name=name, flags=flags

@@ -4,6 +4,7 @@ import logging
 import unittest
 from unittest.mock import patch
 
+from common import Constants
 from controller.scan.local_scanner import LocalScanner
 from controller.scan.scanner_process import ScannerError
 from system import SystemFile, SystemScannerError
@@ -16,7 +17,7 @@ class TestLocalScanner(unittest.TestCase):
     @patch("controller.scan.local_scanner.SystemScanner")
     def test_missing_path_returns_empty_with_warning(self, mock_scanner_cls, mock_isdir):
         """Missing scan path returns empty list + warning log."""
-        scanner = LocalScanner("/nonexistent", use_temp_file=False)
+        scanner = LocalScanner("/nonexistent")
 
         with self.assertLogs("LocalScanner", level="WARNING") as log_ctx:
             result = scanner.scan()
@@ -32,7 +33,7 @@ class TestLocalScanner(unittest.TestCase):
         files = [SystemFile("a", 10, False), SystemFile("b", 20, True)]
         mock_scanner.scan.return_value = files
 
-        scanner = LocalScanner("/exists", use_temp_file=False)
+        scanner = LocalScanner("/exists")
         result = scanner.scan()
 
         self.assertEqual(len(result), 2)
@@ -46,7 +47,7 @@ class TestLocalScanner(unittest.TestCase):
         mock_scanner = mock_scanner_cls.return_value
         mock_scanner.scan.side_effect = SystemScannerError("disk failure")
 
-        scanner = LocalScanner("/exists", use_temp_file=False)
+        scanner = LocalScanner("/exists")
 
         with self.assertRaises(ScannerError):
             scanner.scan()
@@ -54,14 +55,15 @@ class TestLocalScanner(unittest.TestCase):
     @patch("controller.scan.local_scanner.SystemScanner")
     def test_set_base_logger(self, mock_scanner_cls):
         """set_base_logger creates a child logger."""
-        scanner = LocalScanner("/local", use_temp_file=False)
+        scanner = LocalScanner("/local")
         parent_logger = logging.getLogger("parent")
         scanner.set_base_logger(parent_logger)
         self.assertEqual(scanner.logger.name, "parent.LocalScanner")
 
     @patch("controller.scan.local_scanner.SystemScanner")
-    def test_temp_file_suffix_set(self, mock_scanner_cls):
-        """When use_temp_file is True, lftp temp suffix is set on SystemScanner."""
+    def test_temp_file_suffix_always_set(self, mock_scanner_cls):
+        """The lftp temp suffix is always set: use_temp_file can be switched on
+        live after the scanner is built, and old temp files can outlive it."""
         mock_scanner = mock_scanner_cls.return_value
-        LocalScanner("/local", use_temp_file=True)
-        mock_scanner.set_lftp_temp_suffix.assert_called_once()
+        LocalScanner("/local")
+        mock_scanner.set_lftp_temp_suffix.assert_called_once_with(Constants.LFTP_TEMP_FILE_SUFFIX)
