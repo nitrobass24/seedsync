@@ -284,11 +284,15 @@ class RemoteScanner(IScanner):
             self.__remote_path_to_scan_script = fallback_path
             self.logger.info(f"Scanner installed to fallback path: {fallback_path}")
         except SshcpError as fallback_e:
+            # Neither path writable is a Server Script Path problem (fatal); a
+            # connection drop during the fallback copy is retried like any other.
+            message = str(fallback_e)
+            fatal = self._is_fatal_error(message) or "Permission denied" in message
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(
                     f"Could not install scanner to '{self.__remote_path_to_scan_script}' "
                     f"({original_error.strip()}), fallback to '{fallback_path}' "
-                    f"also failed: {str(fallback_e).strip()}"
+                    f"also failed: {message.strip()}"
                 ),
-                recoverable=False,
+                recoverable=not fatal,
             ) from fallback_e

@@ -1,10 +1,12 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import unittest
+from datetime import datetime
 from unittest.mock import MagicMock
 
 from controller.model_updater import ModelUpdater
 from controller.persist_keys import KEY_SEP, persist_key
+from controller.scan.scanner_process import ScannerResult
 
 
 class TestSyncPersistToAllBuilders(unittest.TestCase):
@@ -289,3 +291,50 @@ class TestRetryFailedMoves(unittest.TestCase):
         # Cycle 3: nothing left to retry.
         updater._retry_failed_moves()
         self.assertEqual(1, pipeline.spawn_move_process.call_count)
+
+
+class TestUpdatePairContextScanResults(unittest.TestCase):
+    """A failed local scan carries no files; applying it would make every
+    download look deleted until the next successful scan."""
+
+    def _make_pc(self, local_scan):
+        pc = MagicMock()
+        pc.pair_id = "pair-1"
+        pc.remote_scan_process.pop_latest_result.return_value = None
+        pc.local_scan_process.pop_latest_result.return_value = local_scan
+        pc.active_scan_process.pop_latest_result.return_value = None
+        pc.lftp.status.return_value = []
+        pc.active_downloading_file_names = []
+        pc.active_extracting_file_names = []
+        pc.pending_completion = set()
+        return pc
+
+    def _make_updater(self, pc):
+        return ModelUpdater(
+            pair_contexts=[pc],
+            persist=MagicMock(),
+            pipeline=MagicMock(),
+            registry=MagicMock(),
+            extract_process=MagicMock(),
+            validate_process=MagicMock(),
+            context=MagicMock(),
+            password=None,
+            logger=MagicMock(),
+        )
+
+    def test_failed_local_scan_is_not_applied_to_the_model(self):
+        scan = ScannerResult(timestamp=datetime.now(), files=[], failed=True, error_message="unreadable")
+        pc = self._make_pc(scan)
+
+        self._make_updater(pc)._update_pair_model_state(pc, None, None)
+
+        pc.model_builder.set_local_files.assert_not_called()
+        self.assertIs(scan, pc.latest_local_scan)
+
+    def test_successful_local_scan_is_applied_to_the_model(self):
+        scan = ScannerResult(timestamp=datetime.now(), files=[])
+        pc = self._make_pc(scan)
+
+        self._make_updater(pc)._update_pair_model_state(pc, None, None)
+
+        pc.model_builder.set_local_files.assert_called_once_with([])

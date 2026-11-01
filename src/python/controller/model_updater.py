@@ -472,7 +472,9 @@ class ModelUpdater:
                 latest_remote_scan.files, self._context.config.general.exclude_patterns
             )
             pc.model_builder.set_remote_files(remote_files)
-        if latest_local_scan is not None:
+        # A failed local scan (unreadable path, e.g. a mount that went away)
+        # carries no files; applying it would make every download look deleted.
+        if latest_local_scan is not None and not latest_local_scan.failed:
             pc.model_builder.set_local_files(latest_local_scan.files)
         if latest_active_scan is not None:
             pc.model_builder.set_active_files(latest_active_scan.files)

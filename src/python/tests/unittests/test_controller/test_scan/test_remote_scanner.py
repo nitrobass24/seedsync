@@ -493,6 +493,25 @@ class TestRemoteScanner(unittest.TestCase):
             scanner.scan()
         self.assertTrue(ctx.exception.recoverable)
 
+    def test_home_fallback_copy_failure_is_classified(self):
+        """After a Permission denied on the configured script path, a failed
+        fallback copy is fatal only if it is itself a permission/credential
+        problem; a connection drop mid-copy is retried like any other."""
+        for message, expected_recoverable in (
+            ("Connection refused by server", True),
+            ("scp: /home/u/script: Permission denied", False),
+        ):
+            scanner = self._make_scanner()
+            self.mock_ssh.shell.side_effect = self._make_shell_side_effect(
+                [b"", b"OK", b"/home/u", b"OK"]  # md5sum, dir check, echo ~, fallback dir check
+            )
+            self.mock_ssh.copy.side_effect = [SshcpError("scp: /tmp/script: Permission denied"), SshcpError(message)]
+
+            with self.subTest(message=message), self.assertRaises(ScannerError) as ctx:
+                scanner.scan()
+            self.assertIn(message, str(ctx.exception))
+            self.assertEqual(expected_recoverable, ctx.exception.recoverable)
+
     def test_uses_custom_python_path(self):
         """When remote_python_path is set, uses it instead of 'python3'"""
         scanner = RemoteScanner(
