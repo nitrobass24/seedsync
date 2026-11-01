@@ -35,12 +35,12 @@ from common import (
     ServiceExit,
     ServiceRestart,
     Status,
+    UnrecoverableError,
 )
 from common.json_formatter import JsonFormatter
 from controller import AutoQueue, AutoQueuePersist, Controller, ControllerJob, ControllerPersist
 from controller.arr_notifier import ArrNotifier
 from controller.notifier import WebhookNotifier
-from ssh.lftp_ssh import is_credential_error
 from web import WebAppBuilder, WebAppJob
 
 T_Persist = TypeVar("T_Persist", bound=Persist)
@@ -236,7 +236,7 @@ class Seedsync:
 
                 # Propagate exceptions from child threads.
                 # webapp_job exceptions still exit the main loop for a clean
-                # shutdown. A controller_job credential error is handled
+                # shutdown. A controller_job UnrecoverableError is handled
                 # locally instead (see _handle_controller_failure).
                 webapp_job.propagate_exception()
                 if do_start_controller:
@@ -289,13 +289,13 @@ class Seedsync:
         """Handle an exception propagated from controller_job.
 
         Re-raises (exiting the process, so Docker's restart policy retries) for
-        everything except an SSH credential error: ServiceExit/ServiceRestart
-        raised by a signal mid-check, --exit, and errors that can heal on their
-        own (e.g. a flapping local mount). A bad password never heals, and
-        exiting would just crash-loop the container without ever letting the
-        user reach Settings to fix it.
+        everything except an UnrecoverableError: ServiceExit/ServiceRestart
+        raised by a signal mid-check, --exit, and unexpected errors. An
+        UnrecoverableError (bad credentials, wrong path, missing remote shell)
+        never heals on its own, and exiting would just crash-loop the
+        container without ever letting the user reach Settings to fix it.
 
-        For a credential error, stop just the controller and leave the web app
+        For those, stop just the controller and leave the web app
         running. Mirrors the "config incomplete" state
         set up before the loop starts: status.server.up/error_msg surface the
         error in the UI, and the controller only restarts via an explicit
@@ -304,9 +304,11 @@ class Seedsync:
         running its cleanup (see Job.run()/ControllerJob.cleanup(), which
         calls Controller.exit()), so join() here waits for that teardown.
         """
-        if isinstance(e, (ServiceExit, ServiceRestart)) or self.context.args.exit or not is_credential_error(str(e)):
+        if isinstance(e, (ServiceExit, ServiceRestart)) or self.context.args.exit:
             raise e
-        self.context.logger.exception("Controller stopped due to a credential error; web app remains available")
+        if not isinstance(e, UnrecoverableError):
+            raise e
+        self.context.logger.exception("Controller stopped; fix the error in Settings and restart")
         # Publish the error first: join() waits for Controller.exit() to finish.
         self.context.status.server.up = False
         self.context.status.server.error_msg = str(e)

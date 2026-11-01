@@ -6,7 +6,8 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock
 
-from common import Config, IntegrationsConfig, PathPairsConfig, ServiceExit, ServiceRestart
+from common import Config, IntegrationsConfig, PathPairsConfig, ServiceExit, ServiceRestart, UnrecoverableError
+from controller.scan import ScannerError
 from seedsync import Seedsync
 
 
@@ -455,11 +456,12 @@ class TestPersistResilience(unittest.TestCase):
 
 
 class TestHandleControllerFailure(unittest.TestCase):
-    """Tests for _handle_controller_failure(): an SSH credential error from
-    controller_job must stop only the controller, not the whole app -- taking
-    the whole process down just crash-loops the container on every restart
-    attempt instead of letting the user fix the config. Everything else
-    re-raises so the process exits as before.
+    """Tests for _handle_controller_failure(): an UnrecoverableError from
+    controller_job (bad credentials, wrong path, missing remote shell) must
+    stop only the controller, not the whole app -- taking the whole process
+    down just crash-loops the container on every restart attempt instead of
+    letting the user fix the config. Everything else re-raises so the process
+    exits as before.
     """
 
     def _make_bare_seedsync(self, exit_on_error=False):
@@ -472,7 +474,7 @@ class TestHandleControllerFailure(unittest.TestCase):
         s = self._make_bare_seedsync()
         controller_job = MagicMock()
 
-        s._handle_controller_failure(controller_job, RuntimeError("Incorrect password"))
+        s._handle_controller_failure(controller_job, UnrecoverableError("Incorrect password"))
 
         controller_job.terminate.assert_called_once()
         controller_job.join.assert_called_once()
@@ -480,9 +482,20 @@ class TestHandleControllerFailure(unittest.TestCase):
     def test_logs_loudly_so_the_failure_stays_visible(self):
         s = self._make_bare_seedsync()
 
-        s._handle_controller_failure(MagicMock(), RuntimeError("Permission denied (publickey,password)"))
+        s._handle_controller_failure(MagicMock(), UnrecoverableError("Permission denied (publickey,password)"))
 
         s.context.logger.exception.assert_called_once()
+
+    def test_nonrecoverable_scanner_error_stops_only_the_controller(self):
+        """ScannerError is the type a bad Server Script Path / missing remote
+        shell / bad credentials arrive as from the scanner process."""
+        s = self._make_bare_seedsync()
+        controller_job = MagicMock()
+
+        s._handle_controller_failure(controller_job, ScannerError("Server Script Path is a directory"))
+
+        controller_job.terminate.assert_called_once()
+        self.assertFalse(s.context.status.server.up)
 
     def test_surfaces_the_error_via_status_for_the_ui(self):
         """This reuses the same status.server fields the "config incomplete"
@@ -490,7 +503,7 @@ class TestHandleControllerFailure(unittest.TestCase):
         visible on Settings without any new UI plumbing."""
         s = self._make_bare_seedsync()
 
-        s._handle_controller_failure(MagicMock(), RuntimeError("Incorrect password"))
+        s._handle_controller_failure(MagicMock(), UnrecoverableError("Incorrect password"))
 
         self.assertFalse(s.context.status.server.up)
         self.assertEqual("Incorrect password", s.context.status.server.error_msg)
@@ -504,31 +517,21 @@ class TestHandleControllerFailure(unittest.TestCase):
             up=s.context.status.server.up, error_msg=s.context.status.server.error_msg
         )
 
-        s._handle_controller_failure(controller_job, RuntimeError("Incorrect password"))
+        s._handle_controller_failure(controller_job, UnrecoverableError("Incorrect password"))
 
         self.assertEqual({"up": False, "error_msg": "Incorrect password"}, seen_on_join)
 
-    def test_non_credential_error_is_reraised(self):
-        """Errors that can heal on their own (e.g. a flapping local mount)
-        keep exiting so Docker's restart policy retries them."""
+    def test_unexpected_error_is_reraised(self):
+        """Anything that isn't an UnrecoverableError is a bug or something
+        that may heal on its own; keep exiting so Docker's restart policy
+        retries it. The message no longer matters, only the type."""
         s = self._make_bare_seedsync()
         controller_job = MagicMock()
-
-        with self.assertRaises(RuntimeError):
-            s._handle_controller_failure(controller_job, RuntimeError("Failed to scan local directory"))
+        for exc in (RuntimeError("Failed to scan local directory"), PermissionError("Permission denied (publickey)")):
+            with self.subTest(exc=exc), self.assertRaises(type(exc)):
+                s._handle_controller_failure(controller_job, exc)
 
         controller_job.terminate.assert_not_called()
-
-    def test_non_ssh_permission_denied_is_reraised(self):
-        """lftp's unreadable-remote-file error and a local PermissionError both
-        say "Permission denied" but are not credential errors."""
-        s = self._make_bare_seedsync()
-        for message in (
-            "mirror: Access failed: Permission denied (/remote/file)",
-            "[Errno 13] Permission denied: '/downloads/file'",
-        ):
-            with self.subTest(message=message), self.assertRaises(RuntimeError):
-                s._handle_controller_failure(MagicMock(), RuntimeError(message))
 
     def test_service_exit_and_restart_are_reraised(self):
         """A signal can raise these asynchronously while the main loop is
@@ -538,8 +541,8 @@ class TestHandleControllerFailure(unittest.TestCase):
             with self.subTest(exc=type(exc).__name__), self.assertRaises(type(exc)):
                 s._handle_controller_failure(MagicMock(), exc)
 
-    def test_exit_flag_reraises_credential_error(self):
+    def test_exit_flag_reraises_unrecoverable_error(self):
         s = self._make_bare_seedsync(exit_on_error=True)
 
-        with self.assertRaises(RuntimeError):
-            s._handle_controller_failure(MagicMock(), RuntimeError("Incorrect password"))
+        with self.assertRaises(UnrecoverableError):
+            s._handle_controller_failure(MagicMock(), UnrecoverableError("Incorrect password"))
