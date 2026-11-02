@@ -114,9 +114,14 @@ class RemoteScanner(IScanner):
                         recoverable=False,
                     ) from e
 
+                # The remote script says the scan path is missing / not a
+                # directory. Recoverable: a seedbox mount can go away and come
+                # back (same as the local scanner), and the error stays
+                # visible in the header until it does. No in-scan retry: the
+                # next scan interval is soon enough.
                 if "SystemScannerError" in error_str:
                     raise ScannerError(
-                        Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()), recoverable=False
+                        Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()), recoverable=True
                     ) from e
 
                 if self._is_fatal_error(error_str):

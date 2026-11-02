@@ -392,8 +392,10 @@ class TestRemoteScanner(unittest.TestCase):
         scanner.scan()
         self.mock_ssh.detect_shell.assert_not_called()
 
-    def test_raises_nonrecoverable_error_on_failed_scan(self):
-        """SystemScannerError is always non-recoverable, even with retries"""
+    def test_missing_remote_path_is_recoverable_without_in_scan_retry(self):
+        """SystemScannerError (scan path missing / not a directory) is
+        recoverable so a remote mount that went away self-heals on a later
+        scan, but is not retried within the same scan."""
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect(
@@ -409,7 +411,8 @@ class TestRemoteScanner(unittest.TestCase):
         self.assertEqual(
             Localization.Error.REMOTE_SERVER_SCAN.format("SystemScannerError: something failed"), str(ctx.exception)
         )
-        self.assertFalse(ctx.exception.recoverable)
+        self.assertTrue(ctx.exception.recoverable)
+        self.mock_sleep.assert_not_called()
 
     def test_retries_transient_errors_on_first_run(self):
         """Transient errors (timeouts) are retried even on first run"""
