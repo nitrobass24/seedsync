@@ -405,13 +405,19 @@ class Seedsync:
         # the web UI's log viewer reads (#792).
         handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
         if logdir is not None:
-            handlers.append(
-                RotatingFileHandler(
-                    f"{logdir}/{name}.log",
-                    maxBytes=Constants.MAX_LOG_SIZE_IN_BYTES,
-                    backupCount=Constants.LOG_BACKUP_COUNT,
+            log_path = f"{logdir}/{name}.log"
+            try:
+                handlers.append(
+                    RotatingFileHandler(
+                        log_path,
+                        maxBytes=Constants.MAX_LOG_SIZE_IN_BYTES,
+                        backupCount=Constants.LOG_BACKUP_COUNT,
+                    )
                 )
-            )
+            except OSError as e:
+                # e.g. a log file left behind by a previous PUID. Keep stdout
+                # rather than failing startup over the log viewer.
+                print(f"WARNING: cannot open {log_path} ({e}); logging to stdout only", file=sys.stderr)
         for handler in handlers:
             handler.setFormatter(formatter)
             logger.addHandler(handler)

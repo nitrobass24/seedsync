@@ -1,12 +1,13 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import io
 import json
 import logging
 import os
 import tempfile
 import unittest
 from logging.handlers import RotatingFileHandler
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from common import Config, IntegrationsConfig, PathPairsConfig, ServiceExit, ServiceRestart
 from seedsync import Seedsync
@@ -476,6 +477,22 @@ class TestCreateLogger(unittest.TestCase):
         with tempfile.TemporaryDirectory() as logdir:
             self.assertEqual({logging.StreamHandler, RotatingFileHandler}, self._handler_types(logdir))
             self.assertTrue(os.path.exists(os.path.join(logdir, "test-create-logger.log")))
+
+    def test_unopenable_log_file_falls_back_to_stdout(self):
+        """A log file left behind by a previous PUID must not stop startup."""
+        with tempfile.TemporaryDirectory() as logdir:
+            log_path = os.path.join(logdir, "test-create-logger.log")
+            with open(log_path, "w"):
+                pass
+            os.chmod(log_path, 0o000)
+            if os.access(log_path, os.W_OK):
+                self.skipTest("running as root; chmod 000 does not block writes")
+            try:
+                with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                    self.assertEqual({logging.StreamHandler}, self._handler_types(logdir))
+                self.assertIn("logging to stdout only", stderr.getvalue())
+            finally:
+                os.chmod(log_path, 0o600)
 
 
 class TestHandleControllerFailure(unittest.TestCase):

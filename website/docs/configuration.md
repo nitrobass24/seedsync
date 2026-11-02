@@ -178,7 +178,7 @@ Then set **Staging Path** to `/staging` in Settings.
 | `PUID` | 1000 | User ID for file ownership |
 | `PGID` | 1000 | Group ID for file ownership |
 | `UMASK` | *(unset)* | File permission mask (e.g. `002` for 775/664, `000` for 777/666) |
-| `LOGDIR` | `/config/logs` | Directory for rotating log files, read by the web UI's Logs page. Logs always go to `docker logs` too. Set to an empty string to disable file logging. |
+| `LOGDIR` | `/config/logs` | Directory for rotating log files, read by the web UI's Logs page. Logs always go to `docker logs` too. Set to an empty string to disable file logging. Ignored if the container command already passes `--logdir`. |
 
 ## Volumes
 
