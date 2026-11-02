@@ -14,7 +14,7 @@ import os
 from collections.abc import Callable
 from queue import Queue
 
-from common import AppError, Context, MultiprocessingLogger
+from common import Context, MultiprocessingLogger, UnrecoverableError
 from lftp import LftpError
 from model import ModelError, ModelFile
 
@@ -558,9 +558,13 @@ class CommandPipeline:
                 pc.lftp.raise_pending_error()
             except LftpError as e:
                 error_str = str(e)
-                permanent_patterns = ["Login failed", "Access failed"]
+                # Only errors that need a settings change stop the controller.
+                # Other "Access failed" variants (No such file: the remote moved
+                # a file mid-download, #793) end that job and the next scan
+                # reconciles the model.
+                permanent_patterns = ["Login failed:", "Access failed: Permission denied"]
                 if any(p in error_str for p in permanent_patterns):
-                    raise AppError(error_str) from e
+                    raise UnrecoverableError(error_str) from e
                 self._logger.warning(f"Caught lftp error: {error_str}")
             pc.active_scan_process.propagate_exception()
             pc.local_scan_process.propagate_exception()

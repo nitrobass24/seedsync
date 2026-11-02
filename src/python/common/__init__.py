@@ -2,7 +2,12 @@
 
 from .job import Job as Job
 from .context import Context as Context, Args as Args
-from .error import AppError as AppError, ServiceExit as ServiceExit, ServiceRestart as ServiceRestart
+from .error import (
+    AppError as AppError,
+    ServiceExit as ServiceExit,
+    ServiceRestart as ServiceRestart,
+    UnrecoverableError as UnrecoverableError,
+)
 from .constants import Constants as Constants
 from .config import Config as Config, ConfigError as ConfigError
 from .persist import Persist as Persist, PersistError as PersistError, Serializable as Serializable
