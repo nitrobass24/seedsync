@@ -24,6 +24,7 @@ from .model_registry import ModelRegistry
 from .pair_context import PairContext
 from .persist_keys import persist_key, strip_persist_key
 from .persist_sync import PersistSync
+from .scan.scanner_process import ScannerResult
 from .validate import (
     ValidateCompletedResult,
     ValidateFailedResult,
@@ -422,6 +423,28 @@ class ModelUpdater:
                 if current is None or pc.latest_local_scan.timestamp > current:
                     self._context.status.controller.latest_local_scan_time = pc.latest_local_scan.timestamp
 
+    @staticmethod
+    def _record_scan_results(
+        pc: PairContext, latest_remote_scan: ScannerResult | None, latest_local_scan: ScannerResult | None
+    ) -> None:
+        """Track the newest scan result per side.
+
+        The last result (including a failed one) is kept across cycles with no
+        new scan, so "is the remote listing trustworthy" checks like the cleanup
+        guard still see the failure until a scan succeeds. A failed scan carries
+        no files and does not count as "received": that flag opens the
+        absent-persist prune gate, which would drop persist records for
+        downloads that simply aren't visible right now.
+        """
+        if latest_remote_scan is not None:
+            pc.latest_remote_scan = latest_remote_scan
+            if not latest_remote_scan.failed:
+                pc.remote_scan_received = True
+        if latest_local_scan is not None:
+            pc.latest_local_scan = latest_local_scan
+            if not latest_local_scan.failed:
+                pc.local_scan_received = True
+
     def _update_pair_model_state(
         self,
         pc: PairContext,
@@ -435,22 +458,13 @@ class ModelUpdater:
         latest_local_scan = pc.local_scan_process.pop_latest_result()
         latest_active_scan = pc.active_scan_process.pop_latest_result()
 
-        pc.latest_remote_scan = latest_remote_scan
-        pc.latest_local_scan = latest_local_scan
+        self._record_scan_results(pc, latest_remote_scan, latest_local_scan)
 
         lftp_statuses = None
         try:
             lftp_statuses = pc.lftp.status()
         except LftpError as e:
             self._logger.warning(f"Caught lftp error (pair {pc.name}): {e!s}")
-
-        # A failed scan carries no files. Don't count it as "received": that
-        # flag opens the absent-persist prune gate, which would drop persist
-        # records for downloads that simply aren't visible right now.
-        if latest_remote_scan is not None and not latest_remote_scan.failed:
-            pc.remote_scan_received = True
-        if latest_local_scan is not None and not latest_local_scan.failed:
-            pc.local_scan_received = True
 
         self._detect_lftp_completions(pc, lftp_statuses)
 

@@ -13,6 +13,7 @@ _CREDENTIAL_ERROR_RE = re.compile(
     r"Incorrect password"
     r"|Permission denied, please try again"
     r"|Permission denied \((publickey|password|keyboard-interactive|hostbased|gssapi)"
+    r"|Too many authentication failures"
 )
 
 

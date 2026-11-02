@@ -54,19 +54,23 @@ class BrowseHandler(IHandler):
             # exits 1 on a dangling link, failing the whole listing). find has no
             # "--", so a leading "-" gets "./" to keep it from parsing as an option.
             start = f"./{path}" if path.startswith("-") else path
-            raw = ssh.shell(f"find -L {escape_remote_path_double(start)} -mindepth 1 -maxdepth 1 -type d")
+            raw = ssh.shell(f"find -L {escape_remote_path_double(start)} -mindepth 1 -maxdepth 1 -type d -print0")
         except SshcpError as e:
             # 400 for a bad path vs 502 for a failed connection: the picker only
             # walks up to a parent directory on the former.
             message = str(e)
             is_path_error = "No such file or directory" in message or "Not a directory" in message
             return self.__error(message, 400 if is_path_error else 502)
-        # Not splitlines(): find separates entries with \n only, and names may
-        # contain other line-break characters (\x0b, U+2028, ...).
-        lines = raw.decode(errors="replace").split("\n")
-        directories = sorted((posixpath.basename(line) for line in lines if line), key=str.lower)
+        # -print0: a directory name can contain any character but NUL, newline included.
+        entries = raw.decode(errors="replace").split("\0")
+        directories = sorted((posixpath.basename(e) for e in entries if e), key=str.lower)
         normalized = path.rstrip("/") or "/"
-        parent = (posixpath.dirname(normalized) or None) if normalized != "/" else None
+        if normalized in ("/", "~"):
+            parent = None
+        else:
+            # A relative top-level name ("downloads") is relative to $HOME: its
+            # parent is ".", so the picker can still navigate up.
+            parent = posixpath.dirname(normalized) or "."
         return self.__ok(normalized, parent, directories)
 
     @staticmethod

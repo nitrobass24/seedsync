@@ -355,6 +355,17 @@ class TestUpdatePairContextScanResults(unittest.TestCase):
         self.assertFalse(pc.remote_scan_received)
         self.assertIs(scan, pc.latest_remote_scan)  # still surfaced in status
 
+    def test_last_failed_remote_scan_is_kept_on_a_cycle_with_no_new_result(self):
+        """The cleanup guard checks pc.latest_remote_scan.failed; a quiet cycle
+        must not reset it to None while the listing is still untrusted."""
+        failed = ScannerResult(timestamp=datetime.now(), files=[], failed=True, error_message="path missing")
+        pc = self._make_pc(remote_scan=None)
+        pc.latest_remote_scan = failed
+
+        self._make_updater(pc)._update_pair_model_state(pc, None, None)
+
+        self.assertIs(failed, pc.latest_remote_scan)
+
     def test_successful_remote_scan_is_applied_to_the_model(self):
         scan = ScannerResult(timestamp=datetime.now(), files=[])
         pc = self._make_pc(remote_scan=scan)
