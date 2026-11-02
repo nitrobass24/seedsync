@@ -397,23 +397,32 @@ class Seedsync:
 
         numeric_level = getattr(logging, log_level.upper(), logging.INFO)
         logger.setLevel(numeric_level)
-        if logdir is not None:
-            # Output logs to a file in the given directory
-            handler = RotatingFileHandler(
-                f"{logdir}/{name}.log",
-                maxBytes=Constants.MAX_LOG_SIZE_IN_BYTES,
-                backupCount=Constants.LOG_BACKUP_COUNT,
-            )
-        else:
-            handler = logging.StreamHandler(sys.stdout)
         if log_format == "json":
-            formatter = JsonFormatter()
+            formatter: logging.Formatter = JsonFormatter()
         else:
             formatter = logging.Formatter(
                 "%(asctime)s - %(levelname)s - %(name)s (%(processName)s/%(threadName)s) - %(message)s"
             )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        # Always log to stdout (docker logs); a logdir adds the rotating file
+        # the web UI's log viewer reads (#792).
+        handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+        if logdir is not None:
+            log_path = f"{logdir}/{name}.log"
+            try:
+                handlers.append(
+                    RotatingFileHandler(
+                        log_path,
+                        maxBytes=Constants.MAX_LOG_SIZE_IN_BYTES,
+                        backupCount=Constants.LOG_BACKUP_COUNT,
+                    )
+                )
+            except OSError as e:
+                # e.g. a log file left behind by a previous PUID. Keep stdout
+                # rather than failing startup over the log viewer.
+                print(f"WARNING: cannot open {log_path} ({e}); logging to stdout only", file=sys.stderr)
+        for handler in handlers:
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
         return logger
 
     @staticmethod

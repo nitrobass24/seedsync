@@ -1,10 +1,13 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import io
 import json
+import logging
 import os
 import tempfile
 import unittest
-from unittest.mock import MagicMock
+from logging.handlers import RotatingFileHandler
+from unittest.mock import MagicMock, patch
 
 from common import Config, IntegrationsConfig, PathPairsConfig, ServiceExit, ServiceRestart, UnrecoverableError
 from controller.scan import ScannerError
@@ -453,6 +456,44 @@ class TestPersistResilience(unittest.TestCase):
         This guards the invariant the fix must preserve."""
         self.assertIsInstance(ServiceExit(), Exception)
         self.assertIsInstance(ServiceRestart(), Exception)
+
+
+class TestCreateLogger(unittest.TestCase):
+    """#792: a logdir adds the rotating file the Logs page reads; stdout
+    (docker logs) must keep working either way."""
+
+    def _handler_types(self, logdir):
+        logger = Seedsync._create_logger("test-create-logger", "INFO", logdir)
+        try:
+            return {type(h) for h in logger.handlers}
+        finally:
+            for h in logger.handlers[:]:
+                h.close()
+                logger.removeHandler(h)
+
+    def test_without_logdir_logs_to_stdout_only(self):
+        self.assertEqual({logging.StreamHandler}, self._handler_types(None))
+
+    def test_with_logdir_logs_to_stdout_and_file(self):
+        with tempfile.TemporaryDirectory() as logdir:
+            self.assertEqual({logging.StreamHandler, RotatingFileHandler}, self._handler_types(logdir))
+            self.assertTrue(os.path.exists(os.path.join(logdir, "test-create-logger.log")))
+
+    def test_unopenable_log_file_falls_back_to_stdout(self):
+        """A log file left behind by a previous PUID must not stop startup."""
+        with tempfile.TemporaryDirectory() as logdir:
+            log_path = os.path.join(logdir, "test-create-logger.log")
+            with open(log_path, "w"):
+                pass
+            os.chmod(log_path, 0o000)
+            if os.access(log_path, os.W_OK):
+                self.skipTest("running as root; chmod 000 does not block writes")
+            try:
+                with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                    self.assertEqual({logging.StreamHandler}, self._handler_types(logdir))
+                self.assertIn("logging to stdout only", stderr.getvalue())
+            finally:
+                os.chmod(log_path, 0o600)
 
 
 class TestHandleControllerFailure(unittest.TestCase):

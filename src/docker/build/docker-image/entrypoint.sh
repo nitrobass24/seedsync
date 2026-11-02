@@ -98,5 +98,21 @@ if [ -n "$UMASK" ]; then
     echo "Setting umask: $UMASK"
 fi
 
+# File logging for the web UI's log viewer. Only for the seedsync command
+# (not a `docker run ... ls /config` override). LOGDIR="" disables it; a
+# --logdir / --logdir=PATH already in the command wins.
+case "$*" in
+    *seedsync.py*)
+        if [ -n "$LOGDIR" ] && ! printf '%s\n' "$@" | grep -q -- '^--logdir\(=\|$\)'; then
+            if mkdir -p "$LOGDIR" 2>/dev/null && chown "$USER_ID:$GROUP_ID" "$LOGDIR" 2>/dev/null; then
+                set -- "$@" --logdir "$LOGDIR"
+                echo "Logging to: $LOGDIR"
+            else
+                echo "WARNING: cannot create log directory $LOGDIR; file logging disabled" >&2
+            fi
+        fi
+        ;;
+esac
+
 # Execute the command as the resolved user
 exec setpriv --reuid="$USERNAME" --regid="$GROUPNAME" --init-groups -- "$@"
