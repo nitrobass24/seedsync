@@ -67,6 +67,34 @@ jobs:
         # See #376-#382 for the cleanup history.
         run: npx ng lint --max-warnings 0
 
+  docs-build:
+    name: Docs Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        working-directory: website
+        run: npm ci
+
+      # The Pages deploy only runs on master, so build the site here too or a
+      # broken docs build is first seen on a release push (#807).
+      - name: Build docs site
+        working-directory: website
+        env:
+          DOCS_SITE_URL: https://nitrobass24.github.io
+          DOCS_BASE_URL: /seedsync/
+        run: npm run build
+
   python-lint:
     name: Python Lint
     runs-on: ubuntu-latest

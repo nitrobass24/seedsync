@@ -7,6 +7,8 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/docs-pages.yml'
+  # Redeploy the docs without a master push (e.g. after a failed deploy).
+  workflow_dispatch:
 
 permissions:
   contents: read
