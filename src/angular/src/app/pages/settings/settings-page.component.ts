@@ -227,8 +227,11 @@ export class SettingsPageComponent implements OnInit {
     // Captured before the save updates the snapshot. A password comes back
     // redacted, so it always counts as changed.
     const previous = this.getOptionValue(this.configService.configSnapshot, [section, option] as ConfigValuePath);
+    // The port is stored as a number and typed as text ("022" is still 22).
+    const sameValue =
+      String(value) === String(previous) || (option === 'remote_port' && Number(value) === Number(previous));
     const connectionChanged =
-      section === 'lftp' && CONNECTION_FIELDS.has(option) && (option === 'remote_password' || String(value) !== String(previous));
+      section === 'lftp' && CONNECTION_FIELDS.has(option) && (option === 'remote_password' || !sameValue);
     this.configService.set(section, option, value).subscribe({
       next: (reaction) => {
         const notifKey = section + '.' + option;

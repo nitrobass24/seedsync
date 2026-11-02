@@ -182,11 +182,15 @@ describe('SettingsPageComponent connection-field changes invalidate a verified c
 
   it('does not clear the lockout or verified state when a connection field is re-saved unchanged', () => {
     mockConfigService.configSnapshot = { lftp: { remote_port: 22 } };
-    component.onSetConfig('lftp', 'remote_port', '22');
-    setSubject.next({ success: true, data: 'lftp.remote_port set to 22', errorMessage: null });
+    for (const typed of ['22', '022']) {
+      component.connectionLockedOut = true;
+      component.connectionVerified = true;
+      component.onSetConfig('lftp', 'remote_port', typed);
+      setSubject.next({ success: true, data: 'lftp.remote_port set to 22', errorMessage: null });
 
-    expect(component.connectionLockedOut).toBe(true);
-    expect(component.connectionVerified).toBe(true);
+      expect(component.connectionLockedOut, typed).toBe(true);
+      expect(component.connectionVerified, typed).toBe(true);
+    }
   });
 
   it('does not reset connectionVerified for unrelated fields', () => {
