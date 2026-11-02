@@ -444,9 +444,12 @@ class ModelUpdater:
         except LftpError as e:
             self._logger.warning(f"Caught lftp error (pair {pc.name}): {e!s}")
 
-        if latest_remote_scan is not None:
+        # A failed scan carries no files. Don't count it as "received": that
+        # flag opens the absent-persist prune gate, which would drop persist
+        # records for downloads that simply aren't visible right now.
+        if latest_remote_scan is not None and not latest_remote_scan.failed:
             pc.remote_scan_received = True
-        if latest_local_scan is not None:
+        if latest_local_scan is not None and not latest_local_scan.failed:
             pc.local_scan_received = True
 
         self._detect_lftp_completions(pc, lftp_statuses)
@@ -467,13 +470,14 @@ class ModelUpdater:
 
         pc.model_builder.set_auto_delete_remote(bool(self._context.config.autoqueue.auto_delete_remote))
 
-        if latest_remote_scan is not None:
+        # Likewise keep the last good listing on a failed scan: an empty remote
+        # list would prune persist records and later re-queue every download;
+        # an empty local list would make every download look deleted.
+        if latest_remote_scan is not None and not latest_remote_scan.failed:
             remote_files = filter_excluded_files(
                 latest_remote_scan.files, self._context.config.general.exclude_patterns
             )
             pc.model_builder.set_remote_files(remote_files)
-        # A failed local scan (unreadable path, e.g. a mount that went away)
-        # carries no files; applying it would make every download look deleted.
         if latest_local_scan is not None and not latest_local_scan.failed:
             pc.model_builder.set_local_files(latest_local_scan.files)
         if latest_active_scan is not None:

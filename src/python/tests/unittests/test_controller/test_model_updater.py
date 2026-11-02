@@ -294,13 +294,17 @@ class TestRetryFailedMoves(unittest.TestCase):
 
 
 class TestUpdatePairContextScanResults(unittest.TestCase):
-    """A failed local scan carries no files; applying it would make every
-    download look deleted until the next successful scan."""
+    """A failed scan carries no files. Applying it would make every download
+    look deleted (local) or prune persist records and later re-queue every
+    download (remote); and it must not count as "received", which opens the
+    absent-persist prune gate."""
 
-    def _make_pc(self, local_scan):
+    def _make_pc(self, local_scan=None, remote_scan=None):
         pc = MagicMock()
         pc.pair_id = "pair-1"
-        pc.remote_scan_process.pop_latest_result.return_value = None
+        pc.remote_scan_received = False
+        pc.local_scan_received = False
+        pc.remote_scan_process.pop_latest_result.return_value = remote_scan
         pc.local_scan_process.pop_latest_result.return_value = local_scan
         pc.active_scan_process.pop_latest_result.return_value = None
         pc.lftp.status.return_value = []
@@ -329,6 +333,7 @@ class TestUpdatePairContextScanResults(unittest.TestCase):
         self._make_updater(pc)._update_pair_model_state(pc, None, None)
 
         pc.model_builder.set_local_files.assert_not_called()
+        self.assertFalse(pc.local_scan_received)
         self.assertIs(scan, pc.latest_local_scan)
 
     def test_successful_local_scan_is_applied_to_the_model(self):
@@ -338,3 +343,25 @@ class TestUpdatePairContextScanResults(unittest.TestCase):
         self._make_updater(pc)._update_pair_model_state(pc, None, None)
 
         pc.model_builder.set_local_files.assert_called_once_with([])
+        self.assertTrue(pc.local_scan_received)
+
+    def test_failed_remote_scan_keeps_the_last_listing_and_the_prune_gate(self):
+        scan = ScannerResult(timestamp=datetime.now(), files=[], failed=True, error_message="path missing")
+        pc = self._make_pc(remote_scan=scan)
+
+        self._make_updater(pc)._update_pair_model_state(pc, None, None)
+
+        pc.model_builder.set_remote_files.assert_not_called()
+        self.assertFalse(pc.remote_scan_received)
+        self.assertIs(scan, pc.latest_remote_scan)  # still surfaced in status
+
+    def test_successful_remote_scan_is_applied_to_the_model(self):
+        scan = ScannerResult(timestamp=datetime.now(), files=[])
+        pc = self._make_pc(remote_scan=scan)
+        updater = self._make_updater(pc)
+        updater._context.config.general.exclude_patterns = []
+
+        updater._update_pair_model_state(pc, None, None)
+
+        pc.model_builder.set_remote_files.assert_called_once_with([])
+        self.assertTrue(pc.remote_scan_received)
