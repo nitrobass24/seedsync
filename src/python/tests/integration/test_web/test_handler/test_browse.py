@@ -150,6 +150,12 @@ class TestBrowseHandlerRemote(BaseTestWebApp):
             resp = self.test_app.get("/server/browse/remote", {"path": "downloads"})
         self.assertEqual(".", json.loads(resp.text)["parent"])
 
+    def test_dot_has_no_parent(self):
+        self._configure_remote()
+        with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b""):
+            resp = self.test_app.get("/server/browse/remote", {"path": "."})
+        self.assertIsNone(json.loads(resp.text)["parent"])
+
     def test_path_with_spaces_is_shell_quoted(self):
         self._configure_remote()
         with patch("ssh.lftp_ssh.Sshcp.shell", return_value=b"") as mock_shell:

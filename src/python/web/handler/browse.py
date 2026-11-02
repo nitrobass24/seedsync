@@ -65,7 +65,7 @@ class BrowseHandler(IHandler):
         entries = raw.decode(errors="replace").split("\0")
         directories = sorted((posixpath.basename(e) for e in entries if e), key=str.lower)
         normalized = path.rstrip("/") or "/"
-        if normalized in ("/", "~"):
+        if normalized in ("/", "~", "."):
             parent = None
         else:
             # A relative top-level name ("downloads") is relative to $HOME: its
