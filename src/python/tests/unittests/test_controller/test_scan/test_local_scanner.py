@@ -41,15 +41,17 @@ class TestLocalScanner(unittest.TestCase):
 
     @patch("controller.scan.local_scanner.os.path.isdir", return_value=True)
     @patch("controller.scan.local_scanner.SystemScanner")
-    def test_scanner_error_raises_localized(self, mock_scanner_cls, mock_isdir):
-        """SystemScannerError raises ScannerError with localized message."""
+    def test_scanner_error_raises_localized_recoverable(self, mock_scanner_cls, mock_isdir):
+        """SystemScannerError raises a recoverable ScannerError: an unreadable
+        local path (e.g. a mount that went away) should not stop the controller."""
         mock_scanner = mock_scanner_cls.return_value
         mock_scanner.scan.side_effect = SystemScannerError("disk failure")
 
         scanner = LocalScanner("/exists", use_temp_file=False)
 
-        with self.assertRaises(ScannerError):
+        with self.assertRaises(ScannerError) as ctx:
             scanner.scan()
+        self.assertTrue(ctx.exception.recoverable)
 
     @patch("controller.scan.local_scanner.SystemScanner")
     def test_set_base_logger(self, mock_scanner_cls):

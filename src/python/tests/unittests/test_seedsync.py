@@ -1,12 +1,16 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import io
 import json
+import logging
 import os
 import tempfile
 import unittest
-from unittest.mock import MagicMock
+from logging.handlers import RotatingFileHandler
+from unittest.mock import MagicMock, patch
 
-from common import Config, IntegrationsConfig, PathPairsConfig, ServiceExit, ServiceRestart
+from common import Config, IntegrationsConfig, PathPairsConfig, ServiceExit, ServiceRestart, UnrecoverableError
+from controller.scan import ScannerError
 from seedsync import Seedsync
 
 
@@ -452,3 +456,134 @@ class TestPersistResilience(unittest.TestCase):
         This guards the invariant the fix must preserve."""
         self.assertIsInstance(ServiceExit(), Exception)
         self.assertIsInstance(ServiceRestart(), Exception)
+
+
+class TestCreateLogger(unittest.TestCase):
+    """#792: a logdir adds the rotating file the Logs page reads; stdout
+    (docker logs) must keep working either way."""
+
+    def _handler_types(self, logdir):
+        logger = Seedsync._create_logger("test-create-logger", "INFO", logdir)
+        try:
+            return {type(h) for h in logger.handlers}
+        finally:
+            for h in logger.handlers[:]:
+                h.close()
+                logger.removeHandler(h)
+
+    def test_without_logdir_logs_to_stdout_only(self):
+        self.assertEqual({logging.StreamHandler}, self._handler_types(None))
+
+    def test_with_logdir_logs_to_stdout_and_file(self):
+        with tempfile.TemporaryDirectory() as logdir:
+            self.assertEqual({logging.StreamHandler, RotatingFileHandler}, self._handler_types(logdir))
+            self.assertTrue(os.path.exists(os.path.join(logdir, "test-create-logger.log")))
+
+    def test_unopenable_log_file_falls_back_to_stdout(self):
+        """A log file left behind by a previous PUID must not stop startup."""
+        with tempfile.TemporaryDirectory() as logdir:
+            log_path = os.path.join(logdir, "test-create-logger.log")
+            with open(log_path, "w"):
+                pass
+            os.chmod(log_path, 0o000)
+            if os.access(log_path, os.W_OK):
+                self.skipTest("running as root; chmod 000 does not block writes")
+            try:
+                with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                    self.assertEqual({logging.StreamHandler}, self._handler_types(logdir))
+                self.assertIn("logging to stdout only", stderr.getvalue())
+            finally:
+                os.chmod(log_path, 0o600)
+
+
+class TestHandleControllerFailure(unittest.TestCase):
+    """Tests for _handle_controller_failure(): an UnrecoverableError from
+    controller_job (bad credentials, wrong path, missing remote shell) must
+    stop only the controller, not the whole app -- taking the whole process
+    down just crash-loops the container on every restart attempt instead of
+    letting the user fix the config. Everything else re-raises so the process
+    exits as before.
+    """
+
+    def _make_bare_seedsync(self, exit_on_error=False):
+        s = Seedsync.__new__(Seedsync)
+        s.context = MagicMock()
+        s.context.args.exit = exit_on_error
+        return s
+
+    def test_stops_and_joins_the_controller_job(self):
+        s = self._make_bare_seedsync()
+        controller_job = MagicMock()
+
+        s._handle_controller_failure(controller_job, UnrecoverableError("Incorrect password"))
+
+        controller_job.terminate.assert_called_once()
+        controller_job.join.assert_called_once()
+
+    def test_logs_loudly_so_the_failure_stays_visible(self):
+        s = self._make_bare_seedsync()
+
+        s._handle_controller_failure(MagicMock(), UnrecoverableError("Permission denied (publickey,password)"))
+
+        s.context.logger.exception.assert_called_once()
+
+    def test_nonrecoverable_scanner_error_stops_only_the_controller(self):
+        """ScannerError is the type a bad Server Script Path / missing remote
+        shell / bad credentials arrive as from the scanner process."""
+        s = self._make_bare_seedsync()
+        controller_job = MagicMock()
+
+        s._handle_controller_failure(controller_job, ScannerError("Server Script Path is a directory"))
+
+        controller_job.terminate.assert_called_once()
+        self.assertFalse(s.context.status.server.up)
+
+    def test_surfaces_the_error_via_status_for_the_ui(self):
+        """This reuses the same status.server fields the "config incomplete"
+        path (and the frontend's danger banner) already use, so the error is
+        visible on Settings without any new UI plumbing."""
+        s = self._make_bare_seedsync()
+
+        s._handle_controller_failure(MagicMock(), UnrecoverableError("Incorrect password"))
+
+        self.assertFalse(s.context.status.server.up)
+        self.assertEqual("Incorrect password", s.context.status.server.error_msg)
+
+    def test_status_is_published_before_waiting_on_controller_teardown(self):
+        """join() blocks on Controller.exit(); the UI shouldn't wait on that."""
+        s = self._make_bare_seedsync()
+        controller_job = MagicMock()
+        seen_on_join = {}
+        controller_job.join.side_effect = lambda: seen_on_join.update(
+            up=s.context.status.server.up, error_msg=s.context.status.server.error_msg
+        )
+
+        s._handle_controller_failure(controller_job, UnrecoverableError("Incorrect password"))
+
+        self.assertEqual({"up": False, "error_msg": "Incorrect password"}, seen_on_join)
+
+    def test_unexpected_error_is_reraised(self):
+        """Anything that isn't an UnrecoverableError is a bug or something
+        that may heal on its own; keep exiting so Docker's restart policy
+        retries it. The message no longer matters, only the type."""
+        s = self._make_bare_seedsync()
+        controller_job = MagicMock()
+        for exc in (RuntimeError("Failed to scan local directory"), PermissionError("Permission denied (publickey)")):
+            with self.subTest(exc=exc), self.assertRaises(type(exc)):
+                s._handle_controller_failure(controller_job, exc)
+
+        controller_job.terminate.assert_not_called()
+
+    def test_service_exit_and_restart_are_reraised(self):
+        """A signal can raise these asynchronously while the main loop is
+        inside propagate_exception(); they must still shut the process down."""
+        s = self._make_bare_seedsync()
+        for exc in (ServiceExit(), ServiceRestart()):
+            with self.subTest(exc=type(exc).__name__), self.assertRaises(type(exc)):
+                s._handle_controller_failure(MagicMock(), exc)
+
+    def test_exit_flag_reraises_unrecoverable_error(self):
+        s = self._make_bare_seedsync(exit_on_error=True)
+
+        with self.assertRaises(UnrecoverableError):
+            s._handle_controller_failure(MagicMock(), UnrecoverableError("Incorrect password"))

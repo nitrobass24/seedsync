@@ -203,7 +203,7 @@ class TestRemoteScanner(unittest.TestCase):
             local_path=TestRemoteScanner.temp_scan_script, remote_path="/remote/path/to/scan/script"
         )
 
-    def test_raises_nonrecoverable_error_on_md5sum_error(self):
+    def test_raises_recoverable_error_on_md5sum_error(self):
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect(
@@ -215,7 +215,16 @@ class TestRemoteScanner(unittest.TestCase):
         with self.assertRaises(ScannerError) as ctx:
             scanner.scan()
         self.assertEqual(Localization.Error.REMOTE_SERVER_INSTALL.format("an ssh error"), str(ctx.exception))
-        self.assertFalse(ctx.exception.recoverable)
+        self.assertTrue(ctx.exception.recoverable)
+
+    def test_raises_nonrecoverable_error_on_bad_credentials_during_install(self):
+        """Retrying a bad password on every scan risks a fail2ban ban."""
+        scanner = self._make_scanner()
+        for message in ("Incorrect password", "user@host: Permission denied (publickey,password)."):
+            self.mock_ssh.shell.side_effect = self._make_shell_side_effect([SshcpError(message)])
+            with self.subTest(message=message), self.assertRaises(ScannerError) as ctx:
+                scanner.scan()
+            self.assertFalse(ctx.exception.recoverable)
 
     def test_calls_correct_ssh_scan_command(self):
         scanner = self._make_scanner()
@@ -249,24 +258,30 @@ class TestRemoteScanner(unittest.TestCase):
         self.assertEqual(3, self.mock_ssh.shell.call_count)
         # When scan path has tilde, both paths use double quotes for consistent quoting
         # Tilde is converted to $HOME for shell expansion
-        self.mock_ssh.shell.assert_called_with('"python3" "/remote/path/to/scan/script" "$HOME/data/torrents"')
+        self.mock_ssh.shell.assert_called_with('python3 /remote/path/to/scan/script "$HOME"/data/torrents')
 
-    def test_raises_nonrecoverable_error_on_first_failed_ssh(self):
-        """Non-transient errors on first run are non-recoverable (no retry)"""
+    def test_unknown_error_on_first_scan_is_retried_then_recoverable(self):
+        """#770: there is no first-run special case any more. An unrecognised
+        error (host down, DNS, connection reset) is retried and, if it keeps
+        failing, reported as recoverable so the next scan interval tries again
+        instead of the process exiting."""
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect(
             [
                 b"",  # md5sum
                 b"OK",  # directory check
-                SshcpError("an ssh error"),  # scanfs fails (non-transient)
+                SshcpError("kex_exchange_identification: read: Connection reset by peer"),
+                SshcpError("kex_exchange_identification: read: Connection reset by peer"),
+                SshcpError("kex_exchange_identification: read: Connection reset by peer"),
             ]
         )
 
         with self.assertRaises(ScannerError) as ctx:
             scanner.scan()
-        self.assertEqual(Localization.Error.REMOTE_SERVER_SCAN.format("an ssh error"), str(ctx.exception))
-        self.assertFalse(ctx.exception.recoverable)
+        self.assertIn("Connection reset by peer", str(ctx.exception))
+        self.assertTrue(ctx.exception.recoverable)
+        self.assertEqual(2, self.mock_sleep.call_count)
 
     def test_raises_recoverable_error_on_subsequent_failed_ssh(self):
         """After first successful scan, errors are recoverable (after retries exhausted)"""
@@ -313,7 +328,7 @@ class TestRemoteScanner(unittest.TestCase):
             scanner.scan()
         scanner.scan()  # recovers
 
-    def test_raises_nonrecoverable_error_on_failed_copy(self):
+    def test_raises_recoverable_error_on_failed_copy(self):
         scanner = self._make_scanner()
 
         # noinspection PyUnusedLocal
@@ -325,9 +340,10 @@ class TestRemoteScanner(unittest.TestCase):
         with self.assertRaises(ScannerError) as ctx:
             scanner.scan()
         self.assertEqual(Localization.Error.REMOTE_SERVER_INSTALL.format("an scp error"), str(ctx.exception))
-        self.assertFalse(ctx.exception.recoverable)
+        self.assertTrue(ctx.exception.recoverable)
 
-    def test_raises_nonrecoverable_error_on_mangled_output(self):
+    def test_raises_recoverable_error_on_mangled_output(self):
+        """Usually a truncated transfer; the next scan gets a full one."""
         scanner = self._make_scanner()
 
         def ssh_shell(*args):
@@ -340,7 +356,7 @@ class TestRemoteScanner(unittest.TestCase):
         self.assertEqual(
             Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"), str(ctx.exception)
         )
-        self.assertFalse(ctx.exception.recoverable)
+        self.assertTrue(ctx.exception.recoverable)
 
     def test_raises_nonrecoverable_error_on_shell_detection_failure(self):
         scanner = self._make_scanner()
@@ -376,8 +392,10 @@ class TestRemoteScanner(unittest.TestCase):
         scanner.scan()
         self.mock_ssh.detect_shell.assert_not_called()
 
-    def test_raises_nonrecoverable_error_on_failed_scan(self):
-        """SystemScannerError is always non-recoverable, even with retries"""
+    def test_missing_remote_path_is_recoverable_without_in_scan_retry(self):
+        """SystemScannerError (scan path missing / not a directory) is
+        recoverable so a remote mount that went away self-heals on a later
+        scan, but is not retried within the same scan."""
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect(
@@ -393,7 +411,8 @@ class TestRemoteScanner(unittest.TestCase):
         self.assertEqual(
             Localization.Error.REMOTE_SERVER_SCAN.format("SystemScannerError: something failed"), str(ctx.exception)
         )
-        self.assertFalse(ctx.exception.recoverable)
+        self.assertTrue(ctx.exception.recoverable)
+        self.mock_sleep.assert_not_called()
 
     def test_retries_transient_errors_on_first_run(self):
         """Transient errors (timeouts) are retried even on first run"""
@@ -431,15 +450,15 @@ class TestRemoteScanner(unittest.TestCase):
         # Should have slept between attempts (max_retries - 1 times)
         self.assertEqual(2, self.mock_sleep.call_count)
 
-    def test_no_retry_on_non_transient_first_run_error(self):
-        """Non-transient errors on first run fail immediately without retry"""
+    def test_no_retry_on_bad_credentials(self):
+        """Bad credentials fail immediately without retry"""
         scanner = self._make_scanner()
 
         self.mock_ssh.shell.side_effect = self._make_shell_side_effect(
             [
                 b"",  # md5sum
                 b"OK",  # directory check
-                SshcpError("Incorrect password"),  # scanfs - non-transient
+                SshcpError("Incorrect password"),  # scanfs - fatal
             ]
         )
 
@@ -448,18 +467,20 @@ class TestRemoteScanner(unittest.TestCase):
         self.assertFalse(ctx.exception.recoverable)
         self.mock_sleep.assert_not_called()
 
-    def test_raises_recoverable_error_on_transient_shell_detection_failure(self):
-        """Transient SSH errors during shell detection are recoverable"""
+    def test_raises_recoverable_error_on_connection_failure_during_shell_detection(self):
+        """Host down, DNS failure, timeout: all recoverable (#770)."""
         scanner = self._make_scanner()
-
-        self.mock_ssh.detect_shell.side_effect = SshcpError(
-            "ssh: connect to host example.com port 22: Connection timed out"
-        )
-
-        with self.assertRaises(ScannerError) as ctx:
-            scanner.scan()
-        self.assertIn("Connection timed out", str(ctx.exception))
-        self.assertTrue(ctx.exception.recoverable)
+        for message in (
+            "ssh: connect to host example.com port 22: Connection timed out",
+            "kex_exchange_identification: read: Connection reset by peer",
+            "Bad hostname: example.com",
+            "Connection refused by server",
+        ):
+            self.mock_ssh.detect_shell.side_effect = SshcpError(message)
+            with self.subTest(message=message), self.assertRaises(ScannerError) as ctx:
+                scanner.scan()
+            self.assertIn(message, str(ctx.exception))
+            self.assertTrue(ctx.exception.recoverable)
 
     def test_raises_recoverable_error_on_transient_md5sum_failure(self):
         """Transient SSH errors during md5sum check are recoverable"""
@@ -474,6 +495,25 @@ class TestRemoteScanner(unittest.TestCase):
         with self.assertRaises(ScannerError) as ctx:
             scanner.scan()
         self.assertTrue(ctx.exception.recoverable)
+
+    def test_home_fallback_copy_failure_is_classified(self):
+        """After a Permission denied on the configured script path, a failed
+        fallback copy is fatal only if it is itself a permission/credential
+        problem; a connection drop mid-copy is retried like any other."""
+        for message, expected_recoverable in (
+            ("Connection refused by server", True),
+            ("scp: /home/u/script: Permission denied", False),
+        ):
+            scanner = self._make_scanner()
+            self.mock_ssh.shell.side_effect = self._make_shell_side_effect(
+                [b"", b"OK", b"/home/u", b"OK"]  # md5sum, dir check, echo ~, fallback dir check
+            )
+            self.mock_ssh.copy.side_effect = [SshcpError("scp: /tmp/script: Permission denied"), SshcpError(message)]
+
+            with self.subTest(message=message), self.assertRaises(ScannerError) as ctx:
+                scanner.scan()
+            self.assertIn(message, str(ctx.exception))
+            self.assertEqual(expected_recoverable, ctx.exception.recoverable)
 
     def test_uses_custom_python_path(self):
         """When remote_python_path is set, uses it instead of 'python3'"""

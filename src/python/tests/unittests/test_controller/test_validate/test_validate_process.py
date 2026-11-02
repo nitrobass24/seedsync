@@ -361,7 +361,7 @@ class TestValidateProcess(unittest.TestCase):
         find_calls = [c.args[0] for c in ssh_mock.shell.call_args_list if c.args[0].startswith("find ")]
         self.assertEqual(1, len(find_calls))
         find_cmd = find_calls[0]
-        self.assertIn('"$HOME/downloads/mydir"', find_cmd)
+        self.assertIn('"$HOME"/downloads/mydir', find_cmd)
         self.assertNotIn("'~", find_cmd)
 
     @patch.object(ValidateProcess, "_create_ssh")
@@ -375,7 +375,7 @@ class TestValidateProcess(unittest.TestCase):
 
         self.assertEqual("abc123", result)
         cmd = ssh_mock.shell.call_args.args[0]
-        self.assertIn('"$HOME/downloads/mydir/a.txt"', cmd)
+        self.assertIn('"$HOME"/downloads/mydir/a.txt', cmd)
         self.assertNotIn("'~", cmd)
 
     @patch("controller.validate.validate_process.os.path.exists", return_value=True)

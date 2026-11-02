@@ -11,6 +11,7 @@ from common import Localization
 from common import escape_remote_path_double as _escape_remote_path_double
 from common import escape_remote_path_single as _escape_remote_path_single
 from ssh import Sshcp, SshcpError
+from ssh.lftp_ssh import is_credential_error
 from system import SystemFile
 
 from .scanner_process import IScanner, ScannerError
@@ -69,7 +70,7 @@ class RemoteScanner(IScanner):
         except (json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError) as err:
             self.logger.error(f"JSON parse error: {err!s}\n{out[:500]}")
             raise ScannerError(
-                Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"), recoverable=False
+                Localization.Error.REMOTE_SERVER_SCAN.format("Invalid JSON data from scanner"), recoverable=True
             ) from err
 
         self.__first_run = False
@@ -113,18 +114,22 @@ class RemoteScanner(IScanner):
                         recoverable=False,
                     ) from e
 
+                # The remote script says the scan path is missing / not a
+                # directory. Recoverable: a seedbox mount can go away and come
+                # back (same as the local scanner), and the error stays
+                # visible in the header until it does. No in-scan retry: the
+                # next scan interval is soon enough.
                 if "SystemScannerError" in error_str:
                     raise ScannerError(
-                        Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()), recoverable=False
+                        Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()), recoverable=True
                     ) from e
 
-                # Config errors on first run are non-recoverable
-                if self.__first_run and not self._is_transient_error(error_str):
+                if self._is_fatal_error(error_str):
                     raise ScannerError(
                         Localization.Error.REMOTE_SERVER_SCAN.format(error_str.strip()), recoverable=False
                     ) from e
 
-                # Retry transient errors
+                # Retry everything else
                 if attempt < self._SCAN_MAX_RETRIES:
                     self.logger.info(f"Retrying in {self._SCAN_RETRY_DELAY_SECS}s...")
                     time.sleep(self._SCAN_RETRY_DELAY_SECS)
@@ -134,10 +139,14 @@ class RemoteScanner(IScanner):
         raise ScannerError(Localization.Error.REMOTE_SERVER_SCAN.format(str(last_error).strip()), recoverable=True)
 
     @staticmethod
-    def _is_transient_error(error_str: str) -> bool:
-        """Timeouts and connection drops are transient and worth retrying."""
-        transient_patterns = ["Timed out", "lost connection", "Connection refused", "Connection timed out"]
-        return any(p in error_str for p in transient_patterns)
+    def _is_fatal_error(error_str: str) -> bool:
+        """Only errors that need a settings change are fatal: bad credentials
+        and a missing login shell. Everything else (host down, DNS, timeouts,
+        connection resets, ...) is treated as transient and retried on the
+        normal scan interval, so an offline seedbox doesn't crash-loop the
+        process (#770). Retrying bad credentials would risk a fail2ban ban.
+        """
+        return is_credential_error(error_str) or "login shell not found" in error_str
 
     def _install_scanfs(self):
         # Detect available shell on first run to provide clear errors
@@ -146,7 +155,7 @@ class RemoteScanner(IScanner):
             self.__ssh.detect_shell()
         except SshcpError as e:
             self.logger.exception("Shell detection failed")
-            recoverable = self._is_transient_error(str(e))
+            recoverable = not self._is_fatal_error(str(e))
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
             ) from e
@@ -180,7 +189,7 @@ class RemoteScanner(IScanner):
                 return
         except SshcpError as e:
             self.logger.exception("Caught SSH exception during md5sum check")
-            recoverable = self._is_transient_error(str(e))
+            recoverable = not self._is_fatal_error(str(e))
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
             ) from e
@@ -227,7 +236,7 @@ class RemoteScanner(IScanner):
                 self._install_scanfs_with_home_fallback(str(e))
             else:
                 self.logger.exception("Caught scp exception")
-                recoverable = self._is_transient_error(str(e))
+                recoverable = not self._is_fatal_error(str(e))
                 raise ScannerError(
                     Localization.Error.REMOTE_SERVER_INSTALL.format(str(e).strip()), recoverable=recoverable
                 ) from e
@@ -280,11 +289,15 @@ class RemoteScanner(IScanner):
             self.__remote_path_to_scan_script = fallback_path
             self.logger.info(f"Scanner installed to fallback path: {fallback_path}")
         except SshcpError as fallback_e:
+            # Neither path writable is a Server Script Path problem (fatal); a
+            # connection drop during the fallback copy is retried like any other.
+            message = str(fallback_e)
+            fatal = self._is_fatal_error(message) or "Permission denied" in message
             raise ScannerError(
                 Localization.Error.REMOTE_SERVER_INSTALL.format(
                     f"Could not install scanner to '{self.__remote_path_to_scan_script}' "
                     f"({original_error.strip()}), fallback to '{fallback_path}' "
-                    f"also failed: {str(fallback_e).strip()}"
+                    f"also failed: {message.strip()}"
                 ),
-                recoverable=False,
+                recoverable=not fatal,
             ) from fallback_e

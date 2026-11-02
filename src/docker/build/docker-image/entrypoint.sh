@@ -98,5 +98,20 @@ if [ -n "$UMASK" ]; then
     echo "Setting umask: $UMASK"
 fi
 
+# File logging for the web UI's log viewer. Only for the shipped daemon
+# command (the Dockerfile CMD), not a `docker run ... <other cmd>` override.
+# LOGDIR="" disables it; a --logdir / --logdir=PATH already present wins.
+# chown -h: this runs as root and $LOGDIR lives in the app-writable /config,
+# so never follow a symlink the app user could have planted there.
+if [ "$1" = "python" ] && [ "$2" = "/app/python/seedsync.py" ] && [ -n "$LOGDIR" ] \
+   && ! printf '%s\n' "$@" | grep -q -- '^--logdir\(=\|$\)'; then
+    if mkdir -p "$LOGDIR" 2>/dev/null && chown -h "$USER_ID:$GROUP_ID" "$LOGDIR" 2>/dev/null; then
+        set -- "$@" --logdir "$LOGDIR"
+        echo "Logging to: $LOGDIR"
+    else
+        echo "WARNING: cannot create log directory $LOGDIR; file logging disabled" >&2
+    fi
+fi
+
 # Execute the command as the resolved user
 exec setpriv --reuid="$USERNAME" --regid="$GROUPNAME" --init-groups -- "$@"

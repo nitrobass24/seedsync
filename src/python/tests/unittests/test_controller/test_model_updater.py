@@ -1,10 +1,12 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import unittest
+from datetime import datetime
 from unittest.mock import MagicMock
 
 from controller.model_updater import ModelUpdater
 from controller.persist_keys import KEY_SEP, persist_key
+from controller.scan.scanner_process import ScannerResult
 
 
 class TestSyncPersistToAllBuilders(unittest.TestCase):
@@ -289,3 +291,88 @@ class TestRetryFailedMoves(unittest.TestCase):
         # Cycle 3: nothing left to retry.
         updater._retry_failed_moves()
         self.assertEqual(1, pipeline.spawn_move_process.call_count)
+
+
+class TestUpdatePairContextScanResults(unittest.TestCase):
+    """A failed scan carries no files. Applying it would make every download
+    look deleted (local) or prune persist records and later re-queue every
+    download (remote); and it must not count as "received", which opens the
+    absent-persist prune gate."""
+
+    def _make_pc(self, local_scan=None, remote_scan=None):
+        pc = MagicMock()
+        pc.pair_id = "pair-1"
+        pc.remote_scan_received = False
+        pc.local_scan_received = False
+        pc.remote_scan_process.pop_latest_result.return_value = remote_scan
+        pc.local_scan_process.pop_latest_result.return_value = local_scan
+        pc.active_scan_process.pop_latest_result.return_value = None
+        pc.lftp.status.return_value = []
+        pc.active_downloading_file_names = []
+        pc.active_extracting_file_names = []
+        pc.pending_completion = set()
+        return pc
+
+    def _make_updater(self, pc):
+        return ModelUpdater(
+            pair_contexts=[pc],
+            persist=MagicMock(),
+            pipeline=MagicMock(),
+            registry=MagicMock(),
+            extract_process=MagicMock(),
+            validate_process=MagicMock(),
+            context=MagicMock(),
+            password=None,
+            logger=MagicMock(),
+        )
+
+    def test_failed_local_scan_is_not_applied_to_the_model(self):
+        scan = ScannerResult(timestamp=datetime.now(), files=[], failed=True, error_message="unreadable")
+        pc = self._make_pc(scan)
+
+        self._make_updater(pc)._update_pair_model_state(pc, None, None)
+
+        pc.model_builder.set_local_files.assert_not_called()
+        self.assertFalse(pc.local_scan_received)
+        self.assertIs(scan, pc.latest_local_scan)
+
+    def test_successful_local_scan_is_applied_to_the_model(self):
+        scan = ScannerResult(timestamp=datetime.now(), files=[])
+        pc = self._make_pc(scan)
+
+        self._make_updater(pc)._update_pair_model_state(pc, None, None)
+
+        pc.model_builder.set_local_files.assert_called_once_with([])
+        self.assertTrue(pc.local_scan_received)
+
+    def test_failed_remote_scan_keeps_the_last_listing_and_the_prune_gate(self):
+        scan = ScannerResult(timestamp=datetime.now(), files=[], failed=True, error_message="path missing")
+        pc = self._make_pc(remote_scan=scan)
+
+        self._make_updater(pc)._update_pair_model_state(pc, None, None)
+
+        pc.model_builder.set_remote_files.assert_not_called()
+        self.assertFalse(pc.remote_scan_received)
+        self.assertIs(scan, pc.latest_remote_scan)  # still surfaced in status
+
+    def test_last_failed_remote_scan_is_kept_on_a_cycle_with_no_new_result(self):
+        """The cleanup guard checks pc.latest_remote_scan.failed; a quiet cycle
+        must not reset it to None while the listing is still untrusted."""
+        failed = ScannerResult(timestamp=datetime.now(), files=[], failed=True, error_message="path missing")
+        pc = self._make_pc(remote_scan=None)
+        pc.latest_remote_scan = failed
+
+        self._make_updater(pc)._update_pair_model_state(pc, None, None)
+
+        self.assertIs(failed, pc.latest_remote_scan)
+
+    def test_successful_remote_scan_is_applied_to_the_model(self):
+        scan = ScannerResult(timestamp=datetime.now(), files=[])
+        pc = self._make_pc(remote_scan=scan)
+        updater = self._make_updater(pc)
+        updater._context.config.general.exclude_patterns = []
+
+        updater._update_pair_model_state(pc, None, None)
+
+        pc.model_builder.set_remote_files.assert_called_once_with([])
+        self.assertTrue(pc.remote_scan_received)

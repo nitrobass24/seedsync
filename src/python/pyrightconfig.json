@@ -6,6 +6,7 @@
     ],
     "exclude": [
         "tests",
-        "scan_fs.py"
+        "scan_fs.py",
+        ".venv"
     ]
 }

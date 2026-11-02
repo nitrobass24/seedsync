@@ -27,6 +27,12 @@ export class LogsPage {
     return this.page.locator("#logs .record");
   }
 
+  /** Records from the log files (server-side search/level filtered); the
+   * live SSE stream below them is not filtered. */
+  getHistoryRecords() {
+    return this.page.locator("#logs .history-section .record");
+  }
+
   getLogRecordsByLevel(level: string) {
     return this.page.locator(`#logs .record.${level.toLowerCase()}`);
   }

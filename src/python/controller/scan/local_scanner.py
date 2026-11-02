@@ -36,6 +36,8 @@ class LocalScanner(IScanner):
         try:
             result = self.__scanner.scan()
         except SystemScannerError:
+            # Recoverable: an unreadable local path is usually a mount that
+            # went away and will come back; keep scanning rather than stopping.
             self.logger.exception("Caught SystemScannerError")
-            raise ScannerError(Localization.Error.LOCAL_SERVER_SCAN, recoverable=False) from None
+            raise ScannerError(Localization.Error.LOCAL_SERVER_SCAN, recoverable=True) from None
         return result

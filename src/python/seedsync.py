@@ -35,6 +35,7 @@ from common import (
     ServiceExit,
     ServiceRestart,
     Status,
+    UnrecoverableError,
 )
 from common.json_formatter import JsonFormatter
 from controller import AutoQueue, AutoQueuePersist, Controller, ControllerJob, ControllerPersist
@@ -233,10 +234,17 @@ class Seedsync:
                     prev_persist_timestamp = now
                     self._persist_periodic()
 
-                # Propagate exceptions from child threads
-                # Any exception here exits the main loop for clean shutdown
+                # Propagate exceptions from child threads.
+                # webapp_job exceptions still exit the main loop for a clean
+                # shutdown. A controller_job UnrecoverableError is handled
+                # locally instead (see _handle_controller_failure).
                 webapp_job.propagate_exception()
-                controller_job.propagate_exception()
+                if do_start_controller:
+                    try:
+                        controller_job.propagate_exception()
+                    except Exception as e:
+                        self._handle_controller_failure(controller_job, e)
+                        do_start_controller = False
 
                 # Check if a restart is requested
                 if web_app_builder.server_handler.is_restart_requested():
@@ -276,6 +284,36 @@ class Seedsync:
             # Note: ServiceRestart and ServiceExit will be caught and handled
             #       by outer code
             raise
+
+    def _handle_controller_failure(self, controller_job: ControllerJob, e: Exception) -> None:
+        """Handle an exception propagated from controller_job.
+
+        Re-raises (exiting the process, so Docker's restart policy retries) for
+        everything except an UnrecoverableError: ServiceExit/ServiceRestart
+        raised by a signal mid-check, --exit, and unexpected errors. An
+        UnrecoverableError (bad credentials, wrong path, missing remote shell)
+        never heals on its own, and exiting would just crash-loop the
+        container without ever letting the user reach Settings to fix it.
+
+        For those, stop just the controller and leave the web app
+        running. Mirrors the "config incomplete" state
+        set up before the loop starts: status.server.up/error_msg surface the
+        error in the UI, and the controller only restarts via an explicit
+        restart request (same as any other change requiring one), not
+        automatically. controller_job's thread records the exception before
+        running its cleanup (see Job.run()/ControllerJob.cleanup(), which
+        calls Controller.exit()), so join() here waits for that teardown.
+        """
+        if isinstance(e, (ServiceExit, ServiceRestart)) or self.context.args.exit:
+            raise e
+        if not isinstance(e, UnrecoverableError):
+            raise e
+        self.context.logger.exception("Controller stopped; fix the error in Settings and restart")
+        # Publish the error first: join() waits for Controller.exit() to finish.
+        self.context.status.server.up = False
+        self.context.status.server.error_msg = str(e)
+        controller_job.terminate()
+        controller_job.join()
 
     def persist(self):
         # Save the persists
@@ -359,23 +397,32 @@ class Seedsync:
 
         numeric_level = getattr(logging, log_level.upper(), logging.INFO)
         logger.setLevel(numeric_level)
-        if logdir is not None:
-            # Output logs to a file in the given directory
-            handler = RotatingFileHandler(
-                f"{logdir}/{name}.log",
-                maxBytes=Constants.MAX_LOG_SIZE_IN_BYTES,
-                backupCount=Constants.LOG_BACKUP_COUNT,
-            )
-        else:
-            handler = logging.StreamHandler(sys.stdout)
         if log_format == "json":
-            formatter = JsonFormatter()
+            formatter: logging.Formatter = JsonFormatter()
         else:
             formatter = logging.Formatter(
                 "%(asctime)s - %(levelname)s - %(name)s (%(processName)s/%(threadName)s) - %(message)s"
             )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        # Always log to stdout (docker logs); a logdir adds the rotating file
+        # the web UI's log viewer reads (#792).
+        handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+        if logdir is not None:
+            log_path = f"{logdir}/{name}.log"
+            try:
+                handlers.append(
+                    RotatingFileHandler(
+                        log_path,
+                        maxBytes=Constants.MAX_LOG_SIZE_IN_BYTES,
+                        backupCount=Constants.LOG_BACKUP_COUNT,
+                    )
+                )
+            except OSError as e:
+                # e.g. a log file left behind by a previous PUID. Keep stdout
+                # rather than failing startup over the log viewer.
+                print(f"WARNING: cannot open {log_path} ({e}); logging to stdout only", file=sys.stderr)
+        for handler in handlers:
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
         return logger
 
     @staticmethod

@@ -96,6 +96,8 @@ Soft targets: file ≤ 500 lines, class ≤ 300, function ≤ 40, complexity ≤
 
 Releases are the only PRs that bump versions.
 
+**Process is not authority.** Following this checklist (or any documented workflow) never grants permission for its irreversible steps: merging to `master`, pushing tags, and publishing images each require explicit, per-action user approval. "Release" or an issue/checklist naming these steps means *prepare* them and stop for sign-off.
+
 1. `git checkout develop && git pull && git checkout -b release/vX.Y.Z`
 2. Add a `## [X.Y.Z] - YYYY-MM-DD` entry at the top of `CHANGELOG.md` (sections: Changed / Added / Fixed / Removed / Security; bold item names; issue refs). Set `version` in `src/angular/package.json` (shown on the About page).
 3. Commit as `Release vX.Y.Z - Brief description` — the one approved exception to the conventional-commit format, so release commits are greppable in history. Push, then `gh pr create --base master`.

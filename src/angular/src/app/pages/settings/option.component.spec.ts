@@ -1,7 +1,7 @@
 import '@angular/compiler';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Subject, Subscription } from 'rxjs';
-import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { debounceTime } from 'rxjs/operators';
 import { TestBed } from '@angular/core/testing';
 import { ComponentFixture } from '@angular/core/testing';
 
@@ -9,8 +9,8 @@ import { OptionComponent, OptionType, OptionValue, DEBOUNCE_TIME_MS } from './op
 import { REDACTED_SENTINEL } from '../../models/config';
 
 /**
- * Test the debounce/distinctUntilChanged pipe logic directly using the same
- * operators as OptionComponent, avoiding Angular component lifecycle timing issues.
+ * Test the debounce pipe logic directly using the same operator as
+ * OptionComponent, avoiding Angular component lifecycle timing issues.
  */
 describe('OptionComponent — debounce pipe logic', () => {
   let newValue: Subject<OptionValue>;
@@ -22,7 +22,7 @@ describe('OptionComponent — debounce pipe logic', () => {
     newValue = new Subject<OptionValue>();
     emitted = [];
     subscription = newValue
-      .pipe(debounceTime(DEBOUNCE_TIME_MS), distinctUntilChanged())
+      .pipe(debounceTime(DEBOUNCE_TIME_MS))
       .subscribe((val) => emitted.push(val));
   });
 
@@ -50,16 +50,6 @@ describe('OptionComponent — debounce pipe logic', () => {
 
     vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
     expect(emitted).toEqual(['c']);
-  });
-
-  it('should not re-emit same value after full debounce period (distinctUntilChanged)', () => {
-    newValue.next('same');
-    vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
-    expect(emitted).toEqual(['same']);
-
-    newValue.next('same');
-    vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
-    expect(emitted).toEqual(['same']);
   });
 
   it('should emit different values after each debounce period', () => {
@@ -90,6 +80,30 @@ describe('OptionComponent — onChange and effectiveChoices', () => {
   // useFakeTimers() block can't leak fake timers into the next test.
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('emits only when the typed value differs from the bound value, even after an external change', () => {
+    vi.useFakeTimers();
+    fixture.componentRef.setInput('value', '/a');
+    fixture.detectChanges();
+    const emitted: OptionValue[] = [];
+    component.changeEvent.subscribe((v) => emitted.push(v));
+
+    component.onChange('/a');
+    vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
+    expect(emitted).toEqual([]);
+
+    component.onChange('/b');
+    vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
+    expect(emitted).toEqual(['/b']);
+
+    // The directory picker saves '/x' through a different path; typing '/b'
+    // again is a real change now and must not be swallowed.
+    fixture.componentRef.setInput('value', '/x');
+    fixture.detectChanges();
+    component.onChange('/b');
+    vi.advanceTimersByTime(DEBOUNCE_TIME_MS);
+    expect(emitted).toEqual(['/b', '/b']);
   });
 
   it('should suppress REDACTED_SENTINEL for password type', () => {
@@ -137,5 +151,52 @@ describe('OptionComponent — onChange and effectiveChoices', () => {
     fixture.detectChanges();
 
     expect(component.effectiveChoices()).toEqual(['opt1', 'opt2']);
+  });
+});
+
+describe('OptionComponent — Directory type', () => {
+  let component: OptionComponent;
+  let fixture: ComponentFixture<OptionComponent>;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({});
+    fixture = TestBed.createComponent(OptionComponent);
+    component = fixture.componentInstance;
+    fixture.componentRef.setInput('type', OptionType.Directory);
+    fixture.componentRef.setInput('value', '/some/path');
+    fixture.detectChanges();
+  });
+
+  it('emits browseRequested when the Browse button is clicked', () => {
+    let emitted = false;
+    component.browseRequested.subscribe(() => (emitted = true));
+
+    const button = fixture.nativeElement.querySelector('.directory-browse-btn') as HTMLButtonElement;
+    button.click();
+
+    expect(emitted).toBe(true);
+  });
+
+  it('disables the Browse button when the option is disabled', () => {
+    fixture.componentRef.setInput('disabled', true);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('.directory-browse-btn') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it('browseDisabled disables only the Browse button, leaving the input editable', () => {
+    fixture.componentRef.setInput('browseDisabled', true);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('.directory-browse-btn') as HTMLButtonElement;
+    const input = fixture.nativeElement.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(button.disabled).toBe(true);
+    expect(input.disabled).toBe(false);
+  });
+
+  it('renders the current value in the text input', () => {
+    const input = fixture.nativeElement.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input.value).toBe('/some/path');
   });
 });

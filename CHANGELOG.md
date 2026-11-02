@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.2.0] - 2026-11-02
+
+### Added
+
+- **Test Connection and folder pickers in Settings** - A "Test Connection" button on the SSH settings reports success or failure inline, and after a bad-credential failure locks out further attempts until the connection settings change or the controller is restarted (repeated failed logins risk a fail2ban-style ban on the seedbox). Server Directory and both Path Pair path fields can now be chosen from a directory-picker modal that browses the actual local or remote filesystem; remote Browse buttons stay disabled until the connection has been verified, while the text inputs remain editable. New endpoints `/server/config/test-connection` and `/server/browse/{local,remote}`. Contributed by @JAAdventurer. (#726, #771)
+- **Log viewer works out of the box** - The Docker image now defaults `LOGDIR=/config/logs`, so the web UI's Logs page has files to read on a default install instead of "Logging to file is not configured". Logs still go to `docker logs` as well. Set `LOGDIR=""` to disable file logging; an explicit `--logdir` in the container command takes precedence. (#792, #804)
+
+### Changed
+
+- **Settings errors no longer crash-loop the container** - A wrong SSH password or key, a missing remote login shell, a `Server Script Path` that is a directory, or an lftp `Login failed` / `Access failed: Permission denied` now stop only the controller and keep the web UI up with the error in the banner, so Settings stays reachable to fix it (restart from the UI afterwards). Previously the process exited and Docker restarted it every few seconds. Unexpected errors still exit as before. (#793, #770, #802)
+- **Downloaded files respect the umask** - lftp's `mirror:set-permissions` is now off, so mirrored files and directories get `0666`/`0777 & ~umask` (with `UMASK=000`: 666/777) instead of inheriting the seedbox's `644`/`755`. Anyone relying on remote permission bits carrying over will see the difference. (#791, #803)
+- **`ModelFile` is a dataclass** - Internal refactor, no behaviour change. (#666, #715)
+- **Dependency updates** - Angular 22.2 group, ESLint/typescript-eslint/angular-eslint, Vitest/jsdom, undici, fast-uri, Docusaurus transitive bumps, GitHub Actions.
+
+### Fixed
+
+- **Crash when the seedbox moves a file mid-download** - lftp's `pget: Access failed: No such file` was treated as a permanent error and exited the process. It is now logged, the job ends, and the next scan drops the file. (#793)
+- **Crash-loop while the seedbox is offline** - Connection resets (`kex_exchange_identification`), DNS failures, timeouts and other unrecognised scanner errors were fatal. Only bad credentials and a missing login shell are now; everything else is retried on the normal scan interval with the error shown in the header, and scanning resumes by itself when the box comes back. A missing or unmounted remote path, and an unreadable local path, are recoverable the same way. (#770, #802, #805)
+- **Failed scans no longer corrupt the model** - A failed remote or local scan keeps the last good listing instead of applying an empty one, so downloads don't show as deleted and persist records aren't pruned (which could re-queue every download when the path returned). (#802, #805)
+- **Directory picker edge cases** - Local `~` expands; remote names containing unusual line-break characters list correctly; the picker only walks up to a parent on a missing path, not on a connection failure (one SSH login per ancestor otherwise); a Test Connection result that was in flight when a connection field changed is discarded; re-typing a path after the picker set a different one is saved again. (#771)
+- **Credential error visible during teardown** - The error banner is published before the controller's shutdown is awaited. (#771)
+
 ## [1.1.0] - 2026-09-01
 
 ### Added

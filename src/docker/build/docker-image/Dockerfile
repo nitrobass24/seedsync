@@ -102,7 +102,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Runtime configuration
 ENV PUID=1000 \
     PGID=1000 \
-    UMASK=""
+    UMASK="" \
+    LOGDIR=/config/logs
 
 EXPOSE 8800
 VOLUME ["/config", "/downloads", "/staging"]
