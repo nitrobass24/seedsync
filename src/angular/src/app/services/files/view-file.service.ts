@@ -589,6 +589,8 @@ function createViewFile(
     { isTopLevel, ancestorActive, hasDownloadingDescendant, stagingEnabled },
   );
 
+  // Kept out of deriveCapabilities: it needs the ModelFile for is_dir and the
+  // hasLocalOnlyContent tree walk, which the short-circuit keeps off idle rows.
   const isCleanupLocalable =
     LOCAL_ACTION_STATUSES.includes(status) &&
     modelFile.is_dir &&
