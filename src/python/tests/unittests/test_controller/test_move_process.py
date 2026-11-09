@@ -335,3 +335,29 @@ class TestMoveProcess(unittest.TestCase):
         dst_tree = os.path.join(self.dst_dir, "Show.S01")
         self.assertEqual(0o777, stat.S_IMODE(os.stat(dst_tree).st_mode))
         self.assertEqual(0o666, stat.S_IMODE(os.stat(os.path.join(dst_tree, "ep1.mkv")).st_mode))
+
+    def test_merge_into_existing_destination_leaves_other_files_alone(self):
+        """#811: a staged tree merged into an existing folder must not widen the
+        modes of files that were already there."""
+        import stat
+
+        src_tree = os.path.join(self.src_dir, "Show.S01")
+        os.makedirs(src_tree)
+        with open(os.path.join(src_tree, "ep2.mkv"), "w") as f:
+            f.write("x")
+        os.chmod(os.path.join(src_tree, "ep2.mkv"), 0o664)
+        dst_tree = os.path.join(self.dst_dir, "Show.S01")
+        os.makedirs(dst_tree)
+        private = os.path.join(dst_tree, "notes.txt")
+        with open(private, "w") as f:
+            f.write("mine")
+        os.chmod(private, 0o600)
+
+        with mock.patch("os.rename", side_effect=OSError(errno.EXDEV, "cross-device")):
+            process = self._make_process(
+                source_path=self.src_dir, dest_path=self.dst_dir, file_name="Show.S01", umask=0o000
+            )
+            self._run_process(process)
+
+        self.assertEqual(0o600, stat.S_IMODE(os.stat(private).st_mode))
+        self.assertEqual(0o666, stat.S_IMODE(os.stat(os.path.join(dst_tree, "ep2.mkv")).st_mode))

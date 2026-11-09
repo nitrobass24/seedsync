@@ -411,10 +411,12 @@ class TestHandleDownloadedFileUmask(unittest.TestCase):
         threads = []
 
         def run_inline(**kwargs):
-            # Run the worker synchronously so the test can assert on it.
-            kwargs["target"](*kwargs.get("args", ()))
+            # A fake thread that runs the worker when start() is called, so the
+            # test fails if the thread is built but never started.
             threads.append(kwargs)
-            return MagicMock()
+            fake = MagicMock()
+            fake.start.side_effect = lambda: kwargs["target"](*kwargs.get("args", ()))
+            return fake
 
         with (
             patch("controller.model_updater.apply_umask_modes") as apply,

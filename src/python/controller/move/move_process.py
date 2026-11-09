@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import override
 
 from common import AppOneShotProcess, Constants, PipeStream
-from system import apply_umask_modes
+from system import apply_umask_modes_to, relative_entries
 
 
 @dataclass
@@ -137,6 +137,11 @@ class MoveProcess(AppOneShotProcess):
 
         self.logger.info(f"Moving {src} -> {dst}")
 
+        # What we are about to move, so the UMASK pass can be limited to it: a
+        # copy that merges into an existing destination must leave the files
+        # already there alone (#811).
+        moved_entries = relative_entries(src) if self.__umask is not None else []
+
         # Ensure destination parent directory exists
         os.makedirs(self.__dest_path, exist_ok=True)
 
@@ -144,7 +149,7 @@ class MoveProcess(AppOneShotProcess):
         try:
             os.rename(src, dst)
             self.logger.info(f"Move completed via rename: {self.__file_name}")
-            self.__apply_modes(dst)
+            self.__apply_modes(dst, moved_entries)
             return
         except OSError as e:
             if e.errno == errno.EXDEV:
@@ -189,11 +194,11 @@ class MoveProcess(AppOneShotProcess):
             shutil.rmtree(src)
 
         self.logger.info(f"Move completed via copy+delete: {self.__file_name}")
-        self.__apply_modes(dst)
+        self.__apply_modes(dst, moved_entries)
 
-    def __apply_modes(self, dst: str) -> None:
+    def __apply_modes(self, dst: str, moved_entries: list[tuple[str, bool]]) -> None:
         if self.__umask is not None:
-            apply_umask_modes(dst, self.__umask, self.logger)
+            apply_umask_modes_to(dst, moved_entries, self.__umask, self.logger)
 
     def pop_failed(self) -> list[MoveFailedResult]:
         """Process-safe method to retrieve any move failures."""
