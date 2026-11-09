@@ -46,6 +46,17 @@ from web import WebAppBuilder, WebAppJob
 T_Persist = TypeVar("T_Persist", bound=Persist)
 
 
+def parse_umask(value: str | None) -> int | None:
+    """The UMASK env var as an int, or None when unset/blank/invalid."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        return int(value, 8)
+    except ValueError:
+        return None
+
+
 class Seedsync:
     """
     Implements the service for seedsync
@@ -107,6 +118,7 @@ class Seedsync:
         ctx_args.debug = is_debug
         ctx_args.exit = args.exit
         ctx_args.logdir = args.logdir
+        ctx_args.umask = parse_umask(os.environ.get("UMASK"))
 
         # Logger setup
         # We separate the main log from the web-access log
@@ -681,15 +693,15 @@ if __name__ == "__main__":
     # Apply UMASK env var before spawning any child processes (e.g. lftp via pexpect).
     # The shell umask set in entrypoint.sh is not reliably inherited through the
     # setpriv exec chain in all container environments, so we set it explicitly here.
-    # Note: regular files are created with base mode 0666, so umask 000 → 0666 (rw-rw-rw-).
-    # Directories use base mode 0777, so umask 000 → 0777 (rwxrwxrwx).
+    # lftp creates files as 0664 and directories as 0775 regardless, so completed
+    # downloads are additionally chmod'ed to 0666/0777 & ~umask (#811).
     _umask_str = os.environ.get("UMASK", "").strip()
-    if _umask_str:
-        try:
-            _prev_umask = os.umask(int(_umask_str, 8))
-            print(f"Applied umask {_umask_str} (previous: {_prev_umask:04o})", file=sys.stderr)
-        except ValueError:
-            print(f"WARNING: Invalid UMASK value {_umask_str!r}, ignoring", file=sys.stderr)
+    _umask = parse_umask(_umask_str)
+    if _umask is not None:
+        _prev_umask = os.umask(_umask)
+        print(f"Applied umask {_umask_str} (previous: {_prev_umask:04o})", file=sys.stderr)
+    elif _umask_str:
+        print(f"WARNING: Invalid UMASK value {_umask_str!r}, ignoring", file=sys.stderr)
 
     while True:
         try:

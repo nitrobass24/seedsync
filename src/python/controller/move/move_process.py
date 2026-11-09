@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import override
 
 from common import AppOneShotProcess, Constants, PipeStream
+from system import apply_umask_modes
 
 
 @dataclass
@@ -30,12 +31,22 @@ class MoveProcess(AppOneShotProcess):
     for cross-device moves.
     """
 
-    def __init__(self, source_path: str, dest_path: str, file_name: str, pair_id: str | None = None):
+    def __init__(
+        self,
+        source_path: str,
+        dest_path: str,
+        file_name: str,
+        pair_id: str | None = None,
+        umask: int | None = None,
+    ):
         super().__init__(name=self.__class__.__name__)
         self.__source_path = source_path
         self.__dest_path = dest_path
         self.__file_name = file_name
         self._pair_id = pair_id
+        # When set, the moved tree is chmod'ed to 0666/0777 & ~umask here, in
+        # this process, rather than on the controller thread (#811).
+        self.__umask = umask
         self.__failed_result_stream = PipeStream()
 
     @property
@@ -133,6 +144,7 @@ class MoveProcess(AppOneShotProcess):
         try:
             os.rename(src, dst)
             self.logger.info(f"Move completed via rename: {self.__file_name}")
+            self.__apply_modes(dst)
             return
         except OSError as e:
             if e.errno == errno.EXDEV:
@@ -177,6 +189,11 @@ class MoveProcess(AppOneShotProcess):
             shutil.rmtree(src)
 
         self.logger.info(f"Move completed via copy+delete: {self.__file_name}")
+        self.__apply_modes(dst)
+
+    def __apply_modes(self, dst: str) -> None:
+        if self.__umask is not None:
+            apply_umask_modes(dst, self.__umask, self.logger)
 
     def pop_failed(self) -> list[MoveFailedResult]:
         """Process-safe method to retrieve any move failures."""

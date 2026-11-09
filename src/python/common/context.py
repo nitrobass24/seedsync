@@ -24,6 +24,8 @@ class Args:
         self.debug: bool | None = None
         self.exit: bool | None = None
         self.logdir: str | None = None
+        # Parsed UMASK env var; downloads are chmod'ed to 0666/0777 & ~umask (#811)
+        self.umask: int | None = None
 
     def as_dict(self) -> dict[str, str]:
         dct: collections.OrderedDict[str, str] = collections.OrderedDict()
@@ -32,6 +34,7 @@ class Args:
         dct["debug"] = str(self.debug)
         dct["exit"] = str(self.exit)
         dct["logdir"] = str(self.logdir)
+        dct["umask"] = f"{self.umask:03o}" if self.umask is not None else "None"
         return dct
 
 

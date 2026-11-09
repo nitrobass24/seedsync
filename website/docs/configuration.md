@@ -177,7 +177,7 @@ Then set **Staging Path** to `/staging` in Settings.
 | --- | --- | --- |
 | `PUID` | 1000 | User ID for file ownership |
 | `PGID` | 1000 | Group ID for file ownership |
-| `UMASK` | *(unset)* | File permission mask (e.g. `002` for 775/664, `000` for 777/666) |
+| `UMASK` | *(unset)* | Permission mask for downloaded files and directories: files get `0666 & ~UMASK`, directories `0777 & ~UMASK` (e.g. `002` → 775/664, `000` → 777/666). Applied by SeedSync when a download completes, because lftp itself creates 664/775 at most. Unset: lftp's defaults, 644/755 under the container's default umask. |
 | `LOGDIR` | `/config/logs` | Directory for rotating log files, read by the web UI's Logs page. Logs always go to `docker logs` too. Set to an empty string to disable file logging. Ignored if the container command already passes `--logdir`. |
 
 ## Volumes

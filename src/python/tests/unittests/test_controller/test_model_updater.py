@@ -2,11 +2,12 @@
 
 import unittest
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from controller.model_updater import ModelUpdater
 from controller.persist_keys import KEY_SEP, persist_key
 from controller.scan.scanner_process import ScannerResult
+from model import ModelDiff, ModelFile
 
 
 class TestSyncPersistToAllBuilders(unittest.TestCase):
@@ -376,3 +377,65 @@ class TestUpdatePairContextScanResults(unittest.TestCase):
 
         pc.model_builder.set_remote_files.assert_called_once_with([])
         self.assertTrue(pc.remote_scan_received)
+
+
+class TestHandleDownloadedFileUmask(unittest.TestCase):
+    """#811: lftp creates 0664/0775 whatever the umask, so a completed download
+    is chmod'ed to 0666/0777 & ~UMASK before any staging move."""
+
+    def _run(self, umask, use_staging=False):
+        pc = MagicMock()
+        pc.pair_id = "pair-1"
+        pc.local_path = "/downloads"
+        context = MagicMock()
+        context.args.umask = umask
+        context.config.validate.enabled = False
+        context.config.controller.use_staging = use_staging
+        context.config.controller.staging_path = "/staging" if use_staging else None
+        context.config.autoqueue.auto_extract = False
+        updater = ModelUpdater(
+            pair_contexts=[pc],
+            persist=MagicMock(),
+            pipeline=MagicMock(),
+            registry=MagicMock(),
+            extract_process=MagicMock(),
+            validate_process=MagicMock(),
+            context=context,
+            password=None,
+            logger=MagicMock(),
+        )
+        new_file = ModelFile("Show.S01", True)
+        new_file.state = ModelFile.State.DOWNLOADED
+        new_file.pair_id = "pair-1"
+        diff = ModelDiff(ModelDiff.Change.ADDED, old_file=None, new_file=new_file)
+        threads = []
+
+        def run_inline(**kwargs):
+            # Run the worker synchronously so the test can assert on it.
+            kwargs["target"](*kwargs.get("args", ()))
+            threads.append(kwargs)
+            return MagicMock()
+
+        with (
+            patch("controller.model_updater.apply_umask_modes") as apply,
+            patch("controller.model_updater.threading.Thread", side_effect=run_inline),
+        ):
+            updater._handle_downloaded_file(diff, pc)
+        return apply, threads
+
+    def test_applies_modes_off_the_controller_thread_when_umask_is_set(self):
+        apply, threads = self._run(0o000)
+        self.assertEqual(1, len(threads))
+        self.assertTrue(threads[0]["daemon"])
+        apply.assert_called_once()
+        self.assertEqual(("/downloads/Show.S01", 0o000), apply.call_args[0][:2])
+
+    def test_leaves_modes_to_the_move_process_when_staging_is_on(self):
+        apply, threads = self._run(0o000, use_staging=True)
+        apply.assert_not_called()
+        self.assertEqual([], threads)
+
+    def test_skips_when_umask_is_unset(self):
+        apply, threads = self._run(None)
+        apply.assert_not_called()
+        self.assertEqual([], threads)
