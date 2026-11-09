@@ -224,6 +224,14 @@ export class SettingsPageComponent implements OnInit {
   }
 
   onSetConfig(section: string, option: string, value: OptionValue, requiresRestart?: boolean): void {
+    // Captured before the save updates the snapshot. A password comes back
+    // redacted, so it always counts as changed.
+    const previous = this.getOptionValue(this.configService.configSnapshot, [section, option] as ConfigValuePath);
+    // The port is stored as a number and typed as text ("022" is still 22).
+    const sameValue =
+      String(value) === String(previous) || (option === 'remote_port' && Number(value) === Number(previous));
+    const connectionChanged =
+      section === 'lftp' && CONNECTION_FIELDS.has(option) && (option === 'remote_password' || !sameValue);
     this.configService.set(section, option, value).subscribe({
       next: (reaction) => {
         const notifKey = section + '.' + option;
@@ -242,8 +250,8 @@ export class SettingsPageComponent implements OnInit {
           // A changed connection field invalidates any previously-verified
           // connection, re-locking the Server Directory picker until re-tested,
           // and clears a credential-error lockout since the credentials are
-          // no longer what caused it.
-          if (section === 'lftp' && CONNECTION_FIELDS.has(option)) {
+          // no longer what caused it. Re-saving the same value changes nothing.
+          if (connectionChanged) {
             this.connectionTestSeq++;
             this.connectionTestInFlight = false;
             this.testingConnection = false;
@@ -276,16 +284,15 @@ export class SettingsPageComponent implements OnInit {
 
   onCommandRestart(): void {
     this.notifService.hide(this.configRestartNotif);
-    // A restart is the user's remediation action for a credential-error
-    // lockout too: clear it eagerly so Test Connection isn't left blocked
-    // once the app comes back up.
-    this.connectionLockedOut = false;
-    this.cdr.markForCheck();
 
     this.commandService.restart().subscribe({
       next: (reaction) => {
         if (reaction.success) {
           this.logger.info(reaction.data);
+          // A restart is the user's remediation action for a credential-error
+          // lockout too, but only an accepted restart request lifts it.
+          this.connectionLockedOut = false;
+          this.cdr.markForCheck();
         } else {
           this.logger.error(reaction.errorMessage);
         }

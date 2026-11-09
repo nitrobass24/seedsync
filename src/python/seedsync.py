@@ -35,15 +35,26 @@ from common import (
     ServiceExit,
     ServiceRestart,
     Status,
+    UnrecoverableError,
 )
 from common.json_formatter import JsonFormatter
 from controller import AutoQueue, AutoQueuePersist, Controller, ControllerJob, ControllerPersist
 from controller.arr_notifier import ArrNotifier
 from controller.notifier import WebhookNotifier
-from ssh.lftp_ssh import is_credential_error
 from web import WebAppBuilder, WebAppJob
 
 T_Persist = TypeVar("T_Persist", bound=Persist)
+
+
+def parse_umask(value: str | None) -> int | None:
+    """The UMASK env var as an int, or None when unset/blank/invalid."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        return int(value, 8)
+    except ValueError:
+        return None
 
 
 class Seedsync:
@@ -107,6 +118,7 @@ class Seedsync:
         ctx_args.debug = is_debug
         ctx_args.exit = args.exit
         ctx_args.logdir = args.logdir
+        ctx_args.umask = parse_umask(os.environ.get("UMASK"))
 
         # Logger setup
         # We separate the main log from the web-access log
@@ -236,7 +248,7 @@ class Seedsync:
 
                 # Propagate exceptions from child threads.
                 # webapp_job exceptions still exit the main loop for a clean
-                # shutdown. A controller_job credential error is handled
+                # shutdown. A controller_job UnrecoverableError is handled
                 # locally instead (see _handle_controller_failure).
                 webapp_job.propagate_exception()
                 if do_start_controller:
@@ -289,13 +301,13 @@ class Seedsync:
         """Handle an exception propagated from controller_job.
 
         Re-raises (exiting the process, so Docker's restart policy retries) for
-        everything except an SSH credential error: ServiceExit/ServiceRestart
-        raised by a signal mid-check, --exit, and errors that can heal on their
-        own (e.g. a flapping local mount). A bad password never heals, and
-        exiting would just crash-loop the container without ever letting the
-        user reach Settings to fix it.
+        everything except an UnrecoverableError: ServiceExit/ServiceRestart
+        raised by a signal mid-check, --exit, and unexpected errors. An
+        UnrecoverableError (bad credentials, wrong path, missing remote shell)
+        never heals on its own, and exiting would just crash-loop the
+        container without ever letting the user reach Settings to fix it.
 
-        For a credential error, stop just the controller and leave the web app
+        For those, stop just the controller and leave the web app
         running. Mirrors the "config incomplete" state
         set up before the loop starts: status.server.up/error_msg surface the
         error in the UI, and the controller only restarts via an explicit
@@ -304,9 +316,11 @@ class Seedsync:
         running its cleanup (see Job.run()/ControllerJob.cleanup(), which
         calls Controller.exit()), so join() here waits for that teardown.
         """
-        if isinstance(e, (ServiceExit, ServiceRestart)) or self.context.args.exit or not is_credential_error(str(e)):
+        if isinstance(e, (ServiceExit, ServiceRestart)) or self.context.args.exit:
             raise e
-        self.context.logger.exception("Controller stopped due to a credential error; web app remains available")
+        if not isinstance(e, UnrecoverableError):
+            raise e
+        self.context.logger.exception("Controller stopped; fix the error in Settings and restart")
         # Publish the error first: join() waits for Controller.exit() to finish.
         self.context.status.server.up = False
         self.context.status.server.error_msg = str(e)
@@ -395,23 +409,32 @@ class Seedsync:
 
         numeric_level = getattr(logging, log_level.upper(), logging.INFO)
         logger.setLevel(numeric_level)
-        if logdir is not None:
-            # Output logs to a file in the given directory
-            handler = RotatingFileHandler(
-                f"{logdir}/{name}.log",
-                maxBytes=Constants.MAX_LOG_SIZE_IN_BYTES,
-                backupCount=Constants.LOG_BACKUP_COUNT,
-            )
-        else:
-            handler = logging.StreamHandler(sys.stdout)
         if log_format == "json":
-            formatter = JsonFormatter()
+            formatter: logging.Formatter = JsonFormatter()
         else:
             formatter = logging.Formatter(
                 "%(asctime)s - %(levelname)s - %(name)s (%(processName)s/%(threadName)s) - %(message)s"
             )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        # Always log to stdout (docker logs); a logdir adds the rotating file
+        # the web UI's log viewer reads (#792).
+        handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+        if logdir is not None:
+            log_path = f"{logdir}/{name}.log"
+            try:
+                handlers.append(
+                    RotatingFileHandler(
+                        log_path,
+                        maxBytes=Constants.MAX_LOG_SIZE_IN_BYTES,
+                        backupCount=Constants.LOG_BACKUP_COUNT,
+                    )
+                )
+            except OSError as e:
+                # e.g. a log file left behind by a previous PUID. Keep stdout
+                # rather than failing startup over the log viewer.
+                print(f"WARNING: cannot open {log_path} ({e}); logging to stdout only", file=sys.stderr)
+        for handler in handlers:
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
         return logger
 
     @staticmethod
@@ -671,15 +694,15 @@ if __name__ == "__main__":
     # Apply UMASK env var before spawning any child processes (e.g. lftp via pexpect).
     # The shell umask set in entrypoint.sh is not reliably inherited through the
     # setpriv exec chain in all container environments, so we set it explicitly here.
-    # Note: regular files are created with base mode 0666, so umask 000 → 0666 (rw-rw-rw-).
-    # Directories use base mode 0777, so umask 000 → 0777 (rwxrwxrwx).
+    # lftp creates files as 0664 and directories as 0775 regardless, so completed
+    # downloads are additionally chmod'ed to 0666/0777 & ~umask (#811).
     _umask_str = os.environ.get("UMASK", "").strip()
-    if _umask_str:
-        try:
-            _prev_umask = os.umask(int(_umask_str, 8))
-            print(f"Applied umask {_umask_str} (previous: {_prev_umask:04o})", file=sys.stderr)
-        except ValueError:
-            print(f"WARNING: Invalid UMASK value {_umask_str!r}, ignoring", file=sys.stderr)
+    _umask = parse_umask(_umask_str)
+    if _umask is not None:
+        _prev_umask = os.umask(_umask)
+        print(f"Applied umask {_umask_str} (previous: {_prev_umask:04o})", file=sys.stderr)
+    elif _umask_str:
+        print(f"WARNING: Invalid UMASK value {_umask_str!r}, ignoring", file=sys.stderr)
 
     while True:
         try:

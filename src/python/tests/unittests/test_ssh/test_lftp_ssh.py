@@ -10,6 +10,7 @@ class TestIsCredentialError(unittest.TestCase):
             "Connection refused by server - user@host: Permission denied (publickey,password).",
             "Permission denied, please try again.",
             "Permission denied (keyboard-interactive).",
+            "Received disconnect from 10.0.0.1 port 22:2: Too many authentication failures",
         ):
             with self.subTest(message=message):
                 self.assertTrue(is_credential_error(message))

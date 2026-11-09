@@ -7,16 +7,19 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import override
 
-from common import AppError, AppProcess, PipeFlag, PipeStream
+from common import AppProcess, PipeFlag, PipeStream, UnrecoverableError
 from system import SystemFile
 
 
-class ScannerError(AppError):
+class ScannerError(UnrecoverableError):
     """
     Indicates a scanner error
 
     Args:
-        recoverable: indicates scans can be retried
+        recoverable: indicates scans can be retried. Recoverable errors never
+            leave the scanner process (see ScannerProcess.run_loop); only the
+            non-recoverable ones propagate, which is why this is an
+            UnrecoverableError.
     """
 
     def __init__(self, message: str, recoverable: bool = False):

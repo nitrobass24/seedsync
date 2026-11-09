@@ -115,7 +115,11 @@ class TestLftpSpawn(unittest.TestCase):
         # sftp:* settings issued
         settings = sent_settings(fake)
         self.assertEqual("1", settings.get("sftp:auto-confirm"))
-        self.assertEqual("false", settings.get("sftp:set-permissions"))
+        # "sftp:set-permissions" is not an lftp variable (lftp 4.9: "no such
+        # variable"); it was a no-op and is no longer sent (#811).
+        self.assertNotIn("sftp:set-permissions", settings)
+        # #791: mirror must not override the umask with the remote's mode
+        self.assertEqual("false", settings.get("mirror:set-permissions"))
         # No FTPS settings
         self.assertNotIn("ftp:ssl-force", settings)
         self.assertNotIn("ssl:verify-certificate", settings)
@@ -152,6 +156,8 @@ class TestLftpSpawn(unittest.TestCase):
         # sftp:* settings NOT issued
         self.assertNotIn("sftp:auto-confirm", settings)
         self.assertNotIn("sftp:set-permissions", settings)
+        # mirror:set-permissions is protocol-agnostic and still issued (#791)
+        self.assertEqual("false", settings.get("mirror:set-permissions"))
 
     def test_lftp_spawn_ftps_verify_cert_true(self):
         """When ssl_verify_certificate=True, ssl:verify-certificate is 'true'

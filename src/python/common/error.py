@@ -24,3 +24,14 @@ class ServiceRestart(AppError):
     """
 
     pass
+
+
+class UnrecoverableError(AppError):
+    """
+    The controller cannot continue until the user changes a setting (bad
+    credentials, wrong paths, missing remote shell, ...). Stops the controller
+    and keeps the web app up so Settings stays reachable; everything else that
+    reaches the top level still exits the process.
+    """
+
+    pass

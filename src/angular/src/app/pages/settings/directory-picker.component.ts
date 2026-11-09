@@ -10,6 +10,7 @@ import {
   output,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { A11yModule } from '@angular/cdk/a11y';
 
 import { DirectoryBrowserService } from '../../services/settings/directory-browser.service';
 
@@ -18,7 +19,7 @@ export type DirectoryBrowseKind = 'local' | 'remote';
 @Component({
   selector: 'app-directory-picker',
   standalone: true,
-  imports: [],
+  imports: [A11yModule],
   templateUrl: './directory-picker.component.html',
   styleUrls: ['./directory-picker.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,

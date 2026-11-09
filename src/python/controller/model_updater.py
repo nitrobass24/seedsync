@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 
 from common import Context
 from lftp import LftpError, LftpJobStatus
 from model import Model, ModelDiff, ModelError, ModelFile
+from system import apply_umask_modes
 
 from .command_pipeline import CommandPipeline
 from .controller_persist import ControllerPersist
@@ -24,6 +26,7 @@ from .model_registry import ModelRegistry
 from .pair_context import PairContext
 from .persist_keys import persist_key, strip_persist_key
 from .persist_sync import PersistSync
+from .scan.scanner_process import ScannerResult
 from .validate import (
     ValidateCompletedResult,
     ValidateFailedResult,
@@ -210,6 +213,19 @@ class ModelUpdater:
         pkey = persist_key(diff.new_file.pair_id, diff.new_file.name)
         self._persist.downloaded_file_names.add(pkey)
         self.sync_persist_to_all_builders()
+
+        # lftp creates 0664/0775 whatever the umask; honour UMASK ourselves (#811).
+        # With staging on, MoveProcess applies the modes at the final location
+        # (out of process); otherwise a thread does it so a large tree on a slow
+        # filesystem can't stall the controller loop.
+        use_staging = self._context.config.controller.use_staging and self._context.config.controller.staging_path
+        if self._context.args.umask is not None and not use_staging:
+            threading.Thread(
+                target=apply_umask_modes,
+                args=(os.path.join(pc.local_path, diff.new_file.name), self._context.args.umask, self._logger),
+                name=f"umask-{diff.new_file.name}",
+                daemon=True,
+            ).start()
 
         # Auto-validate if enabled
         will_auto_validate = (
@@ -422,6 +438,28 @@ class ModelUpdater:
                 if current is None or pc.latest_local_scan.timestamp > current:
                     self._context.status.controller.latest_local_scan_time = pc.latest_local_scan.timestamp
 
+    @staticmethod
+    def _record_scan_results(
+        pc: PairContext, latest_remote_scan: ScannerResult | None, latest_local_scan: ScannerResult | None
+    ) -> None:
+        """Track the newest scan result per side.
+
+        The last result (including a failed one) is kept across cycles with no
+        new scan, so "is the remote listing trustworthy" checks like the cleanup
+        guard still see the failure until a scan succeeds. A failed scan carries
+        no files and does not count as "received": that flag opens the
+        absent-persist prune gate, which would drop persist records for
+        downloads that simply aren't visible right now.
+        """
+        if latest_remote_scan is not None:
+            pc.latest_remote_scan = latest_remote_scan
+            if not latest_remote_scan.failed:
+                pc.remote_scan_received = True
+        if latest_local_scan is not None:
+            pc.latest_local_scan = latest_local_scan
+            if not latest_local_scan.failed:
+                pc.local_scan_received = True
+
     def _update_pair_model_state(
         self,
         pc: PairContext,
@@ -435,19 +473,13 @@ class ModelUpdater:
         latest_local_scan = pc.local_scan_process.pop_latest_result()
         latest_active_scan = pc.active_scan_process.pop_latest_result()
 
-        pc.latest_remote_scan = latest_remote_scan
-        pc.latest_local_scan = latest_local_scan
+        self._record_scan_results(pc, latest_remote_scan, latest_local_scan)
 
         lftp_statuses = None
         try:
             lftp_statuses = pc.lftp.status()
         except LftpError as e:
             self._logger.warning(f"Caught lftp error (pair {pc.name}): {e!s}")
-
-        if latest_remote_scan is not None:
-            pc.remote_scan_received = True
-        if latest_local_scan is not None:
-            pc.local_scan_received = True
 
         self._detect_lftp_completions(pc, lftp_statuses)
 
@@ -467,12 +499,15 @@ class ModelUpdater:
 
         pc.model_builder.set_auto_delete_remote(bool(self._context.config.autoqueue.auto_delete_remote))
 
-        if latest_remote_scan is not None:
+        # Likewise keep the last good listing on a failed scan: an empty remote
+        # list would prune persist records and later re-queue every download;
+        # an empty local list would make every download look deleted.
+        if latest_remote_scan is not None and not latest_remote_scan.failed:
             remote_files = filter_excluded_files(
                 latest_remote_scan.files, self._context.config.general.exclude_patterns
             )
             pc.model_builder.set_remote_files(remote_files)
-        if latest_local_scan is not None:
+        if latest_local_scan is not None and not latest_local_scan.failed:
             pc.model_builder.set_local_files(latest_local_scan.files)
         if latest_active_scan is not None:
             pc.model_builder.set_active_files(latest_active_scan.files)

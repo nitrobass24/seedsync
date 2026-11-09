@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-from common import AppError
+from common import UnrecoverableError
 from controller.command_pipeline import CommandPipeline, _find_local_only_paths
 from controller.commands import MAX_CONCURRENT_COMMAND_PROCESSES, Command
 from controller.persist_keys import persist_key
@@ -406,16 +406,31 @@ class TestCommandPipelineHelpers(unittest.TestCase):
         dead_reports = [m for m in error_messages if "has died" in m]
         self.assertEqual(2, len(dead_reports), error_messages)
 
-    def test_propagate_exceptions_reraises_permanent_lftp_error(self):
-        """A permanent lftp credential failure must still raise AppError so the
-        engine stops (this engine-stopping behavior is unaffected by the new
-        worker guards)."""
+    def test_propagate_exceptions_raises_unrecoverable_for_lftp_errors_needing_a_settings_change(self):
+        """A bad login or an unreadable remote file needs the user; the
+        controller stops (UnrecoverableError keeps the web app up)."""
+        for message in ("Login failed: 530", "mirror: Access failed: Permission denied (/remote/file)"):
+            pc = self._make_pair_context("pair-1")
+            pc.lftp.raise_pending_error.side_effect = LftpError(message)
+            pipeline = self._make_pipeline([pc])
+
+            with self.subTest(message=message), self.assertRaises(UnrecoverableError):
+                pipeline.propagate_exceptions()
+
+    def test_propagate_exceptions_only_logs_a_file_that_vanished_mid_download(self):
+        """#793: the remote moved/deleted a file while it was downloading. The
+        job is already over and the next scan drops the file; it must not take
+        the process down."""
         pc = self._make_pair_context("pair-1")
-        pc.lftp.raise_pending_error.side_effect = LftpError("Login failed: 530")
+        pc.lftp.raise_pending_error.side_effect = LftpError(
+            "pget: Access failed: No such file (108. Visages - Aria pour un Masque de Colère.mp3)"
+        )
         pipeline = self._make_pipeline([pc])
 
-        with self.assertRaises(AppError):
-            pipeline.propagate_exceptions()
+        pipeline.propagate_exceptions()
+
+        pipeline._logger.warning.assert_called_once()
+        self.assertIn("No such file", pipeline._logger.warning.call_args[0][0])
 
 
 class TestFindLocalOnlyPaths(unittest.TestCase):

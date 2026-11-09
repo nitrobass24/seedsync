@@ -116,11 +116,20 @@ describe('SettingsPageComponent.onTestConnection', () => {
     expect(component.testingConnection).toBe(false);
   });
 
-  it('onCommandRestart() clears the lockout', () => {
+  it('onCommandRestart() clears the lockout once the restart request is accepted', () => {
     component.connectionLockedOut = true;
     component.onCommandRestart();
 
     expect(component.connectionLockedOut).toBe(false);
+  });
+
+  it('onCommandRestart() keeps the lockout when the restart request fails', () => {
+    const restart = TestBed.inject(ServerCommandService).restart as ReturnType<typeof vi.fn>;
+    restart.mockReturnValue(of({ success: false, data: null, errorMessage: 'nope' }));
+    component.connectionLockedOut = true;
+    component.onCommandRestart();
+
+    expect(component.connectionLockedOut).toBe(true);
   });
 });
 
@@ -169,6 +178,19 @@ describe('SettingsPageComponent connection-field changes invalidate a verified c
     setSubject.next({ success: true, data: 'lftp.remote_password updated', errorMessage: null });
 
     expect(component.connectionLockedOut).toBe(false);
+  });
+
+  it('does not clear the lockout or verified state when a connection field is re-saved unchanged', () => {
+    mockConfigService.configSnapshot = { lftp: { remote_port: 22 } };
+    for (const typed of ['22', '022']) {
+      component.connectionLockedOut = true;
+      component.connectionVerified = true;
+      component.onSetConfig('lftp', 'remote_port', typed);
+      setSubject.next({ success: true, data: 'lftp.remote_port set to 22', errorMessage: null });
+
+      expect(component.connectionLockedOut, typed).toBe(true);
+      expect(component.connectionVerified, typed).toBe(true);
+    }
   });
 
   it('does not reset connectionVerified for unrelated fields', () => {
