@@ -15,6 +15,7 @@ import os
 from common import Context
 from lftp import LftpError, LftpJobStatus
 from model import Model, ModelDiff, ModelError, ModelFile
+from system import apply_umask_modes
 
 from .command_pipeline import CommandPipeline
 from .controller_persist import ControllerPersist
@@ -211,6 +212,13 @@ class ModelUpdater:
         pkey = persist_key(diff.new_file.pair_id, diff.new_file.name)
         self._persist.downloaded_file_names.add(pkey)
         self.sync_persist_to_all_builders()
+
+        # lftp creates 0664/0775 whatever the umask; honour UMASK ourselves (#811).
+        # Done here, before any staging move, so the moved copy carries the modes.
+        if self._context.args.umask is not None:
+            apply_umask_modes(
+                os.path.join(pc.effective_local_path, diff.new_file.name), self._context.args.umask, self._logger
+            )
 
         # Auto-validate if enabled
         will_auto_validate = (

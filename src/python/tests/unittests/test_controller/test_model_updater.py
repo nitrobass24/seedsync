@@ -2,11 +2,12 @@
 
 import unittest
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from controller.model_updater import ModelUpdater
 from controller.persist_keys import KEY_SEP, persist_key
 from controller.scan.scanner_process import ScannerResult
+from model import ModelDiff, ModelFile
 
 
 class TestSyncPersistToAllBuilders(unittest.TestCase):
@@ -376,3 +377,43 @@ class TestUpdatePairContextScanResults(unittest.TestCase):
 
         pc.model_builder.set_remote_files.assert_called_once_with([])
         self.assertTrue(pc.remote_scan_received)
+
+
+class TestHandleDownloadedFileUmask(unittest.TestCase):
+    """#811: lftp creates 0664/0775 whatever the umask, so a completed download
+    is chmod'ed to 0666/0777 & ~UMASK before any staging move."""
+
+    def _run(self, umask):
+        pc = MagicMock()
+        pc.pair_id = "pair-1"
+        pc.effective_local_path = "/downloads"
+        context = MagicMock()
+        context.args.umask = umask
+        context.config.validate.enabled = False
+        context.config.controller.use_staging = False
+        updater = ModelUpdater(
+            pair_contexts=[pc],
+            persist=MagicMock(),
+            pipeline=MagicMock(),
+            registry=MagicMock(),
+            extract_process=MagicMock(),
+            validate_process=MagicMock(),
+            context=context,
+            password=None,
+            logger=MagicMock(),
+        )
+        new_file = ModelFile("Show.S01", True)
+        new_file.state = ModelFile.State.DOWNLOADED
+        new_file.pair_id = "pair-1"
+        diff = ModelDiff(ModelDiff.Change.ADDED, old_file=None, new_file=new_file)
+        with patch("controller.model_updater.apply_umask_modes") as apply:
+            updater._handle_downloaded_file(diff, pc)
+        return apply
+
+    def test_applies_modes_at_the_download_path_when_umask_is_set(self):
+        apply = self._run(0o000)
+        apply.assert_called_once()
+        self.assertEqual(("/downloads/Show.S01", 0o000), apply.call_args[0][:2])
+
+    def test_skips_when_umask_is_unset(self):
+        self._run(None).assert_not_called()

@@ -57,7 +57,6 @@ class Lftp:
     __SET_TEMP_FILE_NAME = "xfer:temp-file-name"
     __SET_SFTP_AUTO_CONFIRM = "sftp:auto-confirm"
     __SET_SFTP_CONNECT_PROGRAM = "sftp:connect-program"
-    __SET_SFTP_SET_PERMISSIONS = "sftp:set-permissions"
     __SET_MIRROR_SET_PERMISSIONS = "mirror:set-permissions"
     __SET_NET_SOCKET_BUFFER = "net:socket-buffer"
     __SET_MIRROR_PARALLEL_DIRECTORIES = "mirror:parallel-directories"
@@ -185,10 +184,6 @@ class Lftp:
         """SFTP-specific runtime settings (the historical default behavior)."""
         # Auto-add server to known host file
         self.sftp_auto_confirm = True
-        # Do not copy remote file permissions — let the local umask determine
-        # the permissions of downloaded files instead of preserving the seedbox's
-        # permission bits (e.g. 664 → remote) which would override our umask setting
-        self.__set(Lftp.__SET_SFTP_SET_PERMISSIONS, "false")
 
     def __setup_ftps(self):
         """FTPS-specific runtime settings (FTP-over-TLS, explicit AUTH TLS).

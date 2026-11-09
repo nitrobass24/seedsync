@@ -458,6 +458,15 @@ class TestPersistResilience(unittest.TestCase):
         self.assertIsInstance(ServiceRestart(), Exception)
 
 
+class TestParseUmask(unittest.TestCase):
+    def test_parses_octal_and_rejects_junk(self):
+        self.assertEqual(0o000, Seedsync._parse_umask("000"))
+        self.assertEqual(0o022, Seedsync._parse_umask(" 022 "))
+        self.assertIsNone(Seedsync._parse_umask(None))
+        self.assertIsNone(Seedsync._parse_umask(""))
+        self.assertIsNone(Seedsync._parse_umask("abc"))
+
+
 class TestCreateLogger(unittest.TestCase):
     """#792: a logdir adds the rotating file the Logs page reads; stdout
     (docker logs) must keep working either way."""
