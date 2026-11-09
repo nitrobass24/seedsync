@@ -681,9 +681,11 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         )
         return pipeline
 
-    def _make_pair_context(self, pair_id=None):
+    def _make_pair_context(self, pair_id=None, effective_local_path="/local"):
         pc = MagicMock()
         pc.pair_id = pair_id
+        pc.local_path = "/local"
+        pc.effective_local_path = effective_local_path
         return pc
 
     @staticmethod
@@ -1292,6 +1294,40 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         pc.lftp.queue.assert_called_once_with("Top/leaf.rar", False, exclude_patterns=[])
         callback.on_success.assert_called_once()
         callback.on_failure.assert_not_called()
+
+    def test_nested_queue_refused_while_staging(self):
+        """A nested job would land in the staging dir, which only top-level
+        moves empty, so it's refused rather than orphaned."""
+        pc = self._make_pair_context("pair-1", effective_local_path="/staging/pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        root = ModelFile("Top", True)
+        leaf = ModelFile("leaf.rar", False)
+        leaf.remote_size = 100
+        root.add_child(leaf)
+        command = Command(Command.Action.QUEUE, "Top/leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._dispatch_command(command, leaf, pc, [], notify)
+
+        self.assertFalse(result)
+        self.assertEqual(1, len(calls))
+        self.assertIn("staging", calls[0])
+        pc.lftp.queue.assert_not_called()
+
+    def test_top_level_queue_allowed_while_staging(self):
+        pc = self._make_pair_context("pair-1", effective_local_path="/staging/pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.general.exclude_patterns = ""
+        top = ModelFile("Top", True)
+        top.remote_size = 100
+        command = Command(Command.Action.QUEUE, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._dispatch_command(command, top, pc, [], notify)
+
+        self.assertTrue(result)
+        self.assertEqual([], calls)
+        pc.lftp.queue.assert_called_once_with("Top", True, exclude_patterns=[])
 
     def test_step_nested_queue_not_found_when_disabled(self):
         pc = self._make_pair_context("pair-1")

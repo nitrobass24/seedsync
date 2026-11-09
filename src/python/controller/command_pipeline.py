@@ -209,6 +209,11 @@ class CommandPipeline:
         if file.remote_size is None:
             _notify_failure(command, f"File '{command.filename}' does not exist remotely")
             return False
+        # A nested job would land under the staging dir, and the staging move
+        # only handles top-level names, so the download would never arrive.
+        if file.parent is not None and pc.effective_local_path != pc.local_path:
+            _notify_failure(command, "Queuing a nested file is not supported while staging is enabled")
+            return False
         try:
             exclude = parse_exclude_patterns(self._context.config.general.exclude_patterns)
             pc.lftp.queue(command.filename, file.is_dir, exclude_patterns=exclude)

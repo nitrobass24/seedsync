@@ -316,7 +316,8 @@ export const OPTIONS_CONTEXT_OTHER: IOptionsContext = {
       valuePath: ['controller', 'enable_nested_navigation'],
       description:
         'Browse into subfolders of a tracked directory and queue, stop, or delete ' +
-        'individual nested files and folders as independent jobs.',
+        'individual nested files and folders as independent jobs. Nested files ' +
+        "can't be queued while the staging directory is in use.",
     },
   ],
 };
