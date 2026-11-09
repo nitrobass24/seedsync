@@ -9,7 +9,7 @@
 ### Changed
 
 - **Docs** - The `UMASK` row says what actually happens, and the release checklist now includes syncing `master` back into `develop`. (#810, #818)
-- **Dependency updates** - Angular 22.2 group, ESLint 10.14, jsdom 31, tslib 2.9.1, docker/login-action 4.8.0, softprops/action-gh-release 3.0.4.
+- **Dependency updates** - Angular 22.2 group (#814), ESLint 10.14 (#816), jsdom 31 (#817), tslib 2.9.1 (#815), docker/login-action 4.8.0 (#812), softprops/action-gh-release 3.0.4 (#813).
 
 ## [1.2.0] - 2026-11-02
 
