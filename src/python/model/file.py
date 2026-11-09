@@ -16,6 +16,11 @@ _NON_NEGATIVE_FIELDS = frozenset({"remote_size", "local_size", "transferred_size
 _EQ_EXCLUDED_FIELDS = frozenset({"update_timestamp"})
 
 
+def is_nested_name(name: str) -> bool:
+    """True if name is a nested path (e.g. "TopDir/leaf.rar") rather than a bare top-level name."""
+    return "/" in name
+
+
 @dataclass(eq=False, repr=False)
 class ModelFile:
     """

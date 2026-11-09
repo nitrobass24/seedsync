@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from queue import Queue
 
 from common import Context, MultiprocessingLogger, UnrecoverableError
 from lftp import LftpError
-from model import ModelError, ModelFile
+from model import ModelError, ModelFile, is_nested_name
 
 from .commands import MAX_CONCURRENT_COMMAND_PROCESSES, Command, CommandProcessWrapper
 from .controller_persist import ControllerPersist
@@ -163,7 +163,7 @@ class CommandPipeline:
         (no top-level name ever contains '/', so the plain lookup already
         raises "not found" for a nested-looking name).
         """
-        if "/" not in filename or not self._context.config.controller.enable_nested_navigation:
+        if not is_nested_name(filename) or not self._context.config.controller.enable_nested_navigation:
             return self._registry.get_file(filename, pair_id=pair_id)
         return self._registry.resolve_full_path(filename, pair_id=pair_id)
 
@@ -223,6 +223,26 @@ class CommandPipeline:
         return True
 
     @staticmethod
+    def _iter_active_descendants(file: ModelFile) -> Iterator[ModelFile]:
+        """BFS over `file`'s descendants, yielding each independently active
+        (Queued/Downloading) node.
+
+        Each yielded node is the root of one independently active subtree (a
+        standalone nested job); its own children aren't independently active
+        while it is (no new job can start under an already-active node), so
+        we don't descend past it - stopping it stops everything beneath it
+        via the same lftp job.
+        """
+        active_states = (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING)
+        frontier = list(file.get_children())
+        while frontier:
+            descendant = frontier.pop(0)
+            if descendant.state in active_states:
+                yield descendant
+            else:
+                frontier.extend(descendant.get_children())
+
+    @staticmethod
     def _find_active_job_conflict(file: ModelFile) -> str | None:
         """Check for ancestor/descendant job conflicts before queuing or
         deleting `file`.
@@ -241,34 +261,19 @@ class CommandPipeline:
                 return f"'{ancestor.full_path}' is already queued/downloading, which includes '{file.full_path}'"
             ancestor = ancestor.parent
         if file.is_dir:
-            frontier = list(file.get_children())
-            while frontier:
-                descendant = frontier.pop(0)
-                if descendant.state in active_states:
-                    return f"'{descendant.full_path}' inside this folder is already queued/downloading"
-                frontier.extend(descendant.get_children())
+            descendant = next(CommandPipeline._iter_active_descendants(file), None)
+            if descendant is not None:
+                return f"'{descendant.full_path}' inside this folder is already queued/downloading"
         return None
 
     @staticmethod
     def _find_active_nested_descendants(file: ModelFile) -> list[ModelFile]:
         """Find independently active (Queued/Downloading) descendants of `file`.
 
-        Each result is the root of one independently active subtree (a
-        standalone nested job); its own children aren't independently active
-        for the same invariant _find_active_job_conflict relies on (no new job can
-        start under an already-active node), so we don't descend past it -
-        stopping it stops everything beneath it via the same lftp job.
+        See `_iter_active_descendants` for why we don't descend past an
+        active node.
         """
-        active_states = (ModelFile.State.QUEUED, ModelFile.State.DOWNLOADING)
-        result: list[ModelFile] = []
-        frontier = list(file.get_children())
-        while frontier:
-            descendant = frontier.pop(0)
-            if descendant.state in active_states:
-                result.append(descendant)
-                continue
-            frontier.extend(descendant.get_children())
-        return result
+        return list(CommandPipeline._iter_active_descendants(file))
 
     def _handle_stop(
         self,

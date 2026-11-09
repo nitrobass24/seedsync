@@ -15,7 +15,7 @@ import threading
 
 from common import Context
 from lftp import LftpError, LftpJobStatus
-from model import Model, ModelDiff, ModelError, ModelFile
+from model import Model, ModelDiff, ModelError, ModelFile, is_nested_name
 from system import apply_umask_modes
 
 from .command_pipeline import CommandPipeline
@@ -539,7 +539,7 @@ class ModelUpdater:
                 # it, distinct from the correctly nested row. Nested
                 # completions are still tracked via downloaded_file_names above
                 # and picked up by the regular recursive local scan.
-                pc.pending_completion.update(name for name in just_completed if "/" not in name)
+                pc.pending_completion.update(name for name in just_completed if not is_nested_name(name))
                 pc.local_scan_process.force_scan()
 
             # The active scanner is a top-level-only fast path (it stats a name
@@ -548,7 +548,7 @@ class ModelUpdater:
             # feeding one through would inject a fake top-level entry into the
             # model. Nested downloads still get picked up by the regular
             # recursive local scan, just less often.
-            pc.active_downloading_file_names = [name for name in current_downloading if "/" not in name]
+            pc.active_downloading_file_names = [name for name in current_downloading if not is_nested_name(name)]
             pc.prev_downloading_file_names = current_downloading
 
     def sync_persist_to_all_builders(self):

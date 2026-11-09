@@ -6,7 +6,7 @@ import os
 from collections import deque
 
 from lftp import LftpJobStatus
-from model import Model, ModelError, ModelFile
+from model import Model, ModelError, ModelFile, is_nested_name
 
 # my libs
 from system import SystemFile
@@ -180,8 +180,8 @@ class ModelBuilder:
         # their top-level ancestor is built. Split regardless of the
         # nested-navigation toggle: a nested job still running after the
         # toggle is turned off must not show up as a phantom top-level entry.
-        top_level_statuses = {n: s for n, s in self.__lftp_statuses.items() if "/" not in n}
-        nested_statuses = {n: s for n, s in self.__lftp_statuses.items() if "/" in n}
+        top_level_statuses = {n: s for n, s in self.__lftp_statuses.items() if not is_nested_name(n)}
+        nested_statuses = {n: s for n, s in self.__lftp_statuses.items() if is_nested_name(n)}
 
         all_file_names: set[str] = set[str]().union(
             effective_local.keys(), self.__remote_files.keys(), top_level_statuses.keys()
@@ -253,8 +253,8 @@ class ModelBuilder:
         local: SystemFile | None,
         status: LftpJobStatus | None,
         root_model_file: ModelFile,
-        nested_statuses: dict[str, LftpJobStatus] | None = None,
-        nested_dirs_to_finalize: list[ModelFile] | None = None,
+        nested_statuses: dict[str, LftpJobStatus],
+        nested_dirs_to_finalize: list[ModelFile],
     ):
         # Traverse SystemFile children tree in BFS order
         # Store (remote, local, status, model_file) tuple in traversal frontier where remote and local
@@ -263,7 +263,6 @@ class ModelBuilder:
         # for the pair
         # Note: in this case the frontier contains nodes that have already been process, it is
         #       merely used for traversing children
-        nested_statuses = nested_statuses or {}
         frontier: deque[tuple[SystemFile | None, SystemFile | None, LftpJobStatus | None, ModelFile]] = deque()
         if remote or local:
             frontier.append((remote, local, status, root_model_file))
@@ -299,7 +298,7 @@ class ModelBuilder:
                 # A standalone job queued directly on this nested file/folder (independent
                 # of whether its parent is being mirrored), matched by full_path
                 _nested_status = nested_statuses.get(_child_model_file.full_path)
-                if _nested_status is not None and _is_dir and nested_dirs_to_finalize is not None:
+                if _nested_status is not None and _is_dir:
                     nested_dirs_to_finalize.append(_child_model_file)
 
                 _child_model_file.state, _effective_transfer_state = ModelBuilder._determine_child_state(
