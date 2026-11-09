@@ -2040,6 +2040,29 @@ class TestLftpJobStatusParserHelpers(unittest.TestCase):
         self.parser.set_base_remote_dir_path("/other/base")
         self.assertEqual("leaf.rar", self.parser._extract_name("/remote/path/TopDir/leaf.rar"))
 
+    def test_extract_name_warns_when_base_set_but_does_not_match(self):
+        """A mismatched base silently loses the nested subdirectory, so it
+        must be logged - the operator needs to know nested names are
+        collapsing to basenames."""
+        self.parser.set_base_remote_dir_path("/other/base")
+        with self.assertLogs("LftpJobStatusParser", level="WARNING") as log:
+            self.parser._extract_name("/remote/path/TopDir/leaf.rar")
+        self.assertEqual(1, len(log.records))
+        message = log.records[0].getMessage()
+        self.assertIn("/remote/path/TopDir/leaf.rar", message)
+        self.assertIn("/other/base", message)
+
+    def test_extract_name_does_not_warn_when_base_not_set(self):
+        """No base configured is the expected pre-set_base_remote_dir_path
+        state, not an error - must not warn."""
+        with self.assertNoLogs("LftpJobStatusParser", level="WARNING"):
+            self.parser._extract_name("/remote/path/TopDir/leaf.rar")
+
+    def test_extract_name_does_not_warn_when_base_matches(self):
+        self.parser.set_base_remote_dir_path("/remote/path")
+        with self.assertNoLogs("LftpJobStatusParser", level="WARNING"):
+            self.parser._extract_name("/remote/path/TopDir/leaf.rar")
+
     def test_parse_pget_header_block_preserves_nested_name(self):
         self.parser.set_base_remote_dir_path("/tmp/test_lftp/remote")
         line = "[1] pget -c /tmp/test_lftp/remote/TopDir/leaf.rar -o /tmp/test_lftp/local/"

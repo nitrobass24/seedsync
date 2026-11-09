@@ -215,6 +215,12 @@ class LftpJobStatusParser:
             prefix = base + os.sep
             if normalized.startswith(prefix):
                 return normalized[len(prefix) :]
+            self.logger.warning(
+                "Echoed remote path '%s' does not start with configured base '%s'; "
+                "falling back to basename, which loses any nested subdirectory",
+                remote,
+                self.__base_remote_dir_path,
+            )
         return os.path.basename(normalized)
 
     @staticmethod
