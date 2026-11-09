@@ -215,11 +215,12 @@ describe('view-file-capabilities', () => {
       expect(caps.isRemotelyDeletable).toBe(false);
     });
 
-    it('offers Stop and blocks deletes for a folder with a downloading descendant', () => {
+    it('offers Stop and blocks queue and deletes for a folder with a downloading descendant', () => {
       const caps = deriveCapabilities(ViewFileStatus.DEFAULT, 100, 100, 100, 100, {
         ...base,
         hasDownloadingDescendant: true,
       });
+      expect(caps.isQueueable).toBe(false);
       expect(caps.isStoppable).toBe(true);
       expect(caps.isLocallyDeletable).toBe(false);
       expect(caps.isRemotelyDeletable).toBe(false);

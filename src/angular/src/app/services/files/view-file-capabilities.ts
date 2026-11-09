@@ -148,14 +148,16 @@ export function deriveCapabilities(
   //  - ancestorActive: the ancestor's job owns this file, so it can't be
   //    queued, stopped or deleted on its own (_find_active_job_conflict,
   //    "no independent download job to stop").
-  //  - hasDownloadingDescendant: deleting the folder would remove an in-flight
-  //    download (_find_active_job_conflict); Stop becomes "Stop Nested Downloads".
+  //  - hasDownloadingDescendant: a new job on the folder would race the nested
+  //    one, and deleting it would remove an in-flight download
+  //    (_find_active_job_conflict); Stop becomes "Stop Nested Downloads".
   //  - nested rows: EXTRACT/VALIDATE are top-level only, and so is QUEUE while
   //    staging is on.
   const nestedQueueBlocked = !tree.isTopLevel && tree.stagingEnabled;
   const isQueueable =
     ((QUEUEABLE_STATUSES.includes(status) && remoteSize > 0) || status === ViewFileStatus.CORRUPT) &&
     !tree.ancestorActive &&
+    !tree.hasDownloadingDescendant &&
     !nestedQueueBlocked;
   const isStoppable =
     (STOPPABLE_STATUSES.includes(status) || tree.hasDownloadingDescendant) && !tree.ancestorActive;
