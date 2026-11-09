@@ -231,10 +231,11 @@ class TestDetectLftpCompletionsNestedFiltering(unittest.TestCase):
 
         self.assertEqual({"TopLevel"}, pc.pending_completion)
 
-    def test_pending_completion_still_persists_nested_completion_via_downloaded_file_names(self):
-        """Nested completions must still be tracked, just via persist (picked up
-        by the regular recursive local scan) instead of the active-scan
-        fast path pending_completion feeds."""
+    def test_nested_completion_not_added_to_downloaded_file_names(self):
+        """Nothing reads a nested persist key (model_builder's persist-authority
+        check matches top-level names only) and nothing ever removes one, so
+        persisting it would just grow the persist file forever. Nested
+        completions are picked up by the regular recursive local scan instead."""
         pc = self._make_pair_context("pair-1")
         pc.prev_downloading_file_names = {"TopDir/nested_file.rar"}
         persist = MagicMock()
@@ -244,8 +245,21 @@ class TestDetectLftpCompletionsNestedFiltering(unittest.TestCase):
 
         updater._detect_lftp_completions(pc, statuses)
 
-        self.assertIn(persist_key("pair-1", "TopDir/nested_file.rar"), persist.downloaded_file_names)
+        self.assertNotIn(persist_key("pair-1", "TopDir/nested_file.rar"), persist.downloaded_file_names)
         self.assertEqual(set(), pc.pending_completion)
+
+    def test_top_level_completion_added_to_downloaded_file_names(self):
+        pc = self._make_pair_context("pair-1")
+        pc.prev_downloading_file_names = {"TopLevel"}
+        persist = MagicMock()
+        persist.downloaded_file_names = set()
+        updater = self._make_updater([pc], persist)
+        statuses = []
+
+        updater._detect_lftp_completions(pc, statuses)
+
+        self.assertIn(persist_key("pair-1", "TopLevel"), persist.downloaded_file_names)
+        self.assertEqual({"TopLevel"}, pc.pending_completion)
 
 
 class TestRetryFailedMoves(unittest.TestCase):

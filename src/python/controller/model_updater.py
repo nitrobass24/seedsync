@@ -528,7 +528,9 @@ class ModelUpdater:
             if just_completed:
                 for name in just_completed:
                     self._logger.info(f"Download completed (LFTP job finished): {name}")
-                self._persist.downloaded_file_names.update(persist_key(pc.pair_id, n) for n in just_completed)
+                self._persist.downloaded_file_names.update(
+                    persist_key(pc.pair_id, n) for n in just_completed if not is_nested_name(n)
+                )
                 self.sync_persist_to_all_builders()
                 # Same "/" filter as active_downloading_file_names below, same
                 # reason: pending_completion feeds active_scanner too (see the
@@ -537,8 +539,8 @@ class ModelUpdater:
                 # "TopDir/leaf.rar" under the local root) and injected a
                 # phantom top-level entry with the full nested name baked into
                 # it, distinct from the correctly nested row. Nested
-                # completions are still tracked via downloaded_file_names above
-                # and picked up by the regular recursive local scan.
+                # completions are picked up by the regular recursive local
+                # scan instead.
                 pc.pending_completion.update(name for name in just_completed if not is_nested_name(name))
                 pc.local_scan_process.force_scan()
 
