@@ -314,3 +314,24 @@ class TestMoveProcess(unittest.TestCase):
             f.write("ignored entirely")
 
         self.assertEqual(5, MoveProcess._get_copied_size(src_subdir, dst_subdir))
+
+    def test_move_applies_umask_modes_at_destination(self):
+        """#811: lftp leaves 0664/0775 in staging; the moved copy gets 0666/0777 & ~umask."""
+        import stat
+
+        src_tree = os.path.join(self.src_dir, "Show.S01")
+        os.makedirs(src_tree)
+        src_file = os.path.join(src_tree, "ep1.mkv")
+        with open(src_file, "w") as f:
+            f.write("x")
+        os.chmod(src_tree, 0o775)
+        os.chmod(src_file, 0o664)
+
+        process = self._make_process(
+            source_path=self.src_dir, dest_path=self.dst_dir, file_name="Show.S01", umask=0o000
+        )
+        self._run_process(process)
+
+        dst_tree = os.path.join(self.dst_dir, "Show.S01")
+        self.assertEqual(0o777, stat.S_IMODE(os.stat(dst_tree).st_mode))
+        self.assertEqual(0o666, stat.S_IMODE(os.stat(os.path.join(dst_tree, "ep1.mkv")).st_mode))

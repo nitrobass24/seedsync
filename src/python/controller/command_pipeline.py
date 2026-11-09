@@ -658,7 +658,13 @@ class CommandPipeline:
             self.moved_file_keys.add(move_key)
             return False
 
-        process = MoveProcess(source_path=staging_source, dest_path=dest_path, file_name=file_name, pair_id=pair_id)
+        process = MoveProcess(
+            source_path=staging_source,
+            dest_path=dest_path,
+            file_name=file_name,
+            pair_id=pair_id,
+            umask=self._context.args.umask,
+        )
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
         # Start before publishing bookkeeping: if start() raises we must not leave
         # a stale move_key (which would block every future retry of this move) or

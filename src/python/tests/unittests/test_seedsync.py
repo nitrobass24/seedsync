@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 from common import Config, IntegrationsConfig, PathPairsConfig, ServiceExit, ServiceRestart, UnrecoverableError
 from controller.scan import ScannerError
-from seedsync import Seedsync
+from seedsync import Seedsync, parse_umask
 
 
 class TestSeedsync(unittest.TestCase):
@@ -460,11 +460,11 @@ class TestPersistResilience(unittest.TestCase):
 
 class TestParseUmask(unittest.TestCase):
     def test_parses_octal_and_rejects_junk(self):
-        self.assertEqual(0o000, Seedsync._parse_umask("000"))
-        self.assertEqual(0o022, Seedsync._parse_umask(" 022 "))
-        self.assertIsNone(Seedsync._parse_umask(None))
-        self.assertIsNone(Seedsync._parse_umask(""))
-        self.assertIsNone(Seedsync._parse_umask("abc"))
+        self.assertEqual(0o000, parse_umask("000"))
+        self.assertEqual(0o022, parse_umask(" 022 "))
+        self.assertIsNone(parse_umask(None))
+        self.assertIsNone(parse_umask(""))
+        self.assertIsNone(parse_umask("abc"))
 
 
 class TestCreateLogger(unittest.TestCase):
