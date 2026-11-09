@@ -78,6 +78,28 @@ export interface ViewFileCapabilities {
 }
 
 /**
+ * Where a file sits in the nested tree. The defaults describe a top-level
+ * row with nested navigation off, so callers outside the tree can omit it.
+ */
+export interface TreePosition {
+  /** False for a nested row. */
+  isTopLevel: boolean;
+  /** An ancestor's own job is Queued/Downloading, so it owns this file's transfer. */
+  ancestorActive: boolean;
+  /** A folder whose own job is idle but which has an independently active nested job. */
+  hasDownloadingDescendant: boolean;
+  /** Staging is on; nested jobs would land in staging, which only moves top-level names. */
+  stagingEnabled: boolean;
+}
+
+const TOP_LEVEL: TreePosition = {
+  isTopLevel: true,
+  ancestorActive: false,
+  hasDownloadingDescendant: false,
+  stagingEnabled: false,
+};
+
+/**
  * Map a backend model-file state to the view status.
  *
  * The only non-1:1 case is DEFAULT: a file in DEFAULT with both a local and a
@@ -111,6 +133,7 @@ export function mapState(state: ModelFileState, localSize: number, remoteSize: n
  * @param remoteSize coalesced (non-null) remote size in bytes
  * @param localSizeRaw the raw, possibly-null local size from the model file
  * @param remoteSizeRaw the raw, possibly-null remote size from the model file
+ * @param tree where the file sits in the nested tree
  */
 export function deriveCapabilities(
   status: ViewFileStatus,
@@ -118,18 +141,33 @@ export function deriveCapabilities(
   remoteSize: number,
   localSizeRaw: number | null,
   remoteSizeRaw: number | null,
+  tree: TreePosition = TOP_LEVEL,
 ): ViewFileCapabilities {
+  // Each rule below mirrors a backend refusal in CommandPipeline, so the
+  // button is disabled up front instead of failing on click:
+  //  - ancestorActive: the ancestor's job owns this file, so it can't be
+  //    queued, stopped or deleted on its own (_find_active_job_conflict,
+  //    "no independent download job to stop").
+  //  - hasDownloadingDescendant: deleting the folder would remove an in-flight
+  //    download (_find_active_job_conflict); Stop becomes "Stop Nested Downloads".
+  //  - nested rows: EXTRACT/VALIDATE are top-level only, and so is QUEUE while
+  //    staging is on.
+  const nestedQueueBlocked = !tree.isTopLevel && tree.stagingEnabled;
   const isQueueable =
-    (QUEUEABLE_STATUSES.includes(status) && remoteSize > 0) || status === ViewFileStatus.CORRUPT;
-  const isStoppable = STOPPABLE_STATUSES.includes(status);
-  const isExtractable = LOCAL_ACTION_STATUSES.includes(status) && localSize > 0;
-  const isLocallyDeletable = LOCAL_ACTION_STATUSES.includes(status) && localSize > 0;
-  const isRemotelyDeletable = REMOTELY_DELETABLE_STATUSES.includes(status) && remoteSize > 0;
+    ((QUEUEABLE_STATUSES.includes(status) && remoteSize > 0) || status === ViewFileStatus.CORRUPT) &&
+    !tree.ancestorActive &&
+    !nestedQueueBlocked;
+  const isStoppable =
+    (STOPPABLE_STATUSES.includes(status) || tree.hasDownloadingDescendant) && !tree.ancestorActive;
+  const isExtractable = LOCAL_ACTION_STATUSES.includes(status) && localSize > 0 && tree.isTopLevel;
+  const deleteBlocked = tree.ancestorActive || tree.hasDownloadingDescendant;
+  const isLocallyDeletable = LOCAL_ACTION_STATUSES.includes(status) && localSize > 0 && !deleteBlocked;
+  const isRemotelyDeletable = REMOTELY_DELETABLE_STATUSES.includes(status) && remoteSize > 0 && !deleteBlocked;
   const isValidatable =
-    VALIDATABLE_STATUSES.includes(status) && localSizeRaw != null && remoteSizeRaw != null;
+    VALIDATABLE_STATUSES.includes(status) && localSizeRaw != null && remoteSizeRaw != null && tree.isTopLevel;
 
   let validateTooltip: string | null = null;
-  if (!isValidatable && VALIDATABLE_STATUSES.includes(status) && remoteSizeRaw == null) {
+  if (!isValidatable && tree.isTopLevel && VALIDATABLE_STATUSES.includes(status) && remoteSizeRaw == null) {
     validateTooltip = VALIDATE_UNAVAILABLE_TOOLTIP;
   }
 

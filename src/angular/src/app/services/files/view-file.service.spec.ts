@@ -39,12 +39,19 @@ function makeModelFile(
   };
 }
 
+interface TestConfig {
+  controller: { enable_nested_navigation: boolean; use_staging?: boolean; staging_path?: string };
+}
+const STAGING_ON: TestConfig = {
+  controller: { enable_nested_navigation: true, use_staging: true, staging_path: "/staging" },
+};
+
 describe("ViewFileService", () => {
   let service: ViewFileService;
   let modelFilesSubject: BehaviorSubject<Map<string, ModelFile>>;
   let pairsSubject: BehaviorSubject<PathPair[]>;
   // Nested navigation on by default, so nested-row specs see children.
-  let configSubject: BehaviorSubject<{ controller: { enable_nested_navigation: boolean } }>;
+  let configSubject: BehaviorSubject<TestConfig>;
   let mockModelFileService: {
     files$: ReturnType<BehaviorSubject<Map<string, ModelFile>>["asObservable"]>;
     command: ReturnType<typeof vi.fn>;
@@ -53,7 +60,7 @@ describe("ViewFileService", () => {
   beforeEach(() => {
     modelFilesSubject = new BehaviorSubject<Map<string, ModelFile>>(new Map());
     pairsSubject = new BehaviorSubject<PathPair[]>([]);
-    configSubject = new BehaviorSubject<{ controller: { enable_nested_navigation: boolean } }>({
+    configSubject = new BehaviorSubject<TestConfig>({
       controller: { enable_nested_navigation: true },
     });
     mockModelFileService = {
@@ -561,6 +568,46 @@ describe("ViewFileService", () => {
     const file = latestFiles()[0];
     expect(file.status).toBe(ViewFileStatus.DEFAULT);
     expect(file.isStoppable).toBe(true);
+  });
+
+  it("does not set hasDownloadingDescendant while nested navigation is off", () => {
+    configSubject.next({ controller: { enable_nested_navigation: false } });
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        state: ModelFileState.DEFAULT,
+        children: [makeModelFile({ name: "child", state: ModelFileState.DOWNLOADING })],
+      }),
+    ]);
+    const dir = latestFiles()[0];
+    expect(dir.hasDownloadingDescendant).toBe(false);
+    expect(dir.isStoppable).toBe(false);
+  });
+
+  function emitQueueableTree(): void {
+    emitModelFiles([
+      makeModelFile({
+        name: "dir",
+        is_dir: true,
+        remote_size: 100,
+        children: [makeModelFile({ name: "child", remote_size: 100 })],
+      }),
+    ]);
+  }
+
+  it("blocks queuing nested rows while staging is on, but not the top-level row", () => {
+    configSubject.next(STAGING_ON);
+    emitQueueableTree();
+    expect(findByName(latestFiles(), "dir")!.isQueueable).toBe(true);
+    expect(findByName(latestFiles(), "child")!.isQueueable).toBe(false);
+  });
+
+  it("re-enables queuing nested rows when staging is turned off", () => {
+    configSubject.next(STAGING_ON);
+    emitQueueableTree();
+    configSubject.next({ controller: { enable_nested_navigation: true, use_staging: false } });
+    expect(findByName(latestFiles(), "child")!.isQueueable).toBe(true);
   });
 
   it("should update hasDownloadingDescendant when only a nested descendant's state changes, with identical parent scalar fields", () => {

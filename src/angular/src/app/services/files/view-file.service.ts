@@ -56,6 +56,8 @@ export class ViewFileService {
   // Nested rows exist in the view only while nested navigation is enabled, so
   // selection, select-all and bulk actions can never reach a hidden row.
   private nestedNavEnabled = false;
+  // Nested rows can't be queued while staging is on (see deriveCapabilities).
+  private stagingEnabled = false;
 
   // Resolve a view-file key to its backing ModelFile from the diffing-owned
   // snapshot. Threaded into ViewFileCommandService so command dispatch keeps the
@@ -104,13 +106,18 @@ export class ViewFileService {
       }
     });
 
-    // Toggling nested navigation adds or drops every nested row, so rebuild the
-    // whole view; the rebuild also prunes checked keys of rows that went away.
+    // Toggling nested navigation adds or drops every nested row, and staging
+    // changes what nested rows offer, so rebuild the whole view; the rebuild
+    // also prunes checked keys of rows that went away.
     this.configService.config$.pipe(
-      map((config) => !!config?.controller.enable_nested_navigation),
-      distinctUntilChanged(),
-    ).subscribe((enabled) => {
-      this.nestedNavEnabled = enabled;
+      map((config) => ({
+        nested: !!config?.controller.enable_nested_navigation,
+        staging: !!(config?.controller.use_staging && config.controller.staging_path),
+      })),
+      distinctUntilChanged((a, b) => a.nested === b.nested && a.staging === b.staging),
+    ).subscribe(({ nested, staging }) => {
+      this.nestedNavEnabled = nested;
+      this.stagingEnabled = staging;
       if (this.prevModelFiles.size > 0) {
         this.buildViewFromModelFiles(this.prevModelFiles, true);
       }
@@ -139,41 +146,15 @@ export class ViewFileService {
 
   // Selection can land on a nested row (any depth), not just a top-level one,
   // so it can't use `indices` (built only from the top-level array) or a
-  // flat findIndex. These walk the whole forest, re-spreading only the
-  // ancestors of a changed node so OnPush sees the update.
-  private findSelectable(nodes: readonly ViewFile[], key: string): ViewFile | undefined {
-    for (const node of nodes) {
-      if (viewFileKey(node) === key) return node;
-      const found = this.findSelectable(node.children, key);
-      if (found) return found;
-    }
-    return undefined;
-  }
-
-  private clearSelectionInTree(node: ViewFile): ViewFile {
-    if (node.isSelected) {
-      return { ...node, isSelected: false };
-    }
-    if (node.children.length === 0) {
-      return node;
-    }
-    let changed = false;
-    const children = node.children.map((child) => {
-      const updated = this.clearSelectionInTree(child);
-      if (updated !== child) changed = true;
-      return updated;
-    });
-    return changed ? { ...node, children } : node;
-  }
-
+  // flat findIndex; it walks the whole forest instead.
   setSelected(file: ViewFile): void {
     const key = viewFileKey(file);
-    if (this.findSelectable(this.files, key)?.isSelected) {
+    if (findInForest(this.files, (row) => viewFileKey(row) === key)?.isSelected) {
       return;
     }
 
     let targetFound = false;
-    const cleared = this.files.map((f) => this.clearSelectionInTree(f));
+    const cleared = this.files.map(clearSelectionInTree);
     this.files = cleared.map((f) => {
       const updated = selectInTree(f, key);
       if (updated !== f) targetFound = true;
@@ -186,7 +167,7 @@ export class ViewFileService {
   }
 
   unsetSelected(): void {
-    const cleared = this.files.map((f) => this.clearSelectionInTree(f));
+    const cleared = this.files.map(clearSelectionInTree);
     if (cleared.some((f, i) => f !== this.files[i])) {
       this.files = cleared;
       this.pushViewFiles();
@@ -210,13 +191,11 @@ export class ViewFileService {
     this.updateCheckedState();
   }
 
-  // `visibleKeys`, when given, is the caller's current flattened display-order
-  // key list (top-level + expanded nested rows) so a shift-click range spans
-  // exactly what's on screen, including nested rows. Falls back to the
-  // top-level-only filtered list for callers that don't track a flattened view.
-  shiftCheck(file: ViewFile, visibleKeys?: readonly string[]): void {
-    const filteredKeys = visibleKeys ?? this.filteredFilesSubject.getValue().map(viewFileKey);
-    this.selection.shiftRange(viewFileKey(file), filteredKeys);
+  // `visibleKeys` is the caller's current flattened display-order key list
+  // (top-level + expanded nested rows) so a shift-click range spans exactly
+  // what's on screen, including nested rows.
+  shiftCheck(file: ViewFile, visibleKeys: readonly string[]): void {
+    this.selection.shiftRange(viewFileKey(file), visibleKeys);
     this.updateCheckedState();
   }
 
@@ -358,10 +337,10 @@ export class ViewFileService {
       const index = this.indices.get(key)!;
       const oldViewFile = newViewFiles[index];
       // The selected row may be nested anywhere in this subtree; carry it over.
-      const selectedKey = findSelectedKey(oldViewFile);
-      let newViewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap, this.nestedNavEnabled);
-      if (selectedKey !== undefined) {
-        newViewFile = selectInTree(newViewFile, selectedKey);
+      const selected = findInForest([oldViewFile], (row) => row.isSelected);
+      let newViewFile = this.createTopLevelViewFile(modelFiles.get(key)!);
+      if (selected !== undefined) {
+        newViewFile = selectInTree(newViewFile, viewFileKey(selected));
       }
       newViewFiles[index] = this.sortNewChildren(this.reconcileCheckedTree(newViewFile));
       const liveKeys = new Set(collectAllKeys([newViewFile]));
@@ -374,7 +353,7 @@ export class ViewFileService {
     // Do the adds (requires re-sort)
     for (const key of addedKeys) {
       reSort = true;
-      const viewFile = createViewFile(modelFiles.get(key)!, this.pairNameMap, this.nestedNavEnabled);
+      const viewFile = this.createTopLevelViewFile(modelFiles.get(key)!);
       newViewFiles.push(this.sortNewChildren(this.reconcileCheckedTree(viewFile)));
       this.indices.set(viewFileKey(viewFile), newViewFiles.length - 1);
     }
@@ -412,6 +391,10 @@ export class ViewFileService {
     this.logger.debug('New view model: %O', this.files);
   }
 
+  private createTopLevelViewFile(modelFile: ModelFile): ViewFile {
+    return createViewFile(modelFile, this.pairNameMap, this.nestedNavEnabled, this.stagingEnabled);
+  }
+
   private pushViewFiles(): void {
     this.filesSubject.next(this.files);
 
@@ -431,30 +414,17 @@ export class ViewFileService {
   }
 }
 
-// Selects the row with `key` anywhere in `node`'s subtree, re-spreading only
-// its ancestors so unchanged rows keep identity. Returns `node` itself if the
-// key isn't in the subtree.
-function selectInTree(node: ViewFile, key: string): ViewFile {
-  if (viewFileKey(node) === key) {
-    return { ...node, isSelected: true };
+// Every row in the forest, depth-first, at any depth.
+function* walkForest(files: readonly ViewFile[]): Generator<ViewFile> {
+  for (const file of files) {
+    yield file;
+    yield* walkForest(file.children);
   }
-  let changed = false;
-  const children = node.children.map((child) => {
-    const updated = selectInTree(child, key);
-    if (updated !== child) changed = true;
-    return updated;
-  });
-  return changed ? { ...node, children } : node;
 }
 
-// Key of the selected row anywhere in `node`'s subtree, if any.
-function findSelectedKey(node: ViewFile): string | undefined {
-  if (node.isSelected) {
-    return viewFileKey(node);
-  }
-  for (const child of node.children) {
-    const found = findSelectedKey(child);
-    if (found !== undefined) return found;
+function findInForest(files: readonly ViewFile[], predicate: (row: ViewFile) => boolean): ViewFile | undefined {
+  for (const row of walkForest(files)) {
+    if (predicate(row)) return row;
   }
   return undefined;
 }
@@ -463,14 +433,30 @@ function findSelectedKey(node: ViewFile): string | undefined {
 // all" reaches nested descendants too, whether or not their parent is
 // currently expanded in the flattened display list.
 function collectAllKeys(files: readonly ViewFile[]): string[] {
-  const keys: string[] = [];
-  for (const file of files) {
-    keys.push(viewFileKey(file));
-    if (file.children.length > 0) {
-      keys.push(...collectAllKeys(file.children));
-    }
-  }
-  return keys;
+  return Array.from(walkForest(files), viewFileKey);
+}
+
+// Rebuilds `node`'s subtree with `update` applied, re-spreading only the
+// ancestors of changed rows so unchanged rows keep identity (OnPush). `update`
+// returns a replacement row, or undefined to keep the row and walk its children.
+function updateInTree(node: ViewFile, update: (row: ViewFile) => ViewFile | undefined): ViewFile {
+  const replaced = update(node);
+  if (replaced !== undefined) return replaced;
+  let changed = false;
+  const children = node.children.map((child) => {
+    const updated = updateInTree(child, update);
+    if (updated !== child) changed = true;
+    return updated;
+  });
+  return changed ? { ...node, children } : node;
+}
+
+function selectInTree(node: ViewFile, key: string): ViewFile {
+  return updateInTree(node, (row) => (viewFileKey(row) === key ? { ...row, isSelected: true } : undefined));
+}
+
+function clearSelectionInTree(node: ViewFile): ViewFile {
+  return updateInTree(node, (row) => (row.isSelected ? { ...row, isSelected: false } : undefined));
 }
 
 // Recursively applies `comparator` at every level of the forest, not just
@@ -567,6 +553,7 @@ function createViewFile(
   modelFile: ModelFile,
   pairNameMap: Map<string, string>,
   includeChildren: boolean,
+  stagingEnabled: boolean,
   isTopLevel = true,
   ancestorActive = false,
 ): ViewFile {
@@ -580,57 +567,27 @@ function createViewFile(
   }
 
   const status = mapState(modelFile.state, localSize, remoteSize);
+  // Applies at any depth - a folder anywhere in the stack (top-level or
+  // nested) shows this whenever something independently active exists
+  // beneath it, so e.g. downloading "NestedTest/Extras/bonus.bin" flags both
+  // "NestedTest" and "Extras". Needs nested navigation on (the backend only
+  // stops nested jobs then). The state guard is required: while the folder's
+  // own mirror job runs, its children take Queued/Downloading from it
+  // (ModelBuilder._determine_child_state), which isn't an independent job.
+  const hasDownloadingDescendant =
+    includeChildren &&
+    modelFile.is_dir &&
+    modelFile.state !== ModelFileState.QUEUED &&
+    modelFile.state !== ModelFileState.DOWNLOADING &&
+    hasActiveDescendant(modelFile);
   const capabilities = deriveCapabilities(
     status,
     localSize,
     remoteSize,
     modelFile.local_size,
     modelFile.remote_size,
+    { isTopLevel, ancestorActive, hasDownloadingDescendant, stagingEnabled },
   );
-  // Applies at any depth - a folder anywhere in the stack (top-level or
-  // nested) shows this whenever something independently active exists
-  // beneath it, so e.g. downloading "NestedTest/Extras/bonus.bin" flags both
-  // "NestedTest" and "Extras". Never true simultaneously with the folder's
-  // own state being active - see CommandPipeline._find_active_job_conflict, which
-  // blocks a new independent nested job while any ancestor (at any depth) is
-  // already Queued/Downloading. The state guard here is defense-in-depth for
-  // that invariant.
-  const hasDownloadingDescendant =
-    modelFile.is_dir &&
-    modelFile.state !== ModelFileState.QUEUED &&
-    modelFile.state !== ModelFileState.DOWNLOADING &&
-    hasActiveDescendant(modelFile);
-  if (hasDownloadingDescendant) {
-    capabilities.isStoppable = true; // enables "Stop Nested Downloads"
-    // Deleting the folder would remove an in-flight download; the backend
-    // rejects it (CommandPipeline._find_active_job_conflict).
-    capabilities.isLocallyDeletable = false;
-    capabilities.isRemotelyDeletable = false;
-  }
-
-  // Nested EXTRACT/VALIDATE are out of scope for this feature (they interact
-  // with the staging/move pipeline, which never had to account for nested
-  // paths) - the backend rejects them unconditionally, so don't offer them.
-  if (!isTopLevel) {
-    capabilities.isExtractable = false;
-    capabilities.isValidatable = false;
-    capabilities.validateTooltip = null;
-  }
-
-  // An ancestor's own job is consuming this file's transfer already; queuing
-  // or stopping it individually doesn't apply. Without this, a child whose
-  // state was set to Queued/Downloading purely by participating in the
-  // parent's mirror job (ModelBuilder._determine_child_state) would show as
-  // individually stoppable, and clicking Stop would hit the backend's
-  // "no independent job to stop" failure instead of being disabled up front.
-  // Deleting it would pull files out from under that job, so the backend
-  // rejects deletes too (CommandPipeline._find_active_job_conflict).
-  if (ancestorActive) {
-    capabilities.isQueueable = false;
-    capabilities.isStoppable = false;
-    capabilities.isLocallyDeletable = false;
-    capabilities.isRemotelyDeletable = false;
-  }
 
   const isCleanupLocalable =
     LOCAL_ACTION_STATUSES.includes(status) &&
@@ -643,7 +600,9 @@ function createViewFile(
   const childAncestorActive =
     ancestorActive || modelFile.state === ModelFileState.QUEUED || modelFile.state === ModelFileState.DOWNLOADING;
   const children = includeChildren
-    ? modelFile.children.map((child) => createViewFile(child, pairNameMap, true, false, childAncestorActive))
+    ? modelFile.children.map((child) =>
+        createViewFile(child, pairNameMap, true, stagingEnabled, false, childAncestorActive),
+      )
     : [];
 
   return {

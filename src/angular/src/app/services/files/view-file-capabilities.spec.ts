@@ -200,4 +200,47 @@ describe('view-file-capabilities', () => {
       expect([...REMOTELY_DELETABLE_STATUSES]).toEqual([...LOCAL_ACTION_STATUSES, ViewFileStatus.DELETED]);
     });
   });
+  describe('deriveCapabilities tree position', () => {
+    const base = { isTopLevel: true, ancestorActive: false, hasDownloadingDescendant: false, stagingEnabled: false };
+
+    it('disables queue, stop and deletes when an ancestor job is active', () => {
+      const caps = deriveCapabilities(ViewFileStatus.DOWNLOADING, 100, 100, 100, 100, {
+        ...base,
+        isTopLevel: false,
+        ancestorActive: true,
+      });
+      expect(caps.isQueueable).toBe(false);
+      expect(caps.isStoppable).toBe(false);
+      expect(caps.isLocallyDeletable).toBe(false);
+      expect(caps.isRemotelyDeletable).toBe(false);
+    });
+
+    it('offers Stop and blocks deletes for a folder with a downloading descendant', () => {
+      const caps = deriveCapabilities(ViewFileStatus.DEFAULT, 100, 100, 100, 100, {
+        ...base,
+        hasDownloadingDescendant: true,
+      });
+      expect(caps.isStoppable).toBe(true);
+      expect(caps.isLocallyDeletable).toBe(false);
+      expect(caps.isRemotelyDeletable).toBe(false);
+    });
+
+    it('never offers extract or validate on a nested row', () => {
+      const caps = deriveCapabilities(ViewFileStatus.DOWNLOADED, 100, 0, 100, null, { ...base, isTopLevel: false });
+      expect(caps.isExtractable).toBe(false);
+      expect(caps.isValidatable).toBe(false);
+      expect(caps.validateTooltip).toBeNull();
+    });
+
+    it('blocks queuing a nested row only while staging is on', () => {
+      const nested = { ...base, isTopLevel: false };
+      expect(deriveCapabilities(ViewFileStatus.DEFAULT, 0, 100, 0, 100, nested).isQueueable).toBe(true);
+      expect(
+        deriveCapabilities(ViewFileStatus.DEFAULT, 0, 100, 0, 100, { ...nested, stagingEnabled: true }).isQueueable,
+      ).toBe(false);
+      expect(
+        deriveCapabilities(ViewFileStatus.DEFAULT, 0, 100, 0, 100, { ...base, stagingEnabled: true }).isQueueable,
+      ).toBe(true);
+    });
+  });
 });
