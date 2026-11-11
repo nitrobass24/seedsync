@@ -6,6 +6,7 @@ import datetime
 import errno
 import os
 import shutil
+import stat
 from dataclasses import dataclass
 from typing import override
 
@@ -139,8 +140,11 @@ class MoveProcess(AppOneShotProcess):
 
         # What we are about to move, so the UMASK pass can be limited to it: a
         # copy that merges into an existing destination must leave the files
-        # already there alone (#811).
+        # already there alone (#811). Directories that already exist at the
+        # destination keep their own modes too: copytree would copystat the
+        # source's onto them, and the UMASK pass must not widen them either.
         moved_entries = relative_entries(src) if self.__umask is not None else []
+        existing_dir_modes = self._existing_dir_modes(dst)
 
         # Ensure destination parent directory exists
         os.makedirs(self.__dest_path, exist_ok=True)
@@ -194,7 +198,22 @@ class MoveProcess(AppOneShotProcess):
             shutil.rmtree(src)
 
         self.logger.info(f"Move completed via copy+delete: {self.__file_name}")
-        self.__apply_modes(dst, moved_entries)
+        for rel, mode in existing_dir_modes.items():
+            os.chmod(os.path.join(dst, rel), mode)
+        self.__apply_modes(dst, [e for e in moved_entries if e[0] not in existing_dir_modes])
+
+    @staticmethod
+    def _existing_dir_modes(dst: str) -> dict[str, int]:
+        """Modes of the directories already present under dst (merge case)."""
+        if not os.path.isdir(dst) or os.path.islink(dst):
+            return {}
+        modes: dict[str, int] = {".": stat.S_IMODE(os.stat(dst).st_mode)}
+        for dirpath, dirnames, _filenames in os.walk(dst):
+            for name in dirnames:
+                full = os.path.join(dirpath, name)
+                if not os.path.islink(full):
+                    modes[os.path.normpath(os.path.relpath(full, dst))] = stat.S_IMODE(os.stat(full).st_mode)
+        return modes
 
     def __apply_modes(self, dst: str, moved_entries: list[tuple[str, bool]]) -> None:
         if self.__umask is not None:

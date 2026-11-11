@@ -14,8 +14,9 @@ def _chmod(path: str, mode: int, logger: logging.Logger) -> None:
     try:
         if os.path.islink(path):
             return
-        current = stat.S_IMODE(os.stat(path).st_mode)
-        if stat.S_ISDIR(os.stat(path).st_mode):
+        st = os.stat(path)
+        current = stat.S_IMODE(st.st_mode)
+        if stat.S_ISDIR(st.st_mode):
             mode |= current & _DIR_SPECIAL_BITS
         if current != mode:
             os.chmod(path, mode)

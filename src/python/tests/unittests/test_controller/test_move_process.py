@@ -352,6 +352,7 @@ class TestMoveProcess(unittest.TestCase):
         with open(private, "w") as f:
             f.write("mine")
         os.chmod(private, 0o600)
+        os.chmod(dst_tree, 0o700)
 
         with mock.patch("os.rename", side_effect=OSError(errno.EXDEV, "cross-device")):
             process = self._make_process(
@@ -359,5 +360,9 @@ class TestMoveProcess(unittest.TestCase):
             )
             self._run_process(process)
 
+        # Pre-existing content keeps its modes (copytree's copystat would have
+        # put the source's 0775 on the directory; the UMASK pass must not widen it)
+        self.assertEqual(0o700, stat.S_IMODE(os.stat(dst_tree).st_mode))
         self.assertEqual(0o600, stat.S_IMODE(os.stat(private).st_mode))
+        # The moved file gets the UMASK treatment
         self.assertEqual(0o666, stat.S_IMODE(os.stat(os.path.join(dst_tree, "ep2.mkv")).st_mode))
