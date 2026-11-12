@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 
 from common import Context
 from lftp import LftpError, LftpJobStatus
 from model import Model, ModelDiff, ModelError, ModelFile
+from system import apply_umask_modes
 
 from .command_pipeline import CommandPipeline
 from .controller_persist import ControllerPersist
@@ -211,6 +213,19 @@ class ModelUpdater:
         pkey = persist_key(diff.new_file.pair_id, diff.new_file.name)
         self._persist.downloaded_file_names.add(pkey)
         self.sync_persist_to_all_builders()
+
+        # lftp creates 0664/0775 whatever the umask; honour UMASK ourselves (#811).
+        # With staging on, MoveProcess applies the modes at the final location
+        # (out of process); otherwise a thread does it so a large tree on a slow
+        # filesystem can't stall the controller loop.
+        use_staging = self._context.config.controller.use_staging and self._context.config.controller.staging_path
+        if self._context.args.umask is not None and not use_staging:
+            threading.Thread(
+                target=apply_umask_modes,
+                args=(os.path.join(pc.local_path, diff.new_file.name), self._context.args.umask, self._logger),
+                name=f"umask-{diff.new_file.name}",
+                daemon=True,
+            ).start()
 
         # Auto-validate if enabled
         will_auto_validate = (

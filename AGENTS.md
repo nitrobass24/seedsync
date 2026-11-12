@@ -103,6 +103,7 @@ Releases are the only PRs that bump versions.
 3. Commit as `Release vX.Y.Z - Brief description` — the one approved exception to the conventional-commit format, so release commits are greppable in history. Push, then `gh pr create --base master`.
 4. After merge: `git checkout master && git pull && git tag vX.Y.Z && git push origin vX.Y.Z`. CI builds multi-arch images, pushes `X.Y.Z`, `X.Y`, `latest`, and creates the GitHub release.
 5. Edit the release notes to match the CHANGELOG entry and include `docker pull ghcr.io/nitrobass24/seedsync:X.Y.Z`. Verify the image pulls.
+6. Sync `master` back into `develop`: `git checkout develop && git pull --ff-only && git merge --ff-only origin/master && git push`. If `develop` has moved on and the fast-forward is refused, open a `master`→`develop` sync PR instead (resolve conflicts there). The release commit (CHANGELOG entry + version bump) only lands on `master` otherwise, and the next release branch would start from a stale version (v1.1.0 was missing from `develop` until v1.2.0). Check that the `Deploy Docs` run on `master` succeeded too; it runs on `master` pushes touching `website/` or its own workflow file, and can be re-run from the Actions tab (`workflow_dispatch`).
 
 Semver: major = breaking, minor = features, patch = fixes/cleanup. The `Publish` job can flake on a Docker Hub pull timeout — `gh run rerun <id> --failed`, don't re-tag.
 

@@ -115,7 +115,9 @@ class TestLftpSpawn(unittest.TestCase):
         # sftp:* settings issued
         settings = sent_settings(fake)
         self.assertEqual("1", settings.get("sftp:auto-confirm"))
-        self.assertEqual("false", settings.get("sftp:set-permissions"))
+        # "sftp:set-permissions" is not an lftp variable (lftp 4.9: "no such
+        # variable"); it was a no-op and is no longer sent (#811).
+        self.assertNotIn("sftp:set-permissions", settings)
         # #791: mirror must not override the umask with the remote's mode
         self.assertEqual("false", settings.get("mirror:set-permissions"))
         # No FTPS settings
