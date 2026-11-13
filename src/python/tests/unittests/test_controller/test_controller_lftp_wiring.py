@@ -7,7 +7,7 @@ import logging
 import unittest
 from unittest.mock import MagicMock, patch
 
-from common import Args, Config, Context, Status
+from common import Args, Config, Constants, Context, Status
 from controller.controller import Controller
 
 
@@ -108,6 +108,26 @@ class TestControllerLftpWiring(unittest.TestCase):
         # Scanner stays on SSH remote_port (22), not the FTP port (990)
         _, scanner_kwargs = mock_remote_scanner.call_args
         self.assertEqual(scanner_kwargs["remote_port"], 22)
+
+    def test_active_scanner_recognises_lftp_temp_files_with_use_temp_file_off(self):
+        """use_temp_file is hot-applied to lftp, so it can be switched on after
+        the scanners are built; they must recognise temp files regardless or a
+        download shows up twice (the file and its local-only ".lftp" temp)."""
+        ctx = _make_context(protocol="sftp", remote_port=22, remote_ftp_port=21, verify_cert=False)
+        controller = self._build_controller(ctx)
+        with (
+            patch("controller.controller.Lftp"),
+            patch("controller.controller.RemoteScanner"),
+            patch("controller.controller.ActiveScanner") as mock_active_scanner,
+            patch("controller.controller.LocalScanner"),
+            patch("controller.controller.ScannerProcess"),
+            patch("controller.controller.ModelBuilder"),
+            patch("controller.controller.configure_lftp"),
+        ):
+            controller._create_pair_context(pair_id="p1", name="pair", remote_path="/remote", local_path="/local")
+
+        _, kwargs = mock_active_scanner.call_args
+        self.assertEqual(Constants.LFTP_TEMP_FILE_SUFFIX, kwargs["lftp_temp_suffix"])
 
 
 if __name__ == "__main__":

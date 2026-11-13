@@ -10,9 +10,9 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { AsyncPipe, NgTemplateOutlet } from '@angular/common';
-import { Observable } from 'rxjs';
+import { Observable, combineLatest, map } from 'rxjs';
 import { CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf } from '@angular/cdk/scrolling';
 
 import { ViewFileService } from '../../services/files/view-file.service';
@@ -23,7 +23,8 @@ import { ViewFileOptionsService } from '../../services/files/view-file-options.s
 import { LoggerService } from '../../services/utils/logger.service';
 import { NotificationService } from '../../services/utils/notification.service';
 import { NotificationLevel, createNotification } from '../../models/notification';
-import { fileKey } from '../../services/files/file-key';
+import { viewFileKey } from '../../services/files/file-key';
+import { flattenVisibleRows, FlatViewFileRow } from '../../services/files/view-file-tree-flatten';
 import { FileAction } from '../../models/file-action';
 import { FileComponent, FileActionEvent, FileCleanupEvent } from './file.component';
 import { BulkActionBarComponent } from './bulk-action-bar.component';
@@ -55,12 +56,35 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
 
   readonly useNativeScrolling = signal(false);
 
-  files: Observable<ViewFile[]> = this.viewFileService.filteredFiles$;
+  // Rows expanded via the chevron toggle. Keyed by viewFileKey (fullPath), so
+  // it stays keyed correctly across an incremental model update that swaps
+  // out a row's ViewFile object.
+  private readonly expandedKeys = signal(new Set<string>());
+
   options: Observable<ViewFileOptions> = this.viewFileOptionsService.options$;
   checked$ = this.viewFileService.checked$;
   identify = FileListComponent.identify;
 
+  // Flattened, expansion-aware display list. Each row carries its own depth
+  // and expand state so <app-file> stays a plain row component - see
+  // view-file-tree-flatten.ts for why this can't be recursive rendering.
+  files: Observable<FlatViewFileRow[]> = combineLatest([
+    this.viewFileService.filteredFiles$,
+    toObservable(this.expandedKeys),
+  ]).pipe(
+    map(([files, expandedKeys]) => flattenVisibleRows(files, expandedKeys)),
+  );
+
+  // Latest flattened, on-screen row keys (top-level + expanded nested rows),
+  // kept in sync so a shift-click range can span exactly what's visible,
+  // including nested rows - shiftCheck needs this synchronously at click time.
+  private latestVisibleKeys: string[] = [];
+
   constructor() {
+    this.files.pipe(takeUntilDestroyed()).subscribe((rows) => {
+      this.latestVisibleKeys = rows.map((row) => viewFileKey(row.file));
+    });
+
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
 
     this.mobileMediaQuery = window.matchMedia(MOBILE_FILE_LIST_QUERY);
@@ -68,8 +92,8 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
     this.mobileMediaQuery.addEventListener('change', this.onMobileMediaChange);
   }
 
-  static identify(_index: number, item: ViewFile): string {
-    return fileKey(item.pairId, item.name);
+  static identify(_index: number, row: FlatViewFileRow): string {
+    return viewFileKey(row.file);
   }
 
   ngAfterViewInit(): void {
@@ -137,6 +161,17 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
     this.useNativeScrolling.set(event.matches);
   };
 
+  onToggleExpand(file: ViewFile): void {
+    const key = viewFileKey(file);
+    const next = new Set(this.expandedKeys());
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+    this.expandedKeys.set(next);
+  }
+
   onSelect(file: ViewFile): void {
     if (file.isSelected) {
       this.viewFileService.unsetSelected();
@@ -187,7 +222,7 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
 
   onCheck(event: {file: ViewFile, shiftKey: boolean}): void {
     if (event.shiftKey) {
-      this.viewFileService.shiftCheck(event.file);
+      this.viewFileService.shiftCheck(event.file, this.latestVisibleKeys);
     } else {
       this.viewFileService.toggleCheck(event.file);
     }

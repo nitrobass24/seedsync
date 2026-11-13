@@ -15,7 +15,7 @@ import threading
 
 from common import Context
 from lftp import LftpError, LftpJobStatus
-from model import Model, ModelDiff, ModelError, ModelFile
+from model import Model, ModelDiff, ModelError, ModelFile, is_nested_name
 from system import apply_umask_modes
 
 from .command_pipeline import CommandPipeline
@@ -528,12 +528,29 @@ class ModelUpdater:
             if just_completed:
                 for name in just_completed:
                     self._logger.info(f"Download completed (LFTP job finished): {name}")
-                self._persist.downloaded_file_names.update(persist_key(pc.pair_id, n) for n in just_completed)
+                self._persist.downloaded_file_names.update(
+                    persist_key(pc.pair_id, n) for n in just_completed if not is_nested_name(n)
+                )
                 self.sync_persist_to_all_builders()
-                pc.pending_completion.update(just_completed)
+                # Same "/" filter as active_downloading_file_names below, same
+                # reason: pending_completion feeds active_scanner too (see the
+                # comment on that assignment). A nested name slipping through
+                # here got stat'd as a literal top-level path (e.g.
+                # "TopDir/leaf.rar" under the local root) and injected a
+                # phantom top-level entry with the full nested name baked into
+                # it, distinct from the correctly nested row. Nested
+                # completions are picked up by the regular recursive local
+                # scan instead.
+                pc.pending_completion.update(name for name in just_completed if not is_nested_name(name))
                 pc.local_scan_process.force_scan()
 
-            pc.active_downloading_file_names = list(current_downloading)
+            # The active scanner is a top-level-only fast path (it stats a name
+            # directly under the local root), so nested (path-containing) names
+            # are excluded here regardless of the nested-navigation toggle -
+            # feeding one through would inject a fake top-level entry into the
+            # model. Nested downloads still get picked up by the regular
+            # recursive local scan, just less often.
+            pc.active_downloading_file_names = [name for name in current_downloading if not is_nested_name(name)]
             pc.prev_downloading_file_names = current_downloading
 
     def sync_persist_to_all_builders(self):

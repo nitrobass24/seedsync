@@ -341,6 +341,7 @@ class Config(Persist):
         use_local_path_as_extract_path = PROP("use_local_path_as_extract_path", Checkers.null, Converters.bool)
         use_staging = PROP("use_staging", Checkers.null, Converters.bool)
         staging_path = PROP("staging_path", Checkers.string_nonempty, Converters.null)
+        enable_nested_navigation = PROP("enable_nested_navigation", Checkers.null, Converters.bool)
 
         def __init__(self):
             super().__init__()
@@ -351,6 +352,7 @@ class Config(Persist):
             self.use_local_path_as_extract_path = None
             self.use_staging = None
             self.staging_path = None
+            self.enable_nested_navigation = None
 
     class Web(InnerConfig):
         port = PROP("port", Checkers.int_positive, Converters.int)
