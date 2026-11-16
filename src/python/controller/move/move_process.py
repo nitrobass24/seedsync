@@ -7,11 +7,12 @@ import datetime
 import errno
 import os
 import shutil
+import stat
 from dataclasses import dataclass
 from typing import override
 
 from common import AppOneShotProcess, Constants, PipeStream
-from system import apply_umask_modes
+from system import apply_umask_modes_to, relative_entries
 
 
 @dataclass
@@ -171,7 +172,6 @@ class MoveProcess(AppOneShotProcess):
                 return
             left = ", ".join(sorted(os.path.relpath(p, self.__source_path) for p in incomplete))
             self.logger.info(f"Left incomplete nested downloads in staging: {left}")
-        self.__apply_modes(dst)
         self.__prune_empty_staging_parents(src)
 
     def _incomplete_nested(self, src: str) -> frozenset[str]:
@@ -196,9 +196,13 @@ class MoveProcess(AppOneShotProcess):
             # holding nothing but incomplete downloads isn't created at dst.
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             return self._move_item(src, dst)
+        created = not os.path.exists(dst)
         for entry in os.listdir(src):
             if not self._move_tree(os.path.join(src, entry), os.path.join(dst, entry), incomplete):
                 return False
+        if created and os.path.isdir(dst):
+            # Made here by a child's makedirs; a dir that was already there keeps its mode
+            self.__apply_modes(dst, [(".", True)])
         with contextlib.suppress(OSError):  # still holds an incomplete download
             os.rmdir(src)
         return True
@@ -208,10 +212,19 @@ class MoveProcess(AppOneShotProcess):
         devices or onto a non-empty dir. Reports and returns False on failure."""
         name = os.path.relpath(src, self.__source_path)
 
+        # What we are about to move, so the UMASK pass can be limited to it: a
+        # copy that merges into an existing destination must leave the files
+        # already there alone (#811). Directories that already exist at the
+        # destination keep their own modes too: copytree would copystat the
+        # source's onto them, and the UMASK pass must not widen them either.
+        moved_entries = relative_entries(src) if self.__umask is not None else []
+        existing_dir_modes = self._existing_dir_modes(dst)
+
         # Try rename first (instant on same filesystem)
         try:
             os.rename(src, dst)
             self.logger.info(f"Move completed via rename: {name}")
+            self.__apply_modes(dst, moved_entries)
             return True
         except OSError as e:
             if e.errno == errno.EXDEV:
@@ -256,11 +269,27 @@ class MoveProcess(AppOneShotProcess):
             shutil.rmtree(src)
 
         self.logger.info(f"Move completed via copy+delete: {name}")
+        for rel, mode in existing_dir_modes.items():
+            os.chmod(os.path.join(dst, rel), mode)
+        self.__apply_modes(dst, [e for e in moved_entries if e[0] not in existing_dir_modes])
         return True
 
-    def __apply_modes(self, dst: str) -> None:
+    @staticmethod
+    def _existing_dir_modes(dst: str) -> dict[str, int]:
+        """Modes of the directories already present under dst (merge case)."""
+        if not os.path.isdir(dst) or os.path.islink(dst):
+            return {}
+        modes: dict[str, int] = {".": stat.S_IMODE(os.stat(dst).st_mode)}
+        for dirpath, dirnames, _filenames in os.walk(dst):
+            for name in dirnames:
+                full = os.path.join(dirpath, name)
+                if not os.path.islink(full):
+                    modes[os.path.normpath(os.path.relpath(full, dst))] = stat.S_IMODE(os.stat(full).st_mode)
+        return modes
+
+    def __apply_modes(self, dst: str, moved_entries: list[tuple[str, bool]]) -> None:
         if self.__umask is not None:
-            apply_umask_modes(dst, self.__umask, self.logger)
+            apply_umask_modes_to(dst, moved_entries, self.__umask, self.logger)
 
     def __prune_empty_staging_parents(self, src: str) -> None:
         """Remove the staging dirs a nested name's move emptied, up to (not

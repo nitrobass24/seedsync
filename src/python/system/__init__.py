@@ -2,4 +2,8 @@
 
 from .scanner import SystemScanner as SystemScanner, SystemScannerError as SystemScannerError
 from .file import SystemFile as SystemFile
-from .file_modes import apply_umask_modes as apply_umask_modes
+from .file_modes import (
+    apply_umask_modes as apply_umask_modes,
+    apply_umask_modes_to as apply_umask_modes_to,
+    relative_entries as relative_entries,
+)

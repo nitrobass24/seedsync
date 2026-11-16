@@ -68,3 +68,39 @@ class TestApplyUmaskModes(unittest.TestCase):
         logger = MagicMock()
         apply_umask_modes(os.path.join(self.tmp.name, "gone"), 0o000, logger)
         logger.warning.assert_not_called()
+
+    def test_restrictive_umask_still_reaches_descendants(self):
+        """0177 strips search permission from directories; the walk must visit
+        the contents before locking the parent. Assert outside-in, re-opening
+        each directory before looking inside it."""
+        apply_umask_modes(self.root, 0o177, self.logger)
+
+        self.assertEqual(0o600, _mode(self.root))
+        os.chmod(self.root, 0o700)
+        self.assertEqual(0o600, _mode(os.path.join(self.root, "ep1.mkv")))
+        self.assertEqual(0o600, _mode(os.path.join(self.root, "Sample")))
+        os.chmod(os.path.join(self.root, "Sample"), 0o700)
+        self.assertEqual(0o600, _mode(os.path.join(self.root, "Sample/sample.mkv")))
+
+    def test_directory_setgid_is_preserved(self):
+        os.chmod(self.root, 0o2775)
+
+        apply_umask_modes(self.root, 0o000, self.logger)
+
+        self.assertEqual(0o2777, _mode(self.root))
+
+    def test_apply_to_entries_only_touches_listed_paths(self):
+        from system.file_modes import apply_umask_modes_to, relative_entries
+
+        untouched = os.path.join(self.root, "preexisting.txt")
+        with open(untouched, "w"):
+            pass
+        os.chmod(untouched, 0o600)
+        entries = [e for e in relative_entries(self.root) if e[0] != "preexisting.txt"]
+
+        apply_umask_modes_to(self.root, entries, 0o000, self.logger)
+
+        self.assertEqual(0o600, _mode(untouched))
+        self.assertEqual(0o666, _mode(os.path.join(self.root, "ep1.mkv")))
+        self.assertEqual(0o777, _mode(os.path.join(self.root, "Sample")))
+        self.assertEqual(0o777, _mode(self.root))

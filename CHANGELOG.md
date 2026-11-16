@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.1] - 2026-11-09
+
+### Fixed
+
+- **`UMASK` is now honoured for downloaded files** - lftp creates files as `664` and directories as `775` before the umask is applied, so `UMASK=000` could never produce the 666/777 that 1.2.0 promised (it stopped the seedbox's modes being copied, but lftp's own defaults were still the ceiling). SeedSync now sets the modes itself when a download completes: files `0666 & ~UMASK`, directories `0777 & ~UMASK`. With staging on this happens in the move process at the final location (which also covers files extracted in staging); otherwise in a background thread. The `sftp:set-permissions` setting SeedSync used to send does not exist in lftp 4.9 and is no longer sent. (#811, #818)
+
+### Changed
+
+- **Docs** - The `UMASK` row says what actually happens, and the release checklist now includes syncing `master` back into `develop`. (#810, #818)
+- **Dependency updates** - Angular 22.2 group (#814), ESLint 10.14 (#816), jsdom 31 (#817), tslib 2.9.1 (#815), docker/login-action 4.8.0 (#812), softprops/action-gh-release 3.0.4 (#813).
+
 ## [1.2.0] - 2026-11-02
 
 ### Added

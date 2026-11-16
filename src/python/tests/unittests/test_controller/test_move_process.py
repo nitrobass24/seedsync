@@ -631,3 +631,34 @@ class TestMoveProcess(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "a.bin")))
         self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Top", "Sub", "big.bin")))
         self.assertFalse(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub", "big.bin")))
+
+    def test_merge_into_existing_destination_leaves_other_files_alone(self):
+        """#811: a staged tree merged into an existing folder must not widen the
+        modes of files that were already there."""
+        import stat
+
+        src_tree = os.path.join(self.src_dir, "Show.S01")
+        os.makedirs(src_tree)
+        with open(os.path.join(src_tree, "ep2.mkv"), "w") as f:
+            f.write("x")
+        os.chmod(os.path.join(src_tree, "ep2.mkv"), 0o664)
+        dst_tree = os.path.join(self.dst_dir, "Show.S01")
+        os.makedirs(dst_tree)
+        private = os.path.join(dst_tree, "notes.txt")
+        with open(private, "w") as f:
+            f.write("mine")
+        os.chmod(private, 0o600)
+        os.chmod(dst_tree, 0o700)
+
+        with mock.patch("os.rename", side_effect=OSError(errno.EXDEV, "cross-device")):
+            process = self._make_process(
+                source_path=self.src_dir, dest_path=self.dst_dir, file_name="Show.S01", umask=0o000
+            )
+            self._run_process(process)
+
+        # Pre-existing content keeps its modes (copytree's copystat would have
+        # put the source's 0775 on the directory; the UMASK pass must not widen it)
+        self.assertEqual(0o700, stat.S_IMODE(os.stat(dst_tree).st_mode))
+        self.assertEqual(0o600, stat.S_IMODE(os.stat(private).st_mode))
+        # The moved file gets the UMASK treatment
+        self.assertEqual(0o666, stat.S_IMODE(os.stat(os.path.join(dst_tree, "ep2.mkv")).st_mode))
