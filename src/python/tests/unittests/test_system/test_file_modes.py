@@ -104,3 +104,17 @@ class TestApplyUmaskModes(unittest.TestCase):
         self.assertEqual(0o666, _mode(os.path.join(self.root, "ep1.mkv")))
         self.assertEqual(0o777, _mode(os.path.join(self.root, "Sample")))
         self.assertEqual(0o777, _mode(self.root))
+
+    def test_apply_to_entries_single_file(self):
+        """A single file's entries are [(".", False)]; "file/." must not be chmod'ed."""
+        from system.file_modes import apply_umask_modes_to, relative_entries
+
+        single = os.path.join(self.tmp.name, "single.mkv")
+        with open(single, "w"):
+            pass
+        os.chmod(single, 0o664)
+
+        with self.assertNoLogs(self.logger):
+            apply_umask_modes_to(single, relative_entries(single), 0o000, self.logger)
+
+        self.assertEqual(0o666, _mode(single))

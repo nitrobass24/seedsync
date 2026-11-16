@@ -662,3 +662,35 @@ class TestMoveProcess(unittest.TestCase):
         self.assertEqual(0o600, stat.S_IMODE(os.stat(private).st_mode))
         # The moved file gets the UMASK treatment
         self.assertEqual(0o666, stat.S_IMODE(os.stat(os.path.join(dst_tree, "ep2.mkv")).st_mode))
+
+    def test_partial_tree_move_applies_umask_only_to_what_it_moved(self):
+        """#811 with a nested partial left behind: dirs the tree move creates at
+        the destination and the files it moves get the UMASK modes; a destination
+        dir that was already there keeps its own."""
+        import stat
+
+        top_dir = os.path.join(self.src_dir, "Top")
+        os.makedirs(os.path.join(top_dir, "New", "Sub"))
+        with open(os.path.join(top_dir, "New", "a.bin"), "w") as f:
+            f.write("complete")
+        with open(os.path.join(top_dir, "New", "Sub", "big.bin"), "w") as f:
+            f.write("short")
+        os.chmod(os.path.join(top_dir, "New", "a.bin"), 0o664)
+        dst_top = os.path.join(self.dst_dir, "Top")
+        os.makedirs(dst_top)
+        os.chmod(dst_top, 0o700)
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            umask=0o000,
+            nested_expected_sizes={"New/Sub/big.bin": 1000},
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Top", "New", "Sub", "big.bin")))
+        self.assertEqual(0o700, stat.S_IMODE(os.stat(dst_top).st_mode))
+        self.assertEqual(0o777, stat.S_IMODE(os.stat(os.path.join(dst_top, "New")).st_mode))
+        self.assertEqual(0o666, stat.S_IMODE(os.stat(os.path.join(dst_top, "New", "a.bin")).st_mode))
