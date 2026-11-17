@@ -104,6 +104,7 @@ class ModelUpdater:
         if new_model is not None:
             model_diff = self._registry.apply_diff(new_model)
             self._process_model_diffs(model_diff)
+        self._note_remote_scans_in_model()
 
         self._prune_stale_persist()
         self._process_extraction_failures(latest_failed_extractions)
@@ -604,6 +605,10 @@ class ModelUpdater:
         The job ending doesn't mean it finished (a Stop ends it too), so the
         move gets the row's remote size to check.
         """
+        if not pc.remote_scan_in_model:
+            # After a restart the pending moves come back before the first remote
+            # scan; without it in the model every row looks unresolvable.
+            return
         for name in pc.pending_nested_moves - lftp_job_names:
             pc.pending_nested_moves.discard(name)
             try:
@@ -616,6 +621,12 @@ class ModelUpdater:
                 self._logger.warning(f"Not moving '{name}' out of staging: its remote size is unknown")
                 continue
             self._pipeline.spawn_move_process(name, pc, expected_size=expected_size)
+
+    def _note_remote_scans_in_model(self) -> None:
+        """Mark each pair whose remote scan has reached the registry."""
+        for pc in self._pair_contexts:
+            if pc.remote_scan_received:
+                pc.remote_scan_in_model = True
 
     def sync_persist_to_all_builders(self):
         """Push current persist state to all pair model builders, filtered by pair_id."""

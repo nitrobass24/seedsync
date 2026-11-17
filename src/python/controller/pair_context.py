@@ -60,6 +60,9 @@ class PairContext:
     # behind (see CommandPipeline.spawn_move_process).
     staged_nested: set[str] = field(default_factory=set[str])
     remote_scan_received: bool = False
+    # True once a model built from a remote scan is in the registry, so a
+    # nested row's remote size can be resolved (see ModelUpdater._spawn_nested_moves)
+    remote_scan_in_model: bool = False
     local_scan_received: bool = False
 
     # Temporary storage for latest scan results (set during ModelUpdater._update_pair_model_state)

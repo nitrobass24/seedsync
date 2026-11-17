@@ -288,6 +288,7 @@ class TestSpawnNestedMoves(unittest.TestCase):
         pc.prev_downloading_file_names = set()
         pc.pending_completion = set()
         pc.pending_nested_moves = set()
+        pc.remote_scan_in_model = True
         return pc
 
     def _make_updater(self, pair_contexts, persist=None, *, use_staging=True, staging_path="/tmp/staging"):
@@ -394,6 +395,35 @@ class TestSpawnNestedMoves(unittest.TestCase):
 
         pipeline.spawn_move_process.assert_not_called()
         registry.resolve_full_path.assert_not_called()
+
+    def test_pending_nested_move_waits_until_the_remote_scan_is_in_the_model(self):
+        """After a restart, pending moves come back before the first remote
+        scan. Until a model built from it is in the registry the row can't be
+        resolved, and the move would be dropped for an unknown size."""
+        pc = self._make_pair_context("pair-1")
+        pc.remote_scan_in_model = False
+        pc.pending_nested_moves = {"Top/leaf.rar"}
+        updater, pipeline, registry = self._make_updater([pc], self._make_persist())
+
+        updater._detect_lftp_completions(pc, [])
+
+        registry.resolve_full_path.assert_not_called()
+        pipeline.spawn_move_process.assert_not_called()
+        self.assertEqual({"Top/leaf.rar"}, pc.pending_nested_moves)
+
+    def test_remote_scan_marked_in_model_once_a_model_is_built_with_it(self):
+        received = self._make_pair_context("pair-1")
+        received.remote_scan_received = True
+        received.remote_scan_in_model = False
+        waiting = self._make_pair_context("pair-2")
+        waiting.remote_scan_received = False
+        waiting.remote_scan_in_model = False
+        updater, _pipeline, _registry = self._make_updater([received, waiting], self._make_persist())
+
+        updater._note_remote_scans_in_model()
+
+        self.assertTrue(received.remote_scan_in_model)
+        self.assertFalse(waiting.remote_scan_in_model)
 
 
 class TestPruneAbsentNestedMoveFailures(unittest.TestCase):
