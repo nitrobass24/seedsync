@@ -397,6 +397,21 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         self.assertEqual({"Sub/big.bin": 999}, mock_move_cls.call_args.kwargs["nested_expected_sizes"])
 
+    @patch("controller.command_pipeline.os.path.exists", return_value=True)
+    @patch("controller.command_pipeline.MoveProcess")
+    def test_spawn_move_process_keeps_dirs_of_other_pending_nested_downloads(self, mock_move_cls, _mock_exists):
+        pc = self._make_pair_context("pair-1")
+        pc.local_path = "/local/pair-1"
+        pc.staged_nested = set()
+        pc.pending_nested_moves = {"Top/Sub/b.bin"}
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+
+        pipeline.spawn_move_process("Top/Sub/a.bin", pc, expected_size=1)
+
+        self.assertEqual(frozenset({"Top/Sub/b.bin"}), mock_move_cls.call_args.kwargs["keep_parents_of"])
+
     # --- _staged_nested_sizes ---
 
     def test_staged_nested_sizes_filters_by_prefix_and_resolves_remote_size(self):
@@ -502,7 +517,47 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         self.assertEqual({persist_key("pair-1", "Top/kept.bin")}, pipeline._persist.staged_nested_file_names)
 
+    def test_sweep_staged_nested_keeps_a_pending_download_with_nothing_in_staging_yet(self):
+        """A queued nested job has no file in staging until lftp starts it."""
+        pc = self._make_pair_context("pair-1")
+        pc.staged_nested = {"Top/queued.bin"}
+        pc.pending_nested_moves = {"Top/queued.bin"}
+        pipeline = self._make_pipeline([pc])
+        pipeline._persist.staged_nested_file_names = {persist_key("pair-1", "Top/queued.bin")}
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+
+        with patch("controller.command_pipeline.os.path.exists", return_value=False):
+            pipeline._sweep_staged_nested(pc)
+
+        self.assertEqual({"Top/queued.bin"}, pc.staged_nested)
+        self.assertEqual({persist_key("pair-1", "Top/queued.bin")}, pipeline._persist.staged_nested_file_names)
+
     # --- restore_staged_nested ---
+
+    def test_restore_staged_nested_queues_one_move_for_overlapping_names(self):
+        """Top/sub and Top/sub/item both restored: only Top/sub gets a move (its
+        size check covers item), or item's move would empty Top/sub under it."""
+        with tempfile.TemporaryDirectory() as staging_root:
+            os.makedirs(os.path.join(staging_root, "pair-1", "Top", "sub"))
+            with open(os.path.join(staging_root, "pair-1", "Top", "sub", "item"), "w") as f:
+                f.write("x")
+            pc = self._make_pair_context("pair-1")
+            pc.staged_nested = set()
+            pc.pending_nested_moves = set()
+            pc.pending_completion = set()
+            pipeline = self._make_pipeline([pc])
+            pipeline._context.config.controller.use_staging = True
+            pipeline._context.config.controller.staging_path = staging_root
+            pipeline._persist.staged_nested_file_names = {
+                persist_key("pair-1", "Top/sub"),
+                persist_key("pair-1", "Top/sub/item"),
+            }
+
+            pipeline.restore_staged_nested(pc)
+
+        self.assertEqual({"Top/sub", "Top/sub/item"}, pc.staged_nested)
+        self.assertEqual({"Top/sub"}, pc.pending_nested_moves)
 
     def test_restore_staged_nested_picks_up_what_a_previous_session_left_in_staging(self):
         """staged_nested is in memory; its persisted copy brings back the nested

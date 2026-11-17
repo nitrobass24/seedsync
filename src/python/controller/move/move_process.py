@@ -42,6 +42,7 @@ class MoveProcess(AppOneShotProcess):
         umask: int | None = None,
         expected_size: int | None = None,
         nested_expected_sizes: dict[str, int | None] | None = None,
+        keep_parents_of: frozenset[str] = frozenset(),
     ):
         super().__init__(name=self.__class__.__name__)
         self.__source_path = source_path
@@ -58,6 +59,10 @@ class MoveProcess(AppOneShotProcess):
         # the same way; an incomplete one (or one of unknown size) is left in
         # place while the rest of the tree moves.
         self.__nested_expected_sizes = nested_expected_sizes or {}
+        # Paths relative to source_path whose parent dirs survive the prune of
+        # emptied staging dirs (a queued nested job's dir is made at queue time,
+        # and pget won't recreate it)
+        self.__keep_parents_of = keep_parents_of
         self.__failed_result_stream = PipeStream()
 
     @property
@@ -301,6 +306,9 @@ class MoveProcess(AppOneShotProcess):
         such as another nested job's download."""
         parent = os.path.dirname(src)
         while os.path.normpath(parent) != os.path.normpath(self.__source_path):
+            rel_parent = os.path.relpath(parent, self.__source_path) + os.sep
+            if any(path.startswith(rel_parent) for path in self.__keep_parents_of):
+                return
             try:
                 os.rmdir(parent)
             except OSError:

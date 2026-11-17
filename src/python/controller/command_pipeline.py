@@ -844,6 +844,7 @@ class CommandPipeline:
             umask=self._context.args.umask,
             expected_size=expected_size,
             nested_expected_sizes=self._staged_nested_sizes(file_name, pc),
+            keep_parents_of=frozenset(pc.pending_nested_moves - {file_name}),
         )
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
         # Start before publishing bookkeeping: if start() raises we must not leave
@@ -870,17 +871,19 @@ class CommandPipeline:
         return sizes
 
     def _sweep_staged_nested(self, pc: PairContext) -> None:
-        """Forget staged nested downloads that are no longer in staging (moved,
-        deleted, or carried along by an ancestor's move)."""
+        """Forget staged nested downloads that are no longer pending and no
+        longer in staging (moved, deleted, or carried along by an ancestor's move)."""
         staging = self._pair_staging_dir(pc)
         # An unfinished file with lftp temp files on is "<name>.lftp"
         suffix = Constants.LFTP_TEMP_FILE_SUFFIX
+        # A name still pending stays: a queued job has nothing in staging yet
         gone = [
             name
             for name in pc.staged_nested
             if staging is None
             or (
-                not os.path.exists(os.path.join(staging, name))
+                name not in pc.pending_nested_moves
+                and not os.path.exists(os.path.join(staging, name))
                 and not os.path.exists(os.path.join(staging, name + suffix))
             )
         ]
@@ -891,8 +894,8 @@ class CommandPipeline:
         """Pick up the nested downloads a previous session left in staging.
 
         Restores pc.staged_nested from its persisted copy (dropping names no
-        longer in staging) and queues each one's move; the move checks its
-        size. A top-level name holding one is taken off pc.pending_completion:
+        longer in staging) and queues a move for each outermost one; the move
+        checks its size. A top-level name holding one is taken off pc.pending_completion:
         the active scanner would report its staging copy, which holds only
         the nested downloads, in place of its local_path copy. The active
         scanner gets the corrected names before its first scan.
@@ -904,7 +907,11 @@ class CommandPipeline:
             if name != key or pc.pair_id is None:
                 pc.staged_nested.add(name)
         self._sweep_staged_nested(pc)
-        pc.pending_nested_moves.update(pc.staged_nested)
+        # One move per outermost name: an inner name's move would empty part of
+        # an outer one's tree before the outer move checks its size.
+        pc.pending_nested_moves.update(
+            name for name in pc.staged_nested if not any(name.startswith(other + "/") for other in pc.staged_nested)
+        )
         pc.pending_completion.difference_update(name.split("/", 1)[0] for name in pc.staged_nested)
         pc.active_scanner.set_active_files(sorted(pc.pending_completion | pc.staged_nested))
 

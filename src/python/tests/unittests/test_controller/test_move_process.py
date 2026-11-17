@@ -359,6 +359,26 @@ class TestMoveProcess(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Top")))
         self.assertTrue(os.path.exists(sibling_file))
 
+    def test_move_nested_prune_keeps_dir_a_queued_sibling_needs(self):
+        """A queued nested job's parent dir is made when it's queued, and pget
+        won't recreate it, so an emptied dir it needs must survive the prune."""
+        nested_dir = os.path.join(self.src_dir, "Top", "Sub")
+        os.makedirs(nested_dir)
+        with open(os.path.join(nested_dir, "a.bin"), "w") as f:
+            f.write("data")
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top/Sub/a.bin",
+            keep_parents_of=frozenset({"Top/Sub/b.bin"}),
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub", "a.bin")))
+        self.assertTrue(os.path.isdir(nested_dir))
+
     def test_move_nested_via_copy_delete_prunes_empty_staging_dirs(self):
         """The copy+delete fallback path must prune the same as the rename path."""
         nested_dir = os.path.join(self.src_dir, "Top", "Sub")
