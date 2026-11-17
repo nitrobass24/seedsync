@@ -32,6 +32,9 @@ class ModelBuilder:
         self.__active_files: dict[str, SystemFile] = {}
         self.__staged_nested_files: dict[str, SystemFile] = {}
         self.__remote_files: dict[str, SystemFile] = {}
+        # False until the first remote listing: until then a missing remote
+        # size means "not scanned yet", not "deleted remotely"
+        self.__remote_listing_received = False
         self.__lftp_statuses: dict[str, LftpJobStatus] = {}
         self.__downloaded_files: set[str] = set()
         self.__extract_statuses: dict[str, ExtractStatus] = {}
@@ -71,8 +74,9 @@ class ModelBuilder:
         prev_remote_files = self.__remote_files
         self.__remote_files = {file.name: file for file in remote_files}
         # Invalidate the cache
-        if self.__remote_files != prev_remote_files:
+        if self.__remote_files != prev_remote_files or not self.__remote_listing_received:
             self.__cached_model = None
+        self.__remote_listing_received = True
 
     def set_lftp_statuses(self, lftp_statuses: list[LftpJobStatus]):
         prev_lftp_statuses = self.__lftp_statuses
@@ -147,6 +151,7 @@ class ModelBuilder:
         self.__active_files.clear()
         self.__staged_nested_files.clear()
         self.__remote_files.clear()
+        self.__remote_listing_received = False
         self.__lftp_statuses.clear()
         self.__downloaded_files.clear()
         self.__extract_statuses.clear()
@@ -611,6 +616,9 @@ class ModelBuilder:
             and model_file.local_size < model_file.remote_size
         ):
             return  # Stay DEFAULT for re-download
+        # A missing remote size only means "gone" once a remote listing is in
+        if model_file.remote_size is None and not self.__remote_listing_received:
+            return
         # Persist authority — applies when auto_delete_remote OFF,
         # or when remote is already gone (auto_delete_remote ON, delete succeeded)
         if not self.__auto_delete_remote or model_file.remote_size is None:
