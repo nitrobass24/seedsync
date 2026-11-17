@@ -113,6 +113,8 @@ class Lftp:
         self.__timeout = 10  # in seconds
         self.__consecutive_status_errors = 0
         self.__consecutive_timeouts = 0
+        # Set by __run_command: its "" on a timeout reads the same as no output
+        self.__last_command_timed_out = False
         self.__settings_cache: dict[str, str] = {}
 
         self.__log_command_output = False
@@ -289,6 +291,7 @@ class Lftp:
             self.__process.expect(self.__expect_pattern, timeout=self.__timeout)
         except pexpect.exceptions.TIMEOUT:
             timed_out = True
+        self.__last_command_timed_out = timed_out
 
         if timed_out:
             self.__consecutive_timeouts += 1
@@ -577,12 +580,15 @@ class Lftp:
     def status(self) -> list[LftpJobStatus] | None:
         """
         Return a status list of queued and running jobs.
-        Returns None when the status output could not be parsed, so callers
+        Returns None when the status output timed out or could not be parsed, so callers
         can distinguish "no jobs" from "parse failed" and avoid false
         completion signals.
         :return:
         """
         out = self.__run_command("jobs -v")  # type: ignore[arg-type]
+        if self.__last_command_timed_out:
+            # Empty output here isn't "no jobs"; it would read as every job finished
+            return None
         try:
             statuses = self.__job_status_parser.parse(out)
             self.__consecutive_status_errors = 0

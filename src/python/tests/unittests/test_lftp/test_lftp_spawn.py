@@ -292,3 +292,24 @@ class TestLftpFtpsErrorDetection(unittest.TestCase):
 
     def test_clean_output_not_flagged(self):
         self.assertFalse(self._detect("`file' at 100 (50%) 1.2M/s eta:30s [Receiving data/TLS]"))
+
+
+class TestLftpStatusTimeout(unittest.TestCase):
+    """A timed-out 'jobs -v' reads back as empty output, the same as no jobs.
+    status() must report it as unavailable (None), or callers take every
+    running job for finished."""
+
+    def test_status_is_none_when_jobs_command_times_out(self):
+        lftp, fake = make_lftp(address="host.example.com", port=22, user="bob", password=None)
+        with patch.object(fake, "expect", side_effect=lftp_mod.pexpect.exceptions.TIMEOUT("timed out")):
+            self.assertIsNone(lftp.status())
+
+    def test_status_is_empty_list_when_there_are_no_jobs(self):
+        lftp, _fake = make_lftp(address="host.example.com", port=22, user="bob", password=None)
+        self.assertEqual([], lftp.status())
+
+    def test_status_recovers_after_a_timeout(self):
+        lftp, fake = make_lftp(address="host.example.com", port=22, user="bob", password=None)
+        with patch.object(fake, "expect", side_effect=lftp_mod.pexpect.exceptions.TIMEOUT("timed out")):
+            lftp.status()
+        self.assertEqual([], lftp.status())
