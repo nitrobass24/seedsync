@@ -233,8 +233,8 @@ class CommandPipeline:
         return True
 
     def find_overlapping_move(self, name: str, pc: PairContext) -> str | None:
-        """Name of an in-flight staging move for this pair that `name` lies inside
-        or contains, or None. lftp writing into a tree mid-move would race it."""
+        """Name of an in-flight staging move for this pair that `name` is, lies
+        inside, or contains, or None."""
         for move_process in self.active_move_processes:
             if move_process.pair_id != pc.pair_id:
                 continue
@@ -813,7 +813,8 @@ class CommandPipeline:
         staging). A retry of a failed move uses this to tell a real retry from a
         resolved no-op so it can clear a stale MOVE_FAILED state (#536 follow-up).
 
-        expected_size (see MoveProcess) is set for a nested job that just ended.
+        expected_size is passed to MoveProcess: a source short of it, or still
+        holding lftp temp files, is left in staging with no failure reported.
         """
         pair_id = pc.pair_id
         move_key = persist_key(pair_id, file_name)
