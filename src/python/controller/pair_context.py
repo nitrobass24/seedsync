@@ -8,6 +8,7 @@ Extracted from controller.py as part of the controller decomposition
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 from common import AppError, Config, Constants, Context
@@ -57,6 +58,21 @@ class PairContext:
     # Temporary storage for latest scan results (set during ModelUpdater._update_pair_model_state)
     latest_remote_scan: ScannerResult | None = None
     latest_local_scan: ScannerResult | None = None
+
+
+def staged_top_level_names(staging_dir: str) -> set[str]:
+    """Names of the top-level downloads with something in staging_dir.
+
+    lftp's "<name>.lftp" temp file is listed as <name>; its
+    "<name>.lftp-pget-status" progress file is skipped. A missing dir lists
+    nothing.
+    """
+    try:
+        entries = os.listdir(staging_dir)
+    except FileNotFoundError:
+        return set()
+    suffix = Constants.LFTP_TEMP_FILE_SUFFIX
+    return {entry.removesuffix(suffix) for entry in entries if not entry.endswith(suffix + "-pget-status")}
 
 
 def validate_config(context: Context) -> None:

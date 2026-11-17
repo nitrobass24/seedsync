@@ -1,5 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
+import os
+import tempfile
 import unittest
 from unittest.mock import MagicMock
 
@@ -8,6 +10,7 @@ from controller.pair_context import (
     ControllerError,
     PairContext,
     configure_lftp,
+    staged_top_level_names,
     validate_config,
 )
 
@@ -341,3 +344,20 @@ class TestConfigureLftp(unittest.TestCase):
         self.assertEqual(lftp.num_connections_per_root_file, 20)
         self.assertEqual(lftp.num_connections_per_dir_file, 20)
         self.assertEqual(lftp.num_max_total_connections, 0)
+
+
+class TestStagedTopLevelNames(unittest.TestCase):
+    def test_lists_downloads_in_staging_by_their_final_name(self):
+        """lftp's "<name>.lftp" temp file is the download <name>; its
+        "<name>.lftp-pget-status" progress file is not a download."""
+        with tempfile.TemporaryDirectory() as staging:
+            os.makedirs(os.path.join(staging, "Show.S01"))
+            for name in ("movie.mkv", "partial.mkv.lftp", "movie.mkv.lftp-pget-status"):
+                with open(os.path.join(staging, name), "w") as f:
+                    f.write("x")
+
+            self.assertEqual({"Show.S01", "movie.mkv", "partial.mkv"}, staged_top_level_names(staging))
+
+    def test_missing_staging_dir_lists_nothing(self):
+        with tempfile.TemporaryDirectory() as parent:
+            self.assertEqual(set(), staged_top_level_names(os.path.join(parent, "nope")))
