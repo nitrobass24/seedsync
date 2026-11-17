@@ -180,7 +180,11 @@ class MoveProcess(AppOneShotProcess):
         incomplete: set[str] = set()
         for rel, size in self.__nested_expected_sizes.items():
             path = os.path.join(src, rel)
-            if os.path.exists(path) and (
+            temp_path = path + Constants.LFTP_TEMP_FILE_SUFFIX
+            if not os.path.exists(path) and os.path.isfile(temp_path):
+                # An unfinished file with lftp temp files on: "<name>.lftp" until done
+                incomplete.add(temp_path)
+            elif os.path.exists(path) and (
                 size is None or self._has_lftp_temp_files(path) or self._get_total_size(path) < size
             ):
                 incomplete.add(path)

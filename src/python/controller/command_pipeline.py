@@ -14,7 +14,7 @@ import os
 from collections.abc import Callable, Iterator
 from queue import Queue
 
-from common import Context, MultiprocessingLogger, UnrecoverableError
+from common import Constants, Context, MultiprocessingLogger, UnrecoverableError
 from lftp import LftpError
 from model import ModelError, ModelFile, is_nested_name
 
@@ -871,8 +871,18 @@ class CommandPipeline:
         """Forget staged nested downloads that are no longer in staging (moved,
         deleted, or carried along by an ancestor's move)."""
         staging = self._pair_staging_dir(pc)
+        if staging is None:
+            pc.staged_nested.clear()
+            return
+        # An unfinished file with lftp temp files on is "<name>.lftp"
+        suffix = Constants.LFTP_TEMP_FILE_SUFFIX
         pc.staged_nested.difference_update(
-            [name for name in pc.staged_nested if staging is None or not os.path.exists(os.path.join(staging, name))]
+            [
+                name
+                for name in pc.staged_nested
+                if not os.path.exists(os.path.join(staging, name))
+                and not os.path.exists(os.path.join(staging, name + suffix))
+            ]
         )
 
     def _get_pair_context_for_command(self, command: Command) -> PairContext | None:

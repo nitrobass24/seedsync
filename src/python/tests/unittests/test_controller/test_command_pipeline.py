@@ -457,6 +457,21 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         self.assertEqual({"Top/kept.bin"}, pc.staged_nested)
 
+    def test_sweep_staged_nested_keeps_entries_only_in_staging_as_temp_files(self):
+        """With lftp temp files on, an unfinished nested file is '<name>.lftp'."""
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.staged_nested = {"Top/partial.bin"}
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+        temp_path = os.path.join("/tmp/staging", "pair-1", "Top/partial.bin.lftp")
+
+        with patch("controller.command_pipeline.os.path.exists", side_effect=lambda p: p == temp_path):
+            pipeline._sweep_staged_nested(pc)
+
+        self.assertEqual({"Top/partial.bin"}, pc.staged_nested)
+
     def test_sweep_staged_nested_clears_all_when_staging_disabled(self):
         pc = self._make_pair_context("pair-1")
         pc.pair_id = "pair-1"

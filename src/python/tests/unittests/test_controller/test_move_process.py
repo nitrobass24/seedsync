@@ -465,6 +465,30 @@ class TestMoveProcess(unittest.TestCase):
         # Sub holds only the partial, so no empty Sub is created at the destination
         self.assertFalse(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub")))
 
+    def test_top_level_move_leaves_temp_named_nested_partial_in_staging(self):
+        """With lftp temp files on, a stopped nested file exists only as
+        '<name>.lftp'. It is the incomplete entry: left behind, and it doesn't
+        defer the rest of the tree."""
+        top_dir = os.path.join(self.src_dir, "Top")
+        os.makedirs(os.path.join(top_dir, "Sub"))
+        with open(os.path.join(top_dir, "a.bin"), "w") as f:
+            f.write("complete")
+        with open(os.path.join(top_dir, "Sub", "big.bin.lftp"), "w") as f:
+            f.write("short")
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            nested_expected_sizes={"Sub/big.bin": 1000},
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "a.bin")))
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Top", "Sub", "big.bin.lftp")))
+        self.assertFalse(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub")))
+
     def test_top_level_move_moves_everything_when_nested_download_complete(self):
         """A nested download whose size has caught up to expected moves along
         with the rest of the tree; nothing is left behind."""
