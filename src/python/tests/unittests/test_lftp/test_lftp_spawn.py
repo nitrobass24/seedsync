@@ -313,3 +313,22 @@ class TestLftpStatusTimeout(unittest.TestCase):
         with patch.object(fake, "expect", side_effect=lftp_mod.pexpect.exceptions.TIMEOUT("timed out")):
             lftp.status()
         self.assertEqual([], lftp.status())
+
+    def test_status_is_none_when_error_output_read_times_out(self):
+        """When 'jobs -v' output matches an error pattern, a second read drains it.
+        A timeout on that read must also report the status as unavailable."""
+        lftp, fake = make_lftp(address="host.example.com", port=22, user="bob", password=None)
+        calls = {"n": 0}
+
+        def expect(pattern, timeout=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                fake.before = b"pget: Access failed: Permission denied"
+                return 0
+            raise lftp_mod.pexpect.exceptions.TIMEOUT("timed out")
+
+        with patch.object(fake, "expect", side_effect=expect):
+            self.assertIsNone(lftp.status())
+        self.assertEqual(2, calls["n"])
+        with self.assertRaises(LftpError):
+            lftp.raise_pending_error()
