@@ -252,7 +252,13 @@ class ModelUpdater:
 
         if self._context.config.controller.use_staging and self._context.config.controller.staging_path:
             will_auto_extract = self._context.config.autoqueue.auto_extract and diff.new_file.is_extractable
-            if not will_auto_extract and not will_auto_validate:
+            # A nested download still in staging counts toward its root, so the
+            # root can turn Downloaded while that download's own move is in
+            # flight. Leave the files to that move rather than race it.
+            overlapping = self._pipeline.find_overlapping_move(diff.new_file.name, pc)
+            if overlapping is not None:
+                self._logger.info(f"Not moving '{diff.new_file.name}': '{overlapping}' is moving out of staging")
+            elif not will_auto_extract and not will_auto_validate:
                 self._pipeline.spawn_move_process(diff.new_file.name, pc)
 
     def _handle_pending_completion(self, diff: ModelDiff, pc: PairContext | None) -> None:
@@ -524,6 +530,10 @@ class ModelUpdater:
 
         active_files = pc.active_downloading_file_names + pc.active_extracting_file_names
         active_files += list(pc.pending_completion)
+        # Nested downloads in staging, finished or not: the local scan covers
+        # only local_path, so this is the only scan that sees them. The builder
+        # puts each on its nested row, not at the top level.
+        active_files += list(pc.staged_nested)
         pc.active_scanner.set_active_files(active_files)
 
         pc.model_builder.set_auto_delete_remote(bool(self._context.config.autoqueue.auto_delete_remote))

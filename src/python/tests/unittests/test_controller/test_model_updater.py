@@ -231,6 +231,22 @@ class TestDetectLftpCompletionsNestedFiltering(unittest.TestCase):
 
         self.assertEqual({"TopLevel"}, pc.pending_completion)
 
+    def test_staged_nested_names_fed_to_active_scanner(self):
+        """The active scanner is rooted at staging when staging is on, so a
+        nested download still there (e.g. a stopped partial) is stat'd like a
+        top-level one in pending_completion, and its row shows its size."""
+        pc = self._make_pair_context("pair-1")
+        pc.staged_nested = {"TopDir/nested_file.rar"}
+        pc.active_extracting_file_names = []
+        for proc in (pc.remote_scan_process, pc.local_scan_process, pc.active_scan_process):
+            proc.pop_latest_result.return_value = None
+        pc.lftp.status.return_value = []
+        updater = self._make_updater([pc])
+
+        updater._update_pair_model_state(pc, None, None)
+
+        pc.active_scanner.set_active_files.assert_called_once_with(["TopDir/nested_file.rar"])
+
     def test_nested_completion_not_added_to_downloaded_file_names(self):
         """Nothing reads a nested persist key (model_builder's persist-authority
         check matches top-level names only) and nothing ever removes one, so
@@ -775,3 +791,44 @@ class TestHandleDownloadedFileUmask(unittest.TestCase):
         apply, threads = self._run(None)
         apply.assert_not_called()
         self.assertEqual([], threads)
+
+
+class TestHandleDownloadedFileOverlappingMove(unittest.TestCase):
+    """A root can turn Downloaded while a nested download inside it is still
+    in staging, its own move in flight. The root's move would race that one,
+    so it is left to the nested move."""
+
+    def _run(self, overlapping_move):
+        pc = MagicMock()
+        context = MagicMock()
+        context.args.umask = None
+        context.config.validate.enabled = False
+        context.config.controller.use_staging = True
+        context.config.controller.staging_path = "/staging"
+        context.config.autoqueue.auto_extract = False
+        pipeline = MagicMock()
+        pipeline.find_overlapping_move.return_value = overlapping_move
+        updater = ModelUpdater(
+            pair_contexts=[pc],
+            persist=MagicMock(),
+            pipeline=pipeline,
+            registry=MagicMock(),
+            extract_process=MagicMock(),
+            validate_process=MagicMock(),
+            context=context,
+            password=None,
+            logger=MagicMock(),
+        )
+        new_file = ModelFile("Show", True)
+        new_file.state = ModelFile.State.DOWNLOADED
+        updater._handle_downloaded_file(ModelDiff(ModelDiff.Change.ADDED, old_file=None, new_file=new_file), pc)
+        return pipeline, pc
+
+    def test_root_move_skipped_while_a_nested_move_inside_it_is_in_flight(self):
+        pipeline, pc = self._run("Show/Season 1")
+        pipeline.find_overlapping_move.assert_called_once_with("Show", pc)
+        pipeline.spawn_move_process.assert_not_called()
+
+    def test_root_move_spawned_without_an_overlapping_move(self):
+        pipeline, pc = self._run(None)
+        pipeline.spawn_move_process.assert_called_once_with("Show", pc)

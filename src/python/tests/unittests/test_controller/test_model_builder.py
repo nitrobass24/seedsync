@@ -2246,6 +2246,40 @@ class TestModelBuilderNestedNavigation(unittest.TestCase):
         leaf = next(c for c in sub.get_children() if c.name == "f.bin")
         self.assertEqual(ModelFile.State.DOWNLOADING, leaf.state)
 
+    def test_staged_nested_file_shows_its_staging_size(self):
+        """A nested download sitting in staging (e.g. a stopped partial) shows
+        its staged size, like a top-level one does, and stays a nested row."""
+        r_top = SystemFile("Top", 1000, True)
+        r_sub = SystemFile("Sub", 1000, True)
+        r_sub.add_child(SystemFile("f.bin", 1000, False))
+        r_top.add_child(r_sub)
+        self.model_builder.set_remote_files([r_top])
+        self.model_builder.set_active_files([SystemFile("Top/Sub/f.bin", 400, False)])
+
+        model = self.model_builder.build_model()
+
+        self.assertEqual({"Top"}, set(model.get_file_names()))
+        sub = next(c for c in model.get_file("Top").get_children() if c.name == "Sub")
+        leaf = next(c for c in sub.get_children() if c.name == "f.bin")
+        self.assertEqual(400, leaf.local_size)
+
+    def test_staged_nested_dir_shows_its_staging_tree(self):
+        r_top = SystemFile("Top", 1000, True)
+        r_sub = SystemFile("Sub", 1000, True)
+        r_sub.add_child(SystemFile("f.bin", 1000, False))
+        r_top.add_child(r_sub)
+        self.model_builder.set_remote_files([r_top])
+        s_sub = SystemFile("Top/Sub", 300, True)
+        s_sub.add_child(SystemFile("f.bin", 300, False))
+        self.model_builder.set_active_files([s_sub])
+
+        model = self.model_builder.build_model()
+
+        sub = next(c for c in model.get_file("Top").get_children() if c.name == "Sub")
+        leaf = next(c for c in sub.get_children() if c.name == "f.bin")
+        self.assertEqual(300, sub.local_size)
+        self.assertEqual(300, leaf.local_size)
+
     def test_nested_status_never_creates_a_phantom_top_level_entry(self):
         """A '/'-containing status name is always routed to its nested child,
         even with nested navigation off (e.g. a nested job still running

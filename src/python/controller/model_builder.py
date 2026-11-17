@@ -30,6 +30,7 @@ class ModelBuilder:
         self.__pair_id = pair_id
         self.__local_files: dict[str, SystemFile] = {}
         self.__active_files: dict[str, SystemFile] = {}
+        self.__staged_nested_files: dict[str, SystemFile] = {}
         self.__remote_files: dict[str, SystemFile] = {}
         self.__lftp_statuses: dict[str, LftpJobStatus] = {}
         self.__downloaded_files: set[str] = set()
@@ -48,12 +49,15 @@ class ModelBuilder:
         self.logger = base_logger.getChild("ModelBuilder")
 
     def set_active_files(self, active_files: list[SystemFile]):
-        prev_active_files = self.__active_files
-        self.__active_files = {file.name: file for file in active_files}
+        prev = (self.__active_files, self.__staged_nested_files)
+        # A nested name ("Top/Sub/f.bin") is a nested download in staging; it
+        # overrides that child's local side, not a top-level entry.
+        self.__active_files = {f.name: f for f in active_files if not is_nested_name(f.name)}
+        self.__staged_nested_files = {f.name: f for f in active_files if is_nested_name(f.name)}
         # Always invalidate when active files present (sizes change rapidly)
         # Also invalidate when active files change (e.g. files removed after
         # a stopped download is deleted locally)
-        if len(active_files) > 0 or self.__active_files != prev_active_files:
+        if len(active_files) > 0 or (self.__active_files, self.__staged_nested_files) != prev:
             self.__cached_model = None
 
     def set_local_files(self, local_files: list[SystemFile]):
@@ -141,6 +145,7 @@ class ModelBuilder:
     def clear(self):
         self.__local_files.clear()
         self.__active_files.clear()
+        self.__staged_nested_files.clear()
         self.__remote_files.clear()
         self.__lftp_statuses.clear()
         self.__downloaded_files.clear()
@@ -273,7 +278,9 @@ class ModelBuilder:
             _all_children_names: set[str] = set[str]().union(_remote_children.keys(), _local_children.keys())
             for _child_name in _all_children_names:
                 _remote_child = _remote_children.get(_child_name)
-                _local_child = _local_children.get(_child_name)
+                _local_child = self.__staged_nested_files.get(
+                    os.path.join(_model_file.full_path, _child_name), _local_children.get(_child_name)
+                )
                 _is_dir = _remote_child.is_dir if _remote_child else (_local_child.is_dir if _local_child else False)
                 # sanity check is_dir
                 if (_remote_child and _is_dir != _remote_child.is_dir) or (
