@@ -328,6 +328,8 @@ class Lftp:
             except pexpect.exceptions.TIMEOUT:
                 self.logger.warning("Lftp timeout while consuming error output")
                 self.__pending_error = redact_credentials(error_out)
+                # Same as the first-read timeout: empty output must not parse as "no jobs"
+                self.__last_command_timed_out = True
                 return ""
             before = self.__process.before
             assert isinstance(before, bytes)

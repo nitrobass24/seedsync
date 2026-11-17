@@ -718,3 +718,21 @@ class TestMoveProcess(unittest.TestCase):
         self.assertEqual(0o700, stat.S_IMODE(os.stat(dst_top).st_mode))
         self.assertEqual(0o777, stat.S_IMODE(os.stat(os.path.join(dst_top, "New")).st_mode))
         self.assertEqual(0o666, stat.S_IMODE(os.stat(os.path.join(dst_top, "New", "a.bin")).st_mode))
+
+    def test_single_file_move_applies_umask_mode(self):
+        """#811: a moved single file gets 0666 & ~umask. Its only entry is ".",
+        which used to make the chmod target "file/." and fail with ENOTDIR."""
+        import stat
+
+        src_file = os.path.join(self.src_dir, "movie.mkv")
+        with open(src_file, "w") as f:
+            f.write("x")
+        os.chmod(src_file, 0o664)
+
+        process = self._make_process(
+            source_path=self.src_dir, dest_path=self.dst_dir, file_name="movie.mkv", umask=0o027
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertEqual(0o640, stat.S_IMODE(os.stat(os.path.join(self.dst_dir, "movie.mkv")).st_mode))
