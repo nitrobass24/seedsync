@@ -1228,6 +1228,32 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         self.assertTrue(result)
         mock_delete_cls.assert_called_once_with(local_path="/local", file_name="Top/leaf.rar")
 
+    @patch("controller.command_pipeline.os.path.exists", return_value=True)
+    @patch("controller.command_pipeline.DeleteLocalProcess")
+    def test_handle_delete_local_of_staged_nested_partial_sweeps_staged_nested(self, mock_delete_cls, _mock_exists):
+        """A stopped nested partial in staging is deleted there, and the sweep
+        afterwards forgets it so it isn't scanned or size-checked any more."""
+        pc = self._make_pair_context("pair-1")
+        pc.local_path = "/local"
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+
+        leaf = ModelFile("leaf.rar", False)
+        leaf.state = ModelFile.State.DEFAULT
+        leaf.local_size = 40
+        command = Command(Command.Action.DELETE_LOCAL, "Top/leaf.rar", pair_id="pair-1")
+        _calls, notify = self._make_notify()
+
+        result = pipeline._handle_delete_local(command, leaf, pc, [], notify)
+
+        self.assertTrue(result)
+        staging = os.path.join("/tmp/staging", "pair-1")
+        mock_delete_cls.assert_called_once_with(local_path=staging, file_name="Top/leaf.rar")
+        with patch.object(pipeline, "_sweep_staged_nested") as mock_sweep:
+            pipeline.active_command_processes[0].post_callback()
+        mock_sweep.assert_called_once_with(pc)
+
     @patch("controller.command_pipeline.DeleteRemoteProcess")
     def test_handle_delete_remote_nested_uses_full_path(self, mock_delete_cls):
         pc = self._make_pair_context("pair-1")
