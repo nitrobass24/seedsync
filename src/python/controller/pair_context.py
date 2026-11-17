@@ -59,6 +59,9 @@ class PairContext:
     # staging (finished or not). A top-level move leaves the incomplete ones
     # behind (see CommandPipeline.spawn_move_process).
     staged_nested: set[str] = field(default_factory=set[str])
+    # Downloaded roots whose validation/move waits for an overlapping move (see
+    # ModelUpdater._handle_downloaded_file)
+    deferred_post_download: set[str] = field(default_factory=set[str])
     remote_scan_received: bool = False
     # True once a model built from a remote scan is in the registry, so a
     # nested row's remote size can be resolved (see ModelUpdater._spawn_nested_moves)

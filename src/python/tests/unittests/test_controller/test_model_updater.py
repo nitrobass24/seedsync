@@ -862,3 +862,111 @@ class TestHandleDownloadedFileOverlappingMove(unittest.TestCase):
     def test_root_move_spawned_without_an_overlapping_move(self):
         pipeline, pc = self._run(None)
         pipeline.spawn_move_process.assert_called_once_with("Show", pc)
+
+
+class TestDeferredPostDownload(unittest.TestCase):
+    """A root that turns Downloaded while a nested move inside it is in flight
+    has its files split between staging and local_path. Validating or moving
+    it then would be wrong, so its post-download step waits for that move."""
+
+    def _make(self, overlapping_move=None, validate=False):
+        pc = MagicMock()
+        pc.pair_id = "pair-1"
+        pc.local_path = "/local"
+        pc.effective_local_path = "/staging"
+        pc.deferred_post_download = set()
+        context = MagicMock()
+        context.args.umask = None
+        context.config.validate.enabled = validate
+        context.config.validate.auto_validate = validate
+        context.config.controller.use_staging = True
+        context.config.controller.staging_path = "/staging"
+        context.config.autoqueue.auto_extract = False
+        pipeline = MagicMock()
+        pipeline.find_overlapping_move.return_value = overlapping_move
+        pipeline.pending_validation_keys = set()
+        registry = MagicMock()
+        validate_process = MagicMock()
+        updater = ModelUpdater(
+            pair_contexts=[pc],
+            persist=MagicMock(),
+            pipeline=pipeline,
+            registry=registry,
+            extract_process=MagicMock(),
+            validate_process=validate_process,
+            context=context,
+            password=None,
+            logger=MagicMock(),
+        )
+        return updater, pc, pipeline, registry, validate_process
+
+    @staticmethod
+    def _downloaded(name="Show"):
+        f = ModelFile(name, True)
+        f.state = ModelFile.State.DOWNLOADED
+        f.remote_size = 30
+        return f
+
+    def _diff(self, f):
+        return ModelDiff(ModelDiff.Change.ADDED, old_file=None, new_file=f)
+
+    def test_validation_and_move_wait_while_a_nested_move_overlaps(self):
+        updater, pc, pipeline, _registry, validate_process = self._make("Show/Season 1", validate=True)
+
+        updater._handle_downloaded_file(self._diff(self._downloaded()), pc)
+
+        validate_process.validate.assert_not_called()
+        pipeline.spawn_move_process.assert_not_called()
+        self.assertEqual({"Show"}, pc.deferred_post_download)
+
+    def test_deferred_root_moves_once_the_overlapping_move_is_done(self):
+        updater, pc, pipeline, registry, _validate_process = self._make(None)
+        pc.deferred_post_download = {"Show"}
+        registry.get_file.return_value = self._downloaded()
+
+        updater._resume_deferred_post_downloads()
+
+        registry.get_file.assert_called_once_with("Show", pair_id="pair-1")
+        pipeline.spawn_move_process.assert_called_once_with("Show", pc)
+        self.assertEqual(set(), pc.deferred_post_download)
+
+    def test_deferred_root_keeps_waiting_while_a_move_still_overlaps(self):
+        updater, pc, pipeline, registry, _validate_process = self._make("Show/Season 1")
+        pc.deferred_post_download = {"Show"}
+
+        updater._resume_deferred_post_downloads()
+
+        registry.get_file.assert_not_called()
+        pipeline.spawn_move_process.assert_not_called()
+        self.assertEqual({"Show"}, pc.deferred_post_download)
+
+    def test_deferred_root_no_longer_downloaded_is_dropped(self):
+        """Its state changed meanwhile (e.g. re-queued); a later Downloaded diff starts it afresh."""
+        updater, pc, pipeline, registry, _validate_process = self._make(None)
+        pc.deferred_post_download = {"Show"}
+        queued = self._downloaded()
+        queued.state = ModelFile.State.QUEUED
+        registry.get_file.return_value = queued
+
+        updater._resume_deferred_post_downloads()
+
+        pipeline.spawn_move_process.assert_not_called()
+        self.assertEqual(set(), pc.deferred_post_download)
+
+    def test_auto_validate_checks_staging_when_the_root_is_there(self):
+        updater, pc, _pipeline, _registry, validate_process = self._make(None, validate=True)
+
+        with patch("controller.model_updater.os.path.exists", side_effect=lambda p: p == "/staging/Show"):
+            updater._handle_downloaded_file(self._diff(self._downloaded()), pc)
+
+        self.assertEqual("/staging", validate_process.validate.call_args[0][0].local_path)
+
+    def test_auto_validate_checks_local_path_once_the_root_left_staging(self):
+        """A root completed by nested downloads that were already moved is all
+        in local_path; staging no longer holds it."""
+        updater, pc, _pipeline, _registry, validate_process = self._make(None, validate=True)
+
+        with patch("controller.model_updater.os.path.exists", return_value=False):
+            updater._handle_downloaded_file(self._diff(self._downloaded()), pc)
+
+        self.assertEqual("/local", validate_process.validate.call_args[0][0].local_path)

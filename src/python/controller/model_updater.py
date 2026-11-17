@@ -110,6 +110,7 @@ class ModelUpdater:
         self._process_extraction_failures(latest_failed_extractions)
         self._process_validation_results(latest_validated_results, latest_failed_validations)
         self._retry_failed_moves()
+        self._resume_deferred_post_downloads()
         self._update_controller_status()
 
     def _process_extraction_completions(self, latest_extracted_results: list[ExtractCompletedResult]) -> None:
@@ -228,18 +229,35 @@ class ModelUpdater:
                 daemon=True,
             ).start()
 
-        # Auto-validate if enabled
+        # A nested download still in staging counts toward its root, so the root
+        # can turn Downloaded while that download's own move is in flight, its
+        # files split between staging and local_path. Validating or moving it
+        # then would be wrong; resume once that move is done.
+        if use_staging:
+            overlapping = self._pipeline.find_overlapping_move(diff.new_file.name, pc)
+            if overlapping is not None:
+                self._logger.info(f"Holding '{diff.new_file.name}': '{overlapping}' is moving out of staging")
+                pc.deferred_post_download.add(diff.new_file.name)
+                return
+        self._start_post_download(diff.new_file, pc)
+
+    def _start_post_download(self, file: ModelFile, pc: PairContext) -> None:
+        """Auto-validate a Downloaded root, and with staging on move it to local_path
+        (after validation or extraction when either will run)."""
         will_auto_validate = (
             self._context.config.validate.enabled
             and self._context.config.validate.auto_validate
-            and diff.new_file.remote_size is not None
+            and file.remote_size is not None
         )
         if will_auto_validate:
+            # Where the root is: staging, or local_path once nested moves have taken
+            # all of it there
+            staged = os.path.exists(os.path.join(pc.effective_local_path, file.name))
             req = ValidateRequest(
-                name=diff.new_file.name,
-                is_dir=diff.new_file.is_dir,
+                name=file.name,
+                is_dir=file.is_dir,
                 pair_id=pc.pair_id,
-                local_path=pc.effective_local_path,
+                local_path=pc.effective_local_path if staged else pc.local_path,
                 remote_path=pc.remote_path,
                 algorithm=self._context.config.validate.algorithm,  # type: ignore[arg-type]
                 remote_address=self._context.config.lftp.remote_address,  # type: ignore[arg-type]
@@ -248,19 +266,28 @@ class ModelUpdater:
                 remote_port=self._context.config.lftp.remote_port,  # type: ignore[arg-type]
             )
             self._validate_process.validate(req)
-            self._pipeline.pending_validation_keys.add(persist_key(pc.pair_id, diff.new_file.name))
-            self._logger.info(f"Auto-queued validation for '{diff.new_file.name}'")
+            self._pipeline.pending_validation_keys.add(persist_key(pc.pair_id, file.name))
+            self._logger.info(f"Auto-queued validation for '{file.name}'")
 
         if self._context.config.controller.use_staging and self._context.config.controller.staging_path:
-            will_auto_extract = self._context.config.autoqueue.auto_extract and diff.new_file.is_extractable
-            # A nested download still in staging counts toward its root, so the
-            # root can turn Downloaded while that download's own move is in
-            # flight. Leave the files to that move rather than race it.
-            overlapping = self._pipeline.find_overlapping_move(diff.new_file.name, pc)
-            if overlapping is not None:
-                self._logger.info(f"Not moving '{diff.new_file.name}': '{overlapping}' is moving out of staging")
-            elif not will_auto_extract and not will_auto_validate:
-                self._pipeline.spawn_move_process(diff.new_file.name, pc)
+            will_auto_extract = self._context.config.autoqueue.auto_extract and file.is_extractable
+            if not will_auto_extract and not will_auto_validate:
+                self._pipeline.spawn_move_process(file.name, pc)
+
+    def _resume_deferred_post_downloads(self) -> None:
+        """Start the post-download step of each held root no move overlaps any more."""
+        for pc in self._pair_contexts:
+            for name in list(pc.deferred_post_download):
+                if self._pipeline.find_overlapping_move(name, pc) is not None:
+                    continue
+                pc.deferred_post_download.discard(name)
+                try:
+                    file = self._registry.get_file(name, pair_id=pc.pair_id)
+                except ModelError:
+                    continue
+                # Otherwise its state moved on; a later Downloaded diff starts it afresh
+                if file.state == ModelFile.State.DOWNLOADED:
+                    self._start_post_download(file, pc)
 
     def _handle_pending_completion(self, diff: ModelDiff, pc: PairContext | None) -> None:
         """Track pending_completion state for a diff."""
