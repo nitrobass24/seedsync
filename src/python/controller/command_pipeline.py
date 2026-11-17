@@ -26,7 +26,7 @@ from .extract import ExtractProcess, ExtractRequest
 from .model_registry import ModelRegistry
 from .move import MoveProcess
 from .pair_context import PairContext
-from .persist_keys import persist_key
+from .persist_keys import persist_key, strip_persist_key
 from .validate import ValidateProcess, ValidateRequest
 from .worker_supervisor import WorkerSupervisor
 
@@ -223,6 +223,7 @@ class CommandPipeline:
             if pc.effective_local_path != pc.local_path:
                 pc.pending_nested_moves.add(command.filename)
                 pc.staged_nested.add(command.filename)
+                self._persist.staged_nested_file_names.add(persist_key(pc.pair_id, command.filename))
             # A nested job's move has no requeue diff to reset it
             # (ModelUpdater._handle_requeued_file sees top-level files only).
             move_key = persist_key(pc.pair_id, command.filename)
@@ -872,19 +873,40 @@ class CommandPipeline:
         """Forget staged nested downloads that are no longer in staging (moved,
         deleted, or carried along by an ancestor's move)."""
         staging = self._pair_staging_dir(pc)
-        if staging is None:
-            pc.staged_nested.clear()
-            return
         # An unfinished file with lftp temp files on is "<name>.lftp"
         suffix = Constants.LFTP_TEMP_FILE_SUFFIX
-        pc.staged_nested.difference_update(
-            [
-                name
-                for name in pc.staged_nested
-                if not os.path.exists(os.path.join(staging, name))
+        gone = [
+            name
+            for name in pc.staged_nested
+            if staging is None
+            or (
+                not os.path.exists(os.path.join(staging, name))
                 and not os.path.exists(os.path.join(staging, name + suffix))
-            ]
-        )
+            )
+        ]
+        pc.staged_nested.difference_update(gone)
+        self._persist.staged_nested_file_names.difference_update(persist_key(pc.pair_id, name) for name in gone)
+
+    def restore_staged_nested(self, pc: PairContext) -> None:
+        """Pick up the nested downloads a previous session left in staging.
+
+        Restores pc.staged_nested from its persisted copy (dropping names no
+        longer in staging) and queues each one's move; the move checks its
+        size. A top-level name holding one is taken off pc.pending_completion:
+        the active scanner would report its staging copy, which holds only
+        the nested downloads, in place of its local_path copy. The active
+        scanner gets the corrected names before its first scan.
+        """
+        if self._pair_staging_dir(pc) is None:
+            return
+        for key in self._persist.staged_nested_file_names:
+            name = strip_persist_key(key, pc.pair_id)
+            if name != key or pc.pair_id is None:
+                pc.staged_nested.add(name)
+        self._sweep_staged_nested(pc)
+        pc.pending_nested_moves.update(pc.staged_nested)
+        pc.pending_completion.difference_update(name.split("/", 1)[0] for name in pc.staged_nested)
+        pc.active_scanner.set_active_files(sorted(pc.pending_completion | pc.staged_nested))
 
     def _get_pair_context_for_command(self, command: Command) -> PairContext | None:
         """Find the pair context for a command based on pair_id."""

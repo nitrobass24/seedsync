@@ -113,6 +113,8 @@ class Controller:
 
         # Seed each builder with filtered persist state
         self.__persist_sync.sync()
+        for pc in self.__pair_contexts:
+            self.__pipeline.restore_staged_nested(pc)
 
         # Flag for hot-reloading LFTP tuning settings (set from REST thread)
         self.__needs_lftp_reconfigure = threading.Event()

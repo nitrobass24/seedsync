@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import os
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -483,6 +484,72 @@ class TestCommandPipelineHelpers(unittest.TestCase):
         pipeline._sweep_staged_nested(pc)
 
         self.assertEqual(set(), pc.staged_nested)
+
+    def test_sweep_staged_nested_drops_persisted_keys_too(self):
+        pc = self._make_pair_context("pair-1")
+        pc.staged_nested = {"Top/kept.bin", "Top/gone.bin"}
+        pipeline = self._make_pipeline([pc])
+        pipeline._persist.staged_nested_file_names = {
+            persist_key("pair-1", "Top/kept.bin"),
+            persist_key("pair-1", "Top/gone.bin"),
+        }
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+        kept_path = os.path.join("/tmp/staging", "pair-1", "Top/kept.bin")
+
+        with patch("controller.command_pipeline.os.path.exists", side_effect=lambda p: p == kept_path):
+            pipeline._sweep_staged_nested(pc)
+
+        self.assertEqual({persist_key("pair-1", "Top/kept.bin")}, pipeline._persist.staged_nested_file_names)
+
+    # --- restore_staged_nested ---
+
+    def test_restore_staged_nested_picks_up_what_a_previous_session_left_in_staging(self):
+        """staged_nested is in memory; its persisted copy brings back the nested
+        downloads still in staging, queues their moves, and keeps their
+        top-level name off the active scan (its staging copy holds only them)."""
+        with tempfile.TemporaryDirectory() as staging_root:
+            os.makedirs(os.path.join(staging_root, "pair-1", "Top", "Sub"))
+            with open(os.path.join(staging_root, "pair-1", "Top", "Sub", "f.bin"), "w") as f:
+                f.write("x")
+            pc = self._make_pair_context("pair-1")
+            pc.staged_nested = set()
+            pc.pending_nested_moves = set()
+            pc.pending_completion = {"Top", "Movie.mkv"}
+            pipeline = self._make_pipeline([pc])
+            pipeline._context.config.controller.use_staging = True
+            pipeline._context.config.controller.staging_path = staging_root
+            other_pair_key = persist_key("pair-2", "X/y.bin")
+            pipeline._persist.staged_nested_file_names = {
+                persist_key("pair-1", "Top/Sub/f.bin"),
+                persist_key("pair-1", "Top/gone.bin"),
+                other_pair_key,
+            }
+
+            pipeline.restore_staged_nested(pc)
+
+        self.assertEqual({"Top/Sub/f.bin"}, pc.staged_nested)
+        self.assertEqual({"Top/Sub/f.bin"}, pc.pending_nested_moves)
+        self.assertEqual({"Movie.mkv"}, pc.pending_completion)
+        self.assertEqual(
+            {persist_key("pair-1", "Top/Sub/f.bin"), other_pair_key}, pipeline._persist.staged_nested_file_names
+        )
+        pc.active_scanner.set_active_files.assert_called_once_with(["Movie.mkv", "Top/Sub/f.bin"])
+
+    def test_restore_staged_nested_does_nothing_with_staging_off(self):
+        pc = self._make_pair_context("pair-1")
+        pc.staged_nested = set()
+        pc.pending_nested_moves = set()
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = False
+        pipeline._context.config.controller.staging_path = None
+        pipeline._persist.staged_nested_file_names = {persist_key("pair-1", "Top/a.bin")}
+
+        pipeline.restore_staged_nested(pc)
+
+        self.assertEqual(set(), pc.staged_nested)
+        self.assertEqual(set(), pc.pending_nested_moves)
+        pc.active_scanner.set_active_files.assert_not_called()
 
     # --- propagate_exceptions: worker-fault isolation (#511) ---
 
@@ -1504,6 +1571,20 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         pipeline.sync_persist_callback.assert_called_once()
         self.assertEqual({"Top/leaf.rar"}, pc.pending_nested_moves)
         self.assertEqual({"Top/leaf.rar"}, pc.staged_nested)
+
+    def test_nested_queue_under_staging_persists_staged_nested(self):
+        """So a restart can find the download in staging again."""
+        pc = self._make_pair_context("pair-1", effective_local_path="/staging/pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.general.exclude_patterns = ""
+        pipeline._persist.staged_nested_file_names = set()
+        leaf = ModelFile("leaf.rar", False)
+        leaf.remote_size = 100
+        command = Command(Command.Action.QUEUE, "Top/leaf.rar", pair_id="pair-1")
+        _calls, notify = self._make_notify()
+
+        self.assertTrue(pipeline._handle_queue(command, leaf, pc, notify))
+        self.assertEqual({persist_key("pair-1", "Top/leaf.rar")}, pipeline._persist.staged_nested_file_names)
 
     def test_nested_queue_without_staging_adds_no_pending_move(self):
         pc = self._make_pair_context("pair-1")
