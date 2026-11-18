@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from controller.move.move_process import MoveFailedResult, MoveProcess
+from controller.move.move_process import MoveFailedResult, MoveProcess, prune_empty_staging_parents
 
 
 class TestMoveProcess(unittest.TestCase):
@@ -315,12 +315,11 @@ class TestMoveProcess(unittest.TestCase):
 
         self.assertEqual(5, MoveProcess._get_copied_size(src_subdir, dst_subdir))
 
-    # --- Nested names: multi-level dest parents + staging prune ---
+    # --- Nested names: multi-level dest parents ---
 
-    def test_move_nested_name_creates_dest_parents_and_prunes_empty_staging_dirs(self):
-        """A nested name's move must create every missing dest parent level and,
-        once the source is gone, remove the staging dirs it emptied up to (not
-        including) source_path."""
+    def test_move_nested_name_creates_dest_parents(self):
+        """A nested name's move must create every missing dest parent level.
+        Its emptied staging dirs are left for prune_empty_staging_parents."""
         nested_dir = os.path.join(self.src_dir, "Top", "Sub")
         os.makedirs(nested_dir)
         src_file = os.path.join(nested_dir, "f.bin")
@@ -334,53 +333,11 @@ class TestMoveProcess(unittest.TestCase):
         self.assertTrue(os.path.exists(dst_file))
         with open(dst_file) as f:
             self.assertEqual("data", f.read())
-        self.assertFalse(os.path.exists(os.path.join(self.src_dir, "Top", "Sub")))
-        self.assertFalse(os.path.exists(os.path.join(self.src_dir, "Top")))
-        self.assertTrue(os.path.exists(self.src_dir))
+        self.assertFalse(os.path.exists(src_file))
         self.assertEqual([], process.pop_failed())
 
-    def test_move_nested_prune_stops_at_nonempty_sibling(self):
-        """Pruning stops at the first staging dir still holding something, such
-        as a sibling file from another job - that dir (and its ancestors) must
-        survive."""
-        nested_dir = os.path.join(self.src_dir, "Top", "Sub")
-        os.makedirs(nested_dir)
-        src_file = os.path.join(nested_dir, "f.bin")
-        with open(src_file, "w") as f:
-            f.write("data")
-        sibling_file = os.path.join(self.src_dir, "Top", "sibling.txt")
-        with open(sibling_file, "w") as f:
-            f.write("keepme")
-
-        process = self._make_process(source_path=self.src_dir, dest_path=self.dst_dir, file_name="Top/Sub/f.bin")
-        self._run_process(process)
-
-        self.assertFalse(os.path.exists(os.path.join(self.src_dir, "Top", "Sub")))
-        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Top")))
-        self.assertTrue(os.path.exists(sibling_file))
-
-    def test_move_nested_prune_keeps_dir_a_queued_sibling_needs(self):
-        """A queued nested job's parent dir is made when it's queued, and pget
-        won't recreate it, so an emptied dir it needs must survive the prune."""
-        nested_dir = os.path.join(self.src_dir, "Top", "Sub")
-        os.makedirs(nested_dir)
-        with open(os.path.join(nested_dir, "a.bin"), "w") as f:
-            f.write("data")
-
-        process = self._make_process(
-            source_path=self.src_dir,
-            dest_path=self.dst_dir,
-            file_name="Top/Sub/a.bin",
-            keep_parents_of=frozenset({"Top/Sub/b.bin"}),
-        )
-        self._run_process(process)
-
-        self.assertEqual([], process.pop_failed())
-        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub", "a.bin")))
-        self.assertTrue(os.path.isdir(nested_dir))
-
-    def test_move_nested_via_copy_delete_prunes_empty_staging_dirs(self):
-        """The copy+delete fallback path must prune the same as the rename path."""
+    def test_move_nested_via_copy_delete(self):
+        """The copy+delete fallback path moves a nested name the same as the rename path."""
         nested_dir = os.path.join(self.src_dir, "Top", "Sub")
         os.makedirs(nested_dir)
         src_file = os.path.join(nested_dir, "f.bin")
@@ -391,10 +348,8 @@ class TestMoveProcess(unittest.TestCase):
         with mock.patch("controller.move.move_process.os.rename", side_effect=OSError(errno.EXDEV, "cross-device")):
             self._run_process(process)
 
-        dst_file = os.path.join(self.dst_dir, "Top", "Sub", "f.bin")
-        self.assertTrue(os.path.exists(dst_file))
-        self.assertFalse(os.path.exists(os.path.join(self.src_dir, "Top", "Sub")))
-        self.assertFalse(os.path.exists(os.path.join(self.src_dir, "Top")))
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub", "f.bin")))
+        self.assertFalse(os.path.exists(src_file))
         self.assertEqual([], process.pop_failed())
 
     # --- expected_size: skip (not fail) an in-flight nested download (#811) ---
@@ -756,3 +711,41 @@ class TestMoveProcess(unittest.TestCase):
 
         self.assertEqual([], process.pop_failed())
         self.assertEqual(0o640, stat.S_IMODE(os.stat(os.path.join(self.dst_dir, "movie.mkv")).st_mode))
+
+
+class TestPruneEmptyStagingParents(unittest.TestCase):
+    def setUp(self):
+        self.staging = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.staging, True)
+        os.makedirs(os.path.join(self.staging, "Top", "Sub"))
+
+    def test_removes_emptied_dirs_up_to_source_path(self):
+        prune_empty_staging_parents(self.staging, "Top/Sub/f.bin", set())
+
+        self.assertFalse(os.path.exists(os.path.join(self.staging, "Top")))
+        self.assertTrue(os.path.isdir(self.staging))
+
+    def test_stops_at_nonempty_dir(self):
+        """A dir still holding something, such as another job's file, survives
+        along with its ancestors."""
+        sibling_file = os.path.join(self.staging, "Top", "sibling.txt")
+        with open(sibling_file, "w") as f:
+            f.write("keepme")
+
+        prune_empty_staging_parents(self.staging, "Top/Sub/f.bin", set())
+
+        self.assertFalse(os.path.exists(os.path.join(self.staging, "Top", "Sub")))
+        self.assertTrue(os.path.exists(sibling_file))
+
+    def test_keeps_dir_a_queued_sibling_needs(self):
+        """A queued nested job's parent dir is made when it's queued, and pget
+        won't recreate it, so an emptied dir it needs must survive."""
+        prune_empty_staging_parents(self.staging, "Top/Sub/a.bin", {"Top/Sub/b.bin"})
+
+        self.assertTrue(os.path.isdir(os.path.join(self.staging, "Top", "Sub")))
+
+    def test_ignores_a_name_that_only_shares_a_prefix(self):
+        prune_empty_staging_parents(self.staging, "Top/Sub/a.bin", {"Top/Subtitles/b.srt"})
+
+        self.assertFalse(os.path.exists(os.path.join(self.staging, "Top", "Sub")))
+        self.assertTrue(os.path.isdir(os.path.join(self.staging, "Top")))

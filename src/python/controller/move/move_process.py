@@ -8,11 +8,32 @@ import errno
 import os
 import shutil
 import stat
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from typing import override
 
 from common import AppOneShotProcess, Constants, PipeStream
 from system import apply_umask_modes_to, relative_entries
+
+
+def prune_empty_staging_parents(source_path: str, file_name: str, keep_parents_of: AbstractSet[str]) -> None:
+    """Remove the staging dirs above `file_name` that its move emptied, up to
+    (not including) source_path. Stops at the first one still holding
+    something, or that a name in `keep_parents_of` lies under: a queued nested
+    job's dir is made at queue time, and pget won't recreate it.
+
+    Runs on the controller thread once the move has finished, so it sees every
+    nested job queued while the move ran."""
+    parent = os.path.dirname(os.path.join(source_path, file_name))
+    while os.path.normpath(parent) != os.path.normpath(source_path):
+        rel_parent = os.path.relpath(parent, source_path) + os.sep
+        if any(path.startswith(rel_parent) for path in keep_parents_of):
+            return
+        try:
+            os.rmdir(parent)
+        except OSError:
+            return
+        parent = os.path.dirname(parent)
 
 
 @dataclass
@@ -42,7 +63,6 @@ class MoveProcess(AppOneShotProcess):
         umask: int | None = None,
         expected_size: int | None = None,
         nested_expected_sizes: dict[str, int | None] | None = None,
-        keep_parents_of: frozenset[str] = frozenset(),
     ):
         super().__init__(name=self.__class__.__name__)
         self.__source_path = source_path
@@ -59,10 +79,6 @@ class MoveProcess(AppOneShotProcess):
         # the same way; an incomplete one (or one of unknown size) is left in
         # place while the rest of the tree moves.
         self.__nested_expected_sizes = nested_expected_sizes or {}
-        # Paths relative to source_path whose parent dirs survive the prune of
-        # emptied staging dirs (a queued nested job's dir is made at queue time,
-        # and pget won't recreate it)
-        self.__keep_parents_of = keep_parents_of
         self.__failed_result_stream = PipeStream()
 
     @property
@@ -177,7 +193,6 @@ class MoveProcess(AppOneShotProcess):
                 return
             left = ", ".join(sorted(os.path.relpath(p, self.__source_path) for p in incomplete))
             self.logger.info(f"Left incomplete nested downloads in staging: {left}")
-        self.__prune_empty_staging_parents(src)
 
     def _incomplete_nested(self, src: str) -> frozenset[str]:
         """Absolute staging paths of the listed nested downloads under src that
@@ -299,21 +314,6 @@ class MoveProcess(AppOneShotProcess):
     def __apply_modes(self, dst: str, moved_entries: list[tuple[str, bool]]) -> None:
         if self.__umask is not None:
             apply_umask_modes_to(dst, moved_entries, self.__umask, self.logger)
-
-    def __prune_empty_staging_parents(self, src: str) -> None:
-        """Remove the staging dirs a nested name's move emptied, up to (not
-        including) source_path. Stops at the first one still holding something,
-        such as another nested job's download."""
-        parent = os.path.dirname(src)
-        while os.path.normpath(parent) != os.path.normpath(self.__source_path):
-            rel_parent = os.path.relpath(parent, self.__source_path) + os.sep
-            if any(path.startswith(rel_parent) for path in self.__keep_parents_of):
-                return
-            try:
-                os.rmdir(parent)
-            except OSError:
-                return
-            parent = os.path.dirname(parent)
 
     def pop_failed(self) -> list[MoveFailedResult]:
         """Process-safe method to retrieve any move failures."""

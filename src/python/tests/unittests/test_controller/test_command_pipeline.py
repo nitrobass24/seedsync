@@ -1,6 +1,7 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import os
+import shutil
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
@@ -397,20 +398,43 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         self.assertEqual({"Sub/big.bin": 999}, mock_move_cls.call_args.kwargs["nested_expected_sizes"])
 
-    @patch("controller.command_pipeline.os.path.exists", return_value=True)
-    @patch("controller.command_pipeline.MoveProcess")
-    def test_spawn_move_process_keeps_dirs_of_other_pending_nested_downloads(self, mock_move_cls, _mock_exists):
+    def _finish_nested_move_in_real_staging(self, pending_nested_moves, *, failed_results=None):
+        """Finish a 'Top/Sub/a.bin' move whose staging dir it emptied; return that dir."""
+        staging_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, staging_root, True)
+        sub_dir = os.path.join(staging_root, "pair-1", "Top", "Sub")
+        os.makedirs(sub_dir)
         pc = self._make_pair_context("pair-1")
-        pc.local_path = "/local/pair-1"
-        pc.staged_nested = set()
-        pc.pending_nested_moves = {"Top/Sub/b.bin"}
+        pc.pending_nested_moves = pending_nested_moves
         pipeline = self._make_pipeline([pc])
         pipeline._context.config.controller.use_staging = True
-        pipeline._context.config.controller.staging_path = "/tmp/staging"
+        pipeline._context.config.controller.staging_path = staging_root
+        move_process = self._make_move_process("pair-1", "Top/Sub/a.bin", failed_results=failed_results)
+        pipeline.active_move_processes.append(move_process)
 
-        pipeline.spawn_move_process("Top/Sub/a.bin", pc, expected_size=1)
+        with patch.object(pipeline, "_sweep_staged_nested"):
+            pipeline.cleanup()
+        return sub_dir
 
-        self.assertEqual(frozenset({"Top/Sub/b.bin"}), mock_move_cls.call_args.kwargs["keep_parents_of"])
+    def test_finalize_prunes_staging_dirs_a_nested_move_emptied(self):
+        sub_dir = self._finish_nested_move_in_real_staging(set())
+
+        self.assertFalse(os.path.exists(os.path.dirname(sub_dir)))
+
+    def test_finalize_keeps_dir_of_a_sibling_queued_during_the_move(self):
+        """A sibling queued while the move ran (after it was spawned) still needs
+        its staging dir, which pget won't recreate."""
+        sub_dir = self._finish_nested_move_in_real_staging({"Top/Sub/b.bin"})
+
+        self.assertTrue(os.path.isdir(sub_dir))
+
+    def test_finalize_does_not_prune_after_a_failed_move(self):
+        failure = MagicMock()
+        failure.name = "Top/Sub/a.bin"
+        failure.error_message = "source does not exist"
+        sub_dir = self._finish_nested_move_in_real_staging(set(), failed_results=[failure])
+
+        self.assertTrue(os.path.isdir(sub_dir))
 
     # --- _staged_nested_sizes ---
 

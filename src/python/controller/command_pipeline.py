@@ -24,7 +24,7 @@ from .delete import CleanupLocalProcess, DeleteLocalProcess, DeleteRemoteProcess
 from .exclude_patterns import parse_exclude_patterns
 from .extract import ExtractProcess, ExtractRequest
 from .model_registry import ModelRegistry
-from .move import MoveProcess
+from .move import MoveProcess, prune_empty_staging_parents
 from .pair_context import PairContext
 from .persist_keys import persist_key, strip_persist_key
 from .validate import ValidateProcess, ValidateRequest
@@ -717,6 +717,9 @@ class CommandPipeline:
         # pair; fall back to all pairs only if the owner can't be located.
         owner = next((pc for pc in self._pair_contexts if pc.pair_id == move_process.pair_id), None)
         if owner is not None:
+            staging = self._pair_staging_dir(owner)
+            if not failed and staging is not None and is_nested_name(move_process.file_name):
+                prune_empty_staging_parents(staging, move_process.file_name, owner.pending_nested_moves)
             self._sweep_staged_nested(owner)
             owner.local_scan_process.force_scan()
         else:
@@ -844,7 +847,6 @@ class CommandPipeline:
             umask=self._context.args.umask,
             expected_size=expected_size,
             nested_expected_sizes=self._staged_nested_sizes(file_name, pc),
-            keep_parents_of=frozenset(pc.pending_nested_moves - {file_name}),
         )
         process.set_mp_log_queue(self._mp_logger.queue, self._mp_logger.log_level)
         # Start before publishing bookkeeping: if start() raises we must not leave
