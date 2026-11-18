@@ -54,6 +54,9 @@ class PairContext:
     pending_completion: set[str] = field(default_factory=set[str])
     remote_scan_received: bool = False
     local_scan_received: bool = False
+    # pending_completion names get their local size from the active scanner;
+    # until its first scan, a row with none isn't known to be gone
+    active_scan_received: bool = False
 
     # Temporary storage for latest scan results (set during ModelUpdater._update_pair_model_state)
     latest_remote_scan: ScannerResult | None = None

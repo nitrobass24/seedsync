@@ -560,3 +560,101 @@ class TestHandleDownloadedFileUmask(unittest.TestCase):
         apply, threads = self._run(None)
         apply.assert_not_called()
         self.assertEqual([], threads)
+
+
+class TestHandlePendingCompletion(unittest.TestCase):
+    """pending_completion keeps the active scanner on a download in staging,
+    including one a previous session left there (#826)."""
+
+    def _make(self, state, local_size=None, *, active_scan_received=True):
+        pc = MagicMock()
+        pc.pair_id = "pair-1"
+        pc.pending_completion = {"Show"}
+        pc.active_scan_received = active_scan_received
+        pipeline = MagicMock()
+        pipeline.moved_file_keys = set()
+        pipeline.pending_validation_keys = set()
+        context = MagicMock()
+        context.config.controller.use_staging = True
+        context.config.controller.staging_path = "/staging"
+        updater = ModelUpdater(
+            pair_contexts=[pc],
+            persist=MagicMock(),
+            pipeline=pipeline,
+            registry=MagicMock(),
+            extract_process=MagicMock(),
+            validate_process=MagicMock(),
+            context=context,
+            password=None,
+            logger=MagicMock(),
+        )
+        file = ModelFile("Show", True, pair_id="pair-1")
+        file.state = state
+        file.local_size = local_size
+        diff = ModelDiff(ModelDiff.Change.ADDED, None, file)
+        return updater, pc, pipeline, diff
+
+    def test_keeps_a_name_with_no_local_size_until_the_first_active_scan(self):
+        for state in (ModelFile.State.DEFAULT, ModelFile.State.DELETED):
+            with self.subTest(state=state):
+                updater, pc, _, diff = self._make(state, active_scan_received=False)
+
+                updater._handle_pending_completion(diff, pc)
+
+                self.assertEqual({"Show"}, pc.pending_completion)
+
+    def test_drops_a_name_with_no_local_size_once_the_active_scan_has_run(self):
+        updater, pc, _, diff = self._make(ModelFile.State.DEFAULT)
+
+        updater._handle_pending_completion(diff, pc)
+
+        self.assertEqual(set(), pc.pending_completion)
+
+    def test_moves_a_finished_download_whose_move_a_restart_cut_short(self):
+        for state in (ModelFile.State.EXTRACTED, ModelFile.State.VALIDATED, ModelFile.State.CORRUPT):
+            with self.subTest(state=state):
+                updater, pc, pipeline, diff = self._make(state, local_size=10)
+
+                updater._handle_pending_completion(diff, pc)
+
+                pipeline.spawn_move_process.assert_called_once_with("Show", pc)
+                self.assertEqual(set(), pc.pending_completion)
+
+    def test_no_second_move_once_one_was_spawned(self):
+        updater, pc, pipeline, diff = self._make(ModelFile.State.VALIDATED, local_size=10)
+        pipeline.moved_file_keys.add(persist_key("pair-1", "Show"))
+
+        updater._handle_pending_completion(diff, pc)
+
+        pipeline.spawn_move_process.assert_not_called()
+
+    def test_no_move_while_validation_is_pending(self):
+        """With auto-validate on, an extracted download waits for validation to
+        finish, which spawns its move."""
+        updater, pc, pipeline, diff = self._make(ModelFile.State.EXTRACTED, local_size=10)
+        pipeline.pending_validation_keys.add(persist_key("pair-1", "Show"))
+
+        updater._handle_pending_completion(diff, pc)
+
+        pipeline.spawn_move_process.assert_not_called()
+
+    def test_active_scan_received_is_set_by_a_successful_active_scan(self):
+        pc = MagicMock()
+        pc.active_scan_received = False
+        pc.remote_scan_process.pop_latest_result.return_value = None
+        pc.local_scan_process.pop_latest_result.return_value = None
+        pc.lftp.status.return_value = []
+        pc.active_downloading_file_names = []
+        pc.active_extracting_file_names = []
+        pc.pending_completion = set()
+        updater, _, _, _ = self._make(ModelFile.State.DEFAULT)
+
+        pc.active_scan_process.pop_latest_result.return_value = ScannerResult(
+            timestamp=datetime.now(), files=[], failed=True, error_message="x"
+        )
+        updater._update_pair_model_state(pc, None, None)
+        self.assertFalse(pc.active_scan_received)
+
+        pc.active_scan_process.pop_latest_result.return_value = ScannerResult(timestamp=datetime.now(), files=[])
+        updater._update_pair_model_state(pc, None, None)
+        self.assertTrue(pc.active_scan_received)

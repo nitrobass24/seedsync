@@ -259,6 +259,11 @@ class ModelUpdater:
         """Track pending_completion state for a diff."""
         if diff.new_file is None or pc is None or diff.new_file.name not in pc.pending_completion:
             return
+        if not pc.active_scan_received:
+            # A download left in staging by a previous session has no local
+            # size until the active scanner's first scan, which the first
+            # remote listing can beat. Dropping it here would hide it for good.
+            return
         use_staging = self._context.config.controller.use_staging and self._context.config.controller.staging_path
         # A file with no local presence and DEFAULT state means
         # it was deleted locally (e.g. stopped download whose files
@@ -267,6 +272,14 @@ class ModelUpdater:
             pc.pending_completion.discard(diff.new_file.name)
         elif use_staging:
             move_key = persist_key(diff.new_file.pair_id, diff.new_file.name)
+            if (
+                diff.new_file.state in (ModelFile.State.EXTRACTED, ModelFile.State.VALIDATED, ModelFile.State.CORRUPT)
+                and move_key not in self._pipeline.moved_file_keys
+                and move_key not in self._pipeline.pending_validation_keys
+            ):
+                # Done with extract/validate but never moved: a restart cut its
+                # move short. In-session, that move is already spawned by now.
+                self._pipeline.spawn_move_process(diff.new_file.name, pc)
             if move_key in self._pipeline.moved_file_keys or diff.new_file.state in (
                 ModelFile.State.DELETED,
                 ModelFile.State.EXTRACTED,
@@ -511,6 +524,8 @@ class ModelUpdater:
             pc.model_builder.set_local_files(latest_local_scan.files)
         if latest_active_scan is not None:
             pc.model_builder.set_active_files(latest_active_scan.files)
+            if not latest_active_scan.failed:
+                pc.active_scan_received = True
         if lftp_statuses is not None:
             pc.model_builder.set_lftp_statuses(lftp_statuses)
         if latest_extract_statuses is not None:
