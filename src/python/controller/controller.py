@@ -211,15 +211,19 @@ class Controller:
         # use_temp_file is set to: the setting is hot-applied to lftp
         # (_LFTP_TUNING_KEYS), so it can change after these are built, and
         # temp files from an earlier interrupted download can outlive it.
-        active_scanner = ActiveScanner(effective_local_path, lftp_temp_suffix=Constants.LFTP_TEMP_FILE_SUFFIX)
         # pending_completion is in memory only: re-seed it with what a previous
         # session left in staging (finished or stopped), so the active scanner
         # shows it and a finished one still gets its move. The scanner gets the
-        # names now so its first scan, not the next one, covers them.
+        # names now so its first scan covers them: ModelUpdater holds off on
+        # pending_completion until that scan.
         left_in_staging: set[str] = (
             staged_top_level_names(effective_local_path) if effective_local_path != local_path else set()
         )
-        active_scanner.set_active_files(sorted(left_in_staging))
+        active_scanner = ActiveScanner(
+            effective_local_path,
+            lftp_temp_suffix=Constants.LFTP_TEMP_FILE_SUFFIX,
+            initial_files=sorted(left_in_staging),
+        )
         local_scanner = LocalScanner(local_path=local_path)
         remote_scanner = RemoteScanner(
             remote_address=self.__context.config.lftp.remote_address,  # type: ignore[arg-type]

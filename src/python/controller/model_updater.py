@@ -95,6 +95,7 @@ class ModelUpdater:
         latest_failed_validations = self._validate_process.pop_failed()
 
         # Process each pair context's scan results and LFTP status
+        awaiting_active_scan = [pc for pc in self._pair_contexts if not pc.active_scan_received]
         for pc in self._pair_contexts:
             self._update_pair_model_state(pc, latest_extract_statuses, latest_validate_statuses)
 
@@ -104,6 +105,9 @@ class ModelUpdater:
         if new_model is not None:
             model_diff = self._registry.apply_diff(new_model)
             self._process_model_diffs(model_diff)
+        for pc in awaiting_active_scan:
+            if pc.active_scan_received:
+                self._recheck_pending_completion(pc)
 
         self._prune_stale_persist()
         self._process_extraction_failures(latest_failed_extractions)
@@ -177,7 +181,7 @@ class ModelUpdater:
 
             self._handle_requeued_file(diff)
             self._handle_downloaded_file(diff, pc)
-            self._handle_pending_completion(diff, pc)
+            self._handle_pending_completion(diff.new_file, pc)
 
     def _handle_requeued_file(self, diff: ModelDiff) -> None:
         """Clear persist state when a file goes back to QUEUED/DOWNLOADING."""
@@ -255,9 +259,22 @@ class ModelUpdater:
             if not will_auto_extract and not will_auto_validate:
                 self._pipeline.spawn_move_process(diff.new_file.name, pc)
 
-    def _handle_pending_completion(self, diff: ModelDiff, pc: PairContext | None) -> None:
-        """Track pending_completion state for a diff."""
-        if diff.new_file is None or pc is None or diff.new_file.name not in pc.pending_completion:
+    def _recheck_pending_completion(self, pc: PairContext) -> None:
+        """Re-check each pending name once the first active scan is in the model.
+        Diffs before that scan were skipped, and a name the scan found gone may
+        produce no new diff."""
+        for name in list(pc.pending_completion):
+            try:
+                file = self._registry.get_file(name, pair_id=pc.pair_id)
+            except ModelError:
+                # Neither listed remotely nor found locally
+                pc.pending_completion.discard(name)
+                continue
+            self._handle_pending_completion(file, pc)
+
+    def _handle_pending_completion(self, file: ModelFile | None, pc: PairContext | None) -> None:
+        """Track pending_completion state for a file's new model row."""
+        if file is None or pc is None or file.name not in pc.pending_completion:
             return
         if not pc.active_scan_received:
             # A download left in staging by a previous session has no local
@@ -268,27 +285,27 @@ class ModelUpdater:
         # A file with no local presence and DEFAULT state means
         # it was deleted locally (e.g. stopped download whose files
         # were removed). Nothing left to track.
-        if diff.new_file.state == ModelFile.State.DEFAULT and diff.new_file.local_size is None:
-            pc.pending_completion.discard(diff.new_file.name)
+        if file.state == ModelFile.State.DEFAULT and file.local_size is None:
+            pc.pending_completion.discard(file.name)
         elif use_staging:
-            move_key = persist_key(diff.new_file.pair_id, diff.new_file.name)
+            move_key = persist_key(file.pair_id, file.name)
             if (
-                diff.new_file.state in (ModelFile.State.EXTRACTED, ModelFile.State.VALIDATED, ModelFile.State.CORRUPT)
+                file.state in (ModelFile.State.EXTRACTED, ModelFile.State.VALIDATED, ModelFile.State.CORRUPT)
                 and move_key not in self._pipeline.moved_file_keys
                 and move_key not in self._pipeline.pending_validation_keys
             ):
                 # Done with extract/validate but never moved: a restart cut its
                 # move short. In-session, that move is already spawned by now.
-                self._pipeline.spawn_move_process(diff.new_file.name, pc)
-            if move_key in self._pipeline.moved_file_keys or diff.new_file.state in (
+                self._pipeline.spawn_move_process(file.name, pc)
+            if move_key in self._pipeline.moved_file_keys or file.state in (
                 ModelFile.State.DELETED,
                 ModelFile.State.EXTRACTED,
                 ModelFile.State.EXTRACT_FAILED,
                 ModelFile.State.VALIDATED,
                 ModelFile.State.CORRUPT,
             ):
-                pc.pending_completion.discard(diff.new_file.name)
-        elif diff.new_file.state in (
+                pc.pending_completion.discard(file.name)
+        elif file.state in (
             ModelFile.State.DOWNLOADED,
             ModelFile.State.EXTRACTED,
             ModelFile.State.EXTRACT_FAILED,
@@ -296,7 +313,7 @@ class ModelUpdater:
             ModelFile.State.CORRUPT,
             ModelFile.State.DELETED,
         ):
-            pc.pending_completion.discard(diff.new_file.name)
+            pc.pending_completion.discard(file.name)
 
     def _prune_stale_persist(self) -> None:
         """Prune extracted files list and remove persist entries for absent files."""

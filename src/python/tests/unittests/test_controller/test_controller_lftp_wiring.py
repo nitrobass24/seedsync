@@ -144,7 +144,7 @@ class TestControllerLftpWiring(unittest.TestCase):
         ):
             pc = controller._create_pair_context(pair_id="p1", name="pair", remote_path="/remote", local_path="/local")
         # The scanner's first scan covers them too, ahead of the first update cycle
-        mock_active_scanner.return_value.set_active_files.assert_called_once_with(sorted(pc.pending_completion))
+        self.assertEqual(sorted(pc.pending_completion), mock_active_scanner.call_args.kwargs["initial_files"])
         return pc.pending_completion
 
     def test_downloads_left_in_staging_are_scanned_after_a_restart(self):
