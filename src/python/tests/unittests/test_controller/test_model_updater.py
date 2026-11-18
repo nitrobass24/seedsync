@@ -4,11 +4,14 @@ import unittest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+from controller.model_builder import ModelBuilder
+from controller.model_registry import ModelRegistry
 from controller.model_updater import ModelUpdater
 from controller.persist_keys import KEY_SEP, persist_key
 from controller.scan.scanner_process import ScannerResult
 from lftp import LftpJobStatus
 from model import ModelDiff, ModelError, ModelFile
+from system import SystemFile
 
 
 class TestSyncPersistToAllBuilders(unittest.TestCase):
@@ -679,7 +682,7 @@ class TestHandlePendingCompletion(unittest.TestCase):
                 raise ModelError("missing")
             return rows[name]
 
-        updater._registry.get_file.side_effect = get_file
+        pc.model_builder.build_model.return_value.get_file.side_effect = get_file
 
         updater._recheck_pending_completion(pc)
 
@@ -707,3 +710,40 @@ class TestHandlePendingCompletion(unittest.TestCase):
             updater.update()
 
         mock_recheck.assert_called_once_with(pc)
+
+    def test_recheck_keeps_a_staged_row_the_aggregate_model_left_out(self):
+        """Two pairs share a local_path and both have "Show". Before pair B's
+        remote listing, B's staged row is local-only, and the aggregate model
+        keeps pair A's row instead. The re-check must still see B's row."""
+        builder_a = ModelBuilder(pair_id="a")
+        builder_a.set_remote_files([SystemFile("Show", 10, True)])
+        builder_b = ModelBuilder(pair_id="b")
+        builder_b.set_active_files([SystemFile("Show", 4, True)])
+        pc_a, pc_b = MagicMock(), MagicMock()
+        for pc, pair_id, builder in ((pc_a, "a", builder_a), (pc_b, "b", builder_b)):
+            pc.pair_id = pair_id
+            pc.local_path = "/shared"
+            pc.model_builder = builder
+            pc.active_scan_received = True
+        pc_b.pending_completion = {"Show"}
+        context = MagicMock()
+        context.config.controller.use_staging = True
+        context.config.controller.staging_path = "/staging"
+        updater = ModelUpdater(
+            pair_contexts=[pc_a, pc_b],
+            persist=MagicMock(),
+            pipeline=MagicMock(),
+            registry=MagicMock(),
+            extract_process=MagicMock(),
+            validate_process=MagicMock(),
+            context=context,
+            password=None,
+            logger=MagicMock(),
+        )
+        aggregate = updater._build_aggregate_model()
+        self.assertRaises(ModelError, aggregate.get_file, "Show", "b")
+        updater._registry = ModelRegistry(aggregate)
+
+        updater._recheck_pending_completion(pc_b)
+
+        self.assertEqual({"Show"}, pc_b.pending_completion)

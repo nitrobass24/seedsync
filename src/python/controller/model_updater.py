@@ -262,10 +262,14 @@ class ModelUpdater:
     def _recheck_pending_completion(self, pc: PairContext) -> None:
         """Re-check each pending name once the first active scan is in the model.
         Diffs before that scan were skipped, and a name the scan found gone may
-        produce no new diff."""
+        produce no new diff.
+
+        Reads the pair's own model: the aggregate one can leave out a staged
+        local-only row when another pair with the same local_path has that name."""
+        pair_model = pc.model_builder.build_model()
         for name in list(pc.pending_completion):
             try:
-                file = self._registry.get_file(name, pair_id=pc.pair_id)
+                file = pair_model.get_file(name, pair_id=pc.pair_id)
             except ModelError:
                 # Neither listed remotely nor found locally
                 pc.pending_completion.discard(name)
