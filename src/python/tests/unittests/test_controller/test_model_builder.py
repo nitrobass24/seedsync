@@ -356,6 +356,21 @@ class TestModelBuilder(unittest.TestCase):
         model = self.model_builder.build_model()
         self.assertEqual(ModelFile.State.DELETED, model.get_file("a").state)
 
+    def test_persist_authority_waits_for_a_remote_listing(self):
+        """Before the first remote scan a missing remote size means "not
+        scanned yet", not "deleted remotely". A stopped partial left in
+        staging, seen by the active scanner after a restart, must not read
+        as Downloaded (and be moved) in that window."""
+        self.model_builder.clear()
+        self.model_builder.set_auto_delete_remote(False)
+        self.model_builder.set_active_files([SystemFile("a", 30, False)])
+        self.model_builder.set_downloaded_files({"a"})
+        self.assertEqual(ModelFile.State.DEFAULT, self.model_builder.build_model().get_file("a").state)
+
+        # Once a listing without "a" is in, persist authority applies
+        self.model_builder.set_remote_files([])
+        self.assertEqual(ModelFile.State.DOWNLOADED, self.model_builder.build_model().get_file("a").state)
+
     def test_build_state_persist_with_auto_delete_remote(self):
         """Test persist authority behavior under different auto_delete_remote settings"""
 
@@ -370,6 +385,7 @@ class TestModelBuilder(unittest.TestCase):
         # auto_delete_remote=False, remote absent, local exists, persist → DOWNLOADED
         self.model_builder.clear()
         self.model_builder.set_auto_delete_remote(False)
+        self.model_builder.set_remote_files([])
         self.model_builder.set_local_files([SystemFile("a", 100, False)])
         self.model_builder.set_downloaded_files({"a"})
         model = self.model_builder.build_model()
@@ -378,6 +394,7 @@ class TestModelBuilder(unittest.TestCase):
         # auto_delete_remote=False, remote absent, local absent, persist → DELETED
         self.model_builder.clear()
         self.model_builder.set_auto_delete_remote(False)
+        self.model_builder.set_remote_files([])
         self.model_builder.set_downloaded_files({"a"})
         # Need at least one source for 'a' to appear in model — use lftp status
         self.model_builder.set_lftp_statuses(
@@ -390,6 +407,7 @@ class TestModelBuilder(unittest.TestCase):
         # Instead test: remote absent via local-only + persist
         self.model_builder.clear()
         self.model_builder.set_auto_delete_remote(False)
+        self.model_builder.set_remote_files([])
         self.model_builder.set_downloaded_files({"a"})
         # File must exist in some source to appear in model
         # If remote_size=None and local_size=None but file in lftp status:
@@ -412,6 +430,7 @@ class TestModelBuilder(unittest.TestCase):
         # auto_delete_remote=True, remote absent, local exists, persist → DOWNLOADED
         self.model_builder.clear()
         self.model_builder.set_auto_delete_remote(True)
+        self.model_builder.set_remote_files([])
         self.model_builder.set_local_files([SystemFile("a", 100, False)])
         self.model_builder.set_downloaded_files({"a"})
         model = self.model_builder.build_model()
@@ -426,6 +445,7 @@ class TestModelBuilder(unittest.TestCase):
         # auto_delete_remote=True, remote exists, local absent, persist → DEFAULT (re-downloadable)
         self.model_builder.clear()
         self.model_builder.set_auto_delete_remote(True)
+        self.model_builder.set_remote_files([])
         self.model_builder.set_remote_files([SystemFile("a", 100, False)])
         self.model_builder.set_downloaded_files({"a"})
         model = self.model_builder.build_model()

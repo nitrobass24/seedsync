@@ -19,12 +19,15 @@ class ActiveScanner(IScanner):
     methods are called by different processes.
     """
 
-    def __init__(self, local_path: str, lftp_temp_suffix: str | None = None):
+    def __init__(self, local_path: str, lftp_temp_suffix: str | None = None, initial_files: list[str] | None = None):
+        """initial_files are scanned from the first scan on. Unlike set_active_files,
+        which goes through a queue the first scan may read before it's delivered,
+        they're set before the scanning process starts."""
         self.__scanner = SystemScanner(local_path)
         if lftp_temp_suffix:
             self.__scanner.set_lftp_temp_suffix(lftp_temp_suffix)
         self.__active_files_queue: multiprocessing.Queue[list[str]] = multiprocessing.Queue()
-        self.__active_files: list[str] = []
+        self.__active_files: list[str] = list(initial_files or [])
         self.logger = logging.getLogger(self.__class__.__name__)
 
     @override
