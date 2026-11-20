@@ -104,3 +104,40 @@ class TestApplyUmaskModes(unittest.TestCase):
         self.assertEqual(0o666, _mode(os.path.join(self.root, "ep1.mkv")))
         self.assertEqual(0o777, _mode(os.path.join(self.root, "Sample")))
         self.assertEqual(0o777, _mode(self.root))
+
+    def test_apply_to_entries_single_file(self):
+        """A single file's entries are [(".", False)]; "file/." must not be chmod'ed."""
+        from system.file_modes import apply_umask_modes_to, relative_entries
+
+        single = os.path.join(self.tmp.name, "single.mkv")
+        with open(single, "w"):
+            pass
+        os.chmod(single, 0o664)
+
+        with self.assertNoLogs(self.logger):
+            apply_umask_modes_to(single, relative_entries(single), 0o000, self.logger)
+
+        self.assertEqual(0o666, _mode(single))
+
+    def test_apply_to_entries_resolves_dotdot_like_the_kernel(self):
+        """A "link/.." base resolves through the symlink target's parent, not lexically.
+        The permission pass must chmod the path the move wrote to, not the
+        lexically collapsed one."""
+        from system.file_modes import apply_umask_modes_to, relative_entries
+
+        real_parent = os.path.join(self.tmp.name, "real")
+        os.makedirs(os.path.join(real_parent, "sub"))
+        link = os.path.join(self.tmp.name, "link")
+        os.symlink(os.path.join(real_parent, "sub"), link)
+        kernel_target = os.path.join(real_parent, "single.mkv")  # link/../single.mkv
+        lexical_target = os.path.join(self.tmp.name, "single.mkv")  # normpath(link/../single.mkv)
+        for path, mode in ((kernel_target, 0o664), (lexical_target, 0o600)):
+            with open(path, "w"):
+                pass
+            os.chmod(path, mode)
+
+        base = os.path.join(link, "..", "single.mkv")
+        apply_umask_modes_to(base, relative_entries(base), 0o000, self.logger)
+
+        self.assertEqual(0o666, _mode(kernel_target))
+        self.assertEqual(0o600, _mode(lexical_target))
