@@ -53,9 +53,7 @@ def apply_umask_modes_to(base: str, entries: Iterable[tuple[str, bool]], umask: 
     dir_mode = 0o777 & ~umask
     # Deepest first, for the same reason apply_umask_modes walks bottom-up.
     for rel, is_dir in sorted(entries, key=lambda e: e[0].count(os.sep), reverse=True):
-        # A single file's entry is "." and "file/." is ENOTDIR. Don't normpath the
-        # join: it would collapse ".." lexically, which differs from the kernel's
-        # resolution when a symlink precedes it in base.
+        # A single file's entry is "." and "file/." is ENOTDIR.
         _chmod(base if rel == "." else os.path.join(base, rel), dir_mode if is_dir else file_mode, logger)
 
 
