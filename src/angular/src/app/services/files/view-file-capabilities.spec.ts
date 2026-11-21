@@ -201,7 +201,7 @@ describe('view-file-capabilities', () => {
     });
   });
   describe('deriveCapabilities tree position', () => {
-    const base = { isTopLevel: true, ancestorActive: false, hasDownloadingDescendant: false, stagingEnabled: false };
+    const base = { isTopLevel: true, ancestorActive: false, hasDownloadingDescendant: false };
 
     it('disables queue, stop and deletes when an ancestor job is active', () => {
       const caps = deriveCapabilities(ViewFileStatus.DOWNLOADING, 100, 100, 100, 100, {
@@ -233,15 +233,9 @@ describe('view-file-capabilities', () => {
       expect(caps.validateTooltip).toBeNull();
     });
 
-    it('blocks queuing a nested row only while staging is on', () => {
+    it('offers queue for a nested row', () => {
       const nested = { ...base, isTopLevel: false };
       expect(deriveCapabilities(ViewFileStatus.DEFAULT, 0, 100, 0, 100, nested).isQueueable).toBe(true);
-      expect(
-        deriveCapabilities(ViewFileStatus.DEFAULT, 0, 100, 0, 100, { ...nested, stagingEnabled: true }).isQueueable,
-      ).toBe(false);
-      expect(
-        deriveCapabilities(ViewFileStatus.DEFAULT, 0, 100, 0, 100, { ...base, stagingEnabled: true }).isQueueable,
-      ).toBe(true);
     });
   });
 });

@@ -88,15 +88,12 @@ export interface TreePosition {
   ancestorActive: boolean;
   /** A folder whose own job is idle but which has an independently active nested job. */
   hasDownloadingDescendant: boolean;
-  /** Staging is on; nested jobs would land in staging, which only moves top-level names. */
-  stagingEnabled: boolean;
 }
 
 const TOP_LEVEL: TreePosition = {
   isTopLevel: true,
   ancestorActive: false,
   hasDownloadingDescendant: false,
-  stagingEnabled: false,
 };
 
 /**
@@ -151,14 +148,11 @@ export function deriveCapabilities(
   //  - hasDownloadingDescendant: a new job on the folder would race the nested
   //    one, and deleting it would remove an in-flight download
   //    (_find_active_job_conflict); Stop becomes "Stop Nested Downloads".
-  //  - nested rows: EXTRACT/VALIDATE are top-level only, and so is QUEUE while
-  //    staging is on.
-  const nestedQueueBlocked = !tree.isTopLevel && tree.stagingEnabled;
+  //  - nested rows: EXTRACT/VALIDATE are top-level only.
   const isQueueable =
     ((QUEUEABLE_STATUSES.includes(status) && remoteSize > 0) || status === ViewFileStatus.CORRUPT) &&
     !tree.ancestorActive &&
-    !tree.hasDownloadingDescendant &&
-    !nestedQueueBlocked;
+    !tree.hasDownloadingDescendant;
   const isStoppable =
     (STOPPABLE_STATUSES.includes(status) || tree.hasDownloadingDescendant) && !tree.ancestorActive;
   const isExtractable = LOCAL_ACTION_STATUSES.includes(status) && localSize > 0 && tree.isTopLevel;

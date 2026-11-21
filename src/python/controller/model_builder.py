@@ -30,7 +30,11 @@ class ModelBuilder:
         self.__pair_id = pair_id
         self.__local_files: dict[str, SystemFile] = {}
         self.__active_files: dict[str, SystemFile] = {}
+        self.__staged_nested_files: dict[str, SystemFile] = {}
         self.__remote_files: dict[str, SystemFile] = {}
+        # False until the first remote listing: until then a missing remote
+        # size means "not scanned yet", not "deleted remotely"
+        self.__remote_listing_received = False
         self.__lftp_statuses: dict[str, LftpJobStatus] = {}
         self.__downloaded_files: set[str] = set()
         self.__extract_statuses: dict[str, ExtractStatus] = {}
@@ -48,12 +52,15 @@ class ModelBuilder:
         self.logger = base_logger.getChild("ModelBuilder")
 
     def set_active_files(self, active_files: list[SystemFile]):
-        prev_active_files = self.__active_files
-        self.__active_files = {file.name: file for file in active_files}
+        prev = (self.__active_files, self.__staged_nested_files)
+        # A nested name ("Top/Sub/f.bin") is a nested download in staging; it
+        # overrides that child's local side, not a top-level entry.
+        self.__active_files = {f.name: f for f in active_files if not is_nested_name(f.name)}
+        self.__staged_nested_files = {f.name: f for f in active_files if is_nested_name(f.name)}
         # Always invalidate when active files present (sizes change rapidly)
         # Also invalidate when active files change (e.g. files removed after
         # a stopped download is deleted locally)
-        if len(active_files) > 0 or self.__active_files != prev_active_files:
+        if len(active_files) > 0 or (self.__active_files, self.__staged_nested_files) != prev:
             self.__cached_model = None
 
     def set_local_files(self, local_files: list[SystemFile]):
@@ -67,8 +74,9 @@ class ModelBuilder:
         prev_remote_files = self.__remote_files
         self.__remote_files = {file.name: file for file in remote_files}
         # Invalidate the cache
-        if self.__remote_files != prev_remote_files:
+        if self.__remote_files != prev_remote_files or not self.__remote_listing_received:
             self.__cached_model = None
+        self.__remote_listing_received = True
 
     def set_lftp_statuses(self, lftp_statuses: list[LftpJobStatus]):
         prev_lftp_statuses = self.__lftp_statuses
@@ -141,7 +149,9 @@ class ModelBuilder:
     def clear(self):
         self.__local_files.clear()
         self.__active_files.clear()
+        self.__staged_nested_files.clear()
         self.__remote_files.clear()
+        self.__remote_listing_received = False
         self.__lftp_statuses.clear()
         self.__downloaded_files.clear()
         self.__extract_statuses.clear()
@@ -273,7 +283,9 @@ class ModelBuilder:
             _all_children_names: set[str] = set[str]().union(_remote_children.keys(), _local_children.keys())
             for _child_name in _all_children_names:
                 _remote_child = _remote_children.get(_child_name)
-                _local_child = _local_children.get(_child_name)
+                _local_child = self.__staged_nested_files.get(
+                    os.path.join(_model_file.full_path, _child_name), _local_children.get(_child_name)
+                )
                 _is_dir = _remote_child.is_dir if _remote_child else (_local_child.is_dir if _local_child else False)
                 # sanity check is_dir
                 if (_remote_child and _is_dir != _remote_child.is_dir) or (
@@ -304,6 +316,14 @@ class ModelBuilder:
                 _child_model_file.state, _effective_transfer_state = ModelBuilder._determine_child_state(
                     _is_dir, _child_transfer_state, _nested_status, _remote_child, _local_child, root_model_file
                 )
+                # A nested job whose staging->final move failed. Unlike a root
+                # (_determine_state) there's no post-download state to require:
+                # the file sits in staging, which the local scan doesn't cover.
+                if _child_model_file.full_path in self.__move_failed_files and _child_model_file.state not in (
+                    ModelFile.State.QUEUED,
+                    ModelFile.State.DOWNLOADING,
+                ):
+                    _child_model_file.state = ModelFile.State.MOVE_FAILED
 
                 # fill the rest
                 ModelBuilder._fill_model_file(_child_model_file, _remote_child, _local_child, _effective_transfer_state)
@@ -596,6 +616,9 @@ class ModelBuilder:
             and model_file.local_size < model_file.remote_size
         ):
             return  # Stay DEFAULT for re-download
+        # A missing remote size only means "gone" once a remote listing is in
+        if model_file.remote_size is None and not self.__remote_listing_received:
+            return
         # Persist authority — applies when auto_delete_remote OFF,
         # or when remote is already gone (auto_delete_remote ON, delete succeeded)
         if not self.__auto_delete_remote or model_file.remote_size is None:

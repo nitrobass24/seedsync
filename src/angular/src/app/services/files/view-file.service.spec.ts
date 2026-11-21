@@ -40,11 +40,8 @@ function makeModelFile(
 }
 
 interface TestConfig {
-  controller: { enable_nested_navigation: boolean; use_staging?: boolean; staging_path?: string };
+  controller: { enable_nested_navigation: boolean };
 }
-const STAGING_ON: TestConfig = {
-  controller: { enable_nested_navigation: true, use_staging: true, staging_path: "/staging" },
-};
 
 describe("ViewFileService", () => {
   let service: ViewFileService;
@@ -596,17 +593,9 @@ describe("ViewFileService", () => {
     ]);
   }
 
-  it("blocks queuing nested rows while staging is on, but not the top-level row", () => {
-    configSubject.next(STAGING_ON);
+  it("offers queue for both the top-level row and a nested row", () => {
     emitQueueableTree();
     expect(findByName(latestFiles(), "dir")!.isQueueable).toBe(true);
-    expect(findByName(latestFiles(), "child")!.isQueueable).toBe(false);
-  });
-
-  it("re-enables queuing nested rows when staging is turned off", () => {
-    configSubject.next(STAGING_ON);
-    emitQueueableTree();
-    configSubject.next({ controller: { enable_nested_navigation: true, use_staging: false } });
     expect(findByName(latestFiles(), "child")!.isQueueable).toBe(true);
   });
 
