@@ -219,6 +219,25 @@ class TestControllerPersist(unittest.TestCase):
             persist.move_failed_file_names,
         )
 
+    def test_staged_nested_golden_round_trip(self):
+        """staged_nested: nested downloads left in staging, by persist key."""
+        sep = "\x1f"
+        content = json.dumps(
+            {
+                "downloaded": [],
+                "extracted": [],
+                "staged_nested": ["Top/Sub/f.bin", f"pair-1{sep}Top/a.bin"],
+            }
+        )
+        persist = ControllerPersist.from_str(content)
+        self.assertEqual({"Top/Sub/f.bin", f"pair-1{sep}Top/a.bin"}, persist.staged_nested_file_names)
+        self.assertEqual({"Top/Sub/f.bin", f"pair-1{sep}Top/a.bin"}, set(json.loads(persist.to_str())["staged_nested"]))
+
+    def test_staged_nested_missing_key_defaults_empty(self):
+        """Persist files from before staged_nested load an empty set."""
+        persist = ControllerPersist.from_str(json.dumps({"downloaded": ["a"], "extracted": []}))
+        self.assertEqual(set(), persist.staged_nested_file_names)
+
     def test_validated_corrupt_legacy_keys_migrated(self):
         """Legacy colon-separated keys in validated/corrupt should be migrated."""
         uuid1 = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"

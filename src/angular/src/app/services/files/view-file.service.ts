@@ -56,8 +56,6 @@ export class ViewFileService {
   // Nested rows exist in the view only while nested navigation is enabled, so
   // selection, select-all and bulk actions can never reach a hidden row.
   private nestedNavEnabled = false;
-  // Nested rows can't be queued while staging is on (see deriveCapabilities).
-  private stagingEnabled = false;
 
   // Resolve a view-file key to its backing ModelFile from the diffing-owned
   // snapshot. Threaded into ViewFileCommandService so command dispatch keeps the
@@ -106,18 +104,14 @@ export class ViewFileService {
       }
     });
 
-    // Toggling nested navigation adds or drops every nested row, and staging
-    // changes what nested rows offer, so rebuild the whole view; the rebuild
-    // also prunes checked keys of rows that went away.
+    // Toggling nested navigation adds or drops every nested row, so rebuild
+    // the whole view; the rebuild also prunes checked keys of rows that went
+    // away.
     this.configService.config$.pipe(
-      map((config) => ({
-        nested: !!config?.controller.enable_nested_navigation,
-        staging: !!(config?.controller.use_staging && config.controller.staging_path),
-      })),
-      distinctUntilChanged((a, b) => a.nested === b.nested && a.staging === b.staging),
-    ).subscribe(({ nested, staging }) => {
+      map((config) => !!config?.controller.enable_nested_navigation),
+      distinctUntilChanged(),
+    ).subscribe((nested) => {
       this.nestedNavEnabled = nested;
-      this.stagingEnabled = staging;
       if (this.prevModelFiles.size > 0) {
         this.buildViewFromModelFiles(this.prevModelFiles, true);
       }
@@ -392,7 +386,7 @@ export class ViewFileService {
   }
 
   private createTopLevelViewFile(modelFile: ModelFile): ViewFile {
-    return createViewFile(modelFile, this.pairNameMap, this.nestedNavEnabled, this.stagingEnabled);
+    return createViewFile(modelFile, this.pairNameMap, this.nestedNavEnabled);
   }
 
   private pushViewFiles(): void {
@@ -553,7 +547,6 @@ function createViewFile(
   modelFile: ModelFile,
   pairNameMap: Map<string, string>,
   includeChildren: boolean,
-  stagingEnabled: boolean,
   isTopLevel = true,
   ancestorActive = false,
 ): ViewFile {
@@ -586,7 +579,7 @@ function createViewFile(
     remoteSize,
     modelFile.local_size,
     modelFile.remote_size,
-    { isTopLevel, ancestorActive, hasDownloadingDescendant, stagingEnabled },
+    { isTopLevel, ancestorActive, hasDownloadingDescendant },
   );
 
   // Kept out of deriveCapabilities: it needs the ModelFile for is_dir and the
@@ -603,7 +596,7 @@ function createViewFile(
     ancestorActive || modelFile.state === ModelFileState.QUEUED || modelFile.state === ModelFileState.DOWNLOADING;
   const children = includeChildren
     ? modelFile.children.map((child) =>
-        createViewFile(child, pairNameMap, true, stagingEnabled, false, childAncestorActive),
+        createViewFile(child, pairNameMap, true, false, childAncestorActive),
       )
     : [];
 

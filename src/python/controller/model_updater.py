@@ -104,11 +104,13 @@ class ModelUpdater:
         if new_model is not None:
             model_diff = self._registry.apply_diff(new_model)
             self._process_model_diffs(model_diff)
+        self._note_remote_scans_in_model()
 
         self._prune_stale_persist()
         self._process_extraction_failures(latest_failed_extractions)
         self._process_validation_results(latest_validated_results, latest_failed_validations)
         self._retry_failed_moves()
+        self._resume_deferred_post_downloads()
         self._update_controller_status()
 
     def _process_extraction_completions(self, latest_extracted_results: list[ExtractCompletedResult]) -> None:
@@ -227,18 +229,35 @@ class ModelUpdater:
                 daemon=True,
             ).start()
 
-        # Auto-validate if enabled
+        # A nested download still in staging counts toward its root, so the root
+        # can turn Downloaded while that download's own move is in flight, its
+        # files split between staging and local_path. Validating or moving it
+        # then would be wrong; resume once that move is done.
+        if use_staging:
+            overlapping = self._pipeline.find_overlapping_move(diff.new_file.name, pc)
+            if overlapping is not None:
+                self._logger.info(f"Holding '{diff.new_file.name}': '{overlapping}' is moving out of staging")
+                pc.deferred_post_download.add(diff.new_file.name)
+                return
+        self._start_post_download(diff.new_file, pc)
+
+    def _start_post_download(self, file: ModelFile, pc: PairContext) -> None:
+        """Auto-validate a Downloaded root, and with staging on move it to local_path
+        (after validation or extraction when either will run)."""
         will_auto_validate = (
             self._context.config.validate.enabled
             and self._context.config.validate.auto_validate
-            and diff.new_file.remote_size is not None
+            and file.remote_size is not None
         )
         if will_auto_validate:
+            # Where the root is: staging, or local_path once nested moves have taken
+            # all of it there
+            staged = os.path.exists(os.path.join(pc.effective_local_path, file.name))
             req = ValidateRequest(
-                name=diff.new_file.name,
-                is_dir=diff.new_file.is_dir,
+                name=file.name,
+                is_dir=file.is_dir,
                 pair_id=pc.pair_id,
-                local_path=pc.effective_local_path,
+                local_path=pc.effective_local_path if staged else pc.local_path,
                 remote_path=pc.remote_path,
                 algorithm=self._context.config.validate.algorithm,  # type: ignore[arg-type]
                 remote_address=self._context.config.lftp.remote_address,  # type: ignore[arg-type]
@@ -247,13 +266,28 @@ class ModelUpdater:
                 remote_port=self._context.config.lftp.remote_port,  # type: ignore[arg-type]
             )
             self._validate_process.validate(req)
-            self._pipeline.pending_validation_keys.add(persist_key(pc.pair_id, diff.new_file.name))
-            self._logger.info(f"Auto-queued validation for '{diff.new_file.name}'")
+            self._pipeline.pending_validation_keys.add(persist_key(pc.pair_id, file.name))
+            self._logger.info(f"Auto-queued validation for '{file.name}'")
 
         if self._context.config.controller.use_staging and self._context.config.controller.staging_path:
-            will_auto_extract = self._context.config.autoqueue.auto_extract and diff.new_file.is_extractable
+            will_auto_extract = self._context.config.autoqueue.auto_extract and file.is_extractable
             if not will_auto_extract and not will_auto_validate:
-                self._pipeline.spawn_move_process(diff.new_file.name, pc)
+                self._pipeline.spawn_move_process(file.name, pc)
+
+    def _resume_deferred_post_downloads(self) -> None:
+        """Start the post-download step of each held root no move overlaps any more."""
+        for pc in self._pair_contexts:
+            for name in list(pc.deferred_post_download):
+                if self._pipeline.find_overlapping_move(name, pc) is not None:
+                    continue
+                pc.deferred_post_download.discard(name)
+                try:
+                    file = self._registry.get_file(name, pair_id=pc.pair_id)
+                except ModelError:
+                    continue
+                # Otherwise its state moved on; a later Downloaded diff starts it afresh
+                if file.state == ModelFile.State.DOWNLOADED:
+                    self._start_post_download(file, pc)
 
     def _handle_pending_completion(self, diff: ModelDiff, pc: PairContext | None) -> None:
         """Track pending_completion state for a diff."""
@@ -327,6 +361,30 @@ class ModelUpdater:
             for key in absent_keys:
                 self._move_retry_counts.pop(key, None)
             self.sync_persist_to_all_builders()
+        self._prune_absent_nested_move_failures()
+
+    def _prune_absent_nested_move_failures(self) -> None:
+        """Drop nested move_failed keys whose row is gone (remote and local).
+
+        Nested keys never reach downloaded_file_names, which drives the prune
+        above, so they need their own pass. Called once all scans are in.
+        """
+        absent_keys: set[str] = set()
+        for key in self._persist.move_failed_file_names:
+            for pc in self._pair_contexts:
+                bare_name = strip_persist_key(key, pc.pair_id)
+                if bare_name == key and pc.pair_id is not None:
+                    continue
+                if is_nested_name(bare_name):
+                    try:
+                        self._registry.resolve_full_path(bare_name, pair_id=pc.pair_id)
+                    except ModelError:
+                        absent_keys.add(key)
+                break
+        if absent_keys:
+            self._logger.info(f"Persist cleanup (nested move failures gone): {absent_keys}")
+            self._persist.move_failed_file_names.difference_update(absent_keys)
+            self.sync_persist_to_all_builders()
 
     def _process_extraction_failures(self, latest_failed_extractions: list[ExtractFailedResult]) -> None:
         """Process extraction failures -- mark as failed immediately."""
@@ -382,6 +440,11 @@ class ModelUpdater:
         move_failed_file_names that is not already moving, bounded by a per-file
         budget so a permanently-failing move does not re-spawn forever (#536).
         """
+        # A count outlives its failure when the key is cleared without a requeue
+        # diff (a nested re-queue, see CommandPipeline._handle_queue); drop it so
+        # a later failure starts a fresh budget.
+        for key in [k for k in self._move_retry_counts if k not in self._persist.move_failed_file_names]:
+            del self._move_retry_counts[key]
         cfg = self._context.config.controller
         if not (cfg.use_staging and cfg.staging_path):
             return
@@ -495,6 +558,10 @@ class ModelUpdater:
 
         active_files = pc.active_downloading_file_names + pc.active_extracting_file_names
         active_files += list(pc.pending_completion)
+        # Nested downloads in staging, finished or not: the local scan covers
+        # only local_path, so this is the only scan that sees them. The builder
+        # puts each on its nested row, not at the top level.
+        active_files += list(pc.staged_nested)
         pc.active_scanner.set_active_files(active_files)
 
         pc.model_builder.set_auto_delete_remote(bool(self._context.config.autoqueue.auto_delete_remote))
@@ -552,6 +619,41 @@ class ModelUpdater:
             # recursive local scan, just less often.
             pc.active_downloading_file_names = [name for name in current_downloading if not is_nested_name(name)]
             pc.prev_downloading_file_names = current_downloading
+            self._spawn_nested_moves(pc, {s.name for s in lftp_statuses})
+
+    def _spawn_nested_moves(self, pc: PairContext, lftp_job_names: set[str]) -> None:
+        """Move each nested job queued under staging from staging to local_path
+        once lftp no longer lists it.
+
+        Top-level moves start from the DOWNLOADED diff; nested rows have no
+        diffs, so they start here. Driven by the queue rather than a
+        running->gone transition, which a job finishing between two status
+        polls (a small file, or one already complete in staging) never shows.
+        The job ending doesn't mean it finished (a Stop ends it too), so the
+        move gets the row's remote size to check.
+        """
+        if not pc.remote_scan_in_model:
+            # After a restart the pending moves come back before the first remote
+            # scan; without it in the model every row looks unresolvable.
+            return
+        for name in pc.pending_nested_moves - lftp_job_names:
+            pc.pending_nested_moves.discard(name)
+            try:
+                expected_size = self._registry.resolve_full_path(name, pair_id=pc.pair_id).remote_size
+            except ModelError:
+                expected_size = None
+            if expected_size is None:
+                # Without the remote size a Stop's partial can't be told from a
+                # finished download, so leave it in staging rather than move it.
+                self._logger.warning(f"Not moving '{name}' out of staging: its remote size is unknown")
+                continue
+            self._pipeline.spawn_move_process(name, pc, expected_size=expected_size)
+
+    def _note_remote_scans_in_model(self) -> None:
+        """Mark each pair whose remote scan has reached the registry."""
+        for pc in self._pair_contexts:
+            if pc.remote_scan_received:
+                pc.remote_scan_in_model = True
 
     def sync_persist_to_all_builders(self):
         """Push current persist state to all pair model builders, filtered by pair_id."""

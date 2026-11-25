@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from controller.move.move_process import MoveFailedResult, MoveProcess
+from controller.move.move_process import MoveFailedResult, MoveProcess, prune_empty_staging_parents
 
 
 class TestMoveProcess(unittest.TestCase):
@@ -315,6 +315,81 @@ class TestMoveProcess(unittest.TestCase):
 
         self.assertEqual(5, MoveProcess._get_copied_size(src_subdir, dst_subdir))
 
+    # --- Nested names: multi-level dest parents ---
+
+    def test_move_nested_name_creates_dest_parents(self):
+        """A nested name's move must create every missing dest parent level.
+        Its emptied staging dirs are left for prune_empty_staging_parents."""
+        nested_dir = os.path.join(self.src_dir, "Top", "Sub")
+        os.makedirs(nested_dir)
+        src_file = os.path.join(nested_dir, "f.bin")
+        with open(src_file, "w") as f:
+            f.write("data")
+
+        process = self._make_process(source_path=self.src_dir, dest_path=self.dst_dir, file_name="Top/Sub/f.bin")
+        self._run_process(process)
+
+        dst_file = os.path.join(self.dst_dir, "Top", "Sub", "f.bin")
+        self.assertTrue(os.path.exists(dst_file))
+        with open(dst_file) as f:
+            self.assertEqual("data", f.read())
+        self.assertFalse(os.path.exists(src_file))
+        self.assertEqual([], process.pop_failed())
+
+    def test_move_nested_via_copy_delete(self):
+        """The copy+delete fallback path moves a nested name the same as the rename path."""
+        nested_dir = os.path.join(self.src_dir, "Top", "Sub")
+        os.makedirs(nested_dir)
+        src_file = os.path.join(nested_dir, "f.bin")
+        with open(src_file, "w") as f:
+            f.write("data")
+
+        process = self._make_process(source_path=self.src_dir, dest_path=self.dst_dir, file_name="Top/Sub/f.bin")
+        with mock.patch("controller.move.move_process.os.rename", side_effect=OSError(errno.EXDEV, "cross-device")):
+            self._run_process(process)
+
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub", "f.bin")))
+        self.assertFalse(os.path.exists(src_file))
+        self.assertEqual([], process.pop_failed())
+
+    # --- expected_size: skip (not fail) an in-flight nested download (#811) ---
+
+    def test_expected_size_larger_than_source_skips_move_without_failure(self):
+        """A nested job's lftp process ending early (e.g. a Stop) leaves a
+        smaller-than-expected source; the move must be skipped, not failed, and
+        the source left untouched for a later re-queue to resume."""
+        src_file = os.path.join(self.src_dir, "test.txt")
+        with open(src_file, "w") as f:
+            f.write("12345")  # 5 bytes
+
+        process = self._make_process(
+            source_path=self.src_dir, dest_path=self.dst_dir, file_name="test.txt", expected_size=100
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(src_file))
+        self.assertFalse(os.path.exists(os.path.join(self.dst_dir, "test.txt")))
+
+    def test_expected_size_set_with_temp_files_skips_without_failure(self):
+        """With expected_size set, lftp temp files present also means skip (not
+        the recoverable-failure path used when expected_size is None)."""
+        src_subdir = os.path.join(self.src_dir, "mydir")
+        os.makedirs(src_subdir)
+        with open(os.path.join(src_subdir, "done.mkv"), "w") as f:
+            f.write("finished")
+        with open(os.path.join(src_subdir, "inprogress.mkv.lftp"), "w") as f:
+            f.write("partial")
+
+        process = self._make_process(
+            source_path=self.src_dir, dest_path=self.dst_dir, file_name="mydir", expected_size=1000
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(src_subdir))
+        self.assertFalse(os.path.exists(os.path.join(self.dst_dir, "mydir")))
+
     def test_move_applies_umask_modes_at_destination(self):
         """#811: lftp leaves 0664/0775 in staging; the moved copy gets 0666/0777 & ~umask."""
         import stat
@@ -335,6 +410,226 @@ class TestMoveProcess(unittest.TestCase):
         dst_tree = os.path.join(self.dst_dir, "Show.S01")
         self.assertEqual(0o777, stat.S_IMODE(os.stat(dst_tree).st_mode))
         self.assertEqual(0o666, stat.S_IMODE(os.stat(os.path.join(dst_tree, "ep1.mkv")).st_mode))
+
+    # --- nested_expected_sizes: leave a stopped nested job's partial in staging ---
+
+    def test_top_level_move_leaves_incomplete_nested_download_in_staging(self):
+        """Repro: a top-level staging->final move used to carry a stopped nested
+        partial out of staging into the final dir. With nested_expected_sizes set,
+        the complete sibling must still move while the nested partial under it
+        stays in staging for its own job to resume."""
+        top_dir = os.path.join(self.src_dir, "Top")
+        os.makedirs(os.path.join(top_dir, "Sub"))
+        with open(os.path.join(top_dir, "a.bin"), "w") as f:
+            f.write("complete")
+        with open(os.path.join(top_dir, "Sub", "big.bin"), "w") as f:
+            f.write("short")  # 5 bytes, far under expected
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            nested_expected_sizes={"Sub/big.bin": 1000},
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "a.bin")))
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Top", "Sub", "big.bin")))
+        self.assertFalse(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub", "big.bin")))
+        # Sub holds only the partial, so no empty Sub is created at the destination
+        self.assertFalse(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub")))
+
+    def test_top_level_move_leaves_temp_named_nested_partial_in_staging(self):
+        """With lftp temp files on, a stopped nested file exists only as
+        '<name>.lftp'. It is the incomplete entry: left behind, and it doesn't
+        defer the rest of the tree."""
+        top_dir = os.path.join(self.src_dir, "Top")
+        os.makedirs(os.path.join(top_dir, "Sub"))
+        with open(os.path.join(top_dir, "a.bin"), "w") as f:
+            f.write("complete")
+        with open(os.path.join(top_dir, "Sub", "big.bin.lftp"), "w") as f:
+            f.write("short")
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            nested_expected_sizes={"Sub/big.bin": 1000},
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "a.bin")))
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Top", "Sub", "big.bin.lftp")))
+        self.assertFalse(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub")))
+
+    def test_top_level_move_moves_everything_when_nested_download_complete(self):
+        """A nested download whose size has caught up to expected moves along
+        with the rest of the tree; nothing is left behind."""
+        top_dir = os.path.join(self.src_dir, "Top")
+        os.makedirs(os.path.join(top_dir, "Sub"))
+        with open(os.path.join(top_dir, "a.bin"), "w") as f:
+            f.write("complete")
+        with open(os.path.join(top_dir, "Sub", "big.bin"), "w") as f:
+            f.write("12345")  # 5 bytes, matches expected
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            nested_expected_sizes={"Sub/big.bin": 5},
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "a.bin")))
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub", "big.bin")))
+        self.assertFalse(os.path.exists(os.path.join(self.src_dir, "Top")))
+
+    def test_nested_expected_size_none_leaves_download_in_staging(self):
+        """An unresolved nested row (ModelError during lookup in the pipeline)
+        maps to a None size here, which is always treated as incomplete."""
+        top_dir = os.path.join(self.src_dir, "Top")
+        os.makedirs(os.path.join(top_dir, "Sub"))
+        with open(os.path.join(top_dir, "a.bin"), "w") as f:
+            f.write("complete")
+        with open(os.path.join(top_dir, "Sub", "big.bin"), "w") as f:
+            f.write("anything")
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            nested_expected_sizes={"Sub/big.bin": None},
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "a.bin")))
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Top", "Sub", "big.bin")))
+
+    def test_nested_lftp_temp_file_in_listed_path_skipped_without_deferral(self):
+        """An lftp temp file inside a listed (incomplete) nested path must not
+        defer the whole move."""
+        top_dir = os.path.join(self.src_dir, "Top")
+        os.makedirs(os.path.join(top_dir, "Sub2"))
+        with open(os.path.join(top_dir, "a.bin"), "w") as f:
+            f.write("complete")
+        with open(os.path.join(top_dir, "Sub2", "x.bin.lftp"), "w") as f:
+            f.write("partial")
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            nested_expected_sizes={"Sub2": 999},
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "a.bin")))
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Top", "Sub2", "x.bin.lftp")))
+
+    def test_temp_file_outside_listed_nested_paths_still_defers(self):
+        """A temp file outside any listed nested path still defers the whole
+        move as a recoverable failure (existing behaviour, preserved alongside
+        the nested-skip list)."""
+        top_dir = os.path.join(self.src_dir, "Top")
+        os.makedirs(top_dir)
+        with open(os.path.join(top_dir, "a.bin"), "w") as f:
+            f.write("complete")
+        with open(os.path.join(top_dir, "stray.mkv.lftp"), "w") as f:
+            f.write("partial")
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            nested_expected_sizes={},
+            pair_id="pair-5",
+        )
+        self._run_process(process)
+
+        failures = process.pop_failed()
+        self.assertEqual(1, len(failures))
+        self.assertIn("not finalized", failures[0].error_message)
+        self.assertTrue(os.path.exists(top_dir))
+        self.assertFalse(os.path.exists(os.path.join(self.dst_dir, "Top")))
+
+    def test_nested_expected_sizes_entry_missing_from_staging_is_ignored(self):
+        """A listed nested path that no longer exists in staging (already moved
+        or never downloaded) is ignored - the top-level move proceeds normally."""
+        top_dir = os.path.join(self.src_dir, "Top")
+        os.makedirs(top_dir)
+        with open(os.path.join(top_dir, "a.bin"), "w") as f:
+            f.write("complete")
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            nested_expected_sizes={"Sub/big.bin": 1000},
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "a.bin")))
+        self.assertFalse(os.path.exists(os.path.join(self.src_dir, "Top")))
+
+    def test_sibling_subtree_without_exclusions_moves_whole_via_rename(self):
+        """A subtree containing no incomplete nested path moves as one rename
+        of the whole subtree, not file-by-file."""
+        top_dir = os.path.join(self.src_dir, "Top")
+        other_dir = os.path.join(top_dir, "Other")
+        os.makedirs(other_dir)
+        with open(os.path.join(other_dir, "c.bin"), "w") as f:
+            f.write("complete")
+        sub_dir = os.path.join(top_dir, "Sub")
+        os.makedirs(sub_dir)
+        with open(os.path.join(sub_dir, "big.bin"), "w") as f:
+            f.write("short")
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            nested_expected_sizes={"Sub/big.bin": 1000},
+        )
+        dst_other = os.path.join(self.dst_dir, "Top", "Other")
+        with mock.patch("controller.move.move_process.os.rename", side_effect=os.rename) as mock_rename:
+            self._run_process(process)
+
+        self.assertTrue(os.path.exists(os.path.join(dst_other, "c.bin")))
+        self.assertIn(mock.call(other_dir, dst_other), mock_rename.call_args_list)
+        self.assertEqual([], process.pop_failed())
+
+    def test_cross_device_move_tree_leaves_partial_and_moves_rest(self):
+        """EXDEV from os.rename inside the tree move must fall back to
+        copy+delete per subtree, still leaving the incomplete nested path
+        behind."""
+        top_dir = os.path.join(self.src_dir, "Top")
+        os.makedirs(top_dir)
+        with open(os.path.join(top_dir, "a.bin"), "w") as f:
+            f.write("complete")
+        sub_dir = os.path.join(top_dir, "Sub")
+        os.makedirs(sub_dir)
+        with open(os.path.join(sub_dir, "big.bin"), "w") as f:
+            f.write("short")
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            nested_expected_sizes={"Sub/big.bin": 1000},
+        )
+        with mock.patch("controller.move.move_process.os.rename", side_effect=OSError(errno.EXDEV, "cross-device")):
+            self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(os.path.join(self.dst_dir, "Top", "a.bin")))
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Top", "Sub", "big.bin")))
+        self.assertFalse(os.path.exists(os.path.join(self.dst_dir, "Top", "Sub", "big.bin")))
 
     def test_merge_into_existing_destination_leaves_other_files_alone(self):
         """#811: a staged tree merged into an existing folder must not widen the
@@ -367,6 +662,38 @@ class TestMoveProcess(unittest.TestCase):
         # The moved file gets the UMASK treatment
         self.assertEqual(0o666, stat.S_IMODE(os.stat(os.path.join(dst_tree, "ep2.mkv")).st_mode))
 
+    def test_partial_tree_move_applies_umask_only_to_what_it_moved(self):
+        """#811 with a nested partial left behind: dirs the tree move creates at
+        the destination and the files it moves get the UMASK modes; a destination
+        dir that was already there keeps its own."""
+        import stat
+
+        top_dir = os.path.join(self.src_dir, "Top")
+        os.makedirs(os.path.join(top_dir, "New", "Sub"))
+        with open(os.path.join(top_dir, "New", "a.bin"), "w") as f:
+            f.write("complete")
+        with open(os.path.join(top_dir, "New", "Sub", "big.bin"), "w") as f:
+            f.write("short")
+        os.chmod(os.path.join(top_dir, "New", "a.bin"), 0o664)
+        dst_top = os.path.join(self.dst_dir, "Top")
+        os.makedirs(dst_top)
+        os.chmod(dst_top, 0o700)
+
+        process = self._make_process(
+            source_path=self.src_dir,
+            dest_path=self.dst_dir,
+            file_name="Top",
+            umask=0o000,
+            nested_expected_sizes={"New/Sub/big.bin": 1000},
+        )
+        self._run_process(process)
+
+        self.assertEqual([], process.pop_failed())
+        self.assertTrue(os.path.exists(os.path.join(self.src_dir, "Top", "New", "Sub", "big.bin")))
+        self.assertEqual(0o700, stat.S_IMODE(os.stat(dst_top).st_mode))
+        self.assertEqual(0o777, stat.S_IMODE(os.stat(os.path.join(dst_top, "New")).st_mode))
+        self.assertEqual(0o666, stat.S_IMODE(os.stat(os.path.join(dst_top, "New", "a.bin")).st_mode))
+
     def test_single_file_move_applies_umask_mode(self):
         """#811: a moved single file gets 0666 & ~umask. Its only entry is ".",
         which used to make the chmod target "file/." and fail with ENOTDIR."""
@@ -384,3 +711,41 @@ class TestMoveProcess(unittest.TestCase):
 
         self.assertEqual([], process.pop_failed())
         self.assertEqual(0o640, stat.S_IMODE(os.stat(os.path.join(self.dst_dir, "movie.mkv")).st_mode))
+
+
+class TestPruneEmptyStagingParents(unittest.TestCase):
+    def setUp(self):
+        self.staging = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.staging, True)
+        os.makedirs(os.path.join(self.staging, "Top", "Sub"))
+
+    def test_removes_emptied_dirs_up_to_source_path(self):
+        prune_empty_staging_parents(self.staging, "Top/Sub/f.bin", set())
+
+        self.assertFalse(os.path.exists(os.path.join(self.staging, "Top")))
+        self.assertTrue(os.path.isdir(self.staging))
+
+    def test_stops_at_nonempty_dir(self):
+        """A dir still holding something, such as another job's file, survives
+        along with its ancestors."""
+        sibling_file = os.path.join(self.staging, "Top", "sibling.txt")
+        with open(sibling_file, "w") as f:
+            f.write("keepme")
+
+        prune_empty_staging_parents(self.staging, "Top/Sub/f.bin", set())
+
+        self.assertFalse(os.path.exists(os.path.join(self.staging, "Top", "Sub")))
+        self.assertTrue(os.path.exists(sibling_file))
+
+    def test_keeps_dir_a_queued_sibling_needs(self):
+        """A queued nested job's parent dir is made when it's queued, and pget
+        won't recreate it, so an emptied dir it needs must survive."""
+        prune_empty_staging_parents(self.staging, "Top/Sub/a.bin", {"Top/Sub/b.bin"})
+
+        self.assertTrue(os.path.isdir(os.path.join(self.staging, "Top", "Sub")))
+
+    def test_ignores_a_name_that_only_shares_a_prefix(self):
+        prune_empty_staging_parents(self.staging, "Top/Sub/a.bin", {"Top/Subtitles/b.srt"})
+
+        self.assertFalse(os.path.exists(os.path.join(self.staging, "Top", "Sub")))
+        self.assertTrue(os.path.isdir(os.path.join(self.staging, "Top")))

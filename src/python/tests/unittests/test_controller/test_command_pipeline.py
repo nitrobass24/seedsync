@@ -1,6 +1,8 @@
 # Copyright 2017, Inderpreet Singh, All rights reserved.
 
 import os
+import shutil
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -299,6 +301,20 @@ class TestCommandPipelineHelpers(unittest.TestCase):
         owner.local_scan_process.force_scan.assert_called_once()
         other.local_scan_process.force_scan.assert_not_called()
 
+    def test_finalize_sweeps_staged_nested_for_owner_pair(self):
+        """Finishing a move must sweep the owner's staged_nested so entries the
+        move carried along (or left behind) are reconciled."""
+        owner = self._make_pair_context("pair-1")
+        other = self._make_pair_context("pair-2")
+        pipeline = self._make_pipeline([owner, other])
+        move_process = self._make_move_process("pair-1", "Top", failed_results=[])
+        pipeline.active_move_processes.append(move_process)
+
+        with patch.object(pipeline, "_sweep_staged_nested") as mock_sweep:
+            pipeline.cleanup()
+
+        mock_sweep.assert_called_once_with(owner)
+
     def test_finalize_rescans_all_pairs_when_owner_not_found(self):
         """If the move's pair_id matches no context, fall back to rescanning all."""
         pc1 = self._make_pair_context("pair-1")
@@ -331,6 +347,288 @@ class TestCommandPipelineHelpers(unittest.TestCase):
 
         self.assertNotIn(persist_key("pair-1", "file.txt"), pipeline.moved_file_keys)
         self.assertEqual([], pipeline.active_move_processes)
+
+    @patch("controller.command_pipeline.os.path.exists", return_value=True)
+    @patch("controller.command_pipeline.MoveProcess")
+    def test_spawn_move_process_passes_expected_size_to_move_process(self, mock_move_cls, _mock_exists):
+        """A nested job's just-ended expected_size must reach MoveProcess so it
+        can tell an incomplete source from a finished one."""
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.local_path = "/local/pair-1"
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+
+        pipeline.spawn_move_process("Top/leaf.rar", pc, expected_size=12345)
+
+        self.assertEqual(12345, mock_move_cls.call_args.kwargs["expected_size"])
+
+    @patch("controller.command_pipeline.os.path.exists", return_value=True)
+    @patch("controller.command_pipeline.MoveProcess")
+    def test_spawn_move_process_default_expected_size_is_none(self, mock_move_cls, _mock_exists):
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.local_path = "/local/pair-1"
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+
+        pipeline.spawn_move_process("file.txt", pc)
+
+        self.assertIsNone(mock_move_cls.call_args.kwargs["expected_size"])
+
+    @patch("controller.command_pipeline.os.path.exists", return_value=True)
+    @patch("controller.command_pipeline.MoveProcess")
+    def test_spawn_move_process_passes_nested_expected_sizes_to_move_process(self, mock_move_cls, _mock_exists):
+        """A top-level move must carry the staged nested downloads under it to
+        MoveProcess so an incomplete one can be left behind."""
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.local_path = "/local/pair-1"
+        pc.staged_nested = {"Top/Sub/big.bin"}
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+        resolved = MagicMock()
+        resolved.remote_size = 999
+        pipeline._registry.resolve_full_path.return_value = resolved
+
+        pipeline.spawn_move_process("Top", pc)
+
+        self.assertEqual({"Sub/big.bin": 999}, mock_move_cls.call_args.kwargs["nested_expected_sizes"])
+
+    def _finish_nested_move_in_real_staging(self, pending_nested_moves, *, failed_results=None):
+        """Finish a 'Top/Sub/a.bin' move whose staging dir it emptied; return that dir."""
+        staging_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, staging_root, True)
+        sub_dir = os.path.join(staging_root, "pair-1", "Top", "Sub")
+        os.makedirs(sub_dir)
+        pc = self._make_pair_context("pair-1")
+        pc.pending_nested_moves = pending_nested_moves
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = staging_root
+        move_process = self._make_move_process("pair-1", "Top/Sub/a.bin", failed_results=failed_results)
+        pipeline.active_move_processes.append(move_process)
+
+        with patch.object(pipeline, "_sweep_staged_nested"):
+            pipeline.cleanup()
+        return sub_dir
+
+    def test_finalize_prunes_staging_dirs_a_nested_move_emptied(self):
+        sub_dir = self._finish_nested_move_in_real_staging(set())
+
+        self.assertFalse(os.path.exists(os.path.dirname(sub_dir)))
+
+    def test_finalize_keeps_dir_of_a_sibling_queued_during_the_move(self):
+        """A sibling queued while the move ran (after it was spawned) still needs
+        its staging dir, which pget won't recreate."""
+        sub_dir = self._finish_nested_move_in_real_staging({"Top/Sub/b.bin"})
+
+        self.assertTrue(os.path.isdir(sub_dir))
+
+    def test_finalize_does_not_prune_after_a_failed_move(self):
+        failure = MagicMock()
+        failure.name = "Top/Sub/a.bin"
+        failure.error_message = "source does not exist"
+        sub_dir = self._finish_nested_move_in_real_staging(set(), failed_results=[failure])
+
+        self.assertTrue(os.path.isdir(sub_dir))
+
+    # --- _staged_nested_sizes ---
+
+    def test_staged_nested_sizes_filters_by_prefix_and_resolves_remote_size(self):
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.staged_nested = {"Top/Sub/big.bin", "Top/a.bin", "TopX/other.bin"}
+        pipeline = self._make_pipeline([pc])
+
+        remote_sizes = {"Top/Sub/big.bin": 500, "Top/a.bin": 10}
+
+        def resolve(name, pair_id):
+            file = MagicMock()
+            file.remote_size = remote_sizes[name]
+            return file
+
+        pipeline._registry.resolve_full_path.side_effect = resolve
+
+        result = pipeline._staged_nested_sizes("Top", pc)
+
+        self.assertEqual({"Sub/big.bin": 500, "a.bin": 10}, result)
+        resolved_names = {call.args[0] for call in pipeline._registry.resolve_full_path.call_args_list}
+        self.assertNotIn("TopX/other.bin", resolved_names)
+
+    def test_staged_nested_sizes_model_error_maps_to_none(self):
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.staged_nested = {"Top/gone.bin"}
+        pipeline = self._make_pipeline([pc])
+        pipeline._registry.resolve_full_path.side_effect = ModelError("not found")
+
+        result = pipeline._staged_nested_sizes("Top", pc)
+
+        self.assertEqual({"gone.bin": None}, result)
+
+    def test_staged_nested_sizes_empty_when_no_entries_under_file_name(self):
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.staged_nested = {"Other/a.bin"}
+        pipeline = self._make_pipeline([pc])
+
+        result = pipeline._staged_nested_sizes("Top", pc)
+
+        self.assertEqual({}, result)
+        pipeline._registry.resolve_full_path.assert_not_called()
+
+    # --- _sweep_staged_nested ---
+
+    def test_sweep_staged_nested_drops_entries_no_longer_in_staging(self):
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.staged_nested = {"Top/kept.bin", "Top/gone.bin"}
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+        kept_path = os.path.join("/tmp/staging", "pair-1", "Top/kept.bin")
+
+        with patch("controller.command_pipeline.os.path.exists", side_effect=lambda p: p == kept_path):
+            pipeline._sweep_staged_nested(pc)
+
+        self.assertEqual({"Top/kept.bin"}, pc.staged_nested)
+
+    def test_sweep_staged_nested_keeps_entries_only_in_staging_as_temp_files(self):
+        """With lftp temp files on, an unfinished nested file is '<name>.lftp'."""
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.staged_nested = {"Top/partial.bin"}
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+        temp_path = os.path.join("/tmp/staging", "pair-1", "Top/partial.bin.lftp")
+
+        with patch("controller.command_pipeline.os.path.exists", side_effect=lambda p: p == temp_path):
+            pipeline._sweep_staged_nested(pc)
+
+        self.assertEqual({"Top/partial.bin"}, pc.staged_nested)
+
+    def test_sweep_staged_nested_clears_all_when_staging_disabled(self):
+        pc = self._make_pair_context("pair-1")
+        pc.pair_id = "pair-1"
+        pc.staged_nested = {"Top/a.bin", "Top/b.bin"}
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = False
+        pipeline._context.config.controller.staging_path = None
+
+        pipeline._sweep_staged_nested(pc)
+
+        self.assertEqual(set(), pc.staged_nested)
+
+    def test_sweep_staged_nested_drops_persisted_keys_too(self):
+        pc = self._make_pair_context("pair-1")
+        pc.staged_nested = {"Top/kept.bin", "Top/gone.bin"}
+        pipeline = self._make_pipeline([pc])
+        pipeline._persist.staged_nested_file_names = {
+            persist_key("pair-1", "Top/kept.bin"),
+            persist_key("pair-1", "Top/gone.bin"),
+        }
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+        kept_path = os.path.join("/tmp/staging", "pair-1", "Top/kept.bin")
+
+        with patch("controller.command_pipeline.os.path.exists", side_effect=lambda p: p == kept_path):
+            pipeline._sweep_staged_nested(pc)
+
+        self.assertEqual({persist_key("pair-1", "Top/kept.bin")}, pipeline._persist.staged_nested_file_names)
+
+    def test_sweep_staged_nested_keeps_a_pending_download_with_nothing_in_staging_yet(self):
+        """A queued nested job has no file in staging until lftp starts it."""
+        pc = self._make_pair_context("pair-1")
+        pc.staged_nested = {"Top/queued.bin"}
+        pc.pending_nested_moves = {"Top/queued.bin"}
+        pipeline = self._make_pipeline([pc])
+        pipeline._persist.staged_nested_file_names = {persist_key("pair-1", "Top/queued.bin")}
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+
+        with patch("controller.command_pipeline.os.path.exists", return_value=False):
+            pipeline._sweep_staged_nested(pc)
+
+        self.assertEqual({"Top/queued.bin"}, pc.staged_nested)
+        self.assertEqual({persist_key("pair-1", "Top/queued.bin")}, pipeline._persist.staged_nested_file_names)
+
+    # --- restore_staged_nested ---
+
+    def test_restore_staged_nested_queues_one_move_for_overlapping_names(self):
+        """Top/sub and Top/sub/item both restored: only Top/sub gets a move (its
+        size check covers item), or item's move would empty Top/sub under it."""
+        with tempfile.TemporaryDirectory() as staging_root:
+            os.makedirs(os.path.join(staging_root, "pair-1", "Top", "sub"))
+            with open(os.path.join(staging_root, "pair-1", "Top", "sub", "item"), "w") as f:
+                f.write("x")
+            pc = self._make_pair_context("pair-1")
+            pc.staged_nested = set()
+            pc.pending_nested_moves = set()
+            pc.pending_completion = set()
+            pipeline = self._make_pipeline([pc])
+            pipeline._context.config.controller.use_staging = True
+            pipeline._context.config.controller.staging_path = staging_root
+            pipeline._persist.staged_nested_file_names = {
+                persist_key("pair-1", "Top/sub"),
+                persist_key("pair-1", "Top/sub/item"),
+            }
+
+            pipeline.restore_staged_nested(pc)
+
+        self.assertEqual({"Top/sub", "Top/sub/item"}, pc.staged_nested)
+        self.assertEqual({"Top/sub"}, pc.pending_nested_moves)
+
+    def test_restore_staged_nested_picks_up_what_a_previous_session_left_in_staging(self):
+        """staged_nested is in memory; its persisted copy brings back the nested
+        downloads still in staging, queues their moves, and keeps their
+        top-level name off the active scan (its staging copy holds only them)."""
+        with tempfile.TemporaryDirectory() as staging_root:
+            os.makedirs(os.path.join(staging_root, "pair-1", "Top", "Sub"))
+            with open(os.path.join(staging_root, "pair-1", "Top", "Sub", "f.bin"), "w") as f:
+                f.write("x")
+            pc = self._make_pair_context("pair-1")
+            pc.staged_nested = set()
+            pc.pending_nested_moves = set()
+            pc.pending_completion = {"Top", "Movie.mkv"}
+            pipeline = self._make_pipeline([pc])
+            pipeline._context.config.controller.use_staging = True
+            pipeline._context.config.controller.staging_path = staging_root
+            other_pair_key = persist_key("pair-2", "X/y.bin")
+            pipeline._persist.staged_nested_file_names = {
+                persist_key("pair-1", "Top/Sub/f.bin"),
+                persist_key("pair-1", "Top/gone.bin"),
+                other_pair_key,
+            }
+
+            pipeline.restore_staged_nested(pc)
+
+        self.assertEqual({"Top/Sub/f.bin"}, pc.staged_nested)
+        self.assertEqual({"Top/Sub/f.bin"}, pc.pending_nested_moves)
+        self.assertEqual({"Movie.mkv"}, pc.pending_completion)
+        self.assertEqual(
+            {persist_key("pair-1", "Top/Sub/f.bin"), other_pair_key}, pipeline._persist.staged_nested_file_names
+        )
+        pc.active_scanner.set_active_files.assert_called_once_with(["Movie.mkv", "Top/Sub/f.bin"])
+
+    def test_restore_staged_nested_does_nothing_with_staging_off(self):
+        pc = self._make_pair_context("pair-1")
+        pc.staged_nested = set()
+        pc.pending_nested_moves = set()
+        pipeline = self._make_pipeline([pc])
+        pipeline._context.config.controller.use_staging = False
+        pipeline._context.config.controller.staging_path = None
+        pipeline._persist.staged_nested_file_names = {persist_key("pair-1", "Top/a.bin")}
+
+        pipeline.restore_staged_nested(pc)
+
+        self.assertEqual(set(), pc.staged_nested)
+        self.assertEqual(set(), pc.pending_nested_moves)
+        pc.active_scanner.set_active_files.assert_not_called()
 
     # --- propagate_exceptions: worker-fault isolation (#511) ---
 
@@ -686,6 +984,8 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         pc.pair_id = pair_id
         pc.local_path = "/local"
         pc.effective_local_path = effective_local_path
+        pc.pending_nested_moves = set()
+        pc.staged_nested = set()
         return pc
 
     @staticmethod
@@ -1074,6 +1374,32 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         self.assertTrue(result)
         mock_delete_cls.assert_called_once_with(local_path="/local", file_name="Top/leaf.rar")
 
+    @patch("controller.command_pipeline.os.path.exists", return_value=True)
+    @patch("controller.command_pipeline.DeleteLocalProcess")
+    def test_handle_delete_local_of_staged_nested_partial_sweeps_staged_nested(self, mock_delete_cls, _mock_exists):
+        """A stopped nested partial in staging is deleted there, and the sweep
+        afterwards forgets it so it isn't scanned or size-checked any more."""
+        pc = self._make_pair_context("pair-1")
+        pc.local_path = "/local"
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.controller.use_staging = True
+        pipeline._context.config.controller.staging_path = "/tmp/staging"
+
+        leaf = ModelFile("leaf.rar", False)
+        leaf.state = ModelFile.State.DEFAULT
+        leaf.local_size = 40
+        command = Command(Command.Action.DELETE_LOCAL, "Top/leaf.rar", pair_id="pair-1")
+        _calls, notify = self._make_notify()
+
+        result = pipeline._handle_delete_local(command, leaf, pc, [], notify)
+
+        self.assertTrue(result)
+        staging = os.path.join("/tmp/staging", "pair-1")
+        mock_delete_cls.assert_called_once_with(local_path=staging, file_name="Top/leaf.rar")
+        with patch.object(pipeline, "_sweep_staged_nested") as mock_sweep:
+            pipeline.active_command_processes[0].post_callback()
+        mock_sweep.assert_called_once_with(pc)
+
     @patch("controller.command_pipeline.DeleteRemoteProcess")
     def test_handle_delete_remote_nested_uses_full_path(self, mock_delete_cls):
         pc = self._make_pair_context("pair-1")
@@ -1295,11 +1621,18 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         callback.on_success.assert_called_once()
         callback.on_failure.assert_not_called()
 
-    def test_nested_queue_refused_while_staging(self):
-        """A nested job would land in the staging dir, which only top-level
-        moves empty, so it's refused rather than orphaned."""
+    def test_nested_queue_under_staging_clears_move_state(self):
+        """Nested queuing under staging is allowed. A successful queue has no
+        requeue diff to reset it, so it must directly clear any stale moved/
+        move-failed bookkeeping for that nested name, syncing persist if it
+        cleared a failure."""
         pc = self._make_pair_context("pair-1", effective_local_path="/staging/pair-1")
         pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.general.exclude_patterns = ""
+        move_key = persist_key("pair-1", "Top/leaf.rar")
+        pipeline.moved_file_keys.add(move_key)
+        pipeline._persist.move_failed_file_names = {move_key}
+
         root = ModelFile("Top", True)
         leaf = ModelFile("leaf.rar", False)
         leaf.remote_size = 100
@@ -1307,11 +1640,137 @@ class TestCommandPipelineNestedNavigation(unittest.TestCase):
         command = Command(Command.Action.QUEUE, "Top/leaf.rar", pair_id="pair-1")
         calls, notify = self._make_notify()
 
-        result = pipeline._dispatch_command(command, leaf, pc, [], notify)
+        result = pipeline._handle_queue(command, leaf, pc, notify)
+
+        self.assertTrue(result)
+        self.assertEqual([], calls)
+        pc.lftp.queue.assert_called_once_with("Top/leaf.rar", False, exclude_patterns=[])
+        self.assertNotIn(move_key, pipeline.moved_file_keys)
+        self.assertNotIn(move_key, pipeline._persist.move_failed_file_names)
+        pipeline.sync_persist_callback.assert_called_once()
+        self.assertEqual({"Top/leaf.rar"}, pc.pending_nested_moves)
+        self.assertEqual({"Top/leaf.rar"}, pc.staged_nested)
+
+    def test_nested_queue_under_staging_persists_staged_nested(self):
+        """So a restart can find the download in staging again."""
+        pc = self._make_pair_context("pair-1", effective_local_path="/staging/pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.general.exclude_patterns = ""
+        pipeline._persist.staged_nested_file_names = set()
+        leaf = ModelFile("leaf.rar", False)
+        leaf.remote_size = 100
+        command = Command(Command.Action.QUEUE, "Top/leaf.rar", pair_id="pair-1")
+        _calls, notify = self._make_notify()
+
+        self.assertTrue(pipeline._handle_queue(command, leaf, pc, notify))
+        self.assertEqual({persist_key("pair-1", "Top/leaf.rar")}, pipeline._persist.staged_nested_file_names)
+
+    def test_nested_queue_without_staging_adds_no_pending_move(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.general.exclude_patterns = ""
+        leaf = ModelFile("leaf.rar", False)
+        leaf.remote_size = 100
+        command = Command(Command.Action.QUEUE, "Top/leaf.rar", pair_id="pair-1")
+        _calls, notify = self._make_notify()
+
+        self.assertTrue(pipeline._handle_queue(command, leaf, pc, notify))
+        self.assertEqual(set(), pc.pending_nested_moves)
+        self.assertEqual(set(), pc.staged_nested)
+
+    def test_top_level_queue_does_not_touch_move_state(self):
+        """The move-state clearing is nested-only (top-level files get a
+        requeue diff instead); a top-level queue must not touch moved_file_keys
+        or move_failed_file_names at all."""
+        pc = self._make_pair_context("pair-1", effective_local_path="/staging/pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline._context.config.general.exclude_patterns = ""
+        move_key = persist_key("pair-1", "Top")
+        pipeline.moved_file_keys.add(move_key)
+        pipeline._persist.move_failed_file_names = {move_key}
+
+        top = ModelFile("Top", True)
+        top.remote_size = 100
+        command = Command(Command.Action.QUEUE, "Top", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_queue(command, top, pc, notify)
+
+        self.assertTrue(result)
+        self.assertEqual([], calls)
+        self.assertIn(move_key, pipeline.moved_file_keys)
+        self.assertIn(move_key, pipeline._persist.move_failed_file_names)
+        pipeline.sync_persist_callback.assert_not_called()
+        self.assertEqual(set(), pc.pending_nested_moves)
+
+    # --- find_overlapping_move ---
+
+    @staticmethod
+    def _fake_move_process(pair_id, file_name):
+        move_process = MagicMock()
+        move_process.pair_id = pair_id
+        move_process.file_name = file_name
+        return move_process
+
+    def test_find_overlapping_move_same_name(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline.active_move_processes.append(self._fake_move_process("pair-1", "Top/Sub"))
+
+        self.assertEqual("Top/Sub", pipeline.find_overlapping_move("Top/Sub", pc))
+
+    def test_find_overlapping_move_ancestor_moving_blocks_descendant_queue(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline.active_move_processes.append(self._fake_move_process("pair-1", "Top"))
+
+        self.assertEqual("Top", pipeline.find_overlapping_move("Top/Sub/f.bin", pc))
+
+    def test_find_overlapping_move_descendant_moving_blocks_ancestor_queue(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline.active_move_processes.append(self._fake_move_process("pair-1", "Top/Sub/f.bin"))
+
+        self.assertEqual("Top/Sub/f.bin", pipeline.find_overlapping_move("Top", pc))
+
+    def test_find_overlapping_move_unrelated_name_no_overlap(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline.active_move_processes.append(self._fake_move_process("pair-1", "Other"))
+
+        self.assertIsNone(pipeline.find_overlapping_move("Top", pc))
+
+    def test_find_overlapping_move_different_pair_no_overlap(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline.active_move_processes.append(self._fake_move_process("pair-2", "Top"))
+
+        self.assertIsNone(pipeline.find_overlapping_move("Top", pc))
+
+    def test_find_overlapping_move_prefix_name_not_overlap(self):
+        """'Top' vs 'TopX' must not be treated as overlapping - a string
+        prefix without the path separator is just a different, unrelated name."""
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline.active_move_processes.append(self._fake_move_process("pair-1", "Top"))
+
+        self.assertIsNone(pipeline.find_overlapping_move("TopX", pc))
+
+    def test_handle_queue_refused_when_overlapping_move_in_progress(self):
+        pc = self._make_pair_context("pair-1")
+        pipeline = self._make_pipeline([pc], nested_enabled=True)
+        pipeline.active_move_processes.append(self._fake_move_process("pair-1", "Top"))
+
+        leaf = ModelFile("leaf.rar", False)
+        leaf.remote_size = 100
+        command = Command(Command.Action.QUEUE, "Top/leaf.rar", pair_id="pair-1")
+        calls, notify = self._make_notify()
+
+        result = pipeline._handle_queue(command, leaf, pc, notify)
 
         self.assertFalse(result)
         self.assertEqual(1, len(calls))
-        self.assertIn("staging", calls[0])
+        self.assertIn("Top", calls[0])
         pc.lftp.queue.assert_not_called()
 
     def test_top_level_queue_allowed_while_staging(self):

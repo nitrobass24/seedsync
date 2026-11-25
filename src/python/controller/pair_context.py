@@ -8,6 +8,7 @@ Extracted from controller.py as part of the controller decomposition
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 from common import AppError, Config, Constants, Context
@@ -51,12 +52,40 @@ class PairContext:
     active_extracting_file_names: list[str] = field(default_factory=list[str])
     prev_downloading_file_names: set[str] = field(default_factory=set[str])
     pending_completion: set[str] = field(default_factory=set[str])
+    # Nested names queued while staging is on, awaiting their staging->final
+    # move once lftp no longer lists the job (see ModelUpdater._spawn_nested_moves)
+    pending_nested_moves: set[str] = field(default_factory=set[str])
+    # Nested names queued while staging is on whose download still sits in
+    # staging (finished or not). A top-level move leaves the incomplete ones
+    # behind (see CommandPipeline.spawn_move_process).
+    staged_nested: set[str] = field(default_factory=set[str])
+    # Downloaded roots whose validation/move waits for an overlapping move (see
+    # ModelUpdater._handle_downloaded_file)
+    deferred_post_download: set[str] = field(default_factory=set[str])
     remote_scan_received: bool = False
+    # True once a model built from a remote scan is in the registry, so a
+    # nested row's remote size can be resolved (see ModelUpdater._spawn_nested_moves)
+    remote_scan_in_model: bool = False
     local_scan_received: bool = False
 
     # Temporary storage for latest scan results (set during ModelUpdater._update_pair_model_state)
     latest_remote_scan: ScannerResult | None = None
     latest_local_scan: ScannerResult | None = None
+
+
+def staged_top_level_names(staging_dir: str) -> set[str]:
+    """Names of the top-level downloads with something in staging_dir.
+
+    lftp's "<name>.lftp" temp file is listed as <name>; its
+    "<name>.lftp-pget-status" progress file is skipped. A missing dir lists
+    nothing.
+    """
+    try:
+        entries = os.listdir(staging_dir)
+    except FileNotFoundError:
+        return set()
+    suffix = Constants.LFTP_TEMP_FILE_SUFFIX
+    return {entry.removesuffix(suffix) for entry in entries if not entry.endswith(suffix + "-pget-status")}
 
 
 def validate_config(context: Context) -> None:

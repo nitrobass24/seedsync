@@ -29,6 +29,9 @@ class ControllerPersist(Persist):
         ("validated", False),
         ("corrupt", False),
         ("move_failed", False),
+        # Nested downloads still in staging (PairContext.staged_nested), so a
+        # restart can find them again
+        ("staged_nested", False),
     )
 
     def __init__(self):
@@ -38,9 +41,10 @@ class ControllerPersist(Persist):
         self.validated_file_names: set[str] = set()
         self.corrupt_file_names: set[str] = set()
         self.move_failed_file_names: set[str] = set()
+        self.staged_nested_file_names: set[str] = set()
 
     def all_sets(self) -> dict[str, set[str]]:
-        """The six persisted key sets, keyed by json key."""
+        """The persisted key sets, keyed by json key."""
         return {key: getattr(self, f"{key}_file_names") for key, _ in self._KEYS}
 
     @staticmethod
