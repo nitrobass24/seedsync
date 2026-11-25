@@ -4,11 +4,14 @@ import unittest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+from controller.model_builder import ModelBuilder
+from controller.model_registry import ModelRegistry
 from controller.model_updater import ModelUpdater
 from controller.persist_keys import KEY_SEP, persist_key
 from controller.scan.scanner_process import ScannerResult
 from lftp import LftpJobStatus
-from model import ModelDiff, ModelFile
+from model import ModelDiff, ModelError, ModelFile
+from system import SystemFile
 
 
 class TestSyncPersistToAllBuilders(unittest.TestCase):
@@ -560,3 +563,187 @@ class TestHandleDownloadedFileUmask(unittest.TestCase):
         apply, threads = self._run(None)
         apply.assert_not_called()
         self.assertEqual([], threads)
+
+
+class TestHandlePendingCompletion(unittest.TestCase):
+    """pending_completion keeps the active scanner on a download in staging,
+    including one a previous session left there (#826)."""
+
+    def _make(self, state, local_size=None, *, active_scan_received=True):
+        pc = MagicMock()
+        pc.pair_id = "pair-1"
+        pc.pending_completion = {"Show"}
+        pc.active_scan_received = active_scan_received
+        pipeline = MagicMock()
+        pipeline.moved_file_keys = set()
+        pipeline.pending_validation_keys = set()
+        context = MagicMock()
+        context.config.controller.use_staging = True
+        context.config.controller.staging_path = "/staging"
+        updater = ModelUpdater(
+            pair_contexts=[pc],
+            persist=MagicMock(),
+            pipeline=pipeline,
+            registry=MagicMock(),
+            extract_process=MagicMock(),
+            validate_process=MagicMock(),
+            context=context,
+            password=None,
+            logger=MagicMock(),
+        )
+        file = ModelFile("Show", True, pair_id="pair-1")
+        file.state = state
+        file.local_size = local_size
+        diff = ModelDiff(ModelDiff.Change.ADDED, None, file)
+        return updater, pc, pipeline, diff
+
+    def test_keeps_a_name_with_no_local_size_until_the_first_active_scan(self):
+        for state in (ModelFile.State.DEFAULT, ModelFile.State.DELETED):
+            with self.subTest(state=state):
+                updater, pc, _, diff = self._make(state, active_scan_received=False)
+
+                updater._handle_pending_completion(diff.new_file, pc)
+
+                self.assertEqual({"Show"}, pc.pending_completion)
+
+    def test_drops_a_name_with_no_local_size_once_the_active_scan_has_run(self):
+        updater, pc, _, diff = self._make(ModelFile.State.DEFAULT)
+
+        updater._handle_pending_completion(diff.new_file, pc)
+
+        self.assertEqual(set(), pc.pending_completion)
+
+    def test_moves_a_finished_download_whose_move_a_restart_cut_short(self):
+        for state in (ModelFile.State.EXTRACTED, ModelFile.State.VALIDATED, ModelFile.State.CORRUPT):
+            with self.subTest(state=state):
+                updater, pc, pipeline, diff = self._make(state, local_size=10)
+
+                updater._handle_pending_completion(diff.new_file, pc)
+
+                pipeline.spawn_move_process.assert_called_once_with("Show", pc)
+                self.assertEqual(set(), pc.pending_completion)
+
+    def test_no_second_move_once_one_was_spawned(self):
+        updater, pc, pipeline, diff = self._make(ModelFile.State.VALIDATED, local_size=10)
+        pipeline.moved_file_keys.add(persist_key("pair-1", "Show"))
+
+        updater._handle_pending_completion(diff.new_file, pc)
+
+        pipeline.spawn_move_process.assert_not_called()
+
+    def test_no_move_while_validation_is_pending(self):
+        """With auto-validate on, an extracted download waits for validation to
+        finish, which spawns its move."""
+        updater, pc, pipeline, diff = self._make(ModelFile.State.EXTRACTED, local_size=10)
+        pipeline.pending_validation_keys.add(persist_key("pair-1", "Show"))
+
+        updater._handle_pending_completion(diff.new_file, pc)
+
+        pipeline.spawn_move_process.assert_not_called()
+
+    def test_active_scan_received_is_set_by_a_successful_active_scan(self):
+        pc = MagicMock()
+        pc.active_scan_received = False
+        pc.remote_scan_process.pop_latest_result.return_value = None
+        pc.local_scan_process.pop_latest_result.return_value = None
+        pc.lftp.status.return_value = []
+        pc.active_downloading_file_names = []
+        pc.active_extracting_file_names = []
+        pc.pending_completion = set()
+        updater, _, _, _ = self._make(ModelFile.State.DEFAULT)
+
+        pc.active_scan_process.pop_latest_result.return_value = ScannerResult(
+            timestamp=datetime.now(), files=[], failed=True, error_message="x"
+        )
+        updater._update_pair_model_state(pc, None, None)
+        self.assertFalse(pc.active_scan_received)
+
+        pc.active_scan_process.pop_latest_result.return_value = ScannerResult(timestamp=datetime.now(), files=[])
+        updater._update_pair_model_state(pc, None, None)
+        self.assertTrue(pc.active_scan_received)
+
+    def test_recheck_on_first_active_scan_settles_names_with_no_new_diff(self):
+        """Diffs before the first active scan were skipped; a name it found gone
+        may get no new diff, so it's re-checked from the registry."""
+        updater, pc, pipeline, _ = self._make(ModelFile.State.DEFAULT)
+        pc.pending_completion = {"Gone", "Remote", "Staged", "Validated"}
+        rows = {}
+        for name, state, local_size in (
+            ("Remote", ModelFile.State.DEFAULT, None),
+            ("Staged", ModelFile.State.DEFAULT, 10),
+            ("Validated", ModelFile.State.VALIDATED, 10),
+        ):
+            rows[name] = ModelFile(name, True, pair_id="pair-1")
+            rows[name].state = state
+            rows[name].local_size = local_size
+
+        def get_file(name, pair_id):
+            if name not in rows:
+                raise ModelError("missing")
+            return rows[name]
+
+        pc.model_builder.build_model.return_value.get_file.side_effect = get_file
+
+        updater._recheck_pending_completion(pc)
+
+        self.assertEqual({"Staged"}, pc.pending_completion)
+        pipeline.spawn_move_process.assert_called_once_with("Validated", pc)
+
+    def test_update_rechecks_only_on_the_cycle_the_first_active_scan_lands(self):
+        updater, pc, _, _ = self._make(ModelFile.State.DEFAULT, active_scan_received=False)
+
+        def first_scan_lands(_pc, *_args):
+            _pc.active_scan_received = True
+
+        with (
+            patch.object(updater, "_update_pair_model_state", side_effect=first_scan_lands),
+            patch.object(updater, "_build_aggregate_model", return_value=None),
+            patch.object(updater, "_process_extraction_completions"),
+            patch.object(updater, "_prune_stale_persist"),
+            patch.object(updater, "_process_extraction_failures"),
+            patch.object(updater, "_process_validation_results"),
+            patch.object(updater, "_retry_failed_moves"),
+            patch.object(updater, "_update_controller_status"),
+            patch.object(updater, "_recheck_pending_completion") as mock_recheck,
+        ):
+            updater.update()
+            updater.update()
+
+        mock_recheck.assert_called_once_with(pc)
+
+    def test_recheck_keeps_a_staged_row_the_aggregate_model_left_out(self):
+        """Two pairs share a local_path and both have "Show". Before pair B's
+        remote listing, B's staged row is local-only, and the aggregate model
+        keeps pair A's row instead. The re-check must still see B's row."""
+        builder_a = ModelBuilder(pair_id="a")
+        builder_a.set_remote_files([SystemFile("Show", 10, True)])
+        builder_b = ModelBuilder(pair_id="b")
+        builder_b.set_active_files([SystemFile("Show", 4, True)])
+        pc_a, pc_b = MagicMock(), MagicMock()
+        for pc, pair_id, builder in ((pc_a, "a", builder_a), (pc_b, "b", builder_b)):
+            pc.pair_id = pair_id
+            pc.local_path = "/shared"
+            pc.model_builder = builder
+            pc.active_scan_received = True
+        pc_b.pending_completion = {"Show"}
+        context = MagicMock()
+        context.config.controller.use_staging = True
+        context.config.controller.staging_path = "/staging"
+        updater = ModelUpdater(
+            pair_contexts=[pc_a, pc_b],
+            persist=MagicMock(),
+            pipeline=MagicMock(),
+            registry=MagicMock(),
+            extract_process=MagicMock(),
+            validate_process=MagicMock(),
+            context=context,
+            password=None,
+            logger=MagicMock(),
+        )
+        aggregate = updater._build_aggregate_model()
+        self.assertRaises(ModelError, aggregate.get_file, "Show", "b")
+        updater._registry = ModelRegistry(aggregate)
+
+        updater._recheck_pending_completion(pc_b)
+
+        self.assertEqual({"Show"}, pc_b.pending_completion)

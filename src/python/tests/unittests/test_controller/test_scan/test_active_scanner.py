@@ -29,6 +29,16 @@ class TestActiveScanner(unittest.TestCase):
         self.assertEqual(result, [])
 
     @patch("controller.scan.active_scanner.SystemScanner")
+    def test_initial_files_are_scanned_by_the_first_scan(self, mock_scanner_cls):
+        """No queue delivery to wait on: they're set before the scan process starts."""
+        mock_scanner_cls.return_value.scan_single.side_effect = lambda name: SystemFile(name, 1, False)
+
+        scanner = ActiveScanner("/local", initial_files=["Show"])
+        self.addCleanup(scanner.close)
+
+        self.assertEqual(["Show"], [f.name for f in scanner.scan()])
+
+    @patch("controller.scan.active_scanner.SystemScanner")
     def test_scan_returns_files_after_set_active(self, mock_scanner_cls):
         """After set_active_files, scan returns SystemFile objects for those files."""
         mock_scanner = mock_scanner_cls.return_value

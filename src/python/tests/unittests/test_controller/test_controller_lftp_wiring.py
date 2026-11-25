@@ -4,6 +4,8 @@
 protocol, port selection, and SSL params, while keeping the scanner on SSH."""
 
 import logging
+import os
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -128,6 +130,38 @@ class TestControllerLftpWiring(unittest.TestCase):
 
         _, kwargs = mock_active_scanner.call_args
         self.assertEqual(Constants.LFTP_TEMP_FILE_SUFFIX, kwargs["lftp_temp_suffix"])
+
+    def _pending_completion_for(self, ctx: Context):
+        controller = self._build_controller(ctx)
+        with (
+            patch("controller.controller.Lftp"),
+            patch("controller.controller.RemoteScanner"),
+            patch("controller.controller.ActiveScanner") as mock_active_scanner,
+            patch("controller.controller.LocalScanner"),
+            patch("controller.controller.ScannerProcess"),
+            patch("controller.controller.ModelBuilder"),
+            patch("controller.controller.configure_lftp"),
+        ):
+            pc = controller._create_pair_context(pair_id="p1", name="pair", remote_path="/remote", local_path="/local")
+        # The scanner's first scan covers them too, ahead of the first update cycle
+        self.assertEqual(sorted(pc.pending_completion), mock_active_scanner.call_args.kwargs["initial_files"])
+        return pc.pending_completion
+
+    def test_downloads_left_in_staging_are_scanned_after_a_restart(self):
+        """pending_completion is in memory only, so a download that finished
+        or was stopped in staging before a restart would otherwise go unseen:
+        the local scan covers only local_path."""
+        ctx = _make_context(protocol="sftp", remote_port=22, remote_ftp_port=21, verify_cert=False)
+        with tempfile.TemporaryDirectory() as staging:
+            ctx.config.controller.use_staging = True
+            ctx.config.controller.staging_path = staging
+            os.makedirs(os.path.join(staging, "p1", "Show.S01"))
+
+            self.assertEqual({"Show.S01"}, self._pending_completion_for(ctx))
+
+    def test_nothing_seeded_with_staging_off(self):
+        ctx = _make_context(protocol="sftp", remote_port=22, remote_ftp_port=21, verify_cert=False)
+        self.assertEqual(set(), self._pending_completion_for(ctx))
 
 
 if __name__ == "__main__":
